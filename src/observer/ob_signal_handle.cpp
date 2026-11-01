@@ -39,7 +39,6 @@ static int sigtimedwait(const sigset_t *set, siginfo_t *info, const struct times
 
 #include "ob_signal_handle.h"
 #include "observer/ob_server.h"
-#include "observer/ob_dump_task_generator.h"
 #include "sql/ob_sql_init.h"
 #include "storage/tx_storage/ob_memory_printer.h"
 
@@ -104,7 +103,7 @@ int ObSignalHandle::add_signums_to_set(sigset_t &sig_set)
     int rc = 0;
     int signals[] = {SIGPIPE, SIGTERM, SIGUSR1,
                      40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-                     50, 51, 52, 53, 55, 56, 57, 59, 60, 62,
+                     50, 51, 52, 53, 55, 56, 57, 59, 60,
                      63, 64};
     for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(signals); ++i) {
       if (0 != (rc = sigaddset(&sig_set, signals[i]))) {
@@ -196,11 +195,6 @@ int ObSignalHandle::deal_signals(int signum)
       break;
     }
     case 60: {
-      break;
-    }
-    case 62: {
-      //RESP_DUMP_TRACE_TO_FILE();
-      ObDumpTaskGenerator::generate_task_from_file();
       break;
     }
     case 63: {

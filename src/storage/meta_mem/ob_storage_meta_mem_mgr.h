@@ -125,7 +125,10 @@ class ObStorageMetaMemMgr final
 {
 public:
   static const int64_t THE_SIZE_OF_HEADERS = sizeof(ObFIFOAllocator::NormalPageHeader) + sizeof(ObMetaObjBufferNode);
-  static const int64_t NORMAL_TABLET_POOL_SIZE = (ABLOCK_SIZE - ABLOCK_HEADER_SIZE) / 2 - AOBJECT_META_SIZE - AOBJECT_EXTRA_INFO_SIZE - THE_SIZE_OF_HEADERS; // 3824B
+  // Preserve the buffer capacity before pool headers: 3880 bytes on 64-bit,
+  // 3944 bytes on 32-bit.
+  static const int64_t NORMAL_TABLET_POOL_SIZE =
+      4008 - 16 * static_cast<int64_t>(sizeof(void *)) - THE_SIZE_OF_HEADERS;
   static const int64_t LARGE_TABLET_POOL_SIZE = 64 * 1024L - THE_SIZE_OF_HEADERS; // 65,480B
 
   static const int64_t MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL = 10000;
@@ -388,13 +391,6 @@ private:
   private:
     ObStorageMetaMemMgr *t3m_;
   };
-  class RefreshConfigTask : public common::ObTimerTask
-  {
-  public:
-    RefreshConfigTask() = default;
-    virtual ~RefreshConfigTask() = default;
-    virtual void runTimerTask() override;
-  };
   class TabletMapDumpOperator
   {
   public:
@@ -492,7 +488,6 @@ private:
   ObExternalTabletCntMap external_tablet_cnt_map_;
   common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
-  RefreshConfigTask refresh_config_task_;
   TabletGCTask tablet_gc_task_;
   TabletGCQueue tablet_gc_queue_;
   common::ObLinkQueue free_tables_queue_;

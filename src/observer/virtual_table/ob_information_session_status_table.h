@@ -36,7 +36,8 @@ class ObInfoSchemaSessionStatusTable : public common::ObVirtualTableScannerItera
 
   enum VARIABLE {
     THREADS_CONNECTED = 0,
-    UPTIME
+    UPTIME,
+    COMPRESSION
   };
 
   typedef common::hash::ObHashMap<common::ObString, common::ObObj> AllStatus;

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_SESSION
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_basic_session_info.h"
 #include "share/config/ob_config_helper.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"

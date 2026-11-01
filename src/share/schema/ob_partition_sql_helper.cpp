@@ -385,11 +385,11 @@ int ObAddPartInfoHelper::add_part_info_dml_column(const ObPartitionSchema *table
        || OB_FAIL(dml.add_column("part_type", part_option.get_part_func_type()))
        || OB_FAIL(dml.add_column(OBJ_GET_K(part_option, part_num)))
        || OB_FAIL(dml.add_column("part_space", 0))
-       || OB_FAIL(dml.add_column("part_expr", part_option.get_part_func_expr_str()))
+       || OB_FAIL(dml.add_column("part_expr", ObHexEscapeSqlStr(part_option.get_part_func_expr_str())))
        || OB_FAIL(dml.add_column("sub_part_type", subpart_option.get_part_func_type()))
        || OB_FAIL(dml.add_column("def_sub_part_num", subpart_option.get_part_num()))
        || OB_FAIL(dml.add_pk_column("schema_version", table->get_schema_version()))
-       || OB_FAIL(dml.add_column("sub_part_expr", subpart_option.get_part_func_expr()))) {
+       || OB_FAIL(dml.add_column("sub_part_expr", ObHexEscapeSqlStr(subpart_option.get_part_func_expr_str())))) {
      }
    }
    return ret;
@@ -1351,7 +1351,7 @@ int ObRenameIncPartHelper::rename_partition_info(const bool update_part_idx)
     } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(table_id)))
           || OB_FAIL(dml.add_pk_column("part_id", inc_part->get_part_id()))
           || OB_FAIL(dml.add_column("schema_version", schema_version_))
-          || OB_FAIL(dml.add_column("part_name", inc_part->get_part_name().ptr()))) {
+          || OB_FAIL(dml.add_column("part_name", ObHexEscapeSqlStr(inc_part->get_part_name())))) {
     } else if (update_part_idx && OB_FAIL(dml.add_column("part_idx", inc_part->get_part_idx()))) {
     } else if (OB_FAIL(dml.splice_update_sql(share::OB_ALL_PART_TNAME, part_sql))) {
     } else if (OB_FAIL(sql_client_.write(part_sql.ptr(), affected_rows))) {
@@ -1414,7 +1414,7 @@ int ObRenameIncSubpartHelper::rename_subpartition_info()
               ||OB_FAIL(dml.add_pk_column("part_id", inc_part->get_part_id()))
               ||OB_FAIL(dml.add_pk_column("sub_part_id", inc_subpart->get_sub_part_id()))
               ||OB_FAIL(dml.add_column("schema_version", schema_version_))
-              ||OB_FAIL(dml.add_column("sub_part_name", inc_subpart->get_part_name().ptr()))) {
+              ||OB_FAIL(dml.add_column("sub_part_name", ObHexEscapeSqlStr(inc_subpart->get_part_name())))) {
       } else if (OB_FAIL(dml.splice_update_sql(share::OB_ALL_SUB_PART_TNAME, subpart_sql))) {
       } else if (OB_FAIL(sql_client_.write(subpart_sql.ptr(), affected_rows))) {
       } else if (OB_UNLIKELY(inc_subpart_num != affected_rows)) {

@@ -28,7 +28,7 @@ int ObShardingInfo::init_partition_info(ObOptimizerContext &ctx,
                                         const ObDMLStmt &stmt,
                                         const uint64_t table_id,
                                         const uint64_t ref_table_id,
-                                        const ObCandiTableLoc &phy_table_location_info)
+                                        const TableAccessTargets &table_access_targets)
 {
   int ret = OB_SUCCESS;
   ObSqlSchemaGuard *schema_guard = NULL;
@@ -70,15 +70,15 @@ int ObShardingInfo::init_partition_info(ObOptimizerContext &ctx,
     }
   }
   if (OB_SUCC(ret)) {
-    if (!(is_virtual_table(ref_table_id) && OB_TBL_LOCATION_DISTRIBUTED == location_type_)) {
-      phy_table_location_info_ = &phy_table_location_info;
+    if (!(is_virtual_table(ref_table_id) && TABLE_ACCESS_MULTI_TABLET == access_shape_)) {
+      table_access_targets_ = &table_access_targets;
     }
     // virtual table can't get part idx from mock list table schema
     // so don't call extract_all_partition_indexes,
     // and not used pwj enhance on virtual table
     if (is_virtual_table(ref_table_id)) {
       // do nothing
-    } else if (OB_FAIL(ObPwjComparer::extract_all_partition_indexes(phy_table_location_info,
+    } else if (OB_FAIL(ObPwjComparer::extract_all_partition_indexes(table_access_targets,
                                                               *table_schema,
                                                               all_tablet_ids_,
                                                               all_partition_indexes_,
@@ -494,10 +494,10 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
     }
     if (OB_SUCC(ret)) {
       if (NULL != left_strong_sharding &&
-          NULL != left_strong_sharding->get_phy_table_location_info() &&
+          NULL != left_strong_sharding->get_access_targets() &&
           OB_FAIL(left_sharding.push_back(left_strong_sharding))) {
       } else if (NULL != right_strong_sharding &&
-                 NULL != right_strong_sharding->get_phy_table_location_info() &&
+                 NULL != right_strong_sharding->get_access_targets() &&
                  OB_FAIL(right_sharding.push_back(right_strong_sharding))) {
       } else if (has_null_safe &&
                  OB_FAIL(check_if_match_partition_wise(equal_sets,
@@ -554,10 +554,10 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
     }
     if (OB_SUCC(ret)) {
       if (NULL != left_strong_sharding &&
-          left_strong_sharding->is_distributed_without_table_location_with_partitioning() &&
+          left_strong_sharding->is_partitioned_multi_tablet_without_targets() &&
           OB_FAIL(left_sharding.push_back(left_strong_sharding))) {
       } else if (NULL != right_strong_sharding &&
-                 right_strong_sharding->is_distributed_without_table_location_with_partitioning() &&
+                 right_strong_sharding->is_partitioned_multi_tablet_without_targets() &&
                  OB_FAIL(right_sharding.push_back(right_strong_sharding))) {
       } else if (has_null_safe &&
                  OB_FAIL(check_if_match_extended_partition_wise(equal_sets,
@@ -651,8 +651,8 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
     ret = OB_ERR_UNEXPECTED;
   } else if (!first_left_sharding->is_distributed() || !first_right_sharding->is_distributed()) {
     is_ext_partition_wise = false;
-  } else if (!first_left_sharding->is_distributed_without_table_location_with_partitioning() ||
-             !first_right_sharding->is_distributed_without_table_location_with_partitioning()) {
+  } else if (!first_left_sharding->is_partitioned_multi_tablet_without_targets() ||
+             !first_right_sharding->is_partitioned_multi_tablet_without_targets()) {
     is_ext_partition_wise = false;
   } else if (OB_FAIL(is_join_key_cover_partition_key(equal_sets,
                                                      left_keys,
@@ -734,8 +734,8 @@ int ObShardingInfo::copy_without_part_keys(const ObShardingInfo &other)
   part_func_type_ = other.part_func_type_;
   subpart_func_type_ = other.subpart_func_type_;
   part_num_ = other.part_num_;
-  location_type_ = other.location_type_;
-  phy_table_location_info_ = other.phy_table_location_info_;
+  access_shape_ = other.access_shape_;
+  table_access_targets_ = other.table_access_targets_;
   partition_array_ = other.partition_array_;
   is_partition_single_ = other.is_partition_single_;
   is_subpartition_sinlge_ = other.is_subpartition_sinlge_;
@@ -858,7 +858,7 @@ int ObShardingInfo::is_sharding_equal(const ObShardingInfo *left_sharding,
     is_equal = true;
   } else if (NULL == left_sharding || NULL == right_sharding) {
     is_equal = false;
-  } else if (left_sharding->get_location_type() != right_sharding->get_location_type()) {
+  } else if (left_sharding->get_access_shape() != right_sharding->get_access_shape()) {
     is_equal = false;
   } else if (left_sharding->is_match_all() || left_sharding->is_local()) {
     is_equal = true;
@@ -872,8 +872,8 @@ int ObShardingInfo::is_sharding_equal(const ObShardingInfo *left_sharding,
                                                    right_sharding->get_partition_func(),
                                                    equal_sets)) {
     is_equal = false;
-  } else if (NULL == left_sharding->get_phy_table_location_info() &&
-             NULL == right_sharding->get_phy_table_location_info()) {
+  } else if (NULL == left_sharding->get_access_targets() &&
+             NULL == right_sharding->get_access_targets()) {
     is_equal = true;
   } else if (OB_FAIL(is_compatible_partition_key(*left_sharding, *right_sharding, is_equal))) {
   } else if (!is_equal) {

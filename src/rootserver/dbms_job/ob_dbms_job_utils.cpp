@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dbms_job_utils.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_share_util.h"

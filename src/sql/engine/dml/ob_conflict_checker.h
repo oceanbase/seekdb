@@ -211,9 +211,9 @@ public:
   ~ObConflictChecker() {};
   // Initial conflict_checker
   int init_conflict_checker(const ObExprFrameInfo *expr_frame_info,
-                            ObDASTableLoc *table_loc,
+                            DASRuntimeTableAccess *table_access,
                             bool use_response_snapshot);
-  void set_local_tablet_loc(ObDASTabletLoc *tablet_loc) { local_tablet_loc_ = tablet_loc; }
+  void set_local_tablet_access(DASRuntimeTabletAccess *tablet_access) { local_tablet_access_ = tablet_access; }
   // Initial conflict_map
   int create_conflict_map(int64_t replace_row_cnt);
 
@@ -261,7 +261,7 @@ public:
 
   int reuse();
 
-  int collect_all_snapshot(transaction::ObTxReadSnapshot &snapshot, const ObDASTabletLoc *tablet_loc);
+  int collect_all_snapshot(transaction::ObTxReadSnapshot &snapshot, const DASRuntimeTabletAccess *tablet_access);
   int get_snapshot_by_tablet(ObTabletID tablet_id, bool &founded, transaction::ObTxReadSnapshot &snapshot);
 
   int set_partition_snapshot_for_das_task(ObDASRef &das_ref);
@@ -270,9 +270,9 @@ public:
 
 private:
   int to_expr(const ObChunkDatumStore::StoredRow *replace_row);
-  int calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc);
+  int resolve_lookup_tablet_access(DASRuntimeTabletAccess *&tablet_access);
   // get current row corresponding scan_op
-  int get_das_scan_op(ObDASTabletLoc *tablet_loc, ObDASScanOp *&das_scan_op);
+  int get_das_scan_op(DASRuntimeTabletAccess *tablet_access, ObDASScanOp *&das_scan_op);
   // Build the range information for back-table lookup
   int build_data_table_range(ObNewRange &lookup_range, ObRowkey &table_rowkey);
 
@@ -302,8 +302,8 @@ public:
   // This das_ref must be careful with reuse and reset,
   // because its internal allocator is used in many places
   ObDASRef das_ref_;
-  ObDASTabletLoc *local_tablet_loc_;
-  ObDASTableLoc *table_loc_;
+  DASRuntimeTabletAccess *local_tablet_access_;
+  DASRuntimeTableAccess *table_access_;
   lib::MemoryContext tmp_mem_ctx_;
   ObSEArray<ObTabletSnapshotMaping, 16> snapshot_maping_;
   ConflictRangeDistCtx *conflict_range_dist_ctx_;

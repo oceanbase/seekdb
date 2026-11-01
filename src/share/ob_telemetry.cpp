@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/utility/utility.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/cpu/ob_cpu_topology.h"
@@ -1263,6 +1264,9 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
       // Skip CA trust verification to avoid depending on distro-specific CA bundle paths.
       // Hostname verification remains enabled, but this does not authenticate the peer.
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+      curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+      curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
       curl_easy_setopt(curl, CURLOPT_POST, 1L);
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.length());

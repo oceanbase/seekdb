@@ -96,6 +96,8 @@ grouped_unity_cc_library(
     public_hdrs = _PUBLIC_HDRS,
     private_hdrs = _PRIVATE_HDRS,
     deps = [
+        "//src/share:startup_result",
+        "//src/share:local_io_config",
         ":append_callback_interface",
         "//src/share:log_protocol",
         "//src/data_plane:data_plane_api_interface",

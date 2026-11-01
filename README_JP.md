@@ -88,7 +88,7 @@ pip install -U pyseekdb   # pyseekdb は seekdb の Python SDK です
 
 > 📋 [demo.py ソースを見る →](images/demo.py)
 
-この Python デモでは、サーバーの手動デプロイ、スキーマ定義、エンベディング設定は不要です。[Python または JavaScript でローカルデータベースを実行 →](#embedded-sdks)
+この Python デモでは、サーバーの手動デプロイ、スキーマ定義、エンベディング設定は不要です。[Python、JavaScript、Go でローカルデータベースを実行 →](#embedded-sdks)
 
 ---
 
@@ -157,7 +157,7 @@ ORDER BY dist APPROXIMATE LIMIT 10;
 
 ### 組み込みでの利用
 
-データベースサービスを手動でデプロイせずに、Python または Node.js からローカルの seekdb を利用できます。データは指定したローカルディレクトリに保存され、再度開いても引き続き利用できます。
+データベースサービスを手動でデプロイせずに、Python、Node.js、Go からローカルの seekdb を利用できます。データは指定したローカルディレクトリに保存され、再度開いても引き続き利用できます。
 
 <details open>
 <summary><b>🐍 Python</b></summary>
@@ -255,7 +255,87 @@ node example.mjs
 
 </details>
 
-データは `./seekdb.db` に保存され、どちらの例も繰り返し実行できます。このパスはデータベースディレクトリです。新しいディレクトリの初期化には、次回以降の起動より時間がかかることがあります。
+<details open>
+<summary><b>🐹 Go</b></summary>
+
+[seekdb-go](https://github.com/oceanbase/seekdb-go) でローカルの seekdb を起動し、`go-sql-driver/mysql` で SQL を実行します。この例には Go 1.24 以降、`CGO_ENABLED=1`、C コンパイラーが必要です。
+
+```bash
+mkdir seekdb-go-example
+cd seekdb-go-example
+go mod init example.com/seekdb-demo
+```
+
+以下の例を `main.go` として保存します。`ConnectionOptions` が返す接続先を使用し、ランタイムハンドルを解放する前に SQL 接続を閉じます：
+
+```go
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+
+	"github.com/go-sql-driver/mysql"
+	seekdb "github.com/oceanbase/seekdb-go"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	db, err := seekdb.Open("./seekdb.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	endpoint, err := db.ConnectionOptions()
+	if err != nil {
+		return err
+	}
+	cfg := mysql.NewConfig()
+	cfg.User, cfg.DBName = endpoint.User, "test"
+	switch endpoint.Transport {
+	case "unix_socket":
+		cfg.Net, cfg.Addr = "unix", endpoint.UnixSocket
+	case "tcp":
+		cfg.Net, cfg.Addr = "tcp", net.JoinHostPort(endpoint.Host, fmt.Sprint(endpoint.Port))
+	default:
+		return fmt.Errorf("unsupported transport %q", endpoint.Transport)
+	}
+	connection, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+
+	var value int
+	if err := connection.QueryRow("SELECT 1 AS value").Scan(&value); err != nil {
+		return err
+	}
+	fmt.Println(value)
+	return nil
+}
+```
+
+実行時に Go が依存関係を解決し、現在のプラットフォーム用のネイティブバンドルを取得します。結果は `1` です：
+
+```bash
+go run -mod=mod .
+```
+
+seekdb-go に対する通常の `go get` や `go mod tidy` は、全対応プラットフォームのバンドルも取得することがあります。
+
+[詳しい使い方](https://github.com/oceanbase/seekdb-go#install) · [対応プラットフォームと環境要件](https://github.com/oceanbase/seekdb-go/blob/main/docs/support.md)
+
+</details>
+
+これらの例はデータを `./seekdb.db` に保存し、繰り返し実行できます。このパスはデータベースディレクトリです。新しいディレクトリの初期化には、次回以降の起動より時間がかかることがあります。
 
 ### サーバーのデプロイ
 
@@ -307,7 +387,7 @@ DEB/RPM オフラインインストールと設定の詳細は[デプロイメ�
 
 ### 📝 その他の例
 
-まずは上の実行可能な [Python と JavaScript の例](#embedded-sdks)を試してください。以下のアプリケーションパターンは、既存のエージェント実装を前提としています。
+まずは上の実行可能な [Python、JavaScript、Go の例](#embedded-sdks)を試してください。以下のアプリケーションパターンは、既存のエージェント実装を前提としています。
 
 <details>
 <summary><b>🤖 エージェントメモリパターン（継続的書込 + 即時検索）</b></summary>

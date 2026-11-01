@@ -6,7 +6,6 @@ package(default_visibility = ["//visibility:public"])
 exports_files(glob(["*.BUILD"]) + [
     "dependencies.json",
     "prepare.py",
-    "icu/embed_data.py",
     "openblas/blas_abi.h",
     "openmp/kmp_config.h",
 ])
@@ -41,7 +40,6 @@ sdk_archives(
     }),
     deps = ["@sdk_roaring//:library"] + select({
         "@platforms//os:emscripten": [
-            "@sdk_icu//:library",
             "@sdk_s2_wasm//:library",
             "@sdk_vsag_wasm//:library",
         ],

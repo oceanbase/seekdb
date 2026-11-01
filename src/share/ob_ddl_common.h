@@ -18,12 +18,11 @@
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
 namespace oceanbase { namespace common { struct ObDatum; } }
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/allocator/page_arena.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_service.h"
-#include "share/location_cache/ob_location_struct.h"
 #include "common/ob_role.h"
 #include "share/tablet/ob_tablet_read_mode.h"
 #include "share/ob_batch_selector.h"
@@ -564,7 +563,7 @@ public:
   static bool is_table_lock_retry_ret_code(int ret)
   {
     return OB_TRY_LOCK_ROW_CONFLICT == ret || OB_NOT_MASTER == ret || OB_TIMEOUT == ret
-           || OB_EAGAIN == ret || OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_TRANS_CTX_NOT_EXIST == ret;
+           || OB_EAGAIN == ret || OB_LOG_STREAM_ACCESS_NOT_READY == ret || OB_TRANS_CTX_NOT_EXIST == ret;
   }
 
   static int check_can_convert_character(const ObObjMeta &obj_meta, const bool is_domain_index, const bool is_string_lob)

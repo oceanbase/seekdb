@@ -1,0 +1,27 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "memtable_mutator_cases",
+    srcs = ["test_memtable_mutator.cpp"],
+    alwayslink = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//src/storage:memtable_mutator_test_headers",
+    ],
+)
+
+cc_test(
+    name = "test_memtable_mutator",
+    linkstatic = True,
+    # liboceanbase supplies the C++ runtime. Use rules_cc's $ORIGIN rpath,
+    # rather than its $EXEC_ORIGIN path for tests with static C++ runtimes.
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":memtable_mutator_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

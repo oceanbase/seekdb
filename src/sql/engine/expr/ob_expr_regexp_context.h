@@ -23,11 +23,10 @@
 #include <sys/types.h>
 #include <assert.h>
 #include "lib/charset/ob_charset.h"
-#include <unicode/uregex.h>
-#include <unicode/ustring.h>
+#include "rust/regex_engine.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
-// this regex is compatible with mysql 8.0
+// MySQL-style SQL functions backed by fancy-regex.
 
 namespace oceanbase
 {
@@ -51,7 +50,6 @@ public:
   ObExprRegexContext();
   virtual ~ObExprRegexContext();
 public:
-  static const char *icu_version_string() { return U_ICU_VERSION; }
   inline bool is_inited() const { return inited_; }
   void destroy();
   void reset();
@@ -96,24 +94,6 @@ public:
               const int64_t start,
               const int64_t occurrence,
               ObString &result) const;
-
-  int append_head(ObExprStringBuf &string_buf,
-                  const int32_t current_pos,
-                  UChar *&replace_buff,
-                  int32_t &buff_size,
-                  int32_t &buff_pos) const;
-
-  int append_replace_str(ObExprStringBuf &string_buf,
-                         const UChar *u_replace,
-                         const int32_t u_replace_length,
-                         UChar *&replace_buff,
-                         int32_t &buff_size,
-                         int32_t &buff_pos) const;
-
-  int append_tail(ObExprStringBuf &string_buf,
-                  UChar *&replace_buff,
-                  int32_t &buff_size,
-                  int32_t &buff_pos) const;
 
   static int get_regexp_flags(const ObString &match_param,
                               const bool is_case_sensitive,
@@ -162,25 +142,15 @@ public:
   static int check_binary_compatible(const ObExprResType *types, int64_t num);
 
 private:
-  int preprocess_pattern(common::ObExprStringBuf &string_buf,
-                         const common::ObString &origin_pattern,
-                         common::ObString &pattern);
-  int check_icu_regexp_status(UErrorCode u_error_code, const UParseError *parse_error = NULL) const;
-  int get_valid_unicode_string(ObExprStringBuf &string_buf,
-                               const ObString &origin_str,
-                               UChar *&u_str,
-                               int32_t &u_str_len) const;
-  int get_valid_replace_string(ObIAllocator &alloc,
-                               const ObString &origin_replace,
-                               UChar *&u_replace,
-                               int32_t &u_replace_len) const;
+  int check_regexp_status(const RegexError &error) const;
 private:
   bool inited_;
   ObInplaceAllocator pattern_allocator_;
   common::ObString pattern_;
   int cflags_;
-  ObInplaceAllocator pattern_wc_allocator_;
-  URegularExpression *regexp_engine_;
+  int64_t stack_limit_;
+  int64_t time_limit_;
+  RegexEngine *regexp_engine_;
 };
 }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SHARE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_i_pre_warmer.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ob_tablet_stat_mgr.h"

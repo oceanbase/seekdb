@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"

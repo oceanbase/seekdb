@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_freeze_info_mgr.h"
 #include "share/rc/ob_server_runtime.h"

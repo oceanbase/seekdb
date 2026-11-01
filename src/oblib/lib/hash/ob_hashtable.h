@@ -244,17 +244,13 @@ private:
 template<class _value_type, class _lock_type, class _cond_type = NCond>
 struct ObHashTableBucket : public MProtect
 {
-  mutable _lock_type lock;
-  mutable _cond_type cond;
+  mutable HashSync<_lock_type> lock;
+  mutable HashSync<_cond_type> cond;
   ObHashTableNode<_value_type> *node;
 
-  ObHashTableBucket() : node(NULL)
-  {
-#if defined(__APPLE__) || defined(_WIN32)
-    init_hash_lock(lock);
-    init_hash_cond(cond);
-#endif
-  }
+  ObHashTableBucket() : node(NULL) {}
+
+  bool sync_initialized() const { return lock.is_initialized() && cond.is_initialized(); }
 
   typedef ObHashTableBucketNodeIterator<_value_type, _lock_type, _cond_type> iterator;
   typedef ObHashTableBucketNodeConstIterator<_value_type, _lock_type, _cond_type> const_iterator;
@@ -283,6 +279,7 @@ struct ObHashTableBucket<_value_type,
 {
   ObHashTableNode<_value_type> *node;
   ObHashTableBucket() : node(NULL) {}
+  bool sync_initialized() const { return true; }
 };
 
 template<class _value_type, class _defendmode>
@@ -297,11 +294,11 @@ struct ObBucketLockCond
   }
   typename _defendmode::lock_type &lock()
   {
-    return bucket_.lock;
+    return bucket_.lock.get();
   }
   typename _defendmode::cond_type &cond()
   {
-    return bucket_.cond;
+    return bucket_.cond.get();
   }
 private:
   bucket_type &bucket_;
@@ -823,7 +820,8 @@ public:
   int create(int64_t bucket_num, _allocer *allocer, _bucket_allocer *bucket_allocer)
   {
     int ret = OB_SUCCESS;
-    if (OB_UNLIKELY(0 >= bucket_num) || OB_UNLIKELY(NULL == allocer)) {
+    if (OB_UNLIKELY(0 >= bucket_num) || OB_UNLIKELY(NULL == allocer)
+        || OB_UNLIKELY(NULL == bucket_allocer)) {
       HASH_WRITE_LOG(HASH_WARNING, "invalid param bucket_num=%ld allocer=%p", bucket_num, allocer);
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_UNLIKELY(inited(buckets_))) {
@@ -835,10 +833,19 @@ public:
       HASH_WRITE_LOG(HASH_WARNING, "create buckets fail, ret=%d", ret);
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      //memset(buckets_, 0, sizeof(hashbucket) * bucket_num);
-      bucket_num_ = bucket_num;
-      allocer_ = allocer;
-      bucket_allocer_ = bucket_allocer;
+      for (int64_t i = 0; OB_SUCC(ret) && i < bucket_num; ++i) {
+        if (OB_UNLIKELY(!buckets_[i].sync_initialized())) {
+          HASH_WRITE_LOG_RET(HASH_WARNING, OB_INIT_FAIL, "init bucket synchronization failed");
+          ret = OB_INIT_FAIL;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        bucket_num_ = bucket_num;
+        allocer_ = allocer;
+        bucket_allocer_ = bucket_allocer;
+      } else {
+        hash::destroy(buckets_, *bucket_allocer, bucket_num);
+      }
     }
     return ret;
   }
@@ -864,7 +871,7 @@ public:
       allocer_ = NULL;
       //delete[] buckets_;
       //buckets_ = NULL;
-      hash::destroy(buckets_, *bucket_allocer_);
+      hash::destroy(buckets_, *bucket_allocer_, bucket_num_);
       bucket_num_ = 0;
       size_ = 0;
     }
@@ -1327,7 +1334,7 @@ public:
           }
         }
       }
-      hash::destroy(old_buckets, *bucket_allocer_);
+      hash::destroy(old_buckets, *bucket_allocer_, old_bucket_num);
     }
 
     return ret;
@@ -1611,7 +1618,7 @@ public:
       if (OB_UNLIKELY(inited(buckets_)) && OB_UNLIKELY(NULL != allocer_)) {
         destroy();
       }
-      if (OB_SUCC(create(bucket_num, allocer, bucket_allocer_))) {
+      if (OB_SUCC(ret = create(bucket_num, allocer, bucket_allocer_))) {
         _value_type value;
         for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
           if (OB_FAIL(hash::deserialization(archive, value))) {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "query/ob_i_active_snapshot_service.h"
 #include "share/ob_share_util.h"

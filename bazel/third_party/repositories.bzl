@@ -89,7 +89,7 @@ def _third_party_headers_repository_impl(repository_ctx):
         libraries64 = libraries
     elif platform == "wasm":
         for child in repository_ctx.path(headers).readdir():
-            if child.basename not in source_headers + ["icu", "unicode"]:
+            if child.basename not in source_headers:
                 repository_ctx.symlink(child, "include/" + child.basename)
     else:
         repository_ctx.symlink(headers, "include")

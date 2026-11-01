@@ -284,7 +284,6 @@
 #include "sql/engine/expr/ob_expr_format_bytes.h"
 #include "sql/engine/expr/ob_expr_format_pico_time.h"
 #include "sql/engine/expr/ob_expr_encrypt.h"
-#include "sql/engine/expr/ob_expr_icu_version.h"
 #include "sql/engine/expr/ob_expr_sql_mode_convert.h"
 #include "sql/engine/expr/ob_expr_prefix_pattern.h"
 #include "sql/engine/expr/ob_expr_extract_value.h"
@@ -809,7 +808,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprCurrentScn);
     REG_OP(ObExprEncode);
     REG_OP(ObExprDecode);
-    REG_OP(ObExprICUVersion);
     REG_OP(ObExprGeneratorFunc);
     REG_OP(PluginFunctionExpr);
     REG_OP(PluginTableFunctionExpr);

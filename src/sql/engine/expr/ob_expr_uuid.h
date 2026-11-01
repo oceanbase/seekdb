@@ -24,42 +24,6 @@ namespace oceanbase
 namespace sql
 {
 
-class ObBigEndian
-{
-public:
-  static int put_uint16(unsigned char *b, uint16_t v);
-  static int put_uint32(unsigned char *b, uint32_t v);
-private :
-  //disallow copy
-  DISALLOW_COPY_AND_ASSIGN(ObBigEndian);
-};
-
-struct ObUUIDNode
-{
-  ObUUIDNode();
-  int init();
-  unsigned char mac_addr_[6];
-  bool is_inited_;
-};
-
-class ObUUIDTime
-{
-public:
-  static int get_time(uint64_t &time, uint16_t &seq);
-private:
-  static int time_now(uint64_t &now);
-  static void reset_clock_seq();
-  static const uint64_t LILLIAN = 2299160; // Julian day of 15 Oct 1582
-  static const uint64_t UNIXX = 2440587; // Julian day of 1 Jan 1970
-  static const uint64_t EPOCH = UNIXX - LILLIAN; // Days between EPOCHs
-  static const uint64_t G1582 = EPOCH * 86400; // seconds between EPOCHs
-  static const uint64_t G1582NS100 = G1582 * 10000000; // 100s of a nanoseconds between EPOCHs
-
-  static uint64_t lasttime_;
-  static uint16_t clock_seq_;
-  static common::ObLatch lock_;
-};
-
 class UuidCommon {
 public:
   static int uuid2bin(char *result, bool &is_valid, const char *src, int64_t len);
@@ -96,7 +60,6 @@ public:
 protected:
   static int calc(unsigned char *scratch);
 private:
-  static ObUUIDNode *uuid_node;
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprUuid);
 };

@@ -19,7 +19,7 @@
 #include <string.h>
 #include "share/object/ob_obj_cast.h"
 #include "share/plugin/plugin_sql_type.h"
-#include "sql/parser/ob_item_type.h"
+#include "query/parser/ob_item_type.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/schema/ob_schema_struct.h"

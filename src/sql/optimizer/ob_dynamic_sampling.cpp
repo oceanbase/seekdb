@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dynamic_sampling.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"

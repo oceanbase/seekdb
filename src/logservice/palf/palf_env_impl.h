@@ -92,12 +92,12 @@ public:
   int update_disk_options(const PalfDiskOptions &disk_opts);
 
   void change_to_normal(const int64_t sequence);
-  const PalfDiskOptions& get_disk_opts_for_stopping_writing() const
+  PalfDiskOptions get_disk_opts_for_stopping_writing() const
   {
     ObSpinLockGuard guard(disk_opts_lock_);
     return disk_opts_for_stopping_writing_;
   }
-  const PalfDiskOptions& get_disk_opts_for_recycling_blocks() const
+  PalfDiskOptions get_disk_opts_for_recycling_blocks() const
   {
     ObSpinLockGuard guard(disk_opts_lock_);
     return disk_opts_for_recycling_blocks_;

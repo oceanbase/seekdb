@@ -7,7 +7,7 @@ Thank you for contributing to seekdb. This document is the canonical contributio
 - Search the [issue tracker](https://github.com/oceanbase/seekdb/issues) before opening a new issue.
 - Bug fixes should include a regression test whenever practical.
 - Discuss large features and user-visible design changes with maintainers before implementation.
-- Read the [Developer Guide](docs/developer-guide/en/README.md) for the toolchain, build, test, and coding guidance.
+- Read the [Developer Guide](docs/developer-guide/en/README.md) for toolchain, build, and test guidance.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Prepare a fork
@@ -44,7 +44,7 @@ Build the existing C++ tests on Linux without running them:
 
 See [Writing and running unit tests](docs/developer-guide/en/unittest.md) for target discovery and Google Test filtering.
 
-Run the affected mysqltest cases when a change alters SQL or server behavior. See [Running mysqltest](docs/developer-guide/en/mysqltest.md) for the current `obd.sh` workflow.
+Run the affected mysqltest cases when a change alters SQL or server behavior. See [Running mysqltest](docs/developer-guide/en/mysqltest.md) for case selection, local execution, and recording expected results.
 
 ## Prepare the change
 

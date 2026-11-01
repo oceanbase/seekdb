@@ -2,11 +2,8 @@
 """Regression coverage for the plugin Bazel migration (no server required)."""
 
 import importlib.util
-import io
-import json
 import re
 from pathlib import Path
-import runpy
 import subprocess
 import sys
 import tarfile
@@ -160,40 +157,6 @@ class PluginBuildTest(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     tools.audit(args)
             self.assertFalse(output.exists())
-
-    def test_cargo_shared_archive_and_headerless_export(self):
-        # plugin-runtime exports no headers and must not be looked up as a
-        # compiler target: its crate package name differs from its lib name.
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            library = root / "libseekdb_rust.a"
-            library.write_bytes(b"archive")
-            messages = [{"reason": "compiler-artifact", "package_id": "host",
-                         "target": {"name": "seekdb_rust", "crate_types": ["staticlib"]},
-                         "filenames": [str(library)]}]
-            exports = json.loads((ROOT / "rust/exports.json").read_text())
-            for export in exports.values():
-                if not export["headers"]:
-                    continue
-                name = export["crate"].replace("-", "_")
-                folder = root / name
-                for header in export["headers"].values():
-                    path = folder / header
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text("// generated header\n")
-                messages.extend([
-                    {"reason": "build-script-executed", "package_id": name, "out_dir": str(folder)},
-                    {"reason": "compiler-artifact", "package_id": name, "target": {"name": name, "crate_types": ["rlib"]}},
-                ])
-            process = mock.MagicMock()
-            process.__enter__.return_value = process
-            process.stdout = io.StringIO("\n".join(map(json.dumps, messages)))
-            process.wait.return_value = 0
-            output = root / "output"
-            with mock.patch("subprocess.Popen", return_value=process), mock.patch.object(sys, "argv", ["build.py", "--target-dir", str(root / "target"), "--output", str(output)]):
-                runpy.run_path(str(ROOT / "rust/build.py"), run_name="__main__")
-            self.assertEqual([path.name for path in output.glob("*.a")], ["libseekdb_rust.a"])
-            self.assertTrue((output / "include/config_bridge.h").is_file())
 
 
 if __name__ == "__main__":

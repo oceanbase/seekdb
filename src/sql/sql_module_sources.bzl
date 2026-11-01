@@ -2,7 +2,12 @@
 
 OPTIMIZER_GROUP_NAMES = [
     "ob_sql_optimizer_0",
+    "ob_sql_optimizer_join_order",
+    "ob_sql_optimizer_operators",
+    "ob_sql_optimizer_log_plan",
     "ob_sql_optimizer_1",
+    "ob_sql_optimizer_cost",
+    "ob_sql_optimizer_utils",
     "ob_sql_optimizer_2",
     "ob_sql_optimizer_stat_0",
     "ob_sql_optimizer_stat_1",

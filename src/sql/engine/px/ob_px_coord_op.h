@@ -81,11 +81,11 @@ public:
   bool enable_px_batch_rescan() { return coord_info_.enable_px_batch_rescan(); }
   int64_t get_rescan_param_count()
   {  return coord_info_.get_rescan_param_count(); }
-  const common::ObIArray<ObTableLocation> *get_pruning_table_locations()
-  {  return coord_info_.pruning_table_location_; }
-  void set_pruning_table_locations(const common::ObIArray<ObTableLocation> *pruning_table_locations)
+  const common::ObIArray<TableAccessPlan> *get_pruning_access_plans()
+  {  return coord_info_.pruning_access_plan_; }
+  void set_pruning_access_plans(const common::ObIArray<TableAccessPlan> *pruning_access_plans)
   {
-    coord_info_.pruning_table_location_ = pruning_table_locations;
+    coord_info_.pruning_access_plan_ = pruning_access_plans;
   }
   virtual int receive_channel_root_dfo(ObExecContext &ctx, ObDfo &parent, ObPxTaskChSets &parent_ch_sets) override;
   virtual int receive_channel_root_dfo(
@@ -166,7 +166,7 @@ public:
     px_expected_worker_count_(0),
     qc_id_(common::OB_INVALID_ID),
     batch_op_info_(),
-    table_locations_(alloc)
+    table_access_plans_(alloc)
   {}
   ~ObPxCoordSpec() {}
 
@@ -183,15 +183,15 @@ public:
     batch_op_info_.op_id_ = id;
     batch_op_info_.op_type_ = type;
   }
-  TableLocationFixedArray &get_table_locations()
-  { return table_locations_; }
+  TableAccessPlanArray &get_table_access_plans()
+  { return table_access_plans_; }
   int64_t px_expected_worker_count_; // The upper limit of threads that px can be allocated, used for multi-px rate limiting scenarios
   int64_t qc_id_;
   // px needs to be aware of the operator id and operator type performing the rescan when supporting distributed batch rescan
   // is 1 to 1 correspondence
   ObPxCoordOp::ObPxBatchOpInfo batch_op_info_;
-  // For table_location with conditional pushdown, serialization is required
-  TableLocationFixedArray table_locations_;
+  // For table_access_plan with conditional pushdown, serialization is required
+  TableAccessPlanArray table_access_plans_;
 };
 
 } // end namespace sql

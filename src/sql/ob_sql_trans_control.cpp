@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_sql_trans_control.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -583,7 +583,7 @@ bool print_log = false;
  if (print_log) {
     bool auto_commit = false;
     session->get_autocommit(auto_commit);
-    ObPhyPlanType plan_type = plan->get_location_type();
+    ObPhyPlanType plan_type = plan->get_access_shape();
     stmt::StmtType stmt_type = plan->get_stmt_type();
     bool has_for_update = plan->has_for_update();
     bool use_das = plan->use_das();

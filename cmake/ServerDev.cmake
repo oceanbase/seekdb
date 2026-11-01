@@ -15,12 +15,12 @@ function(_seekdb_server_dev_contract_tool output dependency)
     if(NOT TARGET seekdb_server_dev_contract_tool)
       file(GLOB_RECURSE _tool_sources CONFIGURE_DEPENDS "${_repo}/rust/plugin-runtime/src/*.rs")
       file(GLOB _workspace_manifests CONFIGURE_DEPENDS
-        "${_repo}/rust/*/Cargo.toml" "${_repo}/rust/Cargo.lock" "${_repo}/rust/rust-toolchain*")
+        "${_repo}/rust/*/Cargo.toml" "${_repo}/Cargo.lock" "${_repo}/rust-toolchain.toml")
       add_custom_command(OUTPUT "${_tool}"
-        COMMAND "${_cargo}" build --offline --manifest-path "${_repo}/rust/Cargo.toml"
+        COMMAND "${_cargo}" build --offline --manifest-path "${_repo}/Cargo.toml"
           --target-dir "${CMAKE_BINARY_DIR}/server-dev-tools"
           -p seekdb-plugin-runtime --example server_dev_contract
-        DEPENDS ${_tool_sources} ${_workspace_manifests} "${_repo}/rust/Cargo.toml"
+        DEPENDS ${_tool_sources} ${_workspace_manifests} "${_repo}/Cargo.toml"
           "${_repo}/rust/plugin-runtime/examples/server_dev_contract.rs"
         VERBATIM)
       add_custom_target(seekdb_server_dev_contract_tool DEPENDS "${_tool}")

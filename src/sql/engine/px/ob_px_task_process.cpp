@@ -27,7 +27,6 @@
 #include "sql/engine/pdml/static/ob_px_multi_part_insert_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
-#include "sql/monitor/ob_process_malloc_callback.h"
 #include "sql/ob_sql.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "lib/signal/ob_signal_struct.h"
@@ -120,10 +119,6 @@ int ObPxTaskProcess::process()
     ObWorkerSessionGuard worker_session_guard(session);
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->set_current_trace_id(ObCurTraceId::get_trace_id());
-    session->get_raw_audit_record().request_memory_used_ = 0;
-    ObProcessMallocCallback pmcb(0,
-          session->get_raw_audit_record().request_memory_used_);
-    lib::ObMallocCallbackGuard guard(pmcb);
     session->set_cur_phy_plan(arg_.des_phy_plan_);
     session->set_thread_id(GETTID());
     arg_.exec_ctx_->reference_my_plan(arg_.des_phy_plan_);
@@ -428,7 +423,7 @@ int ObPxTaskProcess::do_process()
   if (NULL != arg_.sqc_task_ptr_) {
     arg_.sqc_task_ptr_->set_result(ret);
     if (OB_NOT_NULL(arg_.exec_ctx_)) {
-      int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_last_errno();
+      int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_retry_error();
       arg_.sqc_task_ptr_->set_das_retry_rc(das_retry_rc);
     }
     if (OB_SUCC(ret)) {

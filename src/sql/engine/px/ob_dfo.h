@@ -64,43 +64,43 @@ class ObPxSqcHandler;
 class ObJoinFilter;
 class ObPxCoordInfo;
 class ObDfo;
-struct ObSqcTableLocationKey
+struct SqcTabletAccessKey
 {
  OB_UNIS_VERSION(1);
 public:
-  ObSqcTableLocationKey() : table_location_key_(0),
+  SqcTabletAccessKey() : table_ref_id_(0),
       ref_table_id_(OB_INVALID_ID), tablet_id_(),
-      is_dml_(false), is_loc_uncertain_(false) {}
-  ObSqcTableLocationKey(int64_t key, int64_t ref_table_id,
-      common::ObTabletID &tablet_id, bool is_dml, bool is_loc_uncertain) :
-      table_location_key_(key),
+      is_dml_(false), has_dynamic_tablets_(false) {}
+  SqcTabletAccessKey(int64_t key, int64_t ref_table_id,
+      common::ObTabletID &tablet_id, bool is_dml, bool has_dynamic_tablets) :
+      table_ref_id_(key),
       ref_table_id_(ref_table_id),
       tablet_id_(tablet_id),
       is_dml_(is_dml),
-      is_loc_uncertain_(is_loc_uncertain) {}
-  int64_t table_location_key_;
+      has_dynamic_tablets_(has_dynamic_tablets) {}
+  int64_t table_ref_id_;
   int64_t ref_table_id_;
   common::ObTabletID tablet_id_;
   bool is_dml_;
-  bool is_loc_uncertain_; // pdml location
-  TO_STRING_KV(K_(table_location_key), K_(ref_table_id), K_(tablet_id), K_(is_dml), K_(is_loc_uncertain));
+  bool has_dynamic_tablets_; // DML tablet targets are completed at execution time.
+  TO_STRING_KV(K_(table_ref_id), K_(ref_table_id), K_(tablet_id), K_(is_dml), K_(has_dynamic_tablets));
 };
 
-struct ObSqcTableLocationIndex
+struct SqcTableAccessRange
 {
 public:
-  ObSqcTableLocationIndex() : table_location_key_(0),
-    location_start_pos_(0), location_end_pos_(0) {}
-  ObSqcTableLocationIndex(int64_t key,
+  SqcTableAccessRange() : table_ref_id_(0),
+    access_start_pos_(0), access_end_pos_(0) {}
+  SqcTableAccessRange(int64_t key,
       int64_t start_pos,
       int64_t end_pos) :
-      table_location_key_(key),
-      location_start_pos_(start_pos),
-      location_end_pos_(end_pos) {}
-  int64_t table_location_key_;
-  int64_t location_start_pos_;
-  int64_t location_end_pos_;
-  TO_STRING_KV(K_(table_location_key), K_(location_start_pos), K_(location_end_pos));
+      table_ref_id_(key),
+      access_start_pos_(start_pos),
+      access_end_pos_(end_pos) {}
+  int64_t table_ref_id_;
+  int64_t access_start_pos_;
+  int64_t access_end_pos_;
+  TO_STRING_KV(K_(table_ref_id), K_(access_start_pos), K_(access_end_pos));
 };
 
 struct ObQCMonitoringInfo {
@@ -126,8 +126,8 @@ public:
               sqc_id_(common::OB_INVALID_ID),
               dfo_id_(common::OB_INVALID_ID),
               branch_id_base_(0),
-              access_table_locations_(),
-              extra_access_table_locations_(),
+              tablet_accesses_(),
+              extra_tablet_accesses_(),
               qc_ch_info_(),
               sqc_ch_info_(),
               qc_channel_(NULL),
@@ -148,16 +148,16 @@ public:
               recieve_use_interm_result_(false),
               serial_receive_channels_(),
               rescan_batch_params_(),
-              partition_pruning_table_locations_(),
+              partition_pruning_access_plans_(),
               temp_table_ctx_(),
               ignore_vtable_error_(false),
-              access_table_location_keys_(),
-              access_table_location_indexes_(),
+              tablet_access_keys_(),
+              table_access_ranges_(),
               adjoining_root_dfo_(false),
               is_single_tsc_leaf_dfo_(false),
               allocator_("PxSqcMetaInner"),
               sqc_order_gi_tasks_(false),
-              locations_order_()
+              tablet_access_order_()
   {}
   ~ObPxSqcMeta() = default;
   int assign(const ObPxSqcMeta &other);
@@ -168,12 +168,12 @@ public:
   /* Get the communication port of the sqc end, read by the sqc end and link */
   dtl::ObDtlChannelInfo &get_sqc_channel_info() { return sqc_ch_info_; }
   const dtl::ObDtlChannelInfo &get_sqc_channel_info_const() const { return sqc_ch_info_; }
-  ObIArray<ObSqcTableLocationKey> &get_access_table_location_keys() { return access_table_location_keys_; }
-  ObIArray<ObSqcTableLocationIndex> &get_access_table_location_indexes() { return access_table_location_indexes_; }
-  DASTabletLocIArray &get_access_table_locations_for_update() { return access_table_locations_; }
-  const DASTabletLocIArray &get_access_table_locations() const { return access_table_locations_; }
-  DASTabletLocIArray &get_extra_access_table_locations_for_update() { return extra_access_table_locations_; }
-  const DASTabletLocIArray &get_extra_access_table_locations() const { return extra_access_table_locations_; }
+  ObIArray<SqcTabletAccessKey> &get_tablet_access_keys() { return tablet_access_keys_; }
+  ObIArray<SqcTableAccessRange> &get_table_access_ranges() { return table_access_ranges_; }
+  DASRuntimeTabletIArray &get_tablet_accesses_for_update() { return tablet_accesses_; }
+  const DASRuntimeTabletIArray &get_tablet_accesses() const { return tablet_accesses_; }
+  DASRuntimeTabletIArray &get_extra_tablet_accesses_for_update() { return extra_tablet_accesses_; }
+  const DASRuntimeTabletIArray &get_extra_tablet_accesses() const { return extra_tablet_accesses_; }
   void set_execution_id(uint64_t execution_id) { execution_id_ = execution_id; }
   void set_qc_id(uint64_t qc_id) { qc_id_ = qc_id; }
   void set_sqc_id(int64_t sqc_id) { sqc_id_ = sqc_id; }
@@ -224,13 +224,13 @@ public:
   { return serial_receive_channels_; }
   void reset()
   {
-    access_table_locations_.reset();
-    extra_access_table_locations_.reset();
+    tablet_accesses_.reset();
+    extra_tablet_accesses_.reset();
     transmit_channel_.reset();
     receive_channel_.reset();
     serial_receive_channels_.reset();
     rescan_batch_params_.reset();
-    partition_pruning_table_locations_.reset();
+    partition_pruning_access_plans_.reset();
     allocator_.reset();
     monitoring_info_.reset();
   }
@@ -253,8 +253,8 @@ public:
   int add_serial_recieve_channel(const ObPxReceiveDataChannelMsg &channel);
   int set_rescan_batch_params(ObBatchRescanParams &params) { return rescan_batch_params_.assign(params); }
   ObBatchRescanParams &get_rescan_batch_params() { return rescan_batch_params_; }
-  common::ObIArray<ObTableLocation> &get_pruning_table_locations()
-  { return partition_pruning_table_locations_; }
+  common::ObIArray<TableAccessPlan> &get_pruning_access_plans()
+  { return partition_pruning_access_plans_; }
   void set_adjoining_root_dfo(bool flag)
   { adjoining_root_dfo_ = flag; }
   bool adjoining_root_dfo() const { return adjoining_root_dfo_; }
@@ -276,7 +276,7 @@ public:
   const ObQCMonitoringInfo &get_monitoring_info() const { return monitoring_info_; }
   void set_branch_id_base(const int16_t branch_id_base) { branch_id_base_ = branch_id_base; }
   int16_t get_branch_id_base() const { return branch_id_base_; }
-  ObIArray<std::pair<int64_t, bool>> &get_locations_order() { return locations_order_; }
+  ObIArray<std::pair<int64_t, bool>> &get_tablet_access_order() { return tablet_access_order_; }
   TO_STRING_KV(K_(need_report), K_(execution_id), K_(qc_id), K_(sqc_id), K_(dfo_id),
                K_(branch_id_base), K_(qc_ch_info), K_(sqc_ch_info),
                K_(task_count), K_(max_task_count), K_(min_task_count),
@@ -293,13 +293,13 @@ private:
   // for replace and insert update operator, they need branch_id to rollback writes by one px-worker
   int16_t branch_id_base_;
   ObQCMonitoringInfo monitoring_info_;
-  // The partition location information of the all table_scan op and dml op
+  // The partition access information of the all table_scan op and dml op
   // used for px worker execution
   // no need serialize
-  DASTabletLocSEArray access_table_locations_;
-  // Additional tablet locations not scanned directly by this DFO, used by
+  DASRuntimeTabletSEArray tablet_accesses_;
+  // Additional tablet accesses not scanned directly by this DFO, used by
   // PDML operations that also maintain global indexes.
-  DASTabletLocSEArray extra_access_table_locations_;
+  DASRuntimeTabletSEArray extra_tablet_accesses_;
 
   ObPxTransmitDataChannelMsg transmit_channel_; // Used for quickly establishing QC-Task channel mode
   ObPxReceiveDataChannelMsg receive_channel_; // Used for quickly establishing QC-Task channel mode
@@ -332,13 +332,13 @@ private:
   // Used to store parameters for NLJ condition pushdown
   ObBatchRescanParams rescan_batch_params_;
   // for partition pruning
-  common::ObSEArray<ObTableLocation, 2> partition_pruning_table_locations_;
+  common::ObSEArray<TableAccessPlan, 2> partition_pruning_access_plans_;
   // sqc needs an array of data block IDs to be written to the intermediate result file
   ObSEArray<ObSqlTempTableCtx, 2> temp_table_ctx_;
   // all child is virtual table, need ignore error.
   bool ignore_vtable_error_;
-  ObSEArray<ObSqcTableLocationKey, 2> access_table_location_keys_;
-  ObSEArray<ObSqcTableLocationIndex, 2> access_table_location_indexes_;
+  ObSEArray<SqcTabletAccessKey, 2> tablet_access_keys_;
+  ObSEArray<SqcTableAccessRange, 2> table_access_ranges_;
   /*used for init channel msg, indicate a transmit
   op is adjoining coodinator, that need not wait that msg*/
   bool adjoining_root_dfo_;
@@ -348,8 +348,8 @@ private:
   int64_t sqc_count_;
   bool sqc_order_gi_tasks_;
   bool partition_random_affinitize_{true}; // whether do partition random in gi task split
-  // record ordering of locations. first is operator id of table scan and second is asc.
-  ObSEArray<std::pair<int64_t, bool>, 18> locations_order_;
+  // record ordering of accesses. first is operator id of table scan and second is asc.
+  ObSEArray<std::pair<int64_t, bool>, 18> tablet_access_order_;
 };
 
 class ObDfo
@@ -401,7 +401,7 @@ public:
     part_ch_map_(),
     dist_method_(ObPQDistributeMethod::NONE),
     total_task_cnt_(0),
-    pkey_table_loc_id_(0),
+    pkey_table_ref_id_(0),
     tsc_op_cnt_(0),
     p2p_dh_ids_(),
     coord_info_ptr_(nullptr),
@@ -547,8 +547,8 @@ public:
     return (dfo_id >= 0 && dfo_id <= MAX_DFO_ID) ||
            (dfo_id == MAX_DFO_ID);
   }
-  void set_pkey_table_loc_id(int64_t id) { pkey_table_loc_id_ = id; }
-  int64_t get_pkey_table_loc_id() { return pkey_table_loc_id_; };
+  void set_pkey_table_ref_id(int64_t id) { pkey_table_ref_id_ = id; }
+  int64_t get_pkey_table_ref_id() { return pkey_table_ref_id_; };
   void inc_tsc_op_cnt() { tsc_op_cnt_++; }
   bool is_leaf_dfo() { return child_dfos_.empty(); }
   bool is_single_tsc_leaf_dfo() { return is_leaf_dfo() && 1 == tsc_op_cnt_; }
@@ -590,7 +590,7 @@ public:
                K_(in_slave_mapping_type),
                K_(out_slave_mapping_type),
                K_(dist_method),
-               K_(pkey_table_loc_id),
+               K_(pkey_table_ref_id),
                K_(tsc_op_cnt),
                K_(transmit_ch_sets),
                K_(receive_ch_sets_map),
@@ -650,7 +650,7 @@ private:
   ObPxPartChMapArray part_ch_map_;
   ObPQDistributeMethod::Type dist_method_;
   int64_t total_task_cnt_;      // the task total count of dfo start worker
-  int64_t pkey_table_loc_id_; // record pkey table loc id for child dfo
+  int64_t pkey_table_ref_id_; // SQL table reference used to distribute the child DFO.
   int64_t tsc_op_cnt_;
   // for p2p dh mgr
   common::ObArray<int64_t>p2p_dh_ids_; //for dh create

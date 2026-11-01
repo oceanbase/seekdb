@@ -1,33 +1,18 @@
 # Install the toolchain
 
-seekdb uses Bazel, Rust, and a repository-managed compiler and dependency set. Install Rust and the host tools below, then let `./build.py init` prepare the pinned C/C++ dependencies under `deps/3rd`.
+seekdb uses Bazel, Rust, and a repository-managed compiler and dependency set. Install the host tools below, then run `./build.py init` to prepare Rust and the pinned C/C++ dependencies under `deps/3rd`.
 
 ## Rust
 
-Install Rust with [rustup](https://rustup.rs/). On Linux, macOS, or WSL, run the official installer and load Cargo's environment into the current shell:
+`./build.py init` installs rustup if needed, then prepares the toolchain, components, and targets declared in `rust-toolchain.toml`. The repository pins Rust `1.98.1`. Run `init` before the first build and after changing the toolchain file. Downloads and installation logs are shown in the terminal; `build` reports a missing toolchain and asks you to run `init`.
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
+Native init requires only the host Rust standard library and clippy. The Android, iOS device, and iOS simulator init options install their Rust targets on demand. CI installs the Windows GNU target explicitly before its cross-platform check. Host and cross targets use the same pinned toolchain.
 
-On Windows, download and run `rustup-init.exe` from the [official Rust installation page](https://www.rust-lang.org/tools/install), then open a new PowerShell window so `%USERPROFILE%\.cargo\bin` is available in `PATH`.
+Rustup downloads use [RsProxy](https://rsproxy.cn/) by default. Set `RUSTUP_DIST_SERVER` or `RUSTUP_UPDATE_ROOT` before invoking `build.py` to use another source. `RUSTUP_INIT_URL` can override the rustup installer URL. These defaults apply only to the build process and its children; the script does not edit shell profiles or change the default Rust toolchain.
 
-The repository pins Rust `1.98.1` in `rust/rust-toolchain.toml`. Native builds use rustup to locate that version. Rustup installs it automatically if missing, unless `RUSTUP_AUTO_INSTALL=0` is set; no separate installation command is required.
+Existing `CARGO_HOME` and `RUSTUP_HOME` settings are preserved. Without overrides, rustup uses its standard user directories. `build.py` adds the Cargo binary directory to its own `PATH`; to run Cargo directly in another shell, add that directory to your shell's `PATH`.
 
-The toolchain file also declares `clippy` and the following targets for Rust checks and cross-compilation. A native build does not require all of them:
-
-```text
-x86_64-unknown-linux-gnu
-x86_64-pc-windows-gnu
-aarch64-linux-android
-aarch64-apple-ios
-aarch64-apple-ios-sim
-```
-
-To preinstall the toolchain, components, and targets declared in that file, optionally run `rustup toolchain install --no-self-update` from the `rust/` directory. The `--no-self-update` flag only disables updating rustup itself.
-
-The build script downloads locked Cargo dependencies through the [RsProxy sparse registry](https://rsproxy.cn/), overriding the user's crates.io source selection for this step. No global mirror configuration is needed; downloads still use the existing Cargo cache (`$CARGO_HOME`, or `~/.cargo` by default).
+The build script downloads locked Cargo dependencies through the RsProxy sparse registry, overriding the user's crates.io source selection for this step. Downloads reuse the existing Cargo cache (`CARGO_HOME`, or `~/.cargo` by default).
 
 ## Host detection and supported architectures
 

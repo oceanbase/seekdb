@@ -51,7 +51,7 @@ class ObPSAnalysisChecker
 public:
   ObPSAnalysisChecker()
     : pos_(nullptr), begin_pos_(nullptr), end_pos_(nullptr),
-      data_len_(0), need_check_(true)
+      data_len_(0)
   {}
   void init(const char*& pos, const int64_t len)
   {
@@ -59,7 +59,6 @@ public:
     begin_pos_ = pos;
     end_pos_ = pos + len;
     data_len_ = len;
-    need_check_ = true;
   }
   int detection(const int64_t len);
   inline int64_t remain_len()
@@ -70,7 +69,6 @@ public:
   const char* begin_pos_;
   const char* end_pos_;
   int64_t data_len_;
-  bool need_check_;
 };
 
 #define PS_DEFENSE_CHECK(len)                              \
@@ -335,7 +333,6 @@ private:
   int get_pl_type_by_type_info(ObIAllocator &allocator,
                         const sql::TypeInfo *type_info,
                         const pl::ObUserDefinedType *&pl_type);
-  bool is_contain_complex_element(const sql::ParamTypeArray &param_types) const;
 
   virtual int before_process();
   virtual int after_process(int error_code);

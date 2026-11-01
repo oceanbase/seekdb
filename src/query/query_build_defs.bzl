@@ -62,7 +62,7 @@ QUERY_API_INTERFACE_HEADERS = [
     "api/query/ob_sql_name_service.h",
     "api/query/optimizer/ob_opt_default_stat.h",
     "api/query/optimizer/ob_optimizer_algo_defs.h",
-    "api/query/optimizer/ob_optimizer_location_defs.h",
+    "api/query/optimizer/table_access_defs.h",
     "api/query/optimizer/stat/ob_opt_column_stat.h",
     "api/query/optimizer/stat/ob_opt_ds_stat.h",
     "api/query/optimizer/stat/ob_opt_osg_column_stat.h",

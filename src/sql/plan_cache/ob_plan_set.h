@@ -20,7 +20,7 @@
 #include "lib/net/ob_addr.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_2d_array.h"
-#include "sql/optimizer/ob_table_location.h"
+#include "sql/optimizer/table_access_plan.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/executor/ob_sql_executor_ctx.h"
@@ -157,7 +157,7 @@ private:
 //ObPlanSet is a set of ObPhysicalPlans with same PlanMetaInfo
 class ObPlanSet : public common::ObDLinkBase<ObPlanSet>
 {
-  friend struct ObPhyLocationGetter;
+  friend struct TableAccessTargetBuilder;
 public:
   static const ObPCUserVarMeta UNKNOWN_VAR_DEFAULT_META;
   explicit ObPlanSet(ObPlanSetType type)
@@ -301,7 +301,7 @@ public:
   ObSqlPlanSet()
     : ObPlanSet(PST_SQL_CRSR),
       is_all_non_partition_(true),
-      table_locations_(alloc_),
+      table_access_plans_(alloc_),
       array_binding_plan_(),
       local_plans_(),
       direct_local_plan_(NULL),
@@ -359,17 +359,15 @@ private:
                          bool &get_next);
   int try_get_dist_plan(ObPlanCacheCtx &pc_ctx,
                         ObPhysicalPlan *&plan);
-  int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
-                        ObPlanCacheCtx &pc_ctx,
-                        ObIArray<ObCandiTableLoc> &candi_table_locs);
+  int build_access_plans(const ObIArray<TableAccessPlan> &table_access_plans,
+                            ObPlanCacheCtx &pc_ctx);
 
-  int get_phy_locations(const ObTablePartitionInfoArray &partition_infos,
-                        ObIArray<ObCandiTableLoc> &candi_table_locs);
+  int collect_access_targets(const ObTablePartitionInfoArray &partition_infos,
+                        ObIArray<TableAccessTargets> &table_targets);
 
-  int get_plan_type(const ObIArray<ObTableLocation> &table_locations,
+  int get_plan_type(const ObIArray<TableAccessPlan> &table_access_plans,
                     const bool is_contain_uncertain_op,
                     ObPlanCacheCtx &pc_ctx,
-                    ObIArray<ObCandiTableLoc> &candi_table_locs,
                     ObPhyPlanType &plan_type);
   ObPhysicalPlan* get_local_plan();
   int add_local_plan(ObPhysicalPlan &plan);
@@ -377,7 +375,7 @@ private:
 
 private:
   bool is_all_non_partition_; // Determine whether all tables corresponding to this plan are non-partitioned tables
-  TableLocationFixedArray table_locations_;
+  TableAccessPlanArray table_access_plans_;
   //used for array binding, only local plan
   ObPhysicalPlan *array_binding_plan_;
   common::ObSEArray<ObPhysicalPlan *, 4> local_plans_; 
@@ -385,8 +383,8 @@ private:
   ObPhysicalPlan *direct_local_plan_;
   ObDistPlans dist_plans_;
   // Used for handling OR expansion, late materialization, global index, etc., special scenarios
-  // The common characteristic of the above special scenarios is that the table location in the plan_set cache is inconsistent with the table location within the plan,
-  // Must get table location from the plan to calculate physical partition address
+  // The common characteristic of the above special scenarios is that the table access in the plan_set cache is inconsistent with the table access within the plan,
+  // Must get table access from the plan to calculate physical partition address
   int64_t need_try_plan_;
   ObSEArray<int64_t, 4> part_param_idxs_;
   // Whether it contains a virtual table, if it contains a virtual table, do not perform the optimization of directly obtaining the local plan

@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_MGR_
 #define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_MGR_
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "ob_deadlock_detector_common_define.h"
 #include "ob_deadlock_parameters.h"

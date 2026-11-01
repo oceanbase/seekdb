@@ -16,9 +16,8 @@ load("//deps/external/bazel:jemalloc.bzl", "jemalloc")
 
 package(default_visibility = ["//visibility:private"])
 
+exports_files(["Cargo.toml", "Cargo.lock"])
+
 jemalloc(
     name = "jemalloc",
-    external_src = "src/lib.rs",
-    lockfile = "Cargo.lock",
-    manifest = "Cargo.toml",
 )

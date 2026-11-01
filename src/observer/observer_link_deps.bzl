@@ -148,7 +148,7 @@ def observer_third_party_link_files(platform):
     labels += [":_roaring_core_link"]
     files = ["lib/libunwind.a"] if platform == "linux_x86_64" else []
     files += ["lib/" + name for name in [
-        "libz.a", "libicui18n.a", "libicustubdata.a", "libicuuc.a", "libprotobuf-c.a",
+        "libz.a", "libprotobuf-c.a",
     ]]
     if not macos and not android:
         files += ["lib/libaio.so"]

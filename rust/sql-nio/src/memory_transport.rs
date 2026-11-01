@@ -429,8 +429,7 @@ fn checked_bytes_len(data: *const c_char, len: i64) -> Option<usize> {
 
 /// # Safety
 /// The reactor remains live during this call; its destruction cannot race it.
-#[no_mangle]
-pub unsafe extern "C" fn nio_memory_connect(
+pub unsafe fn memory_connect(
     reactor: *const reactor::NioReactor,
     capacity: usize,
 ) -> *mut MemoryClient {
@@ -479,12 +478,7 @@ fn io_result(result: io::Result<usize>) -> i64 {
 
 /// # Safety
 /// `client` remains live during the call and `buffer` is readable for `length` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn nio_memory_write(
-    client: *const MemoryClient,
-    buffer: *const c_char,
-    length: i64,
-) -> i64 {
+pub unsafe fn memory_write(client: *const MemoryClient, buffer: *const c_char, length: i64) -> i64 {
     let Some(client) = (unsafe { client.as_ref() }) else {
         return -1;
     };
@@ -500,12 +494,7 @@ pub unsafe extern "C" fn nio_memory_write(
 }
 /// # Safety
 /// `client` remains live during the call and `buffer` is writable for `length` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn nio_memory_read(
-    client: *const MemoryClient,
-    buffer: *mut c_char,
-    length: i64,
-) -> i64 {
+pub unsafe fn memory_read(client: *const MemoryClient, buffer: *mut c_char, length: i64) -> i64 {
     let Some(client) = (unsafe { client.as_ref() }) else {
         return -1;
     };
@@ -521,8 +510,7 @@ pub unsafe extern "C" fn nio_memory_read(
 }
 /// # Safety
 /// `client` is null or is a live client destroyed once, with no concurrent calls.
-#[no_mangle]
-pub unsafe extern "C" fn nio_memory_close(client: *mut MemoryClient) {
+pub unsafe fn memory_close(client: *mut MemoryClient) {
     if !client.is_null() {
         drop(unsafe { Box::from_raw(client) });
     }

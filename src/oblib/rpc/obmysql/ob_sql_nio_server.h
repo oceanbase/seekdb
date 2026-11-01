@@ -16,10 +16,7 @@
 
 #ifndef OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_
 #define OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_
-#include "nio.h"
-#ifdef __EMSCRIPTEN__
-#include "nio_memory.h"
-#endif
+#include "rust/sql_nio.h"
 #include "lib/lock/ob_mutex.h"
 #include "rpc/obmysql/ob_sql_sock_handler.h"
 
@@ -37,7 +34,7 @@ public:
   int64_t get_bound_tcp_port()
   {
     lib::ObMutexGuard guard(reactor_lock_);
-    return nullptr == reactor_ ? 0 : static_cast<int64_t>(nio_get_bound_tcp_port(reactor_));
+    return nullptr == reactor_ ? 0 : static_cast<int64_t>(oceanbase::nio::get_bound_tcp_port(reactor_));
   }
   int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread,
             bool use_tls, const char *min_tls_version);
@@ -49,7 +46,7 @@ public:
   bool set_external_tcp_port(uint16_t port)
   {
     lib::ObMutexGuard guard(reactor_lock_);
-    if (nullptr == reactor_ || nio_get_bound_tcp_port(reactor_) != 0) {
+    if (nullptr == reactor_ || oceanbase::nio::get_bound_tcp_port(reactor_) != 0) {
       return false;
     }
     external_tcp_port_ = port;
@@ -59,17 +56,17 @@ public:
   {
     lib::ObMutexGuard guard(reactor_lock_);
     return nullptr == reactor_ ? 0 : external_tcp_port_ != 0
-        ? external_tcp_port_ : static_cast<int64_t>(nio_get_bound_tcp_port(reactor_));
+        ? external_tcp_port_ : static_cast<int64_t>(oceanbase::nio::get_bound_tcp_port(reactor_));
   }
   // The caller owns the returned client and must close it exactly once.
-  nio_memory_client *connect_memory(size_t capacity);
+  nio::MemoryClient *connect_memory(size_t capacity);
 #endif
   void update_tcp_keepalive_params(int keepalive_enabled, uint32_t tcp_keepidle, uint32_t tcp_keepintvl, uint32_t tcp_keepcnt);
 
 private:
   ObSqlSockHandler io_handler_; // for io thread
   lib::ObMutex reactor_lock_;
-  NioReactor* reactor_ = nullptr;
+  oceanbase::nio::NioReactor* reactor_ = nullptr;
   int n_thread_ = 1;
 #ifdef __EMSCRIPTEN__
   uint16_t external_tcp_port_ = 0;

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_clustered_index_block_writer.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 

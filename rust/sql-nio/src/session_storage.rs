@@ -29,8 +29,8 @@ impl CppSessionStorage {
         Self { ptr, layout }
     }
 
-    pub(crate) fn as_ptr(&self) -> *mut c_void {
-        self.ptr.as_ptr().cast::<c_void>()
+    pub(crate) fn as_ptr(&self) -> *mut ObSqlSockSession {
+        self.ptr.as_ptr().cast::<ObSqlSockSession>()
     }
 }
 

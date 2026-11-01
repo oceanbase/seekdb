@@ -117,11 +117,11 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
       // The returned value is child's output exprs
       row = &child_->get_spec().output_;
       if (NO_PARTITION_ID_FLAG == part_id_idx) {
-        ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
-        if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
+        DASRuntimeTableAccess *table_access = ins_rtdef_.das_rtdef_.table_access_;
+        if (OB_ISNULL(table_access) || table_access->get_tablet_accesses().size() != 1) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          tablet_id = table_loc->get_first_tablet_loc()->tablet_id_;
+          tablet_id = table_access->get_first_tablet_access()->tablet_id_;
         }
       } else if (child_->get_spec().output_.count() > part_id_idx) {
         ObExpr *expr = child_->get_spec().output_.at(part_id_idx);
@@ -139,7 +139,7 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
 }
 
 int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
-                                      const ObDASTabletLoc *tablet_loc,
+                                      const DASRuntimeTabletAccess *tablet_access,
                                       ObPDMLOpRowIterator &dml_row_iter)
 {
   int ret = OB_SUCCESS;
@@ -158,7 +158,7 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
         } else {
           iter_end_ = true;
         }
-      } else if (OB_FAIL(ObDMLService::insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, tablet_loc, dml_rtctx_, stored_row))) {
+      } else if (OB_FAIL(ObDMLService::insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, tablet_access, dml_rtctx_, stored_row))) {
       } else if (OB_FAIL(discharge_das_write_buffer())) {
       } else {
         op_monitor_info_.otherstat_3_value_++;

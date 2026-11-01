@@ -1,0 +1,66 @@
+DROP USER IF EXISTS 'scheduler_authz_owner'@'%';
+DROP USER IF EXISTS 'scheduler_authz_caller'@'%';
+DROP ROLE IF EXISTS scheduler_authz_admin;
+DELETE FROM oceanbase.__all_scheduler_job WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+CREATE USER 'scheduler_authz_owner'@'%';
+CREATE USER 'scheduler_authz_caller'@'%';
+CREATE ROLE scheduler_authz_admin;
+GRANT SUPER ON *.* TO scheduler_authz_admin;
+GRANT scheduler_authz_admin TO 'scheduler_authz_caller'@'%';
+INSERT INTO oceanbase.__all_scheduler_job
+(job_name, job, lowner, powner, cowner, next_date, `interval#`, flag,
+job_type, job_action, enabled, auto_drop)
+VALUES ('SCHEDULER_AUTHZ_TEST_JOB', 990000001, 'test',
+'scheduler_authz_owner@%', 'scheduler_authz_owner@%',
+'2099-01-01 00:00:00', 'null', 0, 'STORED_PROCEDURE',
+'DBMS_STATS.GATHER_DATABASE_STATS_JOB_PROC', false, false);
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	0
+SELECT CURRENT_USER() AS actor;
+actor
+scheduler_authz_owner@%
+CALL DBMS_SCHEDULER.ENABLE('SCHEDULER_AUTHZ_TEST_JOB');
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	1
+CALL DBMS_SCHEDULER.DISABLE('SCHEDULER_AUTHZ_TEST_JOB');
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	0
+SELECT CURRENT_USER() AS actor;
+actor
+scheduler_authz_caller@%
+SET ROLE NONE;
+CALL DBMS_SCHEDULER.ENABLE('SCHEDULER_AUTHZ_TEST_JOB');
+ERROR 42501: Access denied; you need (at least one of) the SUPER privilege(s) for this operation
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	0
+SET ROLE ALL;
+CALL DBMS_SCHEDULER.ENABLE('SCHEDULER_AUTHZ_TEST_JOB');
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	1
+SET ROLE NONE;
+CALL DBMS_SCHEDULER.DISABLE('SCHEDULER_AUTHZ_TEST_JOB');
+ERROR 42501: Access denied; you need (at least one of) the SUPER privilege(s) for this operation
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	1
+SET ROLE ALL;
+CALL DBMS_SCHEDULER.DISABLE('SCHEDULER_AUTHZ_TEST_JOB');
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+job_name	enabled
+SCHEDULER_AUTHZ_TEST_JOB	0
+DELETE FROM oceanbase.__all_scheduler_job WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+DROP USER 'scheduler_authz_owner'@'%';
+DROP USER 'scheduler_authz_caller'@'%';
+DROP ROLE scheduler_authz_admin;

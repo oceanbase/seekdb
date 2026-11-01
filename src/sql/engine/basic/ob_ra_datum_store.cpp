@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_ra_datum_store.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
@@ -1233,26 +1233,6 @@ bool ObRADatumStore::need_dump(const int64_t extra_size)
   } else if (mem_limit_ > 0) {
     if (mem_hold_ + extra_size > mem_limit_) {
       need_to_dump = true;
-    }
-  } else {
-    const int64_t mem_ctx_pct_trigger = 80;
-    lib::ObMallocAllocator *instance = lib::ObMallocAllocator::get_instance();
-    lib::ObCtxAllocatorGuard allocator = NULL;
-    if (NULL == instance) {
-      int ret = common::OB_ERR_SYS;
-      LOG_ERROR("NULL allocator", K(ret));
-    } else if (OB_ISNULL(allocator = instance->get_ctx_allocator(
-        ctx_id_))) {
-      // no context allocator, do nothing
-    } else {
-      const int64_t limit = allocator->get_limit();
-      const int64_t hold = allocator->get_hold();
-      int64_t mod_hold = 0;
-      if (limit / 100 * mem_ctx_pct_trigger <= hold) {
-        need_to_dump = true;
-      }
-      if (need_to_dump) {
-      }
     }
   }
   return need_to_dump;

@@ -62,14 +62,14 @@ namespace sql
     /**
      * Exchange allocation is also known as parallel optimization. Though there
      * are multiple possible optimization that can happen in this step, at the
-     * moment we just perform simple check on table location and insert pairs of
+     * moment we just perform simple check on table access and insert pairs of
      * exchange nodes at places where data exchange needs to happen(local
      * execution is not enough to satisfy the semantics. )
      */
     OPERATOR_NUMBERING,                                   // numbering operators
     EXCHANGE_NUMBERING,                                   // numbering exchange out for px
     GEN_SIGNATURE,                                  // generating plan signature
-    GEN_LOCATION_CONSTRAINT,                      //generate plan location constraint, used from plan cache
+    GEN_ACCESS_CONSTRAINT,                      //generate plan access constraint, used from plan cache
     EXTRACT_PARAMS_FOR_SUBPLAN,                 // extract params for subplan
 		/**
 		 * alloc granule iterator after all other operation

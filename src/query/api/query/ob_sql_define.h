@@ -283,12 +283,12 @@ inline const ObString &ob_join_type_str(ObJoinType join_type)
   }
 }
 
-enum ObTableLocationType
+enum TableAccessShape
 {
-  OB_TBL_LOCATION_UNINITIALIZED = 0,
-  OB_TBL_LOCATION_LOCAL,
-  OB_TBL_LOCATION_DISTRIBUTED,
-  OB_TBL_LOCATION_ALL//like EXPRESSION, match all
+  TABLE_ACCESS_UNINITIALIZED = 0,
+  TABLE_ACCESS_SINGLE_TABLET,
+  TABLE_ACCESS_MULTI_TABLET,
+  TABLE_ACCESS_ANY//like EXPRESSION, match all
 };
 
 enum ObRepartitionType

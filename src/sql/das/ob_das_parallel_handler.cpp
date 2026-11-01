@@ -90,7 +90,7 @@ int ObDASParallelHandler::deep_copy_das_task(ObDASTaskFactory &das_factory,
     } else if (ser_pos != des_pos) {
       ret = OB_DESERIALIZE_ERROR;
     } else {
-      das_op->set_tablet_loc(src_op->get_tablet_loc());
+      das_op->set_tablet_access(src_op->get_tablet_access());
       dst_op = das_op;
     }
   }

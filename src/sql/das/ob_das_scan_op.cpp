@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_das_scan_op.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "share/rc/ob_server_runtime.h"
@@ -306,7 +306,7 @@ ObDASIterTreeType ObDASScanOp::get_iter_tree_type() const
 storage::ObTableScanParam* ObDASScanOp::get_local_lookup_param()
 {
   storage::ObTableScanParam* lookup_param = nullptr;
-  if (is_local_task() && ITER_TREE_LOCAL_LOOKUP == get_iter_tree_type() && OB_NOT_NULL(result_)) {
+  if (ITER_TREE_LOCAL_LOOKUP == get_iter_tree_type() && OB_NOT_NULL(result_)) {
     ObDASLocalLookupIter *lookup_iter = static_cast<ObDASLocalLookupIter*>(result_);
     lookup_param = &lookup_iter->get_lookup_param();
   }

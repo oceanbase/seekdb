@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "share/ob_server_struct.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "share/rc/ob_server_runtime.h"
@@ -3698,7 +3698,6 @@ int ObDagScheduler::init_allocator(
   int ret = OB_SUCCESS;
   ContextParam param;
   param.set_mem_attr(label, common::ObCtxIds::DEFAULT_CTX_ID)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
       .set_properties(ALLOC_THREAD_SAFE)
       .set_parallel(8);
   if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context, param))) {

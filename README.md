@@ -88,7 +88,7 @@ pip install -U pyseekdb   # pyseekdb is the Python SDK for seekdb
 
 > 📋 [View demo.py source →](images/demo.py)
 
-No manual server deployment, schema definition, or embedding setup for this Python demo. [Run a local database with Python or JavaScript →](#embedded-sdks)
+No manual server deployment, schema definition, or embedding setup for this Python demo. [Run a local database with Python, JavaScript, or Go →](#embedded-sdks)
 
 ---
 
@@ -171,7 +171,7 @@ real-time writes, and the entire MySQL ecosystem out of the box.
 
 ### Embedded use
 
-Use a local seekdb database from Python or Node.js without deploying a database service yourself. Data is stored in a local directory and remains available when you reopen it.
+Use a local seekdb database from Python, Node.js, or Go without deploying a database service yourself. Data is stored in a local directory and remains available when you reopen it.
 
 <details open>
 <summary><b>🐍 Python</b></summary>
@@ -269,6 +269,86 @@ For a higher-level JavaScript Collection API, see [seekdb-js](https://github.com
 
 </details>
 
+<details open>
+<summary><b>🐹 Go</b></summary>
+
+Use [seekdb-go](https://github.com/oceanbase/seekdb-go) to start a local seekdb database, then execute SQL with `go-sql-driver/mysql`. This example requires Go 1.24 or newer, `CGO_ENABLED=1`, and a C compiler.
+
+```bash
+mkdir seekdb-go-example
+cd seekdb-go-example
+go mod init example.com/seekdb-demo
+```
+
+Save the following as `main.go`. It uses the endpoint returned by `ConnectionOptions` and closes the SQL connections before releasing the runtime handle:
+
+```go
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+
+	"github.com/go-sql-driver/mysql"
+	seekdb "github.com/oceanbase/seekdb-go"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	db, err := seekdb.Open("./seekdb.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	endpoint, err := db.ConnectionOptions()
+	if err != nil {
+		return err
+	}
+	cfg := mysql.NewConfig()
+	cfg.User, cfg.DBName = endpoint.User, "test"
+	switch endpoint.Transport {
+	case "unix_socket":
+		cfg.Net, cfg.Addr = "unix", endpoint.UnixSocket
+	case "tcp":
+		cfg.Net, cfg.Addr = "tcp", net.JoinHostPort(endpoint.Host, fmt.Sprint(endpoint.Port))
+	default:
+		return fmt.Errorf("unsupported transport %q", endpoint.Transport)
+	}
+	connection, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+
+	var value int
+	if err := connection.QueryRow("SELECT 1 AS value").Scan(&value); err != nil {
+		return err
+	}
+	fmt.Println(value)
+	return nil
+}
+```
+
+Run it; Go resolves the dependencies and downloads the native bundle for your current platform. The result is `1`:
+
+```bash
+go run -mod=mod .
+```
+
+A regular `go get` for seekdb-go or `go mod tidy` may download bundles for all supported platforms.
+
+[Full usage guide](https://github.com/oceanbase/seekdb-go#install) · [Supported platforms and requirements](https://github.com/oceanbase/seekdb-go/blob/main/docs/support.md)
+
+</details>
+
 These examples store data in `./seekdb.db` and can be rerun. The path is a database directory. Initializing a new directory can take longer than subsequent opens.
 
 ### Server deployments
@@ -321,7 +401,7 @@ See [deployment docs](https://docs.seekdb.ai/seekdb/deploy-by-systemd/) for DEB/
 
 ### 📝 More Examples
 
-Start with the runnable [Python and JavaScript examples](#embedded-sdks) above. The following application pattern assumes an existing agent implementation.
+Start with the runnable [Python, JavaScript, and Go examples](#embedded-sdks) above. The following application pattern assumes an existing agent implementation.
 
 <details>
 <summary><b>🤖 Agent Memory Pattern (continuous write + immediate retrieval)</b></summary>

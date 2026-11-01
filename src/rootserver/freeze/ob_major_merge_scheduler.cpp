@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS_COMPACTION
 
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_scheduler.h"
 #include "share/ob_server_struct.h"

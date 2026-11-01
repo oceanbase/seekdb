@@ -195,14 +195,10 @@ def check_plugin_links(repo: pathlib.Path, errors: list[str]) -> None:
                 )
 
 
-def validate_plugin_expression_ids(query_text: str, jit_text: str) -> list[str]:
-    """The legacy JIT header can precede Query's header via the same guard.
-
-    Check the plugin-owned function range, not unrelated legacy parser drift.
-    """
+def validate_plugin_expression_ids(query_text: str) -> list[str]:
+    """Check the plugin-owned range in the authoritative Query header."""
     errors: list[str] = []
-    maps = []
-    for label, text in (("Query", query_text), ("JIT", jit_text)):
+    for label, text in (("Query", query_text),):
         text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
         entries = re.findall(r"\b(T_[A-Z0-9_]+)\s*=\s*([0-9]+)\s*,", text)
         wanted = re.findall(r"\b(T_FUN_SYS_PLUGIN_[A-Z0-9_]+)\s*=", text)
@@ -215,17 +211,13 @@ def validate_plugin_expression_ids(query_text: str, jit_text: str) -> list[str]:
             collisions = [other for other, number in entries if int(number) == value and other != name]
             if collisions:
                 errors.append(f"{label}: {name}={value} collides with {', '.join(collisions)}")
-        maps.append(dict(plugin))
-    if maps[0] != maps[1]:
-        errors.append("Query/JIT plugin expression IDs differ; update both ob_item_type.h headers")
     return errors
 
 
 def check_plugin_expression_ids(repo: pathlib.Path, errors: list[str]) -> None:
-    headers = [repo / "src/query/api/query/parser/ob_item_type.h",
-               repo / "src/objit/include/objit/common/ob_item_type.h"]
+    headers = [repo / "src/query/api/query/parser/ob_item_type.h"]
     if any(not header.is_file() for header in headers):
-        errors.append("missing Query/JIT expression headers for plugin boundary check")
+        errors.append("missing Query expression header for plugin boundary check")
     else:
         errors.extend(validate_plugin_expression_ids(*(header.read_text(encoding="utf-8") for header in headers)))
 

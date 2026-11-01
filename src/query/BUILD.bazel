@@ -27,7 +27,6 @@ cc_library(
         ":sql_expression_interface",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_base",
-        "//src/objit:objit_api_interface",
         "//src/share:diagnostics",
         "//src/share:semistruct",
     ],

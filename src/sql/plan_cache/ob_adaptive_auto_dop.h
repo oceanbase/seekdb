@@ -34,7 +34,7 @@ namespace sql
 {
 class ObBatchEstTasks;
 class ObCostTableScanSimpleInfo;
-class ObDASTabletLoc;
+class DASRuntimeTabletAccess;
 class ObOpSpec;
 class ObPhysicalPlan;
 class ObTableScanSpec;
@@ -65,7 +65,7 @@ private:
                                      bool &is_single_part, int64_t &part_cnt);
   int add_estimation_tasks(const ObTableScanSpec &tsc_spec,
                            const ObCostTableScanSimpleInfo &cost_tsc_info,
-                           const int64_t schema_version, ObDASTabletLoc *tablet_loc,
+                           const int64_t schema_version, DASRuntimeTabletAccess *tablet_access,
                            ObQueryRangeArray &ranges, ObIArray<ObBatchEstTasks *> &tasks);
   int construct_scan_range_batch(ObIAllocator &allocator, const ObQueryRangeArray &scan_ranges,
                                  ObSimpleBatch &batch);
@@ -75,8 +75,8 @@ private:
                              const ObCostTableScanSimpleInfo &cost_tsc_info, int64_t part_cnt,
                              int64_t &table_dop);
   int choose_storage_estimation_partitions(const int64_t partition_limit,
-                                           const DASTabletLocSEArray &tablet_locs,
-                                           DASTabletLocSEArray &chosen_tablet_locs);
+                                           const DASRuntimeTabletSEArray &tablet_accesses,
+                                           DASRuntimeTabletSEArray &chosen_tablet_accesses);
 
 private:
   ObExecContext &ctx_;

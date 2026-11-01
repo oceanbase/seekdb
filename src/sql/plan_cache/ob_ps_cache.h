@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_PLAN_CACHE_OB_PS_CACHE_
 
 #include "lib/hash/ob_hashmap.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/task/ob_timer.h"

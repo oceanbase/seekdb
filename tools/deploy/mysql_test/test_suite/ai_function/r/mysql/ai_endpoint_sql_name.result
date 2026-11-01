@@ -1,0 +1,16 @@
+SET @endpoint = CONCAT('endpoint_quote', CHAR(39), CHAR(92), 'name');
+CALL DBMS_AI_SERVICE.CREATE_AI_MODEL('sql_name_model', '{"type":"completion","model_name":"example-model"}');
+CALL DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(@endpoint,
+'{"ai_model_name":"sql_name_model","url":"https://example.com/v1/","access_key":"test-only-key","request_model_name":"example-model","provider":"openai"}');
+SELECT HEX(ENDPOINT_NAME) AS endpoint_name_hex, AI_MODEL_NAME, URL, PROVIDER, REQUEST_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME = @endpoint;
+endpoint_name_hex	AI_MODEL_NAME	URL	PROVIDER	REQUEST_MODEL_NAME
+656E64706F696E745F71756F7465275C6E616D65	sql_name_model	https://example.com/v1/	openai	example-model
+CALL DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT(@endpoint, '{"request_model_name":"updated-model"}');
+SELECT HEX(ENDPOINT_NAME) AS endpoint_name_hex, AI_MODEL_NAME, URL, PROVIDER, REQUEST_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME = @endpoint;
+endpoint_name_hex	AI_MODEL_NAME	URL	PROVIDER	REQUEST_MODEL_NAME
+656E64706F696E745F71756F7465275C6E616D65	sql_name_model	https://example.com/v1/	openai	updated-model
+CALL DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT(@endpoint);
+SELECT COUNT(*) AS remaining_endpoint FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME = @endpoint;
+remaining_endpoint
+0
+CALL DBMS_AI_SERVICE.DROP_AI_MODEL('sql_name_model');

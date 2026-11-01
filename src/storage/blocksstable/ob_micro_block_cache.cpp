@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_micro_block_cache.h"
 #include "src/storage/meta_mem/ob_tablet_pointer.h"
 #include "src/storage/meta_mem/ob_tablet_pointer.h"

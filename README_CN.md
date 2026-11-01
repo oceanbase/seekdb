@@ -70,7 +70,7 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
   <img src="images/benchmark.svg" alt="seekdb 基准测试：QPS 是 Milvus 的 10.7 倍，Elasticsearch 的 3.2 倍" width="720" />
 </div>
 
-> 📖 [阅读发布博客 →](docs/blog/launch_blog_zh.md) · 🔁 [复现基准测试 →](https://github.com/oceanbase/vdb-streambench)
+> 📖 [阅读发布博客 →](docs/blog/launch_blog_en.md) · 🔁 [复现基准测试 →](https://github.com/oceanbase/vdb-streambench)
 
 ---
 
@@ -88,7 +88,7 @@ pip install -U pyseekdb   # pyseekdb 是 seekdb 的 Python SDK
 
 > 📋 [查看 demo.py 源码 →](images/demo.py)
 
-这个 Python 演示无需手动部署服务器、定义 Schema 或配置 Embedding。[使用 Python 或 JavaScript 运行本地数据库 →](#embedded-sdks)
+这个 Python 演示无需手动部署服务器、定义 Schema 或配置 Embedding。[使用 Python、JavaScript 或 Go 运行本地数据库 →](#embedded-sdks)
 
 ---
 
@@ -157,7 +157,7 @@ ORDER BY dist APPROXIMATE LIMIT 10;
 
 ### 嵌入式使用
 
-通过 Python 或 Node.js 在应用中使用本地 seekdb，无需手动部署数据库服务。数据保存在指定的本地目录中，再次打开即可继续使用。
+通过 Python、Node.js 或 Go 在应用中使用本地 seekdb，无需手动部署数据库服务。数据保存在指定的本地目录中，再次打开即可继续使用。
 
 <details open>
 <summary><b>🐍 Python</b></summary>
@@ -255,7 +255,87 @@ node example.mjs
 
 </details>
 
-两个示例均将数据保存在 `./seekdb.db`，可以重复运行。该路径是数据库目录。首次初始化新目录通常比后续打开耗时更长。
+<details open>
+<summary><b>🐹 Go</b></summary>
+
+使用 [seekdb-go](https://github.com/oceanbase/seekdb-go) 启动本地 seekdb，再通过 `go-sql-driver/mysql` 执行 SQL。本示例需要 Go 1.24 或更高版本、`CGO_ENABLED=1` 和 C 编译器。
+
+```bash
+mkdir seekdb-go-example
+cd seekdb-go-example
+go mod init example.com/seekdb-demo
+```
+
+将下面的示例保存为 `main.go`。示例使用 `ConnectionOptions` 返回的端点，并在释放运行时句柄前关闭 SQL 连接：
+
+```go
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+
+	"github.com/go-sql-driver/mysql"
+	seekdb "github.com/oceanbase/seekdb-go"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	db, err := seekdb.Open("./seekdb.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	endpoint, err := db.ConnectionOptions()
+	if err != nil {
+		return err
+	}
+	cfg := mysql.NewConfig()
+	cfg.User, cfg.DBName = endpoint.User, "test"
+	switch endpoint.Transport {
+	case "unix_socket":
+		cfg.Net, cfg.Addr = "unix", endpoint.UnixSocket
+	case "tcp":
+		cfg.Net, cfg.Addr = "tcp", net.JoinHostPort(endpoint.Host, fmt.Sprint(endpoint.Port))
+	default:
+		return fmt.Errorf("unsupported transport %q", endpoint.Transport)
+	}
+	connection, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+
+	var value int
+	if err := connection.QueryRow("SELECT 1 AS value").Scan(&value); err != nil {
+		return err
+	}
+	fmt.Println(value)
+	return nil
+}
+```
+
+运行时 Go 会自动解析依赖，并下载当前平台的原生包，输出 `1`：
+
+```bash
+go run -mod=mod .
+```
+
+常规的 seekdb-go `go get` 或 `go mod tidy` 可能下载所有支持平台的原生包。
+
+[完整使用指南](https://github.com/oceanbase/seekdb-go#install) · [支持平台与环境要求](https://github.com/oceanbase/seekdb-go/blob/main/docs/support.md)
+
+</details>
+
+这些示例均将数据保存在 `./seekdb.db`，可以重复运行。该路径是数据库目录。首次初始化新目录通常比后续打开耗时更长。
 
 ### 部署服务器
 
@@ -307,7 +387,7 @@ DEB/RPM 离线安装和配置详情请参见[部署文档](https://docs.seekdb.a
 
 ### 📝 更多示例
 
-首次使用请先运行上面的 [Python 和 JavaScript 示例](#embedded-sdks)。下面的应用模式假设你已有 Agent 实现。
+首次使用请先运行上面的 [Python、JavaScript 和 Go 示例](#embedded-sdks)。下面的应用模式假设你已有 Agent 实现。
 
 <details>
 <summary><b>🤖 Agent 记忆模式（持续写入 + 即时检索）</b></summary>
@@ -428,7 +508,7 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 ## 🌐 下一步与社区
 
 - 📖 **[阅读文档 →](https://docs.seekdb.ai/)** — 快速开始、API 参考、集成指南
-- 📝 **[发布博客 →](docs/blog/launch_blog_zh.md)** — Milvus 10.7 倍 QPS 背后的架构
+- 📝 **[发布博客 →](docs/blog/launch_blog_en.md)** — Milvus 10.7 倍 QPS 背后的架构
 - 🐛 **[提交 Issue →](https://github.com/oceanbase/seekdb/issues)** — 报告 Bug、请求功能
 - 🤝 **[参与贡献 →](CONTRIBUTING.md)** — 共建 Agent 时代的状态存储
 
@@ -456,7 +536,7 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 
 ### 从源码构建
 
-构建之前，请先根据操作系统安装所需的工具链和依赖。详见[安装工具链](docs/developer-guide/zh/toolchain.md)。
+构建之前，请先根据操作系统安装所需的工具链和依赖。详见[安装工具链](docs/developer-guide/en/toolchain.md)。
 
 ```bash
 # 克隆仓库
@@ -470,7 +550,7 @@ cd ~/seekdb
 ./bin/seekdb
 ```
 
-本例中工作目录为 $HOME/seekdb，请使用一个全新的空目录进行测试。详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
+本例中工作目录为 $HOME/seekdb，请使用一个全新的空目录进行测试。详细说明请参见[开发者指南](docs/developer-guide/en/README.md)。
 
 ### 贡献
 

@@ -405,12 +405,13 @@ cc_library(
         "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/share:time_wheel",
+        "//src/share:ls_restore_status",
     ] + _STORAGE_INTERFACE_NON_SHARE_DEPS,
     implementation_deps = (
         [
             dep
             for dep in _STORAGE_INTERFACE_SHARE_DEPS
-            if dep != "//src/share:time_wheel"
+            if dep not in ["//src/share:time_wheel", "//src/share:ls_restore_status"]
         ] +
         _STORAGE_INTERFACE_OBLIB_DEPS
     ),
@@ -574,4 +575,24 @@ cc_library(
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "memtable_mutator_test_headers",
+    testonly = True,
+    deps = [":storage_runtime_interface"] + _STORAGE_INTERFACE_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/storage/memtable:__pkg__"],
+)
+
+cc_library(
+    name = "tx_replay_test_headers",
+    testonly = True,
+    hdrs = ["tx/ob_tx_replay_executor.h"],
+    deps = [
+        ":storage_runtime_interface",
+        "//src/logservice:logservice",
+    ] + _STORAGE_INTERFACE_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/storage/tx:__pkg__"],
 )

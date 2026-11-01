@@ -1,0 +1,94 @@
+DROP DATABASE IF EXISTS stats_sql_names;
+CREATE DATABASE stats_sql_names;
+CREATE TABLE stats_sql_names.src (`c'one` INT)
+PARTITION BY RANGE (`c'one`) (PARTITION `p'one` VALUES LESS THAN (10), PARTITION pmax VALUES LESS THAN MAXVALUE);
+INSERT INTO stats_sql_names.src VALUES (1), (2), (20);
+SELECT `c'one` FROM stats_sql_names.src PARTITION (`p'one`) ORDER BY `c'one`;
+c'one
+1
+2
+CALL DBMS_STATS.GATHER_TABLE_STATS('stats_sql_names', 'src', estimate_percent=>100, method_opt=>'FOR ALL COLUMNS SIZE 1', granularity=>'ALL');
+CALL DBMS_STATS.CREATE_STAT_TABLE('stats_sql_names', 'stat`quote''x');
+CALL DBMS_STATS.EXPORT_TABLE_STATS('stats_sql_names', 'src', NULL, 'stat`quote''x', statown=>'stats_sql_names');
+SELECT C1 AS source_table, C2 AS partition_name, N1 AS exported_rows FROM stats_sql_names.`stat``quote'x` WHERE TYPE = 'T' ORDER BY C2;
+source_table	partition_name	exported_rows
+src	NULL	3
+src	p'one	2
+src	pmax	1
+SELECT C2 AS partition_name, C4 AS column_name, N1 AS exported_ndv FROM stats_sql_names.`stat``quote'x` WHERE TYPE = 'C' ORDER BY C2;
+partition_name	column_name	exported_ndv
+NULL	c'one	3
+p'one	c'one	2
+pmax	c'one	1
+CALL DBMS_STATS.SET_TABLE_STATS('stats_sql_names', 'src', numrows=>9999);
+CALL DBMS_STATS.SET_TABLE_STATS('stats_sql_names', 'src', 'p''one', numrows=>8888);
+CALL DBMS_STATS.DELETE_COLUMN_STATS('stats_sql_names', 'src', 'c''one');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+PARTITION_NAME	NUM_ROWS
+NULL	9999
+p'one	8888
+pmax	1
+SELECT COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_TAB_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one';
+COLUMN_NAME	NUM_DISTINCT
+c'one	NULL
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+PARTITION_NAME	COLUMN_NAME	NUM_DISTINCT
+p'one	c'one	NULL
+pmax	c'one	NULL
+CALL DBMS_STATS.IMPORT_TABLE_STATS('stats_sql_names', 'src', NULL, 'stat`quote''x', statown=>'stats_sql_names');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+PARTITION_NAME	NUM_ROWS
+NULL	3
+p'one	2
+pmax	1
+SELECT COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_TAB_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one';
+COLUMN_NAME	NUM_DISTINCT
+c'one	3
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+PARTITION_NAME	COLUMN_NAME	NUM_DISTINCT
+p'one	c'one	2
+pmax	c'one	1
+CALL DBMS_STATS.EXPORT_TABLE_STATS('stats_sql_names', 'src', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+CALL DBMS_STATS.SET_TABLE_STATS('stats_sql_names', 'src', 'p''one', numrows=>7777);
+CALL DBMS_STATS.DELETE_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+PARTITION_NAME	NUM_ROWS
+NULL	3
+p'one	7777
+pmax	1
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+PARTITION_NAME	COLUMN_NAME	NUM_DISTINCT
+p'one	c'one	NULL
+pmax	c'one	1
+CALL DBMS_STATS.IMPORT_TABLE_STATS('stats_sql_names', 'src', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+PARTITION_NAME	NUM_ROWS
+NULL	3
+p'one	2
+pmax	1
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+PARTITION_NAME	COLUMN_NAME	NUM_DISTINCT
+p'one	c'one	2
+pmax	c'one	1
+CALL DBMS_STATS.EXPORT_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+SELECT C2 AS partition_name, C4 AS column_name, N1 AS exported_ndv FROM stats_sql_names.`stat``quote'x` WHERE TYPE = 'C' AND C2 = 'p''one' AND C4 = 'c''one';
+partition_name	column_name	exported_ndv
+p'one	c'one	2
+CALL DBMS_STATS.DELETE_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one');
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+PARTITION_NAME	COLUMN_NAME	NUM_DISTINCT
+p'one	c'one	NULL
+pmax	c'one	1
+CALL DBMS_STATS.IMPORT_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+SELECT COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_TAB_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one';
+COLUMN_NAME	NUM_DISTINCT
+c'one	3
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+PARTITION_NAME	COLUMN_NAME	NUM_DISTINCT
+p'one	c'one	2
+pmax	c'one	1
+CALL DBMS_STATS.DROP_STAT_TABLE('stats_sql_names', 'stat`quote''x');
+SELECT COUNT(*) AS remaining_stat_tables FROM information_schema.tables WHERE table_schema = 'stats_sql_names' AND table_name = 'stat`quote''x';
+remaining_stat_tables
+0
+DROP DATABASE stats_sql_names;

@@ -293,7 +293,7 @@ pub(crate) fn flush_request(conn: &Arc<Conn>, generation: u64) -> Option<bool> {
 /// # Safety
 /// `sess` is a live C++ session pointer; out-params are valid pointers.
 pub(crate) unsafe fn read_buffered_packet(
-    sess: *mut c_void,
+    sess: *mut ObSqlSockSession,
     generation: u64,
     body: *mut *mut c_char,
     body_len: *mut i64,
@@ -377,9 +377,8 @@ pub(crate) unsafe fn read_buffered_packet(
 /// # Safety
 /// `sess` and `generation` identify a live request; out-params are valid
 /// pointers for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_wait_one_packet(
-    sess: *mut c_void,
+pub unsafe fn nio_wait_one_packet(
+    sess: *mut ObSqlSockSession,
     generation: u64,
     timeout_us: i64,
     body: *mut *mut c_char,
@@ -469,8 +468,7 @@ pub unsafe extern "C" fn nio_wait_one_packet(
 
 /// # Safety
 /// `sess` is a live C++ session pointer.
-#[no_mangle]
-pub unsafe extern "C" fn nio_interrupt_read(sess: *mut c_void, generation: u64) -> c_int {
+pub unsafe fn nio_interrupt_read(sess: *mut ObSqlSockSession, generation: u64) -> c_int {
     let conn = match conn_of(sess) {
         Some(conn) => conn,
         None => return -1,
@@ -503,9 +501,8 @@ pub unsafe extern "C" fn nio_interrupt_read(sess: *mut c_void, generation: u64) 
 /// # Safety
 /// `sess` and `generation` identify a live request; C++ no longer accesses the
 /// packet body after this call begins.
-#[no_mangle]
-pub unsafe extern "C" fn nio_release_read_packet(
-    sess: *mut c_void,
+pub unsafe fn nio_release_read_packet(
+    sess: *mut ObSqlSockSession,
     generation: u64,
     packet_lease: u64,
 ) -> c_int {
@@ -537,15 +534,10 @@ pub unsafe extern "C" fn nio_release_read_packet(
     0
 }
 
-pub const NIO_AUTH_NO_CHANGE: c_int = 0;
-pub const NIO_AUTH_OK: c_int = 1;
-pub const NIO_AUTH_SWITCH_SENT: c_int = 2;
-
 /// # Safety
 /// `connection_handle` is null or is a live acquired handle and must not be
 /// released until this call returns.
-#[no_mangle]
-pub unsafe extern "C" fn nio_prepare_commit(
+pub unsafe fn nio_prepare_commit(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     auth_outcome: c_int,
@@ -635,11 +627,7 @@ pub unsafe extern "C" fn nio_prepare_commit(
 /// io thread; Rust retains the body for it. Empty responses complete inline;
 /// non-empty output is handed to the owning reactor so socket writes stay
 /// concentrated on the SQL-NIO threads.
-#[no_mangle]
-pub unsafe extern "C" fn nio_commit_request(
-    connection_handle: *mut NioConnectionHandle,
-    generation: u64,
-) {
+pub unsafe fn nio_commit_request(connection_handle: *mut NioConnectionHandle, generation: u64) {
     let conn = match unsafe { connection_handle.as_ref() } {
         Some(handle) if !handle.conn.close_notified.load(Ordering::Acquire) => {
             Arc::clone(&handle.conn)

@@ -747,7 +747,7 @@ int ObDASTabletMapper::get_tablet_and_part_id_for_list_part(const share::schema:
               ret = OB_ERR_UNEXPECTED;
             } else {
               ObCastCtx cast_ctx(&exec_ctx.get_allocator(), &dtc_params, CM_NONE, vies.at(k)->dst_cs_type_);
-              if (OB_FAIL(ObTableLocation::se_calc_value_item(cast_ctx, exec_ctx, params,
+              if (OB_FAIL(TableAccessPlan::se_calc_value_item(cast_ctx, exec_ctx, params,
                                                               *vies.at(k), list_row, res))) {
               } else if (res.get_int() == 0) {
                 all_match = false;
@@ -841,7 +841,7 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
               ret = OB_ERR_UNEXPECTED;
             } else {
               ObCastCtx cast_ctx(&exec_ctx.get_allocator(), &dtc_params, CM_NONE, vies.at(k)->dst_cs_type_);
-              if (OB_FAIL(ObTableLocation::se_calc_value_item(cast_ctx, exec_ctx, params,
+              if (OB_FAIL(TableAccessPlan::se_calc_value_item(cast_ctx, exec_ctx, params,
                                                               *vies.at(k), list_row, res))) {
               } else if (res.get_int() == 0) {
                 all_match = false;

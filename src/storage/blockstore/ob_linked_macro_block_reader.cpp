@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/blockstore/ob_linked_macro_block_reader.h"
 
 namespace oceanbase

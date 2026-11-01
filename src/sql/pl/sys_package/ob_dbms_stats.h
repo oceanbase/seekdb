@@ -281,7 +281,8 @@ public:
                               const ObObjParam &tab_name,
                               const bool is_index,
                               const share::schema::ObTableSchema *&table_schema,
-                              ObTableStatParam &param);
+                              ObTableStatParam &param,
+                              const ObPrivSet required_privs = OB_PRIV_SELECT | OB_PRIV_INSERT);
 
   static int parse_table_info(ObExecContext &ctx,
                               const StatTable &stat_table,

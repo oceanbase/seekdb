@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dtl_interm_result_manager.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 #include "share/ob_shared_timer.h"

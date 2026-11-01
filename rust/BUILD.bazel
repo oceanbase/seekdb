@@ -12,37 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@cargo_exports//:exports.bzl", "EXPORTS")
-load("//bazel:cargo.bzl", "cargo_workspace")
+load("//bazel:rust.bzl", "rust_modules")
+load("//bazel:defs.bzl", "cc_library")
+load(":modules.bzl", "MODULES")
 
 package(default_visibility = ["//visibility:private"])
 
-exports_files(
-    ["rust-toolchain.toml"],
-    visibility = ["//deps/external:__pkg__"],
-)
-exports_files(["exports.json"])
-exports_files(["Cargo.lock"], visibility = ["//src/observer:__pkg__"])
-
-filegroup(
-    name = "plugin_host_sources",
-    srcs = glob(["**/*.rs", "**/*.h", "**/*.py", "**/*.toml", "**/*.json", "**/*.yaml", "**/*.yml", "*.lock"], exclude = ["target/**"], allow_empty = True),
-    visibility = ["//plugins:__subpackages__"],
+# The existing plugin ABI remains available to host adapters. Its Rust
+# implementation is linked through the single production archive below.
+cc_library(
+    name = "seekdb_rust_host_headers",
+    hdrs = ["//rust/plugin-runtime:include/plugin_runtime.h"],
+    includes = ["plugin-runtime/include"],
+    visibility = ["//visibility:public"],
 )
 
-filegroup(
-    name = "extension_sdk_sources",
-    srcs = glob(["extension-sdk/src/**/*.rs", "extension-sdk/Cargo.toml", "extension-sdk/Cargo.lock"], allow_empty = True),
-    visibility = ["//plugins:__subpackages__"],
-)
-
-# Cargo resolves dependencies and exports one production Rust runtime.
-cargo_workspace(
-    exports = EXPORTS,
-    cargo_args = ["--features", "seekdb-rust/plugins"],
-    srcs = glob(
-        ["**/*.rs", "**/*.h", "**/*.py", "**/*.toml", "**/*.yaml", "**/*.yml", "**/*.json", "*.lock"],
-        exclude = ["target/**"],
-        allow_empty = True,
-    ),
+rust_modules(
+    modules = MODULES,
+    generated_headers = ["//rust/config:config_checkers.h"],
 )

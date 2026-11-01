@@ -18,8 +18,9 @@
 
 
 #include "share/ob_server_struct.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/alloc/alloc_func.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/tx_storage/ob_log_storage_adapter.h"
@@ -131,17 +132,19 @@ static ObLogRuntimeConfig current_log_runtime_config()
 
 static int init_log_service(
     ObLogService *&log_service,
-    storage::ObLogStorageAdapter *log_storage_adapter)
+    storage::ObLogStorageAdapter *log_storage_adapter,
+    ObServerLogBlockMgr &log_block_mgr,
+    common::ObIODevice *log_device)
 {
   int ret = OB_SUCCESS;
   const auto *runtime = share::server_runtime();
   const share::ObServerModuleInitCtx *module_init_ctx =
       OB_ISNULL(runtime) ? nullptr : runtime->get_module_init_ctx();
   if (OB_ISNULL(module_init_ctx) || OB_ISNULL(GCTX.local_store_)
-      || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>())) {
+      || OB_ISNULL(log_device)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "log service composition is incomplete", KR(ret),
-        KP(module_init_ctx), KP(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()));
+        KP(module_init_ctx), KP(log_device));
   } else if (OB_FAIL(ObLogService::server_module_init(
       log_service,
       module_init_ctx->palf_options_,
@@ -150,14 +153,14 @@ static int init_log_service(
       OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
       GCTX.self_addr(),
       log_storage_adapter,
-      ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>(),
-      &LOCAL_DEVICE_INSTANCE,
+      &log_block_mgr,
+      log_device,
       &OB_IO_MANAGER,
       false,
       config::cpu_quota_concurrency(),
       current_log_runtime_config()))) {
   } else {
-    ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()->bind_log_service(*log_service);
+    log_block_mgr.bind_log_service(*log_service);
   }
   return ret;
 }
@@ -336,7 +339,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta)
   int tmp_ret = OB_SUCCESS;
 
   ObServerRuntime *runtime = nullptr;
-  ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
   ObRuntimeCreateStep create_step = ObRuntimeCreateStep::STEP_BEGIN;  // step0
 
   if (IS_NOT_INIT) {
@@ -345,17 +347,10 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta)
   } else if (OB_UNLIKELY(!meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(ret), K(meta));
-  } else if (OB_ISNULL(malloc_allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("malloc allocator is NULL", K(ret));
   } else if (OB_SUCC(get_runtime_unsafe(runtime))) {
     ret = OB_SERVER_RUNTIME_ALREADY_ACTIVE;
   } else {
     ret = OB_SUCCESS;
-  }
-
-  if (OB_SUCC(ret)) {
-    create_step = ObRuntimeCreateStep::STEP_CTX_MEM_CONFIG_SETTED; // step1
   }
 
   if (OB_FAIL(ret)) {
@@ -406,19 +401,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta)
       }
     } while (OB_SUCCESS != tmp_ret);
 
-    do {
-      tmp_ret = OB_SUCCESS;
-      if (create_step >= ObRuntimeCreateStep::STEP_CTX_MEM_CONFIG_SETTED) {
-        for (uint64_t ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-          if (NULL == malloc_allocator->get_ctx_allocator(ctx_id)) {
-            // do-nothing
-          } else if (OB_SUCCESS != (tmp_ret = malloc_allocator->set_ctx_idle(ctx_id, 0))) {
-            LOG_ERROR("fail to cleanup ctx mem config", K(tmp_ret), K(ctx_id));
-            SLEEP(1);
-          }
-        }
-      }
-    } while (OB_SUCCESS != tmp_ret);
   }
 
   FLOG_INFO("finish create new runtime", K(ret), K(create_step));
@@ -464,7 +446,6 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   } else {
     if (runtime->min_cpu() != min_cpu) {
       runtime->set_min_cpu(min_cpu);
-      set_req_chunkmgr_parallel(ObCtxIds::DEFAULT_CTX_ID, min_cpu * 8);
     }
     if (runtime->max_cpu() != max_cpu) {
       runtime->set_max_cpu(max_cpu);
@@ -929,8 +910,7 @@ int ObServerRuntimeController::get_server_allocated_resource(ServerResource &ser
     const share::ObServerRuntimeConfig runtime_config = runtime_->get_runtime_config();
     server_resource.max_cpu_ += runtime_config.resource_config_.max_cpu();
     server_resource.min_cpu_ += runtime_config.resource_config_.min_cpu();
-    server_resource.memory_size_ += max(ObMallocAllocator::get_instance()->get_total_limit(),
-                                        runtime_config.resource_config_.memory_size());
+    server_resource.memory_size_ += runtime_config.resource_config_.memory_size();
     server_resource.log_disk_size_ += runtime_config.resource_config_.log_disk_size();
   }
   return ret;
@@ -1315,7 +1295,7 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "mods_log_storage_adapter_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_log_service(
-      mods_log_service_, mods_log_storage_adapter_))) {
+      mods_log_service_, mods_log_storage_adapter_, log_block_mgr_, log_device_.get_local_device()))) {
     SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObLSService::server_module_init(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }

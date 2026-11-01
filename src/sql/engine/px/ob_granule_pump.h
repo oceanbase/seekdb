@@ -100,7 +100,7 @@ public :
     tablet_arrays_.reset();
     run_time_pruning_flags_.reset();
     query_range_by_runtime_filter_.reset();
-    locations_order_.reset();
+    tablet_access_order_.reset();
   }
 
   int assign(const ObGranulePumpArgs &rhs);
@@ -115,7 +115,7 @@ public :
 
   ObExecContext *ctx_;
   ObGranulePumpOpInfo op_info_;
-  common::ObArray<DASTabletLocArray> tablet_arrays_;
+  common::ObArray<DASRuntimeTabletArray> tablet_arrays_;
   //-----for runtime filter pruning granule
   common::ObArray<bool> run_time_pruning_flags_;
   int64_t cur_tablet_idx_;
@@ -132,7 +132,7 @@ public :
   bool lucky_one_; // atomic, indicatee which thread is luckly to do extract query range
   ObSEArray<ObNewRange, 16> query_range_by_runtime_filter_;
   bool extract_finished_;
-  ObSEArray<std::pair<int64_t, bool>, 18> locations_order_;
+  ObSEArray<std::pair<int64_t, bool>, 18> tablet_access_order_;
   int64_t gi_op_id_;
   // %task_version_ is increased when task regenerated.
   // Used to help detecting taskset change in GI.
@@ -148,18 +148,18 @@ class ObGITaskSet {
 public:
   struct ObGITaskInfo
   {
-    ObGITaskInfo() : tablet_loc_(nullptr), range_(), idx_(0), hash_value_(0), granule_type_(OB_GRANULE_UNINITIALIZED) {}
-    ObGITaskInfo(ObDASTabletLoc *tablet_loc,
+    ObGITaskInfo() : tablet_access_(nullptr), range_(), idx_(0), hash_value_(0), granule_type_(OB_GRANULE_UNINITIALIZED) {}
+    ObGITaskInfo(DASRuntimeTabletAccess *tablet_access,
                  const common::ObNewRange &range,
                  int64_t idx) :
-        tablet_loc_(tablet_loc), range_(range), idx_(idx), hash_value_(0), granule_type_(OB_GRANULE_UNINITIALIZED) {}
-    TO_STRING_KV(KPC(tablet_loc_),
-                 KP(tablet_loc_),
+        tablet_access_(tablet_access), range_(range), idx_(idx), hash_value_(0), granule_type_(OB_GRANULE_UNINITIALIZED) {}
+    TO_STRING_KV(KPC(tablet_access_),
+                 KP(tablet_access_),
                  K(range_),
                  K(idx_),
                  K(hash_value_),
                  K(granule_type_));
-    ObDASTabletLoc *tablet_loc_;
+    DASRuntimeTabletAccess *tablet_access_;
     common::ObNewRange range_;
     int64_t idx_;
     uint64_t hash_value_;
@@ -183,7 +183,7 @@ public:
   int assign(const ObGITaskSet &other);
   int set_pw_affi_partition_order(bool asc, bool force_reverse);
   int set_block_order(bool asc);
-  int construct_taskset(const common::ObIArray<ObDASTabletLoc*> &taskset_tablets,
+  int construct_taskset(const common::ObIArray<DASRuntimeTabletAccess*> &taskset_tablets,
                         const common::ObIArray<ObNewRange> &taskset_ranges,
                         const common::ObIArray<int64_t> &taskset_idxs,
                         ObGIRandomType random_type);
@@ -249,7 +249,7 @@ protected :
                     const ObTableScanSpec *tsc,
                     int64_t table_id,
                     int64_t op_id,
-                    const common::ObIArray<ObDASTabletLoc*> &tablets,
+                    const common::ObIArray<DASRuntimeTabletAccess*> &tablets,
                     bool partition_granule,
                     ObGITaskSet &task_set,
                     ObGITaskSet::ObGIRandomType random_type);
@@ -271,7 +271,7 @@ public :
                     bool partition_granule = true);
   int split_granule(ObIAllocator &allocator, ObGranuleIteratorOp *gi_op, ObGranulePumpArgs &args,
                     const ObTableScanSpec *tsc, int64_t op_id, ObGITaskSet &task_set,
-                    ObGITaskSet::ObGIRandomType random_type, ObDASTabletLoc *tablet_loc,
+                    ObGITaskSet::ObGIRandomType random_type, DASRuntimeTabletAccess *tablet_access,
                     const ObIArray<ObNewRange> &ranges);
 
 private:
@@ -312,14 +312,14 @@ private:
 int split_insert_gi_task(ObGranulePumpArgs &args,
                         const uint64_t insert_table_id,
                         const int64_t row_key_count,
-                        const common::ObIArray<ObDASTabletLoc*> &tablets,
+                        const common::ObIArray<DASRuntimeTabletAccess*> &tablets,
                         bool partition_granule,
                         ObGITaskSet &task_set,
                         ObGITaskSet::ObGIRandomType random_type);
 
 int split_tsc_gi_task(ObGranulePumpArgs &args,
                       common::ObIArray<const ObTableScanSpec *> &scan_ops,
-                      const common::ObIArray<DASTabletLocArray> &tablet_arrays,
+                      const common::ObIArray<DASRuntimeTabletArray> &tablet_arrays,
                       int64_t tsc_begin_idx,
                       int64_t task_begin_idxm,
                       GITaskArrayMap &gi_task_array_result,
@@ -363,7 +363,7 @@ public:
                     ObGITaskSet::ObGIRandomType random_type,
                     bool partition_granule = true);
   int adjust_task_order(bool asc, ObGITaskArray &taskset_array, int64_t tsc_op_id,
-                        const ObIArray<std::pair<int64_t, bool>> &locations_order);
+                        const ObIArray<std::pair<int64_t, bool>> &tablet_access_order);
 };
 
 //A task will be send to many DFO and we use many threads to execute the DFO.
@@ -385,7 +385,7 @@ public:
   gi_task_array_map_(),
   pump_args_(),
   need_partition_pruning_(false),
-  pruning_table_locations_(),
+  pruning_access_plans_(),
   is_taskset_reset_(false),
   fetch_task_ret_(OB_SUCCESS),
   finished_cnt_(0)
@@ -401,7 +401,7 @@ public:
                      const ObGranuleIteratorSpec *gi_op,
                      const ObIArray<const ObTableScanSpec*> &scan_ops,
                      const ObTableModifySpec *modify_op,
-                     const common::ObIArray<DASTabletLocArray> &tablet_arrays,
+                     const common::ObIArray<DASRuntimeTabletArray> &tablet_arrays,
                      common::ObIArray<ObPxTabletInfo> &partitions_info);
 
   ObGranulePumpArgs *get_granule_pump_arg(const int64_t gi_op_id);
@@ -434,7 +434,7 @@ public:
   int regenerate_gi_task();
   int regenerate_gi_task(ObGranulePumpArgs &args);
 
-  int split_granule(ObGranuleIteratorOp *gi_op, int64_t scan_op_id, ObDASTabletLoc *tablet_loc,
+  int split_granule(ObGranuleIteratorOp *gi_op, int64_t scan_op_id, DASRuntimeTabletAccess *tablet_access,
                     const ObIArray<ObNewRange> &ranges);
 
   int reset_gi_task();
@@ -445,9 +445,9 @@ public:
 
   inline void set_need_partition_pruning(bool flag) { need_partition_pruning_ = flag; };
   inline bool need_partition_pruning() { return need_partition_pruning_; }
-  int set_pruning_table_location(common::ObIArray<ObTableLocation> &table_locations)
-  { return pruning_table_locations_.assign(table_locations); }
-  common::ObIArray<ObTableLocation> *get_pruning_table_location() { return &pruning_table_locations_; }
+  int set_pruning_access_plan(common::ObIArray<TableAccessPlan> &table_access_plans)
+  { return pruning_access_plans_.assign(table_access_plans); }
+  common::ObIArray<TableAccessPlan> *get_pruning_access_plan() { return &pruning_access_plans_; }
   int get_first_tsc_range_cnt(int64_t &cnt);
   const GITaskArrayMap &get_task_array_map() const { return gi_task_array_map_; }
   static int find_task_array_item(GITaskArrayMap &gi_task_map,
@@ -483,13 +483,13 @@ private:
                ObExecContext *ctx,
                const ObGranuleIteratorSpec *gi_op,
                const ObIArray<const ObTableScanSpec*> &scan_ops,
-               const common::ObIArray<DASTabletLocArray> &tablet_arrays,
+               const common::ObIArray<DASRuntimeTabletArray> &tablet_arrays,
                common::ObIArray<ObPxTabletInfo> &partitions_info,
                const ObTableModifySpec* modify_op,
                int64_t parallelism,
                int64_t tablet_size,
                uint64_t gi_attri_flag,
-               const ObIArray<std::pair<int64_t, bool>> &locations_order);
+               const ObIArray<std::pair<int64_t, bool>> &tablet_access_order);
 
   int check_can_randomize(ObGranulePumpArgs &args, bool &can_randomize);
 
@@ -504,7 +504,7 @@ private:
   GITaskArrayMap gi_task_array_map_;
   common::ObArray<ObGranulePumpArgs> pump_args_;
   bool need_partition_pruning_;
-  common::ObArray<ObTableLocation> pruning_table_locations_;
+  common::ObArray<TableAccessPlan> pruning_access_plans_;
 
 
   bool is_taskset_reset_;

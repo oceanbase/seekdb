@@ -1,0 +1,91 @@
+DROP DATABASE IF EXISTS maintenance_authz_db;
+DROP USER IF EXISTS 'maintenance_authz_owner'@'%';
+DROP USER IF EXISTS 'maintenance_authz_caller'@'%';
+CREATE DATABASE maintenance_authz_db;
+CREATE USER 'maintenance_authz_owner'@'%';
+CREATE USER 'maintenance_authz_caller'@'%';
+CREATE TABLE maintenance_authz_db.t_stats(id INT);
+CREATE TABLE maintenance_authz_db.t_vector(id INT PRIMARY KEY, embedding VECTOR(3),
+VECTOR INDEX v_idx(embedding) WITH (distance=l2, type=hnsw));
+INSERT INTO maintenance_authz_db.t_vector VALUES (1, '[1,0,0]'), (2, '[0,1,0]');
+GRANT SELECT, INSERT ON maintenance_authz_db.t_stats TO 'maintenance_authz_owner'@'%';
+GRANT INDEX ON maintenance_authz_db.t_vector TO 'maintenance_authz_owner'@'%';
+GRANT CREATE ROUTINE, ALTER ROUTINE, EXECUTE ON maintenance_authz_db.* TO 'maintenance_authz_owner'@'%';
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.stats_definer()
+SQL SECURITY DEFINER
+BEGIN
+CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '20');
+END|
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.stats_invoker()
+SQL SECURITY INVOKER
+BEGIN
+CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '30');
+END|
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.vector_definer()
+SQL SECURITY DEFINER
+BEGIN
+CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+END|
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.vector_invoker()
+SQL SECURITY INVOKER
+BEGIN
+CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+END|
+GRANT EXECUTE ON maintenance_authz_db.* TO 'maintenance_authz_caller'@'%';
+SELECT CURRENT_USER() AS actor;
+actor
+maintenance_authz_owner@%
+CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '10');
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+stale_percent
+10
+CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+SELECT CURRENT_USER() AS actor;
+actor
+maintenance_authz_caller@%
+CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '40');
+ERROR 42000: INSERT command denied to user 'maintenance_authz_caller'@'%' for table 't_stats'
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+stale_percent
+10
+CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+ERROR 42000: INDEX command denied to user 'maintenance_authz_caller'@'%' for table 't_vector'
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+CALL maintenance_authz_db.stats_definer();
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+stale_percent
+20
+CALL maintenance_authz_db.vector_definer();
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+CALL maintenance_authz_db.stats_invoker();
+ERROR 42000: INSERT command denied to user 'maintenance_authz_caller'@'%' for table 't_stats'
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+stale_percent
+20
+CALL maintenance_authz_db.vector_invoker();
+ERROR 42000: INDEX command denied to user 'maintenance_authz_caller'@'%' for table 't_vector'
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+DROP PROCEDURE maintenance_authz_db.stats_definer;
+DROP PROCEDURE maintenance_authz_db.stats_invoker;
+DROP PROCEDURE maintenance_authz_db.vector_definer;
+DROP PROCEDURE maintenance_authz_db.vector_invoker;
+SELECT COUNT(*) AS routines_remaining FROM information_schema.ROUTINES
+WHERE ROUTINE_SCHEMA = 'maintenance_authz_db';
+routines_remaining
+0
+DROP DATABASE maintenance_authz_db;
+DROP USER 'maintenance_authz_owner'@'%';
+DROP USER 'maintenance_authz_caller'@'%';

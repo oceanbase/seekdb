@@ -106,13 +106,13 @@ class ObDASSimpleUtils
 {
 public:
   static int split_multi_ranges(ObExecContext &exec_ctx,
-                                ObDASTabletLoc *tablet_loc,
+                                DASRuntimeTabletAccess *tablet_access,
                                 const common::ObIArray<ObStoreRange> &ranges,
                                 const int64_t expected_task_count,
                                 ObArrayArray<ObStoreRange> &multi_range_split_array);
 
   static int get_multi_ranges_cost(ObExecContext &exec_ctx,
-                                   ObDASTabletLoc *tablet_loc,
+                                   DASRuntimeTabletAccess *tablet_access,
                                    const common::ObIArray<common::ObStoreRange> &ranges,
                                    int64_t &total_size);
 };
