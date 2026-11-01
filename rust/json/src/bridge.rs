@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{DuplicatePolicy, ParseOptions, Path};
+use crate::{BinaryResult, DuplicatePolicy, ParseOptions, Path};
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::collections::HashMap;
 use std::fmt;
@@ -131,20 +131,24 @@ pub mod ffi {
             first_only: bool,
             max_depth: u32,
         ) -> PathQueryResult;
-        type Extraction;
-        fn new_extraction(input: &[u8], text: bool, max_depth: u32) -> Box<Extraction>;
-        fn status(self: &Extraction) -> Status;
-        fn byte_offset(self: &Extraction) -> u64;
-        fn add_path(self: &mut Extraction, path: &Path) -> Status;
-        fn finish(self: &mut Extraction) -> BinaryResult;
+        type Query;
+        fn new_query(input: &[u8], text: bool, max_depth: u32) -> Box<Query>;
+        fn status(self: &Query) -> Status;
+        fn byte_offset(self: &Query) -> u64;
+        fn add_path(self: &mut Query, path: &Path) -> Status;
+        fn finish(self: &mut Query) -> BinaryResult;
+        fn query(self: &Query, path: &Path, auto_wrap: bool, first_only: bool) -> PathQueryResult;
+        fn object_keys(self: &Query) -> BinaryResult;
+        fn object_keys_at_path(self: &Query, path: &Path) -> BinaryResult;
     }
 }
 
-pub struct Extraction {
-    state: Result<crate::Extraction, (ffi::Status, u64)>,
+pub struct Query {
+    state: Result<crate::Query, (ffi::Status, u64)>,
+    paths: Vec<Path>,
 }
 
-impl Extraction {
+impl Query {
     fn status(&self) -> ffi::Status {
         match &self.state {
             Ok(_) => ffi::Status::Ok,
@@ -161,8 +165,8 @@ impl Extraction {
 
     fn add_path(&mut self, path: &Path) -> ffi::Status {
         match &mut self.state {
-            Ok(extraction) => {
-                extraction.add_path(path);
+            Ok(_) => {
+                self.paths.push(path.clone());
                 ffi::Status::Ok
             }
             Err((status, _)) => *status,
@@ -171,27 +175,9 @@ impl Extraction {
 
     fn finish(&mut self) -> ffi::BinaryResult {
         let state = std::mem::replace(&mut self.state, Err((ffi::Status::InvalidBinary, 0)));
+        let paths = std::mem::take(&mut self.paths);
         match state {
-            Ok(extraction) => match extraction.finish() {
-                Ok(Some(binary)) => ffi::BinaryResult {
-                    status: ffi::Status::Ok,
-                    byte_offset: 0,
-                    message: String::new(),
-                    binary,
-                },
-                Ok(None) => ffi::BinaryResult {
-                    status: ffi::Status::Ok,
-                    byte_offset: 0,
-                    message: String::new(),
-                    binary: Vec::new(),
-                },
-                Err(error) => ffi::BinaryResult {
-                    status: ffi::Status::InvalidBinary,
-                    byte_offset: error.byte_offset as u64,
-                    message: error.to_string(),
-                    binary: Vec::new(),
-                },
-            },
+            Ok(document) => optional_binary_result(document.extract(&paths)),
             Err((status, byte_offset)) => ffi::BinaryResult {
                 status,
                 byte_offset,
@@ -200,11 +186,55 @@ impl Extraction {
             },
         }
     }
+
+    fn query(&self, path: &Path, auto_wrap: bool, first_only: bool) -> ffi::PathQueryResult {
+        match &self.state {
+            Ok(document) => {
+                let result = document
+                    .query(
+                        path,
+                        crate::QueryOptions {
+                            auto_wrap,
+                            first_only,
+                        },
+                    )
+                    .and_then(|values| {
+                        let single_length = if values.len() == 1 {
+                            values[0].len()?
+                        } else {
+                            0
+                        };
+                        Ok((values.len() as u64, single_length))
+                    });
+                query_result(result)
+            }
+            Err((status, byte_offset)) => ffi::PathQueryResult {
+                status: *status,
+                byte_offset: *byte_offset,
+                match_count: 0,
+                single_length: 0,
+            },
+        }
+    }
+
+    fn object_keys(&self) -> ffi::BinaryResult {
+        match &self.state {
+            Ok(document) => optional_binary_result(document.object_keys(None)),
+            Err((status, byte_offset)) => failed_binary_result(*status, *byte_offset),
+        }
+    }
+
+    fn object_keys_at_path(&self, path: &Path) -> ffi::BinaryResult {
+        match &self.state {
+            Ok(document) => optional_binary_result(document.object_keys(Some(path))),
+            Err((status, byte_offset)) => failed_binary_result(*status, *byte_offset),
+        }
+    }
 }
 
-fn new_extraction(input: &[u8], text: bool, max_depth: u32) -> Box<Extraction> {
+fn new_query(input: &[u8], text: bool, max_depth: u32) -> Box<Query> {
     let state = if text {
-        crate::Extraction::from_text(
+        crate::Query::from_text(
             input,
             ParseOptions {
                 max_depth,
@@ -213,10 +243,39 @@ fn new_extraction(input: &[u8], text: bool, max_depth: u32) -> Box<Extraction> {
         )
         .map_err(|error| (parse_status(&error), error.byte_offset as u64))
     } else {
-        crate::Extraction::from_binary(input.to_vec())
+        crate::Query::from_binary(input.to_vec())
             .map_err(|error| (ffi::Status::InvalidBinary, error.byte_offset as u64))
     };
-    Box::new(Extraction { state })
+    Box::new(Query {
+        state,
+        paths: Vec::new(),
+    })
+}
+
+fn optional_binary_result(result: BinaryResult<Option<Vec<u8>>>) -> ffi::BinaryResult {
+    match result {
+        Ok(binary) => ffi::BinaryResult {
+            status: ffi::Status::Ok,
+            byte_offset: 0,
+            message: String::new(),
+            binary: binary.unwrap_or_default(),
+        },
+        Err(error) => ffi::BinaryResult {
+            status: ffi::Status::InvalidBinary,
+            byte_offset: error.byte_offset as u64,
+            message: error.to_string(),
+            binary: Vec::new(),
+        },
+    }
+}
+
+fn failed_binary_result(status: ffi::Status, byte_offset: u64) -> ffi::BinaryResult {
+    ffi::BinaryResult {
+        status,
+        byte_offset,
+        message: String::new(),
+        binary: Vec::new(),
+    }
 }
 
 fn policy(duplicate: ffi::Duplicate) -> DuplicatePolicy {
@@ -621,11 +680,15 @@ impl PathParseResult {
     }
 
     fn byte_offset(&self) -> u64 {
-        self.error.as_ref().map_or(0, |error| error.byte_offset as u64)
+        self.error
+            .as_ref()
+            .map_or(0, |error| error.byte_offset as u64)
     }
 
     fn path(&self) -> &crate::Path {
-        self.path.as_ref().expect("valid paths are checked before use")
+        self.path
+            .as_ref()
+            .expect("valid paths are checked before use")
     }
 }
 
@@ -642,9 +705,7 @@ pub(crate) fn parse_mysql_path(input: &[u8]) -> Box<PathParseResult> {
     })
 }
 
-fn query_result(
-    result: crate::BinaryResult<(u64, u64)>,
-) -> ffi::PathQueryResult {
+fn query_result(result: crate::BinaryResult<(u64, u64)>) -> ffi::PathQueryResult {
     match result {
         Ok((match_count, single_length)) => ffi::PathQueryResult {
             status: ffi::Status::Ok,

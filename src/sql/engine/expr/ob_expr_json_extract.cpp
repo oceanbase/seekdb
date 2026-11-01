@@ -144,7 +144,7 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
     }
   } else if (!is_null_result) {
-    rust::Box<common::json::Extraction> extraction = common::json::new_extraction(
+    rust::Box<common::json::Query> extraction = common::json::new_query(
         rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(json_doc.ptr()), json_doc.length()),
         input_type != ObJsonInType::JSON_BIN,
         ObJsonExprHelper::get_json_text_depth_limit(

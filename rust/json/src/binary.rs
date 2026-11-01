@@ -130,7 +130,11 @@ impl BinaryError {
 
 impl fmt::Display for BinaryError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "invalid binary JSON at byte {}: {:?}", self.byte_offset, self.kind)
+        write!(
+            formatter,
+            "invalid binary JSON at byte {}: {:?}",
+            self.byte_offset, self.kind
+        )
     }
 }
 
@@ -175,9 +179,7 @@ impl<'a> BinaryValue<'a> {
                 _ => None,
             },
             JsonType::Uint => match self.number()? {
-                Number::U64(value) if var_type(value) <= entry_type => {
-                    Some((value, UINT | INLINE))
-                }
+                Number::U64(value) if var_type(value) <= entry_type => Some((value, UINT | INLINE)),
                 _ => None,
             },
             _ => None,
@@ -203,7 +205,10 @@ impl<'a> BinaryValue<'a> {
         }
         let header = read_bytes(self.bytes, self.offset, 2)?;
         if header[0] != kind as u8 {
-            return Err(BinaryError::new(BinaryErrorKind::InvalidHeader, self.offset));
+            return Err(BinaryError::new(
+                BinaryErrorKind::InvalidHeader,
+                self.offset,
+            ));
         }
         let flags = header[1];
         let entry_type = flags & 0x03;
@@ -263,7 +268,10 @@ impl<'a> BinaryValue<'a> {
             .container()?
             .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidType, self.offset))?;
         if index >= container.count {
-            return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset));
+            return Err(BinaryError::new(
+                BinaryErrorKind::InvalidOffset,
+                self.offset,
+            ));
         }
         let index = usize::try_from(index)
             .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset))?;
@@ -313,7 +321,10 @@ impl<'a> BinaryValue<'a> {
             .container()?
             .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidType, self.offset))?;
         if container.kind != JsonType::Object || index >= container.count {
-            return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset));
+            return Err(BinaryError::new(
+                BinaryErrorKind::InvalidOffset,
+                self.offset,
+            ));
         }
         let index = usize::try_from(index)
             .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset))?;
@@ -464,7 +475,9 @@ fn write_binary_value(output: &mut Vec<u8>, value: BinaryValue<'_>) -> BinaryRes
             let encoded = match number {
                 Number::I64(number) => number as u64,
                 Number::U64(number) => number,
-                Number::F64(_) => return Err(BinaryError::new(BinaryErrorKind::InvalidType, value.offset)),
+                Number::F64(_) => {
+                    return Err(BinaryError::new(BinaryErrorKind::InvalidType, value.offset))
+                }
             };
             push_vi64(output, encoded);
         }
@@ -634,6 +647,55 @@ pub fn serialize_array(values: &[BinaryValue<'_>]) -> BinaryResult<Vec<u8>> {
     Ok(output)
 }
 
+pub fn serialize_object_keys(value: BinaryValue<'_>) -> BinaryResult<Vec<u8>> {
+    fn write(
+        output: &mut Vec<u8>,
+        value: BinaryValue<'_>,
+        estimated_size: u64,
+    ) -> BinaryResult<()> {
+        let start = output.len();
+        let count = to_usize(value.len()?, value.offset)?;
+        let count_type = var_type(count as u64);
+        let size_type = var_type(estimated_size);
+        let entry_type = size_type;
+        let entry_size = var_size(entry_type);
+        output.push(ARRAY);
+        output.push(entry_type | (count_type << 2) | (size_type << 4) | 0x40);
+        push_var(output, count as u64, count_type);
+        let size_position = output.len();
+        push_var(output, estimated_size, size_type);
+        let value_entries = output.len();
+        output.resize(output.len() + count * (entry_size + 1), 0);
+        for index in 0..count {
+            let key = value.key(index as u64)?;
+            let value_offset = (output.len() - start) as u64;
+            let position = value_entries + index * (entry_size + 1);
+            set_var(output, position, value_offset, entry_type);
+            output[position + entry_size] = STRING;
+            output.push(STRING);
+            push_vi64(output, key.len() as u64);
+            output.extend_from_slice(key);
+        }
+        let actual_size = (output.len() - start) as u64;
+        if var_type(actual_size) > size_type {
+            output.truncate(start);
+            write(output, value, actual_size)
+        } else {
+            set_var(output, size_position, actual_size, size_type);
+            Ok(())
+        }
+    }
+
+    if value.json_type()? != JsonType::Object {
+        return Err(BinaryError::new(BinaryErrorKind::InvalidType, value.offset));
+    }
+    let mut output = vec![0; 8];
+    write(&mut output, value, 0)?;
+    let header = DOC_HEADER as u64 | ((output.len() as u64) << 22);
+    output[..8].copy_from_slice(&header.to_le_bytes());
+    Ok(output)
+}
+
 #[derive(Clone, Debug)]
 pub struct BinaryDocument<B> {
     bytes: B,
@@ -650,7 +712,9 @@ impl<B: AsRef<[u8]>> BinaryDocument<B> {
             .ok_or_else(|| BinaryError::new(BinaryErrorKind::Truncated, 0))?;
         let (extend_seg_offset, root_offset) = if first == DOC_HEADER {
             let header = u64::from_le_bytes(
-                read_bytes(input, 0, 8)?.try_into().expect("eight bytes were requested"),
+                read_bytes(input, 0, 8)?
+                    .try_into()
+                    .expect("eight bytes were requested"),
             );
             let extend = to_usize((header >> 22) & ((1u64 << 42) - 1), 0)?;
             if extend > input.len() {
@@ -718,7 +782,10 @@ impl<B: AsRef<[u8]>> BinaryDocument<B> {
             };
             let (child, depth) = child;
             if depth as usize > depth_bound {
-                return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, child.offset));
+                return Err(BinaryError::new(
+                    BinaryErrorKind::InvalidDepth,
+                    child.offset,
+                ));
             }
             maximum = maximum.max(depth);
             if let Some(container) = child.container()? {
@@ -743,7 +810,10 @@ impl<B: AsRef<[u8]>> BinaryDocument<B> {
 }
 
 fn needs_type_prefix(value_type: u8) -> bool {
-    matches!(value_type, STRING | OBJECT | ARRAY | 13 | 20 | 21 | 22 | 23 | 28 | 29)
+    matches!(
+        value_type,
+        STRING | OBJECT | ARRAY | 13 | 20 | 21 | 22 | 23 | 28 | 29
+    )
 }
 
 fn read_bytes(bytes: &[u8], offset: usize, length: usize) -> BinaryResult<&[u8]> {
@@ -771,7 +841,10 @@ fn read_vi64(bytes: &[u8], offset: usize) -> BinaryResult<(u64, usize)> {
     for index in 0..10 {
         let byte = read_bytes(bytes, offset + index, 1)?[0];
         if index == 9 && byte > 1 {
-            return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, offset + index));
+            return Err(BinaryError::new(
+                BinaryErrorKind::InvalidOffset,
+                offset + index,
+            ));
         }
         value |= u64::from(byte & 0x7f) << (index * 7);
         if byte & 0x80 == 0 {

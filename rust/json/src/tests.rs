@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::bridge::{ffi, parse as parse_events};
+use crate::{binary, Query};
 use crate::{
     parse, parse_binary, validate, BinaryDocument, BinaryErrorKind, Document, DuplicatePolicy,
     ErrorKind, JsonType, Number, ParseOptions, Path, PathErrorKind, PathStep, QueryOptions,
 };
-use crate::{binary, Extraction};
 
 fn options(policy: DuplicatePolicy) -> ParseOptions {
     ParseOptions {
@@ -148,7 +148,10 @@ fn binary_document_reads_borrowed_and_owned_documents() {
     let input = br#"{"a":[1,-2,3.5,true,null,"x"],"b":{"c":18446744073709551615}}"#;
     let bytes = parse_binary(input, ParseOptions::default()).unwrap();
     let borrowed = BinaryDocument::new(bytes.as_slice()).unwrap();
-    assert_eq!(borrowed.root().unwrap().json_type().unwrap(), JsonType::Object);
+    assert_eq!(
+        borrowed.root().unwrap().json_type().unwrap(),
+        JsonType::Object
+    );
     assert_eq!(borrowed.depth().unwrap(), 3);
     let owned = BinaryDocument::new(bytes).unwrap();
     assert_eq!(owned.depth().unwrap(), 3);
@@ -156,7 +159,10 @@ fn binary_document_reads_borrowed_and_owned_documents() {
     assert_eq!(array.json_type().unwrap(), JsonType::Array);
     assert_eq!(array.len().unwrap(), 6);
     assert_eq!(array.value(0).unwrap().json_type().unwrap(), JsonType::Int);
-    assert_eq!(array.value(5).unwrap().json_type().unwrap(), JsonType::String);
+    assert_eq!(
+        array.value(5).unwrap().json_type().unwrap(),
+        JsonType::String
+    );
     assert_eq!(array.value(0).unwrap().number().unwrap(), Number::I64(1));
     assert_eq!(array.value(1).unwrap().number().unwrap(), Number::I64(-2));
     assert_eq!(array.value(2).unwrap().number().unwrap(), Number::F64(3.5));
@@ -187,8 +193,24 @@ fn binary_document_reads_forward_values() {
 
 #[test]
 fn binary_type_numbers_match_sql_node_types() {
-    assert_eq!(BinaryDocument::new([32]).unwrap().root().unwrap().json_type().unwrap(), JsonType::MySqlDate);
-    assert_eq!(BinaryDocument::new([33]).unwrap().root().unwrap().json_type().unwrap(), JsonType::MySqlDatetime);
+    assert_eq!(
+        BinaryDocument::new([32])
+            .unwrap()
+            .root()
+            .unwrap()
+            .json_type()
+            .unwrap(),
+        JsonType::MySqlDate
+    );
+    assert_eq!(
+        BinaryDocument::new([33])
+            .unwrap()
+            .root()
+            .unwrap()
+            .json_type()
+            .unwrap(),
+        JsonType::MySqlDatetime
+    );
     assert_eq!(JsonType::MySqlDate as u8, 30);
     assert_eq!(JsonType::MySqlDatetime as u8, 31);
 }
@@ -208,7 +230,10 @@ fn binary_document_rejects_malformed_input() {
     bad_forward.extend_from_slice(&[7, 0x40, 1, 6, 0, 31]);
     let header = 30u64 | (14u64 << 22);
     bad_forward[..8].copy_from_slice(&header.to_le_bytes());
-    let error = BinaryDocument::new(bad_forward).unwrap().depth().unwrap_err();
+    let error = BinaryDocument::new(bad_forward)
+        .unwrap()
+        .depth()
+        .unwrap_err();
     assert_eq!(error.kind, BinaryErrorKind::Truncated);
 }
 
@@ -490,9 +515,9 @@ fn mysql_path_query_preserves_binary_values_and_result_order() {
 fn extraction_builds_single_and_array_results_in_rust() {
     let text = "{\"a\":[-1000,1,2,300],\"b\":{\"a\":5},\"s\":\"雪\"}".as_bytes();
     let single = |path: &str| {
-        let mut extraction = Extraction::from_text(text, ParseOptions::default()).unwrap();
-        extraction.add_path(&Path::parse_mysql(path.as_bytes()).unwrap());
-        let bytes = extraction.finish().unwrap().unwrap();
+        let document = Query::from_text(text, ParseOptions::default()).unwrap();
+        let path = Path::parse_mysql(path.as_bytes()).unwrap();
+        let bytes = document.extract(&[path]).unwrap().unwrap();
         BinaryDocument::new(bytes).unwrap()
     };
     assert_eq!(
@@ -503,22 +528,58 @@ fn extraction_builds_single_and_array_results_in_rust() {
         single("$.a[3]").root().unwrap().number().unwrap(),
         Number::I64(300)
     );
-    assert_eq!(single("$.s").root().unwrap().string_bytes().unwrap(), "雪".as_bytes());
+    assert_eq!(
+        single("$.s").root().unwrap().string_bytes().unwrap(),
+        "雪".as_bytes()
+    );
     let array = single("$.a[*]");
     assert_eq!(array.root().unwrap().len().unwrap(), 4);
-    assert_eq!(array.root().unwrap().value(3).unwrap().number().unwrap(), Number::I64(300));
+    assert_eq!(
+        array.root().unwrap().value(3).unwrap().number().unwrap(),
+        Number::I64(300)
+    );
 
-    let mut multiple = Extraction::from_text(text, ParseOptions::default()).unwrap();
-    multiple.add_path(&Path::parse_mysql(b"$.a[1]").unwrap());
-    multiple.add_path(&Path::parse_mysql(b"$.b.a").unwrap());
-    let bytes = multiple.finish().unwrap().unwrap();
+    let multiple = Query::from_text(text, ParseOptions::default()).unwrap();
+    let paths = [
+        Path::parse_mysql(b"$.a[1]").unwrap(),
+        Path::parse_mysql(b"$.b.a").unwrap(),
+    ];
+    let bytes = multiple.extract(&paths).unwrap().unwrap();
     let array = BinaryDocument::new(bytes).unwrap();
     assert_eq!(array.root().unwrap().len().unwrap(), 2);
-    assert_eq!(array.root().unwrap().value(1).unwrap().number().unwrap(), Number::I64(5));
+    assert_eq!(
+        array.root().unwrap().value(1).unwrap().number().unwrap(),
+        Number::I64(5)
+    );
 
-    let mut missing = Extraction::from_text(text, ParseOptions::default()).unwrap();
-    missing.add_path(&Path::parse_mysql(b"$.missing").unwrap());
-    assert!(missing.finish().unwrap().is_none());
+    let missing = Query::from_text(text, ParseOptions::default()).unwrap();
+    assert!(missing
+        .extract(&[Path::parse_mysql(b"$.missing").unwrap()])
+        .unwrap()
+        .is_none());
+
+    let keys = multiple.object_keys(None).unwrap().unwrap();
+    let keys = BinaryDocument::new(keys).unwrap();
+    assert_eq!(keys.root().unwrap().len().unwrap(), 3);
+    assert_eq!(
+        keys.root()
+            .unwrap()
+            .value(2)
+            .unwrap()
+            .string_bytes()
+            .unwrap(),
+        b"s"
+    );
+    let nested_keys = multiple
+        .object_keys(Some(&Path::parse_mysql(b"$.b").unwrap()))
+        .unwrap()
+        .unwrap();
+    let nested_keys = BinaryDocument::new(nested_keys).unwrap();
+    assert_eq!(nested_keys.root().unwrap().len().unwrap(), 1);
+    assert!(multiple
+        .object_keys(Some(&Path::parse_mysql(b"$.a").unwrap()))
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -540,8 +601,17 @@ fn binary_value_serialization_round_trips_document_shapes() {
         BinaryDocument::new(serialized).unwrap();
     }
 
-    let large = format!("[{}]", (0..1000).map(|value| value.to_string()).collect::<Vec<_>>().join(","));
+    let large = format!(
+        "[{}]",
+        (0..1000)
+            .map(|value| value.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    );
     let bytes = parse_binary(large.as_bytes(), ParseOptions::default()).unwrap();
     let document = BinaryDocument::new(bytes.clone()).unwrap();
-    assert_eq!(binary::serialize_value(document.root().unwrap()).unwrap(), bytes);
+    assert_eq!(
+        binary::serialize_value(document.root().unwrap()).unwrap(),
+        bytes
+    );
 }

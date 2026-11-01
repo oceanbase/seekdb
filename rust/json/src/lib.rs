@@ -15,12 +15,14 @@
 //! Standard JSON parsing with explicit duplicate-key and depth policies.
 //! Documents own all strings and values; error offsets are zero-based bytes.
 
-mod bridge;
 pub mod binary;
+mod bridge;
 pub mod path;
 
-pub use binary::{BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType};
-pub use path::{Extraction, Path, PathError, PathErrorKind, PathStep, QueryOptions};
+pub use binary::{
+    BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType,
+};
+pub use path::{Path, PathError, PathErrorKind, PathStep, Query, QueryOptions};
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;
@@ -348,11 +350,17 @@ impl<'de> Visitor<'de> for DocumentVisitor {
                 if entries.len() == 16 {
                     let mut indexed = HashMap::with_capacity(32);
                     for (index, (key, _)) in entries.iter().enumerate() {
-                        indexed.entry(key_hash(key)).or_insert_with(Vec::new).push(index);
+                        indexed
+                            .entry(key_hash(key))
+                            .or_insert_with(Vec::new)
+                            .push(index);
                     }
                     positions = Some(indexed);
                 } else if let Some(positions) = &mut positions {
-                    positions.entry(key_hash(&entries[index].0)).or_default().push(index);
+                    positions
+                        .entry(key_hash(&entries[index].0))
+                        .or_default()
+                        .push(index);
                 }
             }
         }

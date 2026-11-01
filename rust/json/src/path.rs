@@ -39,48 +39,66 @@ pub struct Path {
     steps: Vec<PathStep>,
 }
 
-pub struct Extraction {
+pub struct Query {
     document: BinaryDocument<Vec<u8>>,
-    paths: Vec<Path>,
-    force_array: bool,
 }
 
-impl Extraction {
+impl Query {
     pub fn from_binary(input: Vec<u8>) -> BinaryResult<Self> {
         Ok(Self {
             document: BinaryDocument::new(input)?,
-            paths: Vec::new(),
-            force_array: false,
         })
     }
 
     pub fn from_text(input: &[u8], options: ParseOptions) -> crate::Result<Self> {
-        Self::from_binary(crate::parse_binary(input, options)?)
-            .map_err(|error| crate::ParseError {
-                kind: crate::ErrorKind::Syntax,
-                byte_offset: error.byte_offset,
-                message: error.to_string(),
-            })
+        Self::from_binary(crate::parse_binary(input, options)?).map_err(|error| crate::ParseError {
+            kind: crate::ErrorKind::Syntax,
+            byte_offset: error.byte_offset,
+            message: error.to_string(),
+        })
     }
 
-    pub fn add_path(&mut self, path: &Path) {
-        self.force_array |= !self.paths.is_empty() || path.can_match_many();
-        self.paths.push(path.clone());
+    pub fn query(&self, path: &Path, options: QueryOptions) -> BinaryResult<Vec<BinaryValue<'_>>> {
+        path.query(self.document.root()?, options)
     }
 
-    pub fn finish(self) -> BinaryResult<Option<Vec<u8>>> {
+    pub fn extract(&self, paths: &[Path]) -> BinaryResult<Option<Vec<u8>>> {
         let root = self.document.root()?;
         let mut matches = Vec::new();
-        for path in &self.paths {
+        for path in paths {
             matches.extend(path.query(root, QueryOptions::default())?);
         }
+        let force_array = paths.len() > 1 || paths.iter().any(Path::can_match_many);
         if matches.is_empty() {
             Ok(None)
-        } else if matches.len() == 1 && !self.force_array {
+        } else if matches.len() == 1 && !force_array {
             binary::serialize_value(matches[0]).map(Some)
         } else {
             binary::serialize_array(&matches).map(Some)
         }
+    }
+
+    pub fn object_keys(&self, path: Option<&Path>) -> BinaryResult<Option<Vec<u8>>> {
+        let root = self.document.root()?;
+        let value = if let Some(path) = path {
+            let matches = path.query(
+                root,
+                QueryOptions {
+                    auto_wrap: false,
+                    first_only: true,
+                },
+            )?;
+            if matches.len() != 1 {
+                return Ok(None);
+            }
+            matches[0]
+        } else {
+            root
+        };
+        if value.json_type()? != JsonType::Object {
+            return Ok(None);
+        }
+        binary::serialize_object_keys(value).map(Some)
     }
 }
 
@@ -98,7 +116,11 @@ pub struct PathError {
 
 impl fmt::Display for PathError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "invalid JSON path at byte {}: {:?}", self.byte_offset, self.kind)
+        write!(
+            formatter,
+            "invalid JSON path at byte {}: {:?}",
+            self.byte_offset, self.kind
+        )
     }
 }
 
@@ -517,4 +539,3 @@ impl<'a> Parser<'a> {
 fn is_key_terminator(byte: u8) -> bool {
     matches!(byte, b' ' | b'.' | b'[' | b'*' | b'(' | b'?' | b'-')
 }
-

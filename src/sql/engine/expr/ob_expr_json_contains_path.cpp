@@ -110,6 +110,18 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
   } else {
     input_type = ObJsonExprHelper::get_json_internal_type(doc_type);
   }
+  std::optional<rust::Box<common::json::Query>> query;
+  if (OB_SUCC(ret) && !is_null_result) {
+    query.emplace(common::json::new_query(
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(json_doc.ptr()), json_doc.length()),
+        input_type != ObJsonInType::JSON_BIN,
+        ObJsonExprHelper::get_json_text_depth_limit(
+            ObJsonExprHelper::get_json_max_depth_config())));
+    if ((*query)->status() != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to parse JSON for path query", K(ret), K((*query)->byte_offset()));
+    }
+  }
   if (OB_SUCC(ret) && !is_null_result) {
     // get one_or_all flag
     bool one_flag;
@@ -146,23 +158,24 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
         } else {
           ObString path_val = path_data->get_string();
           const common::json::Path *json_path = NULL;
-          JsonPathMatches matches;
           if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr.args_[i], ctx, temp_allocator, path_val, is_null_result))) {
           } else if (OB_FAIL(find_and_add_native_path_cache(path_cache, json_path, path_val, i, true))) {
-          } else if (OB_FAIL(query_native_json_path(
-                         json_doc, input_type, *json_path, true, true,
-                         ObJsonExprHelper::get_json_max_depth_config(), matches))) {
           }
 
-          if (matches.count_ == 0) {
-            if (!one_flag) {
-              is_contains = false;
-              break;
-            }
-          } else {
-            is_contains = true;
-            if (one_flag) {
-              break; 
+          if (OB_SUCC(ret)) {
+            common::json::PathQueryResult matches = (*query)->query(*json_path, true, true);
+            if (matches.status != common::json::Status::Ok) {
+              ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+            } else if (matches.match_count == 0) {
+              if (!one_flag) {
+                is_contains = false;
+                break;
+              }
+            } else {
+              is_contains = true;
+              if (one_flag) {
+                break;
+              }
             }
           }
         }
