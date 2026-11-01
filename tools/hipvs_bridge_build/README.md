@@ -77,3 +77,9 @@ explicit launch environment; they do not validate the new automatic delivery.
 Run `run_cloud_validation.py` in its default `--bridge-mode installed` mode to
 validate ordinary build output without the environment override. The legacy
 manual mode is diagnostic only. Neither mode proves official competition acceptance.
+
+The subsequent full ordinary-build validation, without the library override,
+passed on the real AMD workspace. See
+`unittest/amd_hipvs/DELIVERY_RESULTS_20261101.md` for the exact source, raw logs,
+SQL lifecycle checks, complete integrity/recall results and 2.667x large-data
+construction speedup. Small inputs were slower on GPU and are also reported.

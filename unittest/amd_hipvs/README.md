@@ -97,6 +97,9 @@ bash unittest/amd_hipvs/test_gpu_export.sh /workspace/amd-build
 
 ## 独立实例完整复现
 
+普通构建自动交付桥接库、无路径覆盖的真实 AMD 验证报告见
+[DELIVERY_RESULTS_20261101.md](DELIVERY_RESULTS_20261101.md)。原始手工桥接部署的历史报告仍保留，二者不混用。
+
 在赛事 `seekdb-hipvs` 工作区使用本提交构建数据库。新启动的模板可能没有 RPM 解包工具，Ubuntu 中先安装：
 
 ```bash
