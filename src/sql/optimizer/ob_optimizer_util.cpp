@@ -6951,6 +6951,18 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
   if (OB_FAIL(opt_params.has_opt_param(ObOptParamHint::ENABLE_NEWSORT, has_hint))) {
   } else if (has_hint) {
     if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ENABLE_NEWSORT, can_sort_opt))) {
+    } else if (can_sort_opt) {
+      // an explicit hint must not bypass the encoder capability check, other-
+      // wise unsupported types would hit OB_NOT_SUPPORTED in the encoder at
+      // execution time and fail the whole (DDL) statement
+      for (int64_t i = 0; OB_SUCC(ret) && i < order_keys.count(); ++i) {
+        if (!ObOrderPerservingEncoder::can_encode_sortkey(
+                                order_keys.at(i).expr_->get_data_type(),
+                                order_keys.at(i).expr_->get_collation_type())) {
+          can_sort_opt = false;
+          break;
+        }
+      }
     }
   } else {
     can_sort_opt &= config::_enable_newsort();

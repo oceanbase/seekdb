@@ -117,7 +117,7 @@ public:
   static int encode_tails(unsigned char *to, int64_t max_buf_len, int64_t &to_len, bool is_mem, common::ObCollationType cs,  bool with_empty_str);
   inline static bool can_encode_sortkey(common::ObObjType type, common::ObCollationType cs)
   {
-    return (type == ObTinyIntType || type == ObSmallIntType || type == ObDateType
+    return ((type == ObTinyIntType || type == ObSmallIntType || type == ObDateType
            || type == ObMediumIntType || type == ObInt32Type
            || type == ObTimeType || type == ObDateTimeType || type == ObTimestampType
            || type == ObIntType || type == ObYearType || type == ObUTinyIntType
@@ -132,7 +132,18 @@ public:
               || cs == CS_TYPE_GBK_CHINESE_CI
               // utf 16 will be open later
               //|| cs == CS_TYPE_UTF16_GENERAL_CI || cs == CS_TYPE_UTF16_BIN
-              || cs == CS_TYPE_GB18030_CHINESE_CI || ObCharset::is_gb18030_2022(cs));
+              || cs == CS_TYPE_GB18030_CHINESE_CI || ObCharset::is_gb18030_2022(cs)))
+         // VARCHAR is only opened for the collations whose encoded-key order
+         // has been proven equivalent to the collation comparator:
+         //   - CS_TYPE_UTF8MB4_GENERAL_CI: var-len sortkey (space-run escape +
+         //     trailing-space strip + 0x20 0x20 terminator) matches
+         //     ob_strnncollsp_utf8mb4 exactly on all valid utf8mb4 input
+         //     (3.6M-pair differential test, see fts task-5 report)
+         //   - CS_TYPE_BINARY: raw bytes + 0x00-escape + 0x00 0x00 terminator
+         //     is trivially order-preserving for memcmp compare
+         // every other collation keeps the legacy compare path unchanged.
+         || (type == ObVarcharType
+             && (cs == CS_TYPE_UTF8MB4_GENERAL_CI || cs == CS_TYPE_BINARY));
   }
 
 private:
