@@ -27,6 +27,42 @@ namespace blocksstable
 using namespace common;
 const ObColumnHeader::Type ObStringDiffDecoder::type_;
 
+namespace
+{
+void copy_common_string_batch(const ObStringDiffHeader &header, char *output,
+                              const int64_t stride, const int64_t count)
+{
+  if (header.string_size_ <= 128) {
+    char common[128] = {};
+    header.copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
+                       header.common_data(), common);
+    for (int64_t i = 0; i < count; ++i) {
+      MEMCPY(output + i * stride, common, header.string_size_);
+    }
+  } else {
+    for (int64_t i = 0; i < count; ++i) {
+      header.copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
+                         header.common_data(), output + i * stride);
+    }
+  }
+}
+
+// Keep the nibble cursor across different runs, including odd run lengths.
+// Bulk unpacking handles pairs without re-testing parity for every byte.
+void unpack_diff_runs(const ObStringDiffHeader &header, const unsigned char *cell, char *output)
+{
+  ObHexStringUnpacker unpacker(header.hex_char_array(), cell);
+  int64_t pos = 0;
+  for (int64_t i = 0; i < header.diff_desc_cnt_; ++i) {
+    const auto &run = header.diff_descs_[i];
+    if (run.diff_ && run.count_ > 0) {
+      unpacker.unpack(reinterpret_cast<unsigned char *>(output + pos), run.count_);
+    }
+    pos += run.count_;
+  }
+}
+} // namespace
+
 ObStringDiffDecoder::ObStringDiffDecoder() : header_(NULL)
 {
 }
@@ -166,10 +202,7 @@ int ObStringDiffDecoder::batch_decode(
     } else if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      for (int64_t i = 0; i < row_cap; ++i) {
-        header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
-            header_->common_data(), buf + i * buf_size);
-      }
+      copy_common_string_batch(*header_, buf, buf_size, row_cap);
     }
 
     if (OB_FAIL(ret)) {
@@ -185,11 +218,7 @@ int ObStringDiffDecoder::batch_decode(
           cell_data = col_data + data_offset + row_id * header_->length_;
           str_ptr = buf + i * buf_size;
           if (header_->is_hex_packing()) {
-            ObHexStringUnpacker unpacker(header_->hex_char_array(),
-                reinterpret_cast<const unsigned char *>(cell_data));
-            header_->copy_hex_string(unpacker,
-                static_cast<void (ObHexStringUnpacker::*)(unsigned char &)>(&ObHexStringUnpacker::unpack),
-                reinterpret_cast<unsigned char *>(str_ptr));
+            unpack_diff_runs(*header_, reinterpret_cast<const unsigned char *>(cell_data), str_ptr);
           } else {
             header_->copy_string(
               ObStringDiffHeader::LeftToRight(),
@@ -217,11 +246,7 @@ int ObStringDiffDecoder::batch_decode(
             *ctx.micro_block_header_, *ctx.col_header_, *header_))) {
         } else {
           if (header_->is_hex_packing()) {
-            ObHexStringUnpacker unpacker(header_->hex_char_array(),
-                reinterpret_cast<const unsigned char *>(cell_data));
-            header_->copy_hex_string(unpacker,
-                static_cast<void (ObHexStringUnpacker::*)(unsigned char &)>(&ObHexStringUnpacker::unpack),
-                reinterpret_cast<unsigned char *>(str_ptr));
+            unpack_diff_runs(*header_, reinterpret_cast<const unsigned char *>(cell_data), str_ptr);
           } else {
             header_->copy_string(
               ObStringDiffHeader::LeftToRight(),

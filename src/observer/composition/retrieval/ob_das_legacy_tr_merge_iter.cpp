@@ -381,6 +381,8 @@ int ObDASLegacyTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.id_proj_expr_ = ir_ctdef_->inv_scan_domain_id_col_;
   sr_iter_param_.relevance_expr_ = ir_ctdef_->relevance_expr_;
   sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
+  sr_iter_param_.skip_projection_ = ir_ctdef_->skip_ir_projection_ && !function_lookup_mode_
+      && !ir_ctdef_->need_calc_relevance() && ir_ctdef_->mode_flag_ == NATURAL_LANGUAGE_MODE;
   // Existence-only index scans accept every posting; the optimizer has
   // already proved that this predicate only tests MATCH against zero.
   sr_iter_param_.filter_expr_ = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;

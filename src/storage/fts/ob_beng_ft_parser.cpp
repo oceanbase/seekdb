@@ -49,15 +49,28 @@ int ObBEngFTParser::get_next_token(
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    MEMCPY(buf, token.ptr_, token.len_);
-    word = buf;
-    word_len = token.len_;
-    char_len = token.len_;
-    word_freq = token_freq;
-    LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
+    // The ASCII normalizer can return a slice of the original document.
+    // That document outlives the term map, just as it does for IK tokens.
+    // Other stream buffers are transient and still need an owning copy.
+    const uintptr_t source = reinterpret_cast<uintptr_t>(doc_.ptr_);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(token.ptr_);
+    const bool input_view = address >= source && address - source <= doc_.len_
+        && token.len_ <= doc_.len_ - (address - source);
+    if (input_view) {
+      word = token.ptr_;
+    } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(buf, token.ptr_, token.len_);
+      word = buf;
+    }
+    if (OB_SUCC(ret)) {
+      word_len = token.len_;
+      char_len = token.len_;
+      word_freq = token_freq;
+      LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
+    }
   }
   return ret;
 }

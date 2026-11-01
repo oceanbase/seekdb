@@ -91,7 +91,8 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
                 cmp = left.is_null() ? (right.is_null() ? 0 : -1) : 1;
               } else {
                 const int64_t length = MIN(left.len_, right.len_);
-                cmp = length > 0 ? MEMCMP(left.ptr_, right.ptr_, length) : 0;
+                cmp = left.len_ == 16 && right.len_ == 16 ? MEMCMP(left.ptr_, right.ptr_, 16)
+                    : (length > 0 ? MEMCMP(left.ptr_, right.ptr_, length) : 0);
                 if (cmp == 0) {
                   cmp = (left.len_ > right.len_) - (left.len_ < right.len_);
                 }

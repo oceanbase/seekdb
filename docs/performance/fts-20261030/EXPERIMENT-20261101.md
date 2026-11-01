@@ -12,7 +12,7 @@ ABBA SQL BENCHMARK diagnostic calls (100000 calls/sample, three samples/pass) sh
 
 Two complete benchmark runs per binary, in ABBA order with the original 20000-row/500-batch/3000-tokenize/200-query/3-sample/30-warmup/SKIP_LOAD=0 settings, did **not** show an overall improvement. Averaging each metric first gives build -5.39%, tokenization -2.45%, query -9.78%, and equal-category mean -5.87% relative reduction. SELECT1 was also 24.19% slower during candidate runs, although this change does not modify that path. This is evidence of substantial measurement confounding; it is not a reason to discard the negative full measurements or substitute microbenchmark gains for a contest score. All raw reports and the calculation are archived here under the revision23 names.
 
-The candidate remains local on an experimental branch, **not pushed to either submission repository**. Submission branch `submit/fts-20261030` remains at the validated 6aeef commit.
+At the time of this experiment, the candidate was kept local and the submission branch stayed at 6aeef. It is superseded by the later validated follow-up documented in LATEST.md; the negative results here remain part of the record.
 
 ## New profile for follow-up
 

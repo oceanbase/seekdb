@@ -112,7 +112,8 @@ struct ObSparseRetrievalMergeParam
       filter_expr_(nullptr),
       topk_limit_(0),
       field_boost_(1.0),
-      max_batch_size_(1)
+      max_batch_size_(1),
+      skip_projection_(false)
   {}
   ~ObSparseRetrievalMergeParam() {}
   bool need_project_relevance() const { return relevance_proj_expr_ != nullptr; }
@@ -131,6 +132,7 @@ struct ObSparseRetrievalMergeParam
   int64_t topk_limit_;
   double field_boost_;
   int64_t max_batch_size_;
+  bool skip_projection_; // proven cardinality-only scan; no result columns
 };
 
 class ObISparseRetrievalMergeIter

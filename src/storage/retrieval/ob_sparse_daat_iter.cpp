@@ -33,7 +33,10 @@ static int compare_binary_posting_ids(const ObDatum &left, const ObDatum &right,
     result = left.is_null() ? (right.is_null() ? 0 : -1) : 1;
   } else {
     const int64_t length = MIN(left.len_, right.len_);
-    result = length > 0 ? MEMCMP(left.ptr_, right.ptr_, length) : 0;
+    // Standard document IDs are 16 bytes. A constant-size comparison can be
+    // inlined instead of entering the general libc memcmp for each posting.
+    result = left.len_ == 16 && right.len_ == 16 ? MEMCMP(left.ptr_, right.ptr_, 16)
+        : (length > 0 ? MEMCMP(left.ptr_, right.ptr_, length) : 0);
     if (result == 0) {
       result = (left.len_ > right.len_) - (left.len_ < right.len_);
     }
@@ -415,8 +418,10 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    buffered_domain_ids_[count].from_datum(id_datum);
-    buffered_relevances_[count] = relevance;
+    if (!iter_param_->skip_projection_) {
+      buffered_domain_ids_[count].from_datum(id_datum);
+      buffered_relevances_[count] = relevance;
+    }
     ++count;
     ++output_row_cnt_;
     if (limit_param->is_valid() && output_row_cnt_ >= limit) {
@@ -428,6 +433,7 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
 
 int ObSRDaaTIterImpl::project_results(const int64_t count)
 {
+  if (iter_param_->skip_projection_) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
   ObExpr *relevance_proj_expr = iter_param_->relevance_proj_expr_;
   ObExpr *id_proj_expr = iter_param_->id_proj_expr_;

@@ -25,6 +25,7 @@
 #include "data_plane/fts/ob_fts_parser.h"
 
 #include <cstdint>
+#include <memory>
 namespace oceanbase
 {
 namespace storage
@@ -106,6 +107,7 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  std::shared_ptr<ObIFTDict> shared_dicts_[3];
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
