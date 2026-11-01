@@ -52,28 +52,48 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
   count = 0;
   const auto *limit = iter_param_->limit_param_;
   const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+  const int64_t dim_count = dim_iters_->count();
   // For a short binary-ID union, compare posting heads directly instead of
   // pushing, rebuilding and popping a polymorphic merger for every document.
-  const bool binary_short_union = dim_iters_->count() <= 8
+  const bool binary_short_union = dim_count <= 8
       && iter_param_->id_proj_expr_->datum_meta_.type_ == common::ObVarcharType
       && iter_param_->id_proj_expr_->datum_meta_.cs_type_ == common::CS_TYPE_BINARY;
+  const ObDatum **domain_ids = iter_domain_ids_.get_data();
+  int64_t *next_indices = next_round_iter_idxes_.get_data();
+  ObISRDaaTDimIter *short_dims[8];
+  if (binary_short_union) {
+    for (int64_t i = 0; i < dim_count; ++i) {
+      short_dims[i] = dim_iters_->at(i);
+    }
+  }
+  // An unlimited cardinality-only scan needs neither projected values nor
+  // per-document limit accounting. Commit its counters once per batch.
+  const bool count_only_unlimited = iter_param_->skip_projection_ && !limit->is_valid();
+  auto cache_document = [&](const ObDatum &id) -> int {
+    if (count_only_unlimited) {
+      ++count;
+      return OB_SUCCESS;
+    } else {
+      return ObSRDaaTIterImpl::cache_result(count, id, 1.0);
+    }
+  };
   if (capacity <= 0) {
   } else if (dim_iters_->empty() || (limit->is_valid() && output_row_cnt_ >= limit->limit_)) {
     ret = OB_ITER_END;
   } else {
     while (OB_SUCC(ret) && count < real_capacity) {
       for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-        const int64_t idx = next_round_iter_idxes_[i];
-        ObISRDaaTDimIter *dim = dim_iters_->at(idx);
+        const int64_t idx = next_indices[i];
+        ObISRDaaTDimIter *dim = binary_short_union ? short_dims[idx] : dim_iters_->at(idx);
         ObSRMergeItem item;
         item.iter_idx_ = idx;
         item.relevance_ = 1.0;
         if (OB_FAIL(dim->get_next_row())) {
           if (ret == OB_ITER_END) {
-            iter_domain_ids_[idx] = nullptr;
+            domain_ids[idx] = nullptr;
             ret = OB_SUCCESS;
           }
-        } else if (OB_FAIL(dim->get_curr_id(iter_domain_ids_[idx]))) {
+        } else if (OB_FAIL(dim->get_curr_id(domain_ids[idx]))) {
         } else if (!binary_short_union && OB_FAIL(merge_heap_->push(item))) {
         }
       }
@@ -81,12 +101,12 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
       } else if (binary_short_union) {
         int64_t first = -1;
         next_round_cnt_ = 0;
-        for (int64_t i = 0; i < dim_iters_->count(); ++i) {
-          if (nullptr != iter_domain_ids_[i]) {
+        for (int64_t i = 0; i < dim_count; ++i) {
+          if (nullptr != domain_ids[i]) {
             int cmp = -1;
             if (first >= 0) {
-              const ObDatum &left = *iter_domain_ids_[i];
-              const ObDatum &right = *iter_domain_ids_[first];
+              const ObDatum &left = *domain_ids[i];
+              const ObDatum &right = *domain_ids[first];
               if (left.is_null() || right.is_null()) {
                 cmp = left.is_null() ? (right.is_null() ? 0 : -1) : 1;
               } else {
@@ -103,14 +123,14 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
                 first = i;
                 next_round_cnt_ = 0;
               }
-              next_round_iter_idxes_[next_round_cnt_++] = i;
+              next_indices[next_round_cnt_++] = i;
             }
           }
         }
         if (first < 0) {
           ret = OB_ITER_END;
         } else {
-          ret = ObSRDaaTIterImpl::cache_result(count, *iter_domain_ids_[first], 1.0);
+          ret = cache_document(*domain_ids[first]);
         }
       } else if (merge_heap_->empty()) {
         ret = OB_ITER_END;
@@ -127,14 +147,18 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
             idx = item->iter_idx_;
             if (OB_FAIL(merge_heap_->pop())) {
             } else {
-              next_round_iter_idxes_[next_round_cnt_++] = idx;
+              next_indices[next_round_cnt_++] = idx;
             }
           }
         }
         if (OB_SUCC(ret)) {
-          ret = ObSRDaaTIterImpl::cache_result(count, *iter_domain_ids_[idx], 1.0);
+          ret = cache_document(*domain_ids[idx]);
         }
       }
+    }
+    if (count_only_unlimited) {
+      input_row_cnt_ += count;
+      output_row_cnt_ += count;
     }
     if ((OB_SUCC(ret) || ret == OB_ITER_END) && count > 0) {
       const int project_ret = ObSRDaaTIterImpl::project_results(count);
