@@ -104,7 +104,6 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: template is null");
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
                                                                tmp_allocator,
                                                                *template_datum,
@@ -123,20 +122,7 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ObJsonString *arg_json_str = NULL;
       if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
       } else if (datum->is_null()) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: argument is null");
-      } else if (ObJsonType == arg->datum_meta_.type_) {
-        ObIJsonBase *j_base = NULL;
-        bool is_json_null = false;
-        ObString json_text;
-        if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, tmp_allocator, static_cast<uint16_t>(i), j_base, is_json_null))) {
-        } else if (is_json_null || OB_ISNULL(j_base)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: json argument is null");
-        } else if (OB_FAIL(j_base->get_raw_binary(json_text, &tmp_allocator))) {
-        } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, json_text, arg_json_str))) {
-        } else if (OB_FAIL(args_array->append(arg_json_str))) {
-        }
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
       } else if (ob_is_string_type(arg->datum_meta_.type_)) {
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
                                                              tmp_allocator,
@@ -146,6 +132,20 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
                                                              arg_str))) {
         } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
         } else if (OB_FAIL(args_array->append(arg_json_str))) {
+        }
+      } else if (ObJsonType == arg->datum_meta_.type_) {
+        // A json argument is kept as a json value instead of being cast into a
+        // varchar, so "ai_prompt('{0}', json_object('a', '1'))" produces the same
+        // structured argument that the caller passed in.
+        ObIJsonBase *j_base = NULL;
+        bool is_json_null = false;
+        if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, tmp_allocator, static_cast<uint16_t>(i), j_base, is_json_null))) {
+        } else if (is_json_null || OB_ISNULL(j_base)) {
+          ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT &&
+                   j_base->json_type() != ObJsonNodeType::J_ARRAY) {
+          ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        } else if (OB_FAIL(args_array->append(static_cast<ObJsonNode *>(j_base)))) {
         }
       } else {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
