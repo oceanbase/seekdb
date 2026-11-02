@@ -5,6 +5,7 @@ import argparse
 import collections
 import itertools
 import json
+import uuid
 
 import pymysql
 
@@ -94,8 +95,38 @@ def table_cases():
         yield "select * from json_table(%s, %s columns(" + columns + ")) jt", (document, path)
 
 
+STORAGE_TABLE = "json_domain_delta_" + uuid.uuid4().hex
+
+
+def storage_cases():
+    yield "set session log_row_value_options='PARTIAL_JSON'", ()
+    yield "create table " + STORAGE_TABLE + "(id int primary key, j json)", ()
+    document = {"a": [1, 2, 3], "number": 1, "large": "x" * 10000,
+                "nested": {"keep": "y" * 1000, "change": "z" * 500}}
+    yield "insert into " + STORAGE_TABLE + " values (1, %s)", (json.dumps(document),)
+    changes = [
+        "json_set(j,'$.number',9,'$.a[1]',42)",
+        "json_replace(j,'$.nested.change','small')",
+        "json_set(j,'$.nested.added',json_object('x',7))",
+        "json_remove(j,'$.a[0]','$.nested.keep')",
+        "json_set(json_set(j,'$.number',11),'$.a[0]',99)",
+        "json_remove(json_replace(j,'$.nested.change',repeat('w',2000)),'$.nested.added')",
+    ]
+    inspect = ("select id,json_extract(j,'$.a','$.number','$.nested.change'),"
+               "json_storage_size(j),json_storage_free(j),md5(cast(j as char)) from " + STORAGE_TABLE)
+    yield inspect, ()
+    for change in changes:
+        yield "update " + STORAGE_TABLE + " set j=" + change + " where id=1", ()
+        yield inspect, ()
+    yield "set @json_domain_bad='not-json'", ()
+    yield ("update " + STORAGE_TABLE + " set j=json_set(j,'$.number',100,'$.bad',"
+           "cast(@json_domain_bad as json)) where id=1"), ()
+    yield inspect, ()
+    yield "drop table " + STORAGE_TABLE, ()
+
+
 SECTIONS = {"query": query_cases, "schema": schema_cases,
-            "update": update_cases, "table": table_cases}
+            "update": update_cases, "table": table_cases, "storage": storage_cases}
 
 
 def execute(connection, sql, arguments):
@@ -126,6 +157,8 @@ def main():
                 before, after = [execute(connection, sql, arguments) for connection in connections]
                 counts[section + ".runs"] += 1
                 counts[section + "." + after[0]] += 1
+                if section == "storage" and after[0] == "ok" and sql.startswith("select"):
+                    counts["storage.partial_results"] += sum(row[3] > 0 for row in after[1])
                 if before != after:
                     counts[section + ".differences"] += 1
                     if len(failures) < 30:
@@ -133,9 +166,16 @@ def main():
                                          "baseline": before, "candidate": after})
             if counts[section + ".ok"] == 0:
                 failures.append({"section": section, "error": "no successful SQL execution"})
+            if section == "storage" and counts["storage.partial_results"] == 0:
+                failures.append({"section": section, "error": "no retained partial-update space observed"})
     finally:
         for connection in connections:
-            connection.close()
+            try:
+                if connection.open and "storage" in (args.section or SECTIONS):
+                    with connection.cursor() as cursor:
+                        cursor.execute("drop table if exists " + STORAGE_TABLE)
+            finally:
+                connection.close()
     print(json.dumps({"counts": counts, "first_failures": failures}, ensure_ascii=False))
     return 1 if failures else 0
 

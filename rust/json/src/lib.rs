@@ -18,6 +18,7 @@
 pub mod binary;
 mod bridge;
 pub mod compare;
+pub mod mutation;
 mod decimal;
 pub mod path;
 mod search;

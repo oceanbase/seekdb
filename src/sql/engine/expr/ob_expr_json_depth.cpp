@@ -81,6 +81,9 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     } else if (!is_null_result) {
       metadata.depth_ = json_doc->depth();
     }
+    if (json_doc != nullptr) {
+      json_doc->reset();
+    }
   } else {
     ObString data;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(

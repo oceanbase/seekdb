@@ -26,6 +26,7 @@
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "lib/utility/ob_defer.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -121,6 +122,8 @@ int get_native_json_query(const ObExpr &expr,
   bool allow_partial_update = false;
   ObString json_doc;
   ObJsonInType input_type = ObJsonInType::JSON_TREE;
+  ObIJsonBase *partial_document = nullptr;
+  DEFER(if (partial_document != nullptr) { partial_document->reset(); });
   query.reset();
   if (OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum))) {
     if (is_cover_by_error != nullptr) {
@@ -136,10 +139,9 @@ int get_native_json_query(const ObExpr &expr,
       && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(
              expr, ctx, json_datum->get_string(), allow_partial_update))) {
   } else if (allow_partial_update) {
-    ObIJsonBase *json_target = NULL;
     if (OB_FAIL(ObJsonExprHelper::get_json_for_partial_update(
-            expr, *json_arg, ctx, allocator, *json_datum, json_target))) {
-    } else if (OB_FAIL(json_target->get_raw_binary(json_doc, &allocator))) {
+            expr, *json_arg, ctx, allocator, *json_datum, partial_document))) {
+    } else if (OB_FAIL(partial_document->get_raw_binary(json_doc, &allocator))) {
     } else {
       input_type = ObJsonInType::JSON_BIN;
     }
@@ -401,6 +403,7 @@ int ObJsonExprHelper::get_partial_json_bin(
     }
   }
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(update_ctx->init_status())) {
   } else if (OB_FAIL(data_plane::bind_json_lob(lob_handle, *update_ctx))) {
   } else if (OB_ISNULL(bin_ctx = OB_NEWx(ObJsonBinCtx, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

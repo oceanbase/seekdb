@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::mutation::{Delta, DeltaError, Operation, PhysicalDiff};
 use crate::{BinaryResult, DuplicatePolicy, ParseOptions, Path};
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::collections::HashMap;
@@ -113,7 +114,33 @@ pub mod ffi {
         is_null: bool,
     }
 
+    struct DeltaRange {
+        offset: i64,
+        length: i64,
+    }
+
     extern "Rust" {
+        type Delta;
+        fn new_delta() -> Box<Delta>;
+        fn delta_record(
+            self: &mut Delta,
+            operation: u8,
+            value_type: u8,
+            flags: u16,
+            path: &[u8],
+            value: &[u8],
+        ) -> i32;
+        fn delta_record_physical(self: &mut Delta, offset: i64, length: i64) -> i32;
+        fn delta_logical_count(self: &Delta) -> usize;
+        fn delta_physical_count(self: &Delta) -> usize;
+        fn delta_physical(self: &Delta, index: usize) -> DeltaRange;
+        fn delta_is_rebuilt(self: &Delta) -> bool;
+        fn delta_mark_rebuilt(self: &mut Delta);
+        fn delta_intersects(self: &Delta, offset: u64, length: u64) -> bool;
+        fn delta_encoded_size(self: &Delta) -> usize;
+        fn delta_encode(self: &Delta, output: &mut [u8]) -> i32;
+        fn delta_restore(self: &mut Delta, input: &[u8], physical: &[DeltaRange]) -> i32;
+
         fn parse(input: &[u8], duplicate: Duplicate, max_depth: u32, schema: bool) -> ParseResult;
         fn validate(
             input: &[u8],
@@ -1022,5 +1049,87 @@ pub(crate) fn query_text(
             match_count: 0,
             single_length: 0,
         },
+    }
+}
+
+fn new_delta() -> Box<Delta> {
+    Box::new(Delta::default())
+}
+
+fn delta_status(result: Result<(), DeltaError>) -> i32 {
+    match result {
+        Ok(()) => 0,
+        Err(DeltaError::Allocation) => 1,
+        Err(DeltaError::UnsupportedVersion) => 2,
+        Err(DeltaError::Truncated) => 3,
+        Err(DeltaError::InvalidRecord | DeltaError::InvalidRange) => 4,
+    }
+}
+
+impl Delta {
+    fn delta_record(
+        &mut self,
+        operation: u8,
+        value_type: u8,
+        flags: u16,
+        path: &[u8],
+        value: &[u8],
+    ) -> i32 {
+        delta_status(
+            Operation::try_from(u64::from(operation))
+                .and_then(|operation| self.record(operation, value_type, flags, path, value)),
+        )
+    }
+    fn delta_record_physical(&mut self, offset: i64, length: i64) -> i32 {
+        delta_status(
+            PhysicalDiff::new(offset as u64, length as u64)
+                .and_then(|diff| self.record_physical(diff)),
+        )
+    }
+    fn delta_logical_count(&self) -> usize {
+        self.logical().len()
+    }
+    fn delta_physical_count(&self) -> usize {
+        self.physical().len()
+    }
+    fn delta_physical(&self, index: usize) -> ffi::DeltaRange {
+        match self.physical().get(index) {
+            Some(diff) => ffi::DeltaRange {
+                offset: diff.offset as i64,
+                length: diff.length as i64,
+            },
+            None => ffi::DeltaRange {
+                offset: -1,
+                length: -1,
+            },
+        }
+    }
+    fn delta_is_rebuilt(&self) -> bool {
+        self.is_rebuilt()
+    }
+    fn delta_mark_rebuilt(&mut self) {
+        self.mark_rebuilt();
+    }
+    fn delta_intersects(&self, offset: u64, length: u64) -> bool {
+        self.intersects(offset, length)
+    }
+    fn delta_encoded_size(&self) -> usize {
+        self.encoded_logical_size()
+    }
+    fn delta_encode(&self, output: &mut [u8]) -> i32 {
+        delta_status(self.write_logical(output).map(|_| ()))
+    }
+    fn delta_restore(&mut self, input: &[u8], physical: &[ffi::DeltaRange]) -> i32 {
+        let mut ranges = Vec::new();
+        if ranges.try_reserve_exact(physical.len()).is_err() {
+            return 1;
+        }
+        for range in physical {
+            match PhysicalDiff::new(range.offset as u64, range.length as u64) {
+                Ok(range) => ranges.push(range),
+                Err(error) => return delta_status(Err(error)),
+            }
+        }
+        delta_status(self.restore(input, &ranges).map(|_| ()))
     }
 }

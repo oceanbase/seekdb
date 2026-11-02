@@ -18,6 +18,7 @@
 #include "ob_expr_json_keys.h"
 #include "ob_expr_json_func_helper.h"
 #include "ob_expr_json_native_path.h"
+#include "lib/utility/ob_defer.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
@@ -69,8 +70,10 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   bool is_null_result = false;
   ObString json_doc;
   ObJsonInType input_type = ObJsonInType::JSON_TREE;
+  ObIJsonBase *partial_document = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  DEFER(if (partial_document != nullptr) { partial_document->reset(); });
   ObDatum *doc_datum = NULL;
   ObExpr *doc_arg = expr.args_[0];
   ObObjType doc_type = doc_arg->datum_meta_.type_;
@@ -88,10 +91,9 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(
              expr, ctx, doc_datum->get_string(), allow_partial_update))) {
   } else if (allow_partial_update) {
-    ObIJsonBase *json_target = NULL;
     if (OB_FAIL(ObJsonExprHelper::get_json_for_partial_update(
-            expr, *doc_arg, ctx, temp_allocator, *doc_datum, json_target))) {
-    } else if (OB_FAIL(json_target->get_raw_binary(json_doc, &temp_allocator))) {
+            expr, *doc_arg, ctx, temp_allocator, *doc_datum, partial_document))) {
+    } else if (OB_FAIL(partial_document->get_raw_binary(json_doc, &temp_allocator))) {
     } else {
       input_type = ObJsonInType::JSON_BIN;
     }

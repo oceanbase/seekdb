@@ -64,11 +64,6 @@ DEFINE_DESERIALIZE(ObExtInfoLogHeader)
   return ret;
 }
 
-ObJsonDiffLog::~ObJsonDiffLog()
-{}
-
-
-
 ObExtInfoCallback::~ObExtInfoCallback()
 {
   if (OB_NOT_NULL(mutator_row_buf_)) {

@@ -1098,3 +1098,106 @@ fn binary_serialization_container_width_boundaries() {
         assert_eq!(binary::serialize_value(document.root().unwrap()).unwrap(), bytes);
     }
 }
+
+#[test]
+fn mutation_delta_matches_persisted_unis_records() {
+    use crate::mutation::{Delta, Operation, PhysicalDiff};
+    let golden = [
+        0, 1, 1, 0x8d, 0x80, 0x80, 0x80, 0, 1, 0x82, 2, 4, b'$', b'[', b'0', b']', 0, 2, 1, 0xff, 0,
+    ];
+    let mut delta = Delta::default();
+    let mut path = b"$[0]".to_vec();
+    let mut value = vec![1, 0xff];
+    delta
+        .record(Operation::Replace, 0x82, 2, &path, &value)
+        .unwrap();
+    path.fill(0);
+    value.fill(0);
+    delta
+        .record_physical(PhysicalDiff::new(42, 5).unwrap())
+        .unwrap();
+    assert_eq!(delta.encode_logical().unwrap(), golden);
+    assert_eq!(delta.encoded_logical_size(), golden.len());
+    assert!(!delta.is_unchanged());
+    let mut restored = Delta::default();
+    assert_eq!(
+        restored.restore(&golden, delta.physical()).unwrap(),
+        golden.len()
+    );
+    assert_eq!(restored.logical(), delta.logical());
+    assert_eq!(restored.physical(), delta.physical());
+    assert_eq!(restored.encode_logical().unwrap(), golden);
+    assert!(restored.intersects(40, 4));
+    assert!(restored.intersects(43, 1));
+    assert!(!restored.intersects(47, 1));
+    assert!(!restored.intersects(40, 2));
+}
+
+#[test]
+fn mutation_delta_restore_is_atomic_and_retains_binary_scalar_payloads() {
+    use crate::mutation::{Delta, Operation, PhysicalDiff};
+    let mut delta = Delta::default();
+    for value_type in 0..=33 {
+        delta
+            .record(
+                Operation::Replace,
+                value_type,
+                3,
+                b"$.a\0b",
+                &[0, 0xff, value_type],
+            )
+            .unwrap();
+    }
+    delta.record(Operation::Remove, 0, 0, b"$[1]", b"").unwrap();
+    let bytes = delta.encode_logical().unwrap();
+    let physical = [
+        PhysicalDiff::new(0, 10).unwrap(),
+        PhysicalDiff::new(99, 5).unwrap(),
+    ];
+    for end in 0..bytes.len() {
+        let mut restored = Delta::default();
+        restored
+            .record(Operation::Insert, 8, 0, b"$.b", &[1])
+            .unwrap();
+        assert!(
+            restored.restore(&bytes[..end], &physical).is_err(),
+            "truncated at {end}"
+        );
+        assert_eq!(restored.logical().len(), 1);
+        assert!(restored.physical().is_empty());
+    }
+    let mut restored = Delta::default();
+    restored.restore(&bytes, &physical).unwrap();
+    assert_eq!(restored.logical(), delta.logical());
+    assert_eq!(restored.physical(), physical);
+    assert!(!restored.is_rebuilt());
+    restored.mark_rebuilt();
+    assert!(restored.is_rebuilt());
+    assert!(PhysicalDiff::new(u64::MAX, 1).is_err());
+    assert!(PhysicalDiff::new(i64::MAX as u64, 1).is_err());
+}
+
+#[test]
+fn mutation_delta_preserves_unis_trailing_field_and_count_contracts() {
+    use crate::mutation::{Delta, DeltaError, Operation};
+    let mut delta = Delta::default();
+    let bytes = [0, 1, 1, 0x80, 0x80, 0x80, 0x80, 0];
+    assert_eq!(delta.restore(&bytes, &[]).unwrap(), bytes.len());
+    assert_eq!(delta.logical()[0].operation, Operation::Invalid);
+    let mut invalid_version = bytes;
+    invalid_version[2] = 2;
+    assert_eq!(
+        delta.restore(&invalid_version, &[]),
+        Err(DeltaError::UnsupportedVersion)
+    );
+    assert_eq!(delta.logical().len(), 1);
+    let mut many = Delta::default();
+    for _ in 0..256 {
+        many.record(Operation::Remove, 0, 0, b"$.a", b"").unwrap();
+    }
+    let bytes = many.encode_logical().unwrap();
+    assert_eq!(&bytes[..2], &[0, 0]);
+    let mut restored = Delta::default();
+    assert_eq!(restored.restore(&bytes, &[]).unwrap(), 2);
+    assert!(restored.logical().is_empty());
+}

@@ -2608,7 +2608,7 @@ int ObJsonBin::reset_root(const ObString &data)
   } else if (OB_FAIL(set_doc_header_v0(header_data, cursor_->get_length(), use_lexicographical_order()))) {
   } else if (OB_FAIL(reset_iter())) {
   } else {
-    update_ctx->is_rebuild_all_ = true;
+    update_ctx->mark_rebuild_all();
   }
   return ret;
 }
@@ -4516,7 +4516,7 @@ int ObJsonBin::should_pack_diff(bool &is_should_pack) const
   uint64_t ori_len = total_len - ext_len;
   if (0 == total_len || 0 == ori_len) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (nullptr == update_ctx || update_ctx->is_rebuild_all_) {
+  } else if (nullptr == update_ctx || update_ctx->is_rebuild_all()) {
     is_should_pack = false;
   } else if (0 == pos_) {
     // if pos is zero, means no json bin doc header, and means that old json data

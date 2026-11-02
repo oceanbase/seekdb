@@ -159,6 +159,108 @@ TEST_F(TestJsonParser, BinaryConversionRejectsActiveUpdateContext)
   EXPECT_EQ(&update_ctx, json_bin.get_update_ctx());
 }
 
+TEST_F(TestJsonParser, MutationDeltaPreservesLegacyWireFormatAndOwnership)
+{
+  ObJsonBinUpdateCtx update(&allocator_);
+  char path[] = "$[0]";
+  char value[] = {1, static_cast<char>(0xff)};
+  ASSERT_EQ(OB_SUCCESS, update.record_inline_diff(ObJsonDiffOp::REPLACE,
+      0x82, ObString(4, path), 2, ObString(2, value)));
+  ASSERT_EQ(OB_SUCCESS, update.record_binary_diff(42, 5));
+  memset(path, 0, sizeof(path));
+  memset(value, 0, sizeof(value));
+  const unsigned char golden[] = {
+      0, 1, 1, 0x8d, 0x80, 0x80, 0x80, 0, 1, 0x82, 2,
+      4, '$', '[', '0', ']', 0, 2, 1, 0xff, 0};
+  char encoded[sizeof(golden)] = {};
+  int64_t pos = 0;
+  ASSERT_EQ(sizeof(golden), update.logical_serialize_size());
+  ASSERT_EQ(OB_SUCCESS, update.serialize_logical(encoded, sizeof(encoded), pos));
+  ASSERT_EQ(sizeof(golden), pos);
+  EXPECT_EQ(0, memcmp(golden, encoded, sizeof(golden)));
+  EXPECT_EQ(1, update.logical_diff_count());
+  EXPECT_EQ(1, update.binary_diff_count());
+  EXPECT_EQ(42, update.binary_diff(0).offset);
+  EXPECT_EQ(5, update.binary_diff(0).length);
+  EXPECT_TRUE(update.intersects(43, 1));
+  EXPECT_FALSE(update.intersects(47, 1));
+
+  int64_t legacy_pos = 2;
+  int64_t version = 0;
+  int64_t length = 0;
+  int32_t operation = 0;
+  int8_t type = 0;
+  int32_t flags = 0;
+  ObString restored_path;
+  ObString restored_value;
+  ASSERT_EQ(OB_SUCCESS, serialization::decode_vi64(encoded, sizeof(encoded), legacy_pos, &version));
+  ASSERT_EQ(OB_SUCCESS, serialization::decode_vi64(encoded, sizeof(encoded), legacy_pos, &length));
+  ASSERT_EQ(OB_SUCCESS, serialization::decode_vi32(encoded, sizeof(encoded), legacy_pos, &operation));
+  ASSERT_EQ(OB_SUCCESS, serialization::decode_i8(encoded, sizeof(encoded), legacy_pos, &type));
+  ASSERT_EQ(OB_SUCCESS, serialization::decode_vi32(encoded, sizeof(encoded), legacy_pos, &flags));
+  ASSERT_EQ(OB_SUCCESS, restored_path.deserialize(encoded, sizeof(encoded), legacy_pos));
+  ASSERT_EQ(OB_SUCCESS, restored_value.deserialize(encoded, sizeof(encoded), legacy_pos));
+  EXPECT_EQ(1, version);
+  EXPECT_EQ(13, length);
+  EXPECT_EQ(1, operation);
+  EXPECT_EQ(0x82, static_cast<uint8_t>(type));
+  EXPECT_EQ(2, flags);
+  EXPECT_EQ(ObString("$[0]"), restored_path);
+  EXPECT_EQ(ObString(2, reinterpret_cast<const char *>(golden) + sizeof(golden) - 3), restored_value);
+  EXPECT_EQ(sizeof(golden), legacy_pos);
+
+  ObJsonBinUpdateCtx replay(&allocator_);
+  ObSEArray<BinaryDiff, 1> physical;
+  ASSERT_EQ(OB_SUCCESS, physical.push_back(BinaryDiff{42, 5}));
+  ASSERT_EQ(OB_SUCCESS, replay.restore_delta(encoded, sizeof(encoded), physical));
+  EXPECT_EQ(1, replay.logical_diff_count());
+  EXPECT_EQ(1, replay.binary_diff_count());
+  EXPECT_FALSE(replay.is_rebuild_all());
+  replay.mark_rebuild_all();
+  EXPECT_TRUE(replay.is_rebuild_all());
+  EXPECT_EQ(OB_DESERIALIZE_ERROR, replay.restore_delta(encoded, sizeof(encoded) - 1, physical));
+  EXPECT_EQ(1, replay.logical_diff_count());
+  EXPECT_EQ(1, replay.binary_diff_count());
+}
+
+TEST_F(TestJsonParser, MutationDeltaLifetimeAndAllocationFailure)
+{
+  class TrackingAllocator : public ObIAllocator
+  {
+  public:
+    void *alloc(const int64_t size) override
+    {
+      void *value = fail_ ? nullptr : arena_.alloc(size);
+      if (value != nullptr) { ++live_; }
+      return value;
+    }
+    void *alloc(const int64_t size, const ObMemAttr &) override { return alloc(size); }
+    void free(void *value) override
+    {
+      if (value != nullptr) { --live_; arena_.free(value); }
+    }
+    ObArenaAllocator arena_;
+    bool fail_ = false;
+    int64_t live_ = 0;
+  } tracking;
+  {
+    ObJsonBinUpdateCtx update(&tracking);
+    ASSERT_EQ(OB_SUCCESS, update.init_status());
+    EXPECT_EQ(1, tracking.live_);
+    ASSERT_EQ(OB_SUCCESS, update.record_remove_diff(ObString("$.a")));
+  }
+  EXPECT_EQ(0, tracking.live_);
+  tracking.fail_ = true;
+  ObJsonBinUpdateCtx update(&tracking);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, update.init_status());
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, update.record_remove_diff(ObString("$.a")));
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, update.record_binary_diff(0, 1));
+  char bytes[2] = {};
+  int64_t pos = 0;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, update.serialize_logical(bytes, sizeof(bytes), pos));
+  EXPECT_EQ(0, pos);
+}
+
 TEST_F(TestJsonParser, BinaryMetadata)
 {
   const std::string text = "{\"a\":[1,{\"b\":2}]}";
