@@ -1093,14 +1093,14 @@ int ObReplayStatus::get_min_unreplayed_scn(SCN &scn) const
   return OB_SUCCESS;
 }
 
-int ObReplayStatus::is_replay_done(const LSN &end_lsn, bool &done) const
+int ObReplayStatus::is_replayed_to(const LSN &target_lsn, bool &reached) const
 {
   ObLockGuard<ObSpinLock> guard(progress_lock_);
-  done = false;
+  reached = false;
   if (!is_active_) {
     return OB_STATE_NOT_MATCH;
   }
-  done = get_min_unreplayed_log_info_().lsn_ >= end_lsn;
+  reached = get_min_unreplayed_log_info_().lsn_ >= target_lsn;
   return OB_SUCCESS;
 }
 

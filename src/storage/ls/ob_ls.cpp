@@ -423,16 +423,16 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
 {
   int ret = OB_SUCCESS;
   palf::LSN end_lsn;
-  bool is_done = false;
+  bool reached = false;
   logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
   }
-  while (OB_SUCC(ret) && !is_done) {
-    if (OB_FAIL(log_service->is_replay_done(end_lsn, is_done))) {
-    } else if (!is_done && ObTimeUtility::current_time() >= deadline_us) {
+  while (OB_SUCC(ret) && !reached) {
+    if (OB_FAIL(log_service->is_replayed_to(end_lsn, reached))) {
+    } else if (!reached && ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay timed out", K(ret), K(end_lsn), K(deadline_us));
-    } else if (!is_done) {
+    } else if (!reached) {
       ob_usleep(50 * 1000);
     }
   }

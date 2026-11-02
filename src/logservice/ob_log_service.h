@@ -163,7 +163,8 @@ public:
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
   bool is_replay_enabled() const;
-  bool is_replay_finished() const;
+  // The recovered watermark has been handed to apply and replay status detached.
+  bool is_replay_handoff_complete() const;
   int get_max_decided_scn(share::SCN &scn);
   int get_max_replayed_scn(share::SCN &scn);
   int get_min_unreplayed_scn(share::SCN &scn);
@@ -171,7 +172,8 @@ public:
   int enable_replay(const palf::LSN &lsn, const share::SCN &scn);
   int disable_replay();
   int finish_replay(int64_t deadline_us);
-  int is_replay_done(const palf::LSN &lsn, bool &done);
+  // Query live replay progress; returns OB_STATE_NOT_MATCH after status retirement.
+  int is_replayed_to(const palf::LSN &target_lsn, bool &reached);
   int block_submit_replay();
   int unblock_submit_replay();
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
@@ -207,7 +209,7 @@ private:
   // Protected by replay_status_lock_; only published while the executor exists.
   ObReplayStatus *replay_status_;
   bool replay_enabled_;
-  bool replay_finished_;
+  bool replay_handoff_complete_;
   ObLogReplayService *replay_service_;
   int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;

@@ -149,7 +149,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
         ret = OB_NOT_INIT;
       } else {
         ret = log_service->get_max_replayed_scn(replay_scn);
-        if (OB_STATE_NOT_MATCH == ret && log_service->is_replay_finished()) {
+        if (OB_STATE_NOT_MATCH == ret && log_service->is_replay_handoff_complete()) {
           // Promotion retires replay before committing the server role to PRIMARY.
           ret = log_service->get_log_apply_service()->get_max_applied_scn(replay_scn);
         }

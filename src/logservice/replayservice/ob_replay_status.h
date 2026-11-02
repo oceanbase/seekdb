@@ -449,7 +449,7 @@ public:
                     const int err_ret);
   bool has_fatal_error() const;
   static bool is_fatal_error(int ret);
-  int is_replay_done(const palf::LSN &end_lsn, bool &done) const;
+  int is_replayed_to(const palf::LSN &target_lsn, bool &reached) const;
   int get_max_replayed_scn(share::SCN &scn) const;
   int get_min_unreplayed_scn(share::SCN &scn) const;
   int stat(LSReplayStat &stat) const;

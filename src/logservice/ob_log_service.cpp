@@ -44,7 +44,7 @@ ObLogService::ObLogService() :
   replay_status_lock_(),
   replay_status_(nullptr),
   replay_enabled_(false),
-  replay_finished_(false),
+  replay_handoff_complete_(false),
   replay_service_(nullptr),
   replay_thread_quota_(1),
   log_storage_(NULL),
@@ -185,7 +185,7 @@ int ObLogService::enable_replay(const LSN &lsn, const SCN &scn)
         ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
         replay_status_ = status_guard.get_replay_status();
         replay_enabled_ = true;
-        replay_finished_ = false;
+        replay_handoff_complete_ = false;
       }
       ret = replay_service_->enable(lsn, scn);
     }
@@ -234,7 +234,7 @@ int ObLogService::finish_replay(const int64_t deadline_us)
       {
         ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
         replay_status_ = nullptr;
-        replay_finished_ = true;
+        replay_handoff_complete_ = true;
       }
       OB_DELETE(ObLogReplayService, "ReplayService", replay_service_);
       replay_service_ = nullptr;
@@ -244,20 +244,15 @@ int ObLogService::finish_replay(const int64_t deadline_us)
   return ret;
 }
 
-int ObLogService::is_replay_done(const LSN &lsn, bool &done)
+int ObLogService::is_replayed_to(const LSN &target_lsn, bool &reached)
 {
+  reached = false;
   ObReplayStatusGuard guard;
-  {
-    ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
-    done = replay_finished_;
-    if (done) {
-      return OB_SUCCESS;
-    } else if (nullptr == replay_status_) {
-      return OB_STATE_NOT_MATCH;
-    }
-    guard.set_replay_status(replay_status_);
+  int ret = get_replay_status_(guard);
+  if (OB_SUCC(ret)) {
+    ret = guard.get_replay_status()->is_replayed_to(target_lsn, reached);
   }
-  return guard.get_replay_status()->is_replay_done(lsn, done);
+  return ret;
 }
 
 int ObLogService::get_replay_status_(ObReplayStatusGuard &guard) const
@@ -276,10 +271,10 @@ bool ObLogService::is_replay_enabled() const
   return replay_enabled_;
 }
 
-bool ObLogService::is_replay_finished() const
+bool ObLogService::is_replay_handoff_complete() const
 {
   ObLockGuard<ObSpinLock> lock(replay_status_lock_);
-  return replay_finished_;
+  return replay_handoff_complete_;
 }
 
 int ObLogService::get_max_replayed_scn(SCN &scn)
