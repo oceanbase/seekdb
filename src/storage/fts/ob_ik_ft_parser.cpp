@@ -135,13 +135,11 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
 {
   int ret = OB_SUCCESS;
   // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < segmenter_count_; ++i) {
     // The current character and its type are already known here; going through
     // ObIIKProcessor::process() would re-fetch both from the context for every
     // processor of the pipeline.
-    if (OB_FAIL((*iter)->do_process(ctx, ch, char_len, type))) {
+    if (OB_FAIL(segmenters_[i]->do_process(ctx, ch, char_len, type))) {
     }
   }
   return ret;
@@ -330,14 +328,16 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
-  } else if (FALSE_IT(letter_seg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
-  } else if (FALSE_IT(cnqsg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
-  } else if (FALSE_IT(cjksg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
-  } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
+  } else {
+    segmenters_[0] = letter_seg;
+    segmenters_[1] = cnqsg;
+    segmenters_[2] = cjksg;
+    segmenters_[3] = surrogate_seg;
+    segmenter_count_ = 4;
+    letter_seg = nullptr;
+    cnqsg = nullptr;
+    cjksg = nullptr;
+    surrogate_seg = nullptr;
   }
   // push back by order, quantifier is before cjk
 
@@ -357,13 +357,14 @@ void ObIKFTParser::reset()
     allocator_.free(ctx_);
   }
 
-  for (ObIIKProcessor *segmenter : segmenters_) {
-    if (!OB_ISNULL(segmenter)) {
-      segmenter->~ObIIKProcessor();
-      allocator_.free(segmenter);
+  for (int64_t i = 0; i < segmenter_count_; ++i) {
+    if (!OB_ISNULL(segmenters_[i])) {
+      segmenters_[i]->~ObIIKProcessor();
+      allocator_.free(segmenters_[i]);
+      segmenters_[i] = nullptr;
     }
   }
-  segmenters_.clear();
+  segmenter_count_ = 0;
 
   cache_main_.reset();
   cache_quan_.reset();
