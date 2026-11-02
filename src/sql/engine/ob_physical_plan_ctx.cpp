@@ -449,7 +449,17 @@ int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
     Datum owned;
     alignas(8) char source_scratch[64];
     ObDatum source_view;
-    if (OB_FAIL(source.export_legacy(source_view, source_scratch, sizeof(source_scratch)))) {
+    if (source.get_type() == ObIntType && source.datum_.is_present()
+        && source.datum_.length() == 0
+        && source.datum_.reference_flags() == Datum::NoReferenceFlags
+        && candidate_type->kind() == ObIntType
+        && candidate_type->canonical_representation() == DatumRepresentation::Inline64) {
+      // Generic and semantic signed BIGINT share the canonical inline word.
+      // Match import's descriptor normalization, then keep its checked final
+      // copy; all other physical/state domains use the original bridge below.
+      imported.set_int(source.datum_.get_int());
+      ret = plan.deep_copy(imported, owned, allocator_);
+    } else if (OB_FAIL(source.export_legacy(source_view, source_scratch, sizeof(source_scratch)))) {
     } else if (OB_FAIL(plan.import_legacy(source_view, imported))) {
     } else if (candidate_type->legacy_meta().is_ext_sql_array()) {
       NativeTypedDatum borrowed, snapshot;

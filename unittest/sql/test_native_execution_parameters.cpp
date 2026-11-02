@@ -2342,3 +2342,130 @@ TEST_F(NativeDomainIdProducer, reference_doc_id_retains_bytes_and_preserves_empt
   EXPECT_TRUE(empty.empty()); EXPECT_EQ(1, reject.calls_);
 }
 } // namespace
+
+namespace {
+TEST_F(NativeExecutionParameters, canonical_signed_i64_init_keeps_attributes_and_owned_execution_values)
+{
+  ASSERT_NO_FATAL_FAILURE(load({INT64_MIN, 0, INT64_MAX}));
+  DatumParameterMetadata expected[3];
+  for (int64_t i = 0; i < 3; ++i) {
+    DatumParameter input = plan().get_parameter_inputs().at(i);
+    auto attributes = input.get_metadata();
+    attributes.accuracy_ = ObAccuracy(20, 0);
+    attributes.raw_text_pos_ = 31 + i;
+    attributes.raw_text_len_ = 2 + i;
+    attributes.res_flags_ = 0x1200 + i;
+    attributes.flag_.extend_flag_ = 0x40 + i;
+    input.set_metadata(attributes);
+    ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(i, input));
+    expected[i] = attributes;
+    ASSERT_EQ(ObIntType, input.get_type());
+    ASSERT_TRUE(input.datum_.is_present());
+    ASSERT_EQ(0U, input.datum_.length());
+    ASSERT_EQ(Datum::NoReferenceFlags, input.datum_.reference_flags());
+  }
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  ASSERT_TRUE(plan().native_parameters_ready());
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan()));
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
+  const int64_t values[] = {INT64_MIN, 0, INT64_MAX};
+  for (int64_t i = 0; i < 3; ++i) {
+    const Datum *value = plan().get_native_parameter(i);
+    const SqlType *type = plan().get_native_parameter_type(i);
+    ASSERT_NE(nullptr, value); ASSERT_NE(nullptr, type);
+    EXPECT_EQ(ObIntType, type->kind());
+    EXPECT_EQ(DatumRepresentation::Inline64, type->canonical_representation());
+    EXPECT_EQ(expected[i].type_meta_, type->legacy_meta());
+    EXPECT_EQ(expected[i].accuracy_, type->accuracy());
+    EXPECT_EQ(values[i], value->get_int());
+    EXPECT_EQ(0U, value->length());
+    EXPECT_EQ(Datum::NoReferenceFlags, value->reference_flags());
+    ASSERT_NE(nullptr, plan().get_parameter_metadata(i));
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(
+        expected[i], *plan().get_parameter_metadata(i)));
+  }
+  // The existing exact-declaration sharing and producer-retirement contracts
+  // remain observable through the public binding, QM and range entries.
+  EXPECT_EQ(plan().get_native_parameter_type(0), plan().get_native_parameter_type(1));
+  EXPECT_EQ(plan().get_native_parameter_type(1), plan().get_native_parameter_type(2));
+  for (Datum &input : request_values_) { input.set_int(7); }
+  std::vector<Datum>().swap(request_values_);
+  for (int64_t i = 0; i < 3; ++i) {
+    ASSERT_NO_FATAL_FAILURE(expect_questionmark(i, values[i]));
+  }
+  ASSERT_NO_FATAL_FAILURE(expect_point(INT64_MIN, 0, INT64_MAX));
+}
+
+TEST_F(NativeExecutionParameters, signed_i64_init_keeps_fallbacks_first_error_and_retry_atomicity)
+{
+  // An unsigned word, typed NULL and generic Reference Decimal must retain
+  // their original import domains even where the prepared carrier is inline.
+  plan().reset_datum_param_store();
+  DatumParameter unsigned_input, null_input, decimal_input;
+  ASSERT_EQ(OB_SUCCESS, unsigned_input.set_uint64(UINT64_MAX, request_arena_));
+  unsigned_input.set_accuracy(ObAccuracy(20, 0)); unsigned_input.set_param_meta();
+  ASSERT_EQ(OB_SUCCESS, null_input.set_int(0, request_arena_));
+  null_input.set_accuracy(ObAccuracy(20, 0)); null_input.set_param_meta();
+  null_input.datum_.set_null();
+  int64_t coefficient = 123400;
+  Datum decimal;
+  ASSERT_EQ(OB_SUCCESS, decimal.set_reference(&coefficient, sizeof(coefficient)));
+  SqlTypeMeta decimal_meta; decimal_meta.set_decimal_int(2);
+  ASSERT_EQ(OB_SUCCESS, decimal_input.assign_native_borrowed(decimal, decimal_meta));
+  decimal_input.set_accuracy(ObAccuracy(18, 2)); decimal_input.set_param_meta();
+  ASSERT_EQ(OB_SUCCESS, plan().append_parameter_input(unsigned_input));
+  ASSERT_EQ(OB_SUCCESS, plan().append_parameter_input(null_input));
+  ASSERT_EQ(OB_SUCCESS, plan().append_parameter_input(decimal_input));
+  plan().set_original_param_cnt(3);
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  EXPECT_EQ(ObUInt64Type, plan().get_native_parameter_type(0)->kind());
+  EXPECT_EQ(UINT64_MAX, plan().get_native_parameter(0)->get_uint64());
+  EXPECT_EQ(ObIntType, plan().get_native_parameter_type(1)->kind());
+  EXPECT_TRUE(plan().get_native_parameter(1)->is_null());
+  EXPECT_EQ(ObDecimalIntType, plan().get_native_parameter_type(2)->kind());
+  EXPECT_EQ(DatumRepresentation::Inline64,
+      plan().get_native_parameter_type(2)->canonical_representation());
+  coefficient = 0;
+  EXPECT_EQ(123400, plan().get_native_parameter(2)->get_int());
+  EXPECT_EQ(2, plan().get_native_parameter_type(2)->scale());
+  ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(
+      decimal_input.get_metadata(), *plan().get_parameter_metadata(2)));
+
+  for (int malformed = 0; malformed < 6; ++malformed) {
+    SCOPED_TRACE(malformed);
+    ASSERT_NO_FATAL_FAILURE(load({1, 2, 3}));
+    const DatumParameter valid = plan().get_parameter_inputs().at(1);
+    DatumParameter invalid = valid;
+    int64_t backing_word = 2;
+    if (malformed == 0) {
+      ASSERT_EQ(OB_SUCCESS, invalid.datum_.set_reference(&backing_word, 7));
+    } else if (malformed == 1 || malformed == 2) {
+      ASSERT_EQ(OB_SUCCESS, invalid.datum_.set_reference(&backing_word, 0,
+          malformed == 1 ? Datum::OutRow : Datum::HasLobHeader));
+    } else if (malformed == 3) { invalid.datum_.set_min(); }
+    else if (malformed == 4) { invalid.datum_.set_max(); }
+    else { invalid.datum_.set_nop(); }
+    ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(1, invalid));
+    // Type allocation for the first valid parameter still precedes any read
+    // of the later malformed value. The fast branch must not move this error.
+    owner_.fail_size_ = sizeof(SqlType);
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan().init_datum_param_store());
+    EXPECT_FALSE(plan().native_parameters_ready());
+    EXPECT_EQ(nullptr, plan().get_native_parameter(0));
+    owner_.fail_size_ = 0;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, plan().init_datum_param_store());
+    EXPECT_FALSE(plan().native_parameters_ready());
+    EXPECT_EQ(nullptr, plan().get_native_parameter(0));
+    EXPECT_EQ(nullptr, plan().get_native_parameter_type(0));
+    ASSERT_EQ(3, plan().get_parameter_inputs().count());
+    EXPECT_EQ(0, MEMCMP(&invalid.datum_,
+        &plan().get_parameter_inputs().at(1).datum_, sizeof(Datum)));
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(invalid.get_metadata(),
+        plan().get_parameter_inputs().at(1).get_metadata()));
+    ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(1, valid));
+    ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+    ASSERT_NO_FATAL_FAILURE(expect_questionmark(1, 2));
+    ASSERT_NO_FATAL_FAILURE(expect_point(1, 2, 3));
+  }
+}
+} // namespace

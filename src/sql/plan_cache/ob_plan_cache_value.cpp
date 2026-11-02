@@ -358,6 +358,8 @@ int ObPlanCacheValue::prepare_lookup_parameters(ObPlanCacheCtx &pc_ctx)
   if (resolved_params != nullptr && protocol_inputs) {
     // The producer owns these original request/PL inputs. Never reconstruct
     // them from a native execution frame or a compatibility directory.
+    if (OB_FAIL(staged.reserve(pc_ctx.fp_result_.parameterized_params_.count()))) {
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < pc_ctx.fp_result_.parameterized_params_.count(); ++i) {
       const DatumParameter *input = pc_ctx.fp_result_.parameterized_params_.at(i);
       if (input == nullptr) { ret = OB_ERR_UNEXPECTED; }
