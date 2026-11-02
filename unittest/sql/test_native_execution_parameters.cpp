@@ -21,6 +21,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "sql/engine/expr/ob_expr.h"
+#include "sql/engine/expr/ob_expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -43,6 +44,7 @@
 #include "sql/pl/ob_pl_user_type.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include <gtest/gtest.h>
+#include <array>
 #include <string>
 #include <vector>
 #include <type_traits>
@@ -2816,5 +2818,205 @@ TEST_F(NativeExecutionParameters, direct_alias_setter_prepares_abi_before_value_
   EXPECT_EQ(ObVarcharType, plan().get_native_parameter_type(0)->kind());
   EXPECT_FALSE(parent.get_eval_info(eval).evaluated_); EXPECT_FALSE(parent.get_eval_info(eval).projected_);
   EXPECT_TRUE(alias.get_eval_info(eval).evaluated_);
+}
+
+// Exercise the registered comparison callback through ObExpr::eval_batch.
+// Unlike eval_batch_param_value, its NULL short circuit can skip the right
+// operand's evaluator before the functor constructs both DatumVectors.
+class NativeParameterBatchComparison : public NativeExecutionParameters
+{
+protected:
+  static constexpr int64_t BATCH = 3;
+  static constexpr int64_t BLOCK = 128;
+  NativeParameterBatchComparison()
+    : frame_{}, frames_{frame_.data(), nullptr}, eval_(exec_), batch_(eval_),
+      expressions_{}, args_{&expressions_[0], &expressions_[1]}, skip_memory_{}, callback_calls_(0) {}
+
+  void configure(bool parameter_alias, bool left_batch = true, bool right_batch = false)
+  {
+    ASSERT_NO_FATAL_FAILURE(load({1, 2, 3}));
+    DatumParameter text;
+    text.set_varchar_view(ObString::make_string("value"));
+    text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    text.set_length(5); text.set_param_meta();
+    text.set_raw_text_info(7, 5); text.set_result_flags(0x1234);
+    ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(0, text));
+    ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+    frames_[1] = plan().get_param_frame_ptrs().at(0);
+    exec_.set_frames(frames_); eval_.frames_ = frames_; eval_.max_batch_size_ = BATCH;
+    batch_.set_batch_size(BATCH); batch_.set_batch_idx(1);
+    for (int64_t col = 0; col < 3; ++col) {
+      ObExpr &expr = expressions_[col];
+      expr.reset();
+      expr.type_ = col == 2 ? T_OP_EQ : T_REF_COLUMN;
+      const SqlValueType type = col == 2 ? ObIntType : ObVarcharType;
+      SqlTypeMeta meta; meta.set_type(type); meta.set_scale(0);
+      meta.set_collation_type(col == 2 ? CS_TYPE_BINARY : CS_TYPE_UTF8MB4_BIN);
+      expr.obj_meta_ = meta;
+      expr.datum_meta_ = ObDatumMeta(type, meta.get_collation_type(), 0, col == 2 ? 20 : -1);
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(meta,
+          col == 2 ? ObAccuracy(20, 0) : ObAccuracy(5), request_arena_));
+      expr.frame_idx_ = 0; expr.datum_off_ = col * BLOCK;
+      expr.eval_info_off_ = col * BLOCK + 48;
+      expr.eval_flags_off_ = col * BLOCK + 56;
+      expr.pvt_skip_off_ = col * BLOCK + 64;
+      expr.batch_result_ = col == 2 || (col == 0 ? left_batch : right_batch);
+      expr.batch_idx_mask_ = expr.is_batch_result() ? UINT64_MAX : 0;
+      for (int64_t row = 0; row < BATCH; ++row) {
+        new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum();
+      }
+      new (frame_.data() + expr.eval_info_off_) ObEvalInfo{};
+      expr.get_eval_info(eval_).evaluated_ = col != 2;
+      expr.get_evaluated_flags(eval_).reset(BATCH);
+      expr.get_pvt_skip(eval_).reset(BATCH);
+    }
+    if (parameter_alias) {
+      ASSERT_FALSE(right_batch);
+      ObExpr &right = expressions_[1];
+      right.type_ = T_QUESTIONMARK; right.native_parameter_alias_ = true; right.extra_ = 0;
+      right.frame_idx_ = 1;
+      right.datum_off_ = ScalarFrameLayout::datum_offset(0);
+      right.eval_info_off_ = ScalarFrameLayout::eval_info_offset(0);
+      ASSERT_EQ(OB_SUCCESS, right.bind_sql_type(*plan().get_native_parameter_type(0), request_arena_));
+    }
+    result().args_ = args_; result().arg_cnt_ = 2;
+    result().eval_batch_func_ = ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
+        ObVarcharType, ObVarcharType, 0, 0, -1, -1, CO_EQ, CS_TYPE_UTF8MB4_BIN, false);
+    ASSERT_NE(nullptr, result().eval_batch_func_);
+    skip().reset(BATCH); callback_calls_ = 0; owner_.clear_calls();
+    for (int64_t i = 0; i < 3; ++i) { ASSERT_EQ(nullptr, plan().locate_materialized_parameter(i)); }
+  }
+
+  ObExpr &result() { return expressions_[2]; }
+  Datum &left(int64_t row = 0) { return expressions_[0].locate_batch_datums(eval_)[row]; }
+  Datum &output(int64_t row) { return result().locate_batch_datums(eval_)[row]; }
+  ObBitVector &skip() { return *to_bit_vector(skip_memory_.data()); }
+  int evaluate() { return result().eval_batch(eval_, skip(), BATCH); }
+  void reset_result()
+  {
+    result().get_eval_info(eval_) = ObEvalInfo{};
+    result().get_evaluated_flags(eval_).reset(BATCH);
+  }
+  static int fail_scalar(const ObExpr &expr, ObEvalCtx &, Datum &)
+  {
+    ++*reinterpret_cast<int64_t *>(expr.extra_);
+    return OB_ERR_UNEXPECTED;
+  }
+  static int fail_batch(const ObExpr &expr, ObEvalCtx &, const ObBitVector &, int64_t)
+  {
+    ++*reinterpret_cast<int64_t *>(expr.extra_);
+    return OB_ERR_UNEXPECTED;
+  }
+
+  alignas(8) std::array<char, 3 * BLOCK> frame_;
+  char *frames_[2];
+  ObEvalCtx eval_;
+  ObEvalCtx::BatchInfoScopeGuard batch_;
+  ObExpr expressions_[3];
+  ObExpr *args_[2];
+  alignas(8) std::array<char, 8> skip_memory_;
+  int64_t callback_calls_;
+};
+
+TEST_F(NativeParameterBatchComparison, null_short_circuit_projects_only_the_consumed_alias)
+{
+  for (bool all_skipped : {false, true}) {
+    SCOPED_TRACE(all_skipped);
+    ASSERT_NO_FATAL_FAILURE(configure(true));
+    // Both an all-NULL left batch and a fully skipped non-NULL batch omit
+    // right.eval_batch in the real relational driver.
+    for (int64_t i = 0; i < BATCH; ++i) {
+      if (all_skipped) { left(i).set_string(ObString::make_string("value")); skip().set(i); }
+    }
+    ASSERT_EQ(OB_SUCCESS, evaluate());
+    const Datum *projection = plan().locate_materialized_parameter(0);
+    ASSERT_NE(nullptr, projection);
+    EXPECT_EQ(ObString::make_string("value"), projection->get_string());
+    EXPECT_EQ(ObVarcharType, plan().get_native_parameter_type(0)->kind());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(1, owner_.calls_for(sizeof(Datum)));
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(1));
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+    for (int64_t i = 0; i < BATCH; ++i) {
+      EXPECT_TRUE(output(i).is_null());
+      EXPECT_EQ(!all_skipped, result().get_evaluated_flags(eval_).at(i));
+    }
+    // The next mixed batch uses the ordinary evaluator path and the same
+    // stable projection. Reference values are actually compared here.
+    reset_result(); skip().reset(BATCH);
+    left(0).set_string(ObString::make_string("value"));
+    left(1).set_string(ObString::make_string("other")); left(2).set_null();
+    owner_.clear_calls(); owner_.reject_all_ = true;
+    ASSERT_EQ(OB_SUCCESS, evaluate());
+    EXPECT_EQ(1, output(0).get_int()); EXPECT_EQ(0, output(1).get_int());
+    EXPECT_TRUE(output(2).is_null());
+    EXPECT_EQ(projection, plan().locate_materialized_parameter(0));
+    EXPECT_TRUE(owner_.sizes_.empty()); EXPECT_EQ(1, eval_.get_batch_idx());
+    owner_.reject_all_ = false;
+  }
+}
+
+TEST_F(NativeParameterBatchComparison, short_circuit_projection_oom_preserves_owner_and_retries)
+{
+  for (int64_t rejected : {int64_t(3 * sizeof(Datum *)), int64_t(sizeof(Datum))}) {
+    SCOPED_TRACE(rejected);
+    ASSERT_NO_FATAL_FAILURE(configure(true));
+    const SqlType *type = plan().get_native_parameter_type(0);
+    const DatumParameterMetadata attributes = *plan().get_parameter_metadata(0);
+    ObEvalInfo *info = plan().get_parameter_eval_info(0);
+    info->flag_ = 3; info->cnt_ = 17;
+    owner_.fail_size_ = rejected;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, evaluate());
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(0));
+    EXPECT_EQ(type, plan().get_native_parameter_type(0));
+    EXPECT_EQ(3, info->flag_); EXPECT_EQ(17, info->cnt_);
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(attributes, *plan().get_parameter_metadata(0)));
+    EXPECT_EQ(ObString::make_string("value"), read_parameter_value(plan(), 0).get_string());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(rejected == sizeof(Datum) ? 1 : 0, owner_.calls_for(sizeof(Datum)));
+    for (int64_t i = 0; i < BATCH; ++i) {
+      EXPECT_TRUE(output(i).is_null());
+      EXPECT_FALSE(result().get_evaluated_flags(eval_).at(i));
+    }
+    // Retry the same failed batch, without resetting Expr evaluation state.
+    owner_.fail_size_ = 0; owner_.clear_calls();
+    ASSERT_EQ(OB_SUCCESS, evaluate());
+    const Datum *projection = plan().locate_materialized_parameter(0);
+    ASSERT_NE(nullptr, projection);
+    EXPECT_EQ(ObString::make_string("value"), projection->get_string());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(1, owner_.calls_for(sizeof(Datum)));
+    for (int64_t i = 0; i < BATCH; ++i) {
+      EXPECT_TRUE(output(i).is_null());
+      EXPECT_TRUE(result().get_evaluated_flags(eval_).at(i));
+    }
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(1));
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+    EXPECT_EQ(type, plan().get_native_parameter_type(0));
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(attributes, *plan().get_parameter_metadata(0)));
+  }
+}
+
+TEST_F(NativeParameterBatchComparison, null_short_circuit_does_not_execute_ordinary_right_callbacks)
+{
+  for (bool left_batch : {false, true}) {
+    SCOPED_TRACE(left_batch);
+    ASSERT_NO_FATAL_FAILURE(configure(false, left_batch, !left_batch));
+    ObExpr &right = expressions_[1];
+    right.extra_ = reinterpret_cast<uint64_t>(&callback_calls_);
+    right.eval_func_ = fail_scalar; right.eval_batch_func_ = fail_batch;
+    right.get_eval_info(eval_).evaluated_ = false;
+    ASSERT_EQ(OB_SUCCESS, evaluate());
+    EXPECT_EQ(0, callback_calls_);
+    for (int64_t i = 0; i < BATCH; ++i) { EXPECT_TRUE(output(i).is_null()); }
+    EXPECT_TRUE(owner_.sizes_.empty());
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(0));
+    // A non-NULL left value must still evaluate the same right operand and
+    // return its error; the negative control is not an inert callback.
+    reset_result(); left(left_batch ? 1 : 0).set_string(ObString::make_string("value"));
+    EXPECT_EQ(OB_ERR_UNEXPECTED, evaluate());
+    EXPECT_EQ(1, callback_calls_);
+    EXPECT_TRUE(owner_.sizes_.empty());
+  }
 }
 } // namespace

@@ -49,13 +49,22 @@ int binary_operand_batch_eval(const ObExpr &expr,
       }
       if (OB_FAIL(ret)) {
       } else if (rskip->is_all_true(size)) {
-        // If rskip is all true, the right expr does not need to be evaluated.
+        // The functor still constructs the right DatumVector after a NULL
+        // short circuit. Prepare only its parameter projection here; executing
+        // an ordinary right callback would break short-circuit semantics.
+        if (right.native_parameter_alias_) {
+          Datum *parameter = nullptr;
+          ret = right.eval_native_parameter(ctx, parameter);
+        }
       } else if (OB_FAIL(right.eval_batch(ctx, *rskip, size))) {
       }
     } else {
       if (!left.locate_expr_datum(ctx).is_null()) {
         if (OB_FAIL(right.eval_batch(ctx, skip, size))) {
         }
+      } else if (right.native_parameter_alias_) {
+        Datum *parameter = nullptr;
+        ret = right.eval_native_parameter(ctx, parameter);
       }
     }
   } else {
