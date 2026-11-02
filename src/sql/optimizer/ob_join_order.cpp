@@ -1501,6 +1501,17 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
 
     if (OB_FAIL(ret)) {
     } else if (access_path.vec_idx_info_.vec_extra_info_.vec_idx_type_ == ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN
+               && access_path.vec_idx_info_.vec_extra_info_.get_selectivity() >= 1.0) {
+      // A predicate whose estimated selectivity reaches 1.0 filters out no row: every
+      // candidate the vector index returns would be accepted. Pushing such a predicate
+      // into the HNSW iterator therefore buys no pruning while still paying the
+      // per-candidate iterative-filter cost (the adaptive plan falls back to
+      // VEC_INDEX_ITERATIVE_FILTER whenever the estimated output row count is large),
+      // which makes a tautological filter several times slower than no filter at all.
+      // Keep the predicate on the table scan instead and run the plain post-filter plan;
+      // the planner adds a TopN above the scan in that case, so results stay correct.
+      access_path.vec_idx_info_.vec_extra_info_.set_vec_idx_type(ObVecIndexType::VEC_INDEX_POST_WITHOUT_FILTER);
+    } else if (access_path.vec_idx_info_.vec_extra_info_.vec_idx_type_ == ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN
       && (access_path.vec_idx_info_.vec_extra_info_.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN
       || access_path.vec_idx_info_.vec_extra_info_.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER)
       && OB_FAIL(ObVectorIndexUtil::set_adaptive_try_path(access_path.vec_idx_info_.vec_extra_info_, index_id == ref_table_id, is_ipivf))) {
