@@ -1762,6 +1762,87 @@ int ObDDLResolver::resolve_column_name(ObColumnSchemaV2 &column,
   return ret;
 }
 
+
+int ObDDLResolver::resolve_ai_column_attribute(ObColumnSchemaV2 &column, ParseNode *attr_node)
+{
+  int ret = OB_SUCCESS;
+  ParseNode *expr_node = NULL;
+  ParseNode *cur = NULL;
+  int64_t max_retries = 0;
+  bool sync_async = true;
+  if (OB_ISNULL(attr_node) || T_AI_COLUMN != attr_node->type_ || 2 != attr_node->num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "invalid ai column attribute", K(ret));
+  } else if (OB_ISNULL(expr_node = attr_node->children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "ai column expression is null", K(ret));
+  } else if (T_FUN_SYS != expr_node->type_ || OB_ISNULL(expr_node->children_[0])) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI column expression, only AI_COMPLETE and AI_EMBED are allowed");
+    SQL_RESV_LOG(WARN, "unsupported ai column expression", K(ret), K(expr_node->type_));
+  } else {
+    const ObString func_name(expr_node->children_[0]->str_len_, expr_node->children_[0]->str_value_);
+    if (0 != func_name.case_compare("ai_complete") && 0 != func_name.case_compare("ai_embed")) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI column expression, only AI_COMPLETE and AI_EMBED are allowed");
+      SQL_RESV_LOG(WARN, "unsupported ai column function", K(ret), K(func_name));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    cur = attr_node->children_[1];
+  }
+  while (OB_SUCC(ret) && NULL != cur) {
+    ParseNode *opt = NULL;
+    if (T_LINK_NODE == cur->type_ && 2 == cur->num_child_ && OB_NOT_NULL(cur->children_[0])
+        && T_LINK_NODE == cur->children_[0]->type_) {
+      // option list link: children_[0] is the previous list, children_[1] is the option
+      opt = cur->children_[1];
+      cur = cur->children_[0];
+    } else {
+      opt = cur;
+      cur = NULL;
+    }
+    if (OB_ISNULL(opt) || T_LINK_NODE != opt->type_ || 2 != opt->num_child_
+        || OB_ISNULL(opt->children_[0]) || OB_ISNULL(opt->children_[1])) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_RESV_LOG(WARN, "invalid ai column option", K(ret));
+    } else {
+      ParseNode *name_node = opt->children_[0];
+      ParseNode *value_node = opt->children_[1];
+      const ObString name(name_node->str_len_, name_node->str_value_);
+      if (0 == name.case_compare("sync_mode")) {
+        if (OB_ISNULL(value_node->str_value_)
+            || 0 != ObString(value_node->str_len_, value_node->str_value_).case_compare("async")) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI column sync_mode, only async is supported");
+        }
+      } else if (0 == name.case_compare("max_retries")) {
+        if ((T_INT != value_node->type_ && T_UINT64 != value_node->type_)
+            || value_node->value_ < 0) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "AI column max_retries, a non negative integer is expected");
+        } else {
+          max_retries = value_node->value_;
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        ObSqlString message;
+        if (OB_FAIL(message.append_fmt("AI column option %.*s",
+                                       static_cast<int>(name.length()), name.ptr()))) {
+        } else {
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, message.ptr());
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    column.set_ai_column(true);
+    column.set_ai_sync_mode_async(sync_async);
+    column.set_ai_max_retries(max_retries);
+  }
+  return ret;
+}
+
 int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
                                              ParseNode *node, /* column_definition */
                                              ObColumnResolveStat &resolve_stat,
@@ -2084,6 +2165,12 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
     for (int64_t i = 0; OB_SUCC(ret) && i < attrs_node->num_child_; ++i) {
       ParseNode *attr_node = attrs_node->children_[i];
       switch (attr_node->type_) {
+      case T_AI_COLUMN: {
+        if (OB_FAIL(resolve_ai_column_attribute(column, attr_node))) {
+          SQL_RESV_LOG(WARN, "fail to resolve ai column attribute", K(ret), K(column));
+        }
+        break;
+      }
       case T_CONSTR_NOT_NULL: {
         if (OB_FAIL(resolve_normal_column_attribute_constr_not_null(column, attr_node, resolve_stat))) {
         }

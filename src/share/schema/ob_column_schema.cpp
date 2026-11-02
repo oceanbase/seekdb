@@ -65,6 +65,12 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     is_zero_fill_ = src_schema.is_zero_fill_;
     is_autoincrement_ = src_schema.is_autoincrement_;
     is_hidden_ = src_schema.is_hidden_;
+    is_ai_column_ = src_schema.is_ai_column_;
+    ai_async_ = src_schema.ai_async_;
+    ai_max_retries_ = src_schema.ai_max_retries_;
+    ai_state_column_id_ = src_schema.ai_state_column_id_;
+    ai_request_column_id_ = src_schema.ai_request_column_id_;
+    ai_result_spec_column_id_ = src_schema.ai_result_spec_column_id_;
     charset_type_ = src_schema.charset_type_;
     is_binary_collation_ = src_schema.is_binary_collation_;
     on_update_current_timestamp_ = src_schema.on_update_current_timestamp_;
@@ -169,6 +175,12 @@ void ObColumnSchemaV2::reset()
   is_zero_fill_ = false;
   is_autoincrement_ = false;
   is_hidden_ = false;
+  is_ai_column_ = false;
+  ai_async_ = true;
+  ai_max_retries_ = 0;
+  ai_state_column_id_ = OB_INVALID_ID;
+  ai_request_column_id_ = OB_INVALID_ID;
+  ai_result_spec_column_id_ = OB_INVALID_ID;
   charset_type_ = ObCharset::get_default_charset();
   is_binary_collation_ = false;
   on_update_current_timestamp_ = false;
