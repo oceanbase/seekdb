@@ -52,6 +52,19 @@ int ObExprAtan2::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
+// Evaluate an argument that is evaluated only when it is needed. The
+// expressions that merge the rows of a batch into one request must not merge
+// the rows of the batch in such a position, the rows that do not need the
+// argument must not be evaluated.
+static int eval_lazy_arg(ObEvalCtx &ctx, const ObExpr &arg, ObDatum *&datum)
+{
+  const bool lazy_eval = ctx.is_lazy_eval();
+  ctx.set_lazy_eval(true);
+  int ret = arg.eval(ctx, datum);
+  ctx.set_lazy_eval(lazy_eval);
+  return ret;
+}
+
 int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
@@ -75,7 +88,7 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     } else if (y->is_null()) {
       /* arg is already cast to number type, no extra null-type handling needed */
       res_datum.set_null();
-    } else if (OB_FAIL(arg1->eval(ctx, x))) {
+    } else if (OB_FAIL(eval_lazy_arg(ctx, *arg1, x))) {
     } else if (x->is_null()) {
       res_datum.set_null();
     } else if (ObNumberType == arg0->datum_meta_.type_

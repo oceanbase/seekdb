@@ -1,0 +1,75 @@
+select ai_prompt('{0}/{0}/{1}', json_array(1,true), json_object('k',2));
+ai_prompt('{0}/{0}/{1}', json_array(1,true), json_object('k',2))
+{"args": [[1, true], {"k": 2}], "template": "{0}/{0}/{1}"}
+select ai_prompt('{0}+{1}', 'a', 'b');
+ai_prompt('{0}+{1}', 'a', 'b')
+{"args": ["a", "b"], "template": "{0}+{1}"}
+select ai_prompt('1+1=?','');
+ai_prompt('1+1=?','')
+{"args": [""], "template": "1+1=?"}
+select ai_prompt('1+1=?{0}','');
+ai_prompt('1+1=?{0}','')
+{"args": [""], "template": "1+1=?{0}"}
+drop table if exists ai_extra_prompt;
+create table ai_extra_prompt(t longtext, a text);
+insert into ai_extra_prompt values('{0}-ok', 'lob');
+select ai_prompt(t, a) from ai_extra_prompt;
+ai_prompt(t, a)
+{"args": ["lob"], "template": "{0}-ok"}
+drop table ai_extra_prompt;
+select ai_prompt(1);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(null);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('');
+ERROR HY000: Invalid argument
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('extra_ollama', '{"type":"dense_embedding","model_name":"nomic-embed-text"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('extra_ollama_ep', '{"ai_model_name":"extra_ollama","scope":"all","url":"http://0.0.0.0:8000/api/embed","access_key":"","provider":"OLLAMA"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where endpoint_name = 'extra_ollama_ep';
+provider
+OLLAMA
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('extra_ollama_ep', '{"provider":"Ollama"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where endpoint_name = 'extra_ollama_ep';
+provider
+Ollama
+select json_valid(ai_embed('extra_ollama', 'hello')) as ollama_embed_ok;
+ollama_embed_ok
+1
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('extra_embed', '{"type":"dense_embedding","model_name":"text-embedding-v1"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('extra_embed_ep', '{"ai_model_name":"extra_embed","scope":"all","url":"http://0.0.0.0:8000/compatible-mode/v1/embeddings","access_key":"mock-key","provider":"openai"}');
+drop table if exists ai_extra_batch;
+create table ai_extra_batch(id int primary key, content text);
+insert into ai_extra_batch values(1,'first'),(2,null),(3,'third');
+select id, json_length(ai_embed('extra_embed', content)) as dimension from ai_extra_batch order by id;
+id	dimension
+1	768
+2	NULL
+3	768
+select json_length(ai_embed('extra_embed', 'single-row')) as dimension;
+dimension
+768
+select json_length(ai_embed('extra_embed', 'dimension-row', 768)) as dimension;
+dimension
+768
+drop table ai_extra_batch;
+with recursive extra_seq(n) as (select 1 union all select n+1 from extra_seq where n < 100)
+select count(*) as rows, sum(json_length(ai_embed('extra_embed', concat('row', n)))) as dims from extra_seq;
+rows	dims
+100	76800
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('extra_rerank', '{"type":"rerank","model_name":"BAAI/bge-reranker-v2-m3"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('extra_rerank_ep', '{"ai_model_name":"extra_rerank","scope":"all","url":"http://0.0.0.0:8000/v1/rerank","access_key":"mock-key","provider":"siliconflow"}');
+select json_length(ai_rerank('extra_rerank','apple','["apple","banana","fruit","vegetable"]', null)) as rerank_count;
+rerank_count
+4
+select json_unquote(json_extract(r, '$[0].id')) as first_id, json_length(r) as rerank_count from (select ai_rerank('extra_rerank','apple','[{"id":"a","text":"apple"},{"id":"b","text":"banana"}]','text') as r) x;
+first_id	rerank_count
+a	2
+select json_length(ai_rerank('extra_rerank','apple','["apple","banana","fruit","vegetable","carrot","potato","onion","garlic","pepper","tomato","cucumber","lettuce","cabbage","broccoli","spinach","corn","pea","bean","rice","wheat","oat","rye","barley","millet","quinoa"]', null)) as rerank_count;
+rerank_count
+25
+call DBMS_AI_SERVICE.DROP_AI_MODEL('extra_ollama');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('extra_ollama_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('extra_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('extra_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('extra_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('extra_rerank_ep');

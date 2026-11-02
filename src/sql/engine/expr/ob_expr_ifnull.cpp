@@ -137,9 +137,18 @@ int ObExprIfNull::calc_ifnull_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg0))) {
   } else if (!arg0->is_null()) {
     res_datum.set_datum(*arg0);
-  } else if (OB_FAIL(expr.args_[1]->eval(ctx, arg1))) {
   } else {
-    res_datum.set_datum(*arg1);
+    // The second argument is evaluated only when the first one is null, it is
+    // not evaluated for every row of the batch. Tell the expressions that
+    // merge the rows of a batch into one request that they must not merge the
+    // rows here.
+    const bool lazy_eval = ctx.is_lazy_eval();
+    ctx.set_lazy_eval(true);
+    ret = expr.args_[1]->eval(ctx, arg1);
+    ctx.set_lazy_eval(lazy_eval);
+    if (OB_SUCC(ret)) {
+      res_datum.set_datum(*arg1);
+    }
   }
   return ret;
 }
