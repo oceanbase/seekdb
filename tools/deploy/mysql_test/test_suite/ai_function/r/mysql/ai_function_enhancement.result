@@ -34,6 +34,14 @@ embed_dimension
 select json_length(ai_embed('enhance_embed', 'dimension-row', 768)) as requested_dimension;
 requested_dimension
 768
+select ai_embed('enhance_embed', 'invalid-dimension', 0);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer
+select ai_embed('enhance_embed', 'invalid-dimension', -1);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer
+select ai_embed('enhance_embed', 'invalid-dimension', 1.5);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be an integer, not a decimal or float
+select ai_embed('enhance_embed', 'invalid-dimension', null);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be an integer, not a decimal or float
 drop table if exists ai_enhance_batch;
 create table ai_enhance_batch(id int primary key, content text);
 insert into ai_enhance_batch values(1,'first'),(2,null),(3,'third');
