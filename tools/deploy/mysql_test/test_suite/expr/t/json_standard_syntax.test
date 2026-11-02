@@ -48,6 +48,29 @@ select json_value('{"a":2}', '$.missing' returning signed default 99 on empty);
 select json_value('{"a":[1,2]}', '$.a[1]' returning signed);
 select json_value('{"a":[1,2]}', '$.a[*]' returning signed default 88 on error);
 select json_value('{"a":3}', '$.a' returning signed);
+select json_query('{"a":[1,2]}', '$.a' returning json);
+select json_query('{"a":1}', '$.a' returning json with wrapper);
+select json_query('{"a":[1,2]}', '$.a[*]' returning json);
+select json_query('{"a":[1,2]}', '$.a[*]' returning json with wrapper);
+select json_query('{"a":[1,2]}', '$.a[*]' returning json with conditional wrapper);
+select json_query('{"a":1}', '$.a[0]' returning json);
+select json_query('{"a":1}', '$.a' returning json disallow scalars with conditional wrapper);
+select json_query('{"a":{"x":1},"b":{"x":2}}', '$**.x' returning json with wrapper);
+select json_query('{"a":"雪"}', '$.a' returning json with wrapper);
+select json_query('{"a":1,"a":2}', '$.a' returning json);
+select json_query(cast('{"a":[1,2]}' as json), '$.a' returning json);
+select json_query('{"a":[1,2]}', '$.missing' returning json empty array on empty);
+select json_query('{"a":[1,2]}', '$.missing' returning json empty object on empty);
+set @json_invalid_document = 'not-json';
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_query(cast(@json_invalid_document as json), '$' returning json null on error);
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_value(cast(@json_invalid_document as json), '$' null on error);
+set @json_invalid_document = null;
+--error 4016
+select json_query('{}', '' returning json);
+select json_depth(json_query(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
+select json_depth(json_value(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
 --error ER_INVALID_JSON_PATH
 select json_length(cast('{"a":1}' as json), '$**');
 --error ER_INVALID_JSON_PATH

@@ -50,6 +50,34 @@ pub struct QueryOutput {
     pub match_count: usize,
     pub value_type: Option<JsonType>,
     pub binary: Option<Vec<u8>>,
+    pub use_wrapper: bool,
+    pub wrapper_required: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WrapperPolicy {
+    Without,
+    With,
+    Conditional,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct QueryOutputOptions {
+    pub wrapper: WrapperPolicy,
+    pub allow_scalar: bool,
+    pub wrap_single: bool,
+    pub wrap_multiple: bool,
+}
+
+impl Default for QueryOutputOptions {
+    fn default() -> Self {
+        Self {
+            wrapper: WrapperPolicy::Without,
+            allow_scalar: true,
+            wrap_single: false,
+            wrap_multiple: false,
+        }
+    }
 }
 
 impl Query {
@@ -72,6 +100,40 @@ impl Query {
     }
 
     pub fn query_output(&self, path: &Path, wrap_result: bool) -> BinaryResult<QueryOutput> {
+        self.query_output_with_options(
+            path,
+            QueryOutputOptions {
+                wrapper: if wrap_result {
+                    WrapperPolicy::With
+                } else {
+                    WrapperPolicy::Without
+                },
+                ..QueryOutputOptions::default()
+            },
+        )
+    }
+
+    pub fn root_output(&self, wrap_result: bool) -> BinaryResult<QueryOutput> {
+        let root = self.document.root()?;
+        let binary = if wrap_result {
+            Some(binary::serialize_array(&[root])?)
+        } else {
+            Some(binary::serialize_value(root)?)
+        };
+        Ok(QueryOutput {
+            match_count: 1,
+            value_type: Some(root.json_type()?),
+            binary,
+            use_wrapper: wrap_result,
+            wrapper_required: false,
+        })
+    }
+
+    pub fn query_output_with_options(
+        &self,
+        path: &Path,
+        options: QueryOutputOptions,
+    ) -> BinaryResult<QueryOutput> {
         let matches = self.query(
             path,
             QueryOptions {
@@ -83,9 +145,25 @@ impl Query {
             Some(value) => Some(value.json_type()?),
             None => None,
         };
-        let binary = if wrap_result && !matches.is_empty() {
+        let scalar_disallowed =
+            matches.len() == 1 && !options.allow_scalar && !matches[0].json_type()?.is_container();
+        let wrapper_required = !matches.is_empty()
+            && ((matches.len() > 1
+                && !options.wrap_multiple
+                && options.wrapper == WrapperPolicy::Without)
+                || (scalar_disallowed
+                    && !options.wrap_single
+                    && options.wrapper == WrapperPolicy::Without));
+        let use_wrapper = !wrapper_required
+            && !matches.is_empty()
+            && ((matches.len() == 1 && options.wrap_single)
+                || (matches.len() > 1 && options.wrap_multiple)
+                || options.wrapper == WrapperPolicy::With
+                || (options.wrapper == WrapperPolicy::Conditional
+                    && (matches.len() > 1 || scalar_disallowed)));
+        let binary = if use_wrapper {
             Some(binary::serialize_array(&matches)?)
-        } else if matches.len() == 1 {
+        } else if matches.len() == 1 && !wrapper_required {
             Some(binary::serialize_value(matches[0])?)
         } else {
             None
@@ -94,6 +172,8 @@ impl Query {
             match_count: matches.len(),
             value_type,
             binary,
+            use_wrapper,
+            wrapper_required,
         })
     }
 

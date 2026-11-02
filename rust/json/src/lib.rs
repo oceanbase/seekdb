@@ -28,7 +28,10 @@ pub use binary::{
 };
 pub use compare::{CompareError, CompareResult};
 pub use decimal::Decimal;
-pub use path::{Path, PathError, PathErrorKind, PathStep, Query, QueryOptions, QueryOutput};
+pub use path::{
+    Path, PathError, PathErrorKind, PathStep, Query, QueryOptions, QueryOutput, QueryOutputOptions,
+    WrapperPolicy,
+};
 pub use search::SearchOptions;
 pub use sql_path::SqlPath;
 

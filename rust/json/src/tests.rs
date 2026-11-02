@@ -189,6 +189,11 @@ fn binary_document_reads_forward_values() {
     assert_eq!(document.depth().unwrap(), 2);
     let child = document.root().unwrap().value(0).unwrap();
     assert_eq!(child.json_type().unwrap(), JsonType::Int);
+    let serialized = binary::serialize_value(document.root().unwrap()).unwrap();
+    let roundtrip = BinaryDocument::new(serialized).unwrap();
+    let restored = roundtrip.root().unwrap().value(0).unwrap();
+    assert_eq!(restored.json_type().unwrap(), JsonType::Int);
+    assert_eq!(restored.number().unwrap(), child.number().unwrap());
 }
 
 #[test]
@@ -726,6 +731,82 @@ fn query_output_preserves_match_metadata_and_wraps_in_rust() {
 }
 
 #[test]
+fn query_output_applies_wrapper_and_scalar_policies() {
+    use crate::{QueryOutputOptions, WrapperPolicy};
+
+    let document = Query::from_text(
+        br#"{"scalar":1,"object":{"a":1},"array":[1,2]}"#,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    let scalar_path = Path::parse_mysql(b"$.scalar").unwrap();
+    let without = document
+        .query_output_with_options(
+            &scalar_path,
+            QueryOutputOptions {
+                allow_scalar: false,
+                ..QueryOutputOptions::default()
+            },
+        )
+        .unwrap();
+    assert!(without.wrapper_required);
+    assert!(!without.use_wrapper);
+    assert!(without.binary.is_none());
+
+    let conditional = document
+        .query_output_with_options(
+            &scalar_path,
+            QueryOutputOptions {
+                wrapper: WrapperPolicy::Conditional,
+                allow_scalar: false,
+                ..QueryOutputOptions::default()
+            },
+        )
+        .unwrap();
+    assert!(!conditional.wrapper_required);
+    assert!(conditional.use_wrapper);
+    let conditional = Query::from_binary(conditional.binary.unwrap()).unwrap();
+    assert_eq!(conditional.document.root().unwrap().len().unwrap(), 1);
+
+    let multiple = document
+        .query_output_with_options(
+            &Path::parse_mysql(b"$.array[*]").unwrap(),
+            QueryOutputOptions::default(),
+        )
+        .unwrap();
+    assert!(multiple.wrapper_required);
+    assert!(multiple.binary.is_none());
+
+    let conditional_multiple = document
+        .query_output_with_options(
+            &Path::parse_mysql(b"$.array[*]").unwrap(),
+            QueryOutputOptions {
+                wrapper: WrapperPolicy::Conditional,
+                ..QueryOutputOptions::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(conditional_multiple.match_count, 2);
+    assert!(!conditional_multiple.wrapper_required);
+    assert!(conditional_multiple.use_wrapper);
+    let conditional_multiple = Query::from_binary(conditional_multiple.binary.unwrap()).unwrap();
+    assert_eq!(conditional_multiple.document.root().unwrap().len().unwrap(), 2);
+
+    let forced = document
+        .query_output_with_options(
+            &scalar_path,
+            QueryOutputOptions {
+                allow_scalar: false,
+                wrap_single: true,
+                ..QueryOutputOptions::default()
+            },
+        )
+        .unwrap();
+    assert!(!forced.wrapper_required);
+    assert!(forced.use_wrapper);
+}
+
+#[test]
 fn sql_json_path_parser_builds_complete_ast() {
     use crate::sql_path::{
         ArraySelector, Comparison, FilterExpr, FilterLiteral, ItemMethod, Operand, PathRoot,
@@ -979,4 +1060,41 @@ fn binary_value_serialization_round_trips_document_shapes() {
         binary::serialize_value(document.root().unwrap()).unwrap(),
         bytes
     );
+}
+
+#[test]
+fn binary_serialization_deep_containers() {
+    for depth in [60, 99, 101] {
+        for object in [false, true] {
+            let text = if object {
+                format!("{}0{}", "{\"k\":".repeat(depth), "}".repeat(depth))
+            } else {
+                format!("{}0{}", "[".repeat(depth), "]".repeat(depth))
+            };
+            let options = ParseOptions {
+                max_depth: 256,
+                ..ParseOptions::default()
+            };
+            let bytes = parse_binary(text.as_bytes(), options).unwrap();
+            let document = BinaryDocument::new(bytes.clone()).unwrap();
+            let root = document.root().unwrap();
+            assert_eq!(binary::serialize_value(root).unwrap(), bytes);
+            let wrapped = binary::serialize_array(&[root]).unwrap();
+            let expected = format!("[{text}]");
+            assert_eq!(wrapped, parse_binary(expected.as_bytes(), options).unwrap());
+        }
+    }
+}
+
+#[test]
+fn binary_serialization_container_width_boundaries() {
+    for length in [230, 250, 255, 256, 65_000, 65_520, 65_535, 65_536] {
+        let text = format!(
+            "{{\"a\":[-32769,-32768,-129,-128,127,128,255,256,32767,32768,65535,65536],\"b\":\"{}\"}}",
+            "x".repeat(length)
+        );
+        let bytes = parse_binary(text.as_bytes(), ParseOptions::default()).unwrap();
+        let document = BinaryDocument::new(bytes.clone()).unwrap();
+        assert_eq!(binary::serialize_value(document.root().unwrap()).unwrap(), bytes);
+    }
 }

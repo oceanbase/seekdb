@@ -140,21 +140,6 @@ public:
   static int check_item_method_valid_with_wrapper(ObJsonPath *j_path, int8_t wrapper_type);
   static int append_node_into_res(ObIJsonBase*& jb_res, ObJsonPath* j_path,
                           ObJsonSeekResult &hits, common::ObIAllocator *allocator);
-  static int append_binary_node_into_res(ObIJsonBase*& jb_res,
-                                         ObJsonPath* j_path,
-                                         ObJsonSeekResult &hits,
-                                         common::ObIAllocator *allocator);
-  static int doc_do_seek(ObIJsonBase* j_base, ObJsonExprParam *json_param,
-                          ObJsonSeekResult &hits, int8_t &use_wrapper,
-                          bool &is_cover_by_error,
-                          bool &is_null_result,
-                          bool& is_json_arr,
-                          bool& is_json_obj);
-  static int deal_item_method_special_case(ObJsonPath* j_path,
-                                            ObJsonSeekResult &hits,
-                                            bool &is_null_result,
-                                            size_t pos,
-                                            bool use_wrapper);
   static int get_error_option(int8_t &error_type, ObIJsonBase *&error_val, ObIJsonBase *jb_arr, ObIJsonBase *jb_obj, bool &is_null);
   static int get_mismatch_option(int8_t &mismatch_type, int &ret);
   static int init_ctx_var(ObJsonParamCacheCtx*& param_ctx, ObEvalCtx &ctx, const ObExpr &expr);

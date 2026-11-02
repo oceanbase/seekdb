@@ -145,6 +145,59 @@ json_value('{"a":[1,2]}', '$.a[*]' returning signed default 88 on error)
 select json_value('{"a":3}', '$.a' returning signed);
 json_value('{"a":3}', '$.a' returning signed)
 3
+select json_query('{"a":[1,2]}', '$.a' returning json);
+json_query('{"a":[1,2]}', '$.a' returning json)
+[1, 2]
+select json_query('{"a":1}', '$.a' returning json with wrapper);
+json_query('{"a":1}', '$.a' returning json with wrapper)
+[1]
+select json_query('{"a":[1,2]}', '$.a[*]' returning json);
+json_query('{"a":[1,2]}', '$.a[*]' returning json)
+NULL
+select json_query('{"a":[1,2]}', '$.a[*]' returning json with wrapper);
+json_query('{"a":[1,2]}', '$.a[*]' returning json with wrapper)
+[1, 2]
+select json_query('{"a":[1,2]}', '$.a[*]' returning json with conditional wrapper);
+json_query('{"a":[1,2]}', '$.a[*]' returning json with conditional wrapper)
+[1, 2]
+select json_query('{"a":1}', '$.a[0]' returning json);
+json_query('{"a":1}', '$.a[0]' returning json)
+1
+select json_query('{"a":1}', '$.a' returning json disallow scalars with conditional wrapper);
+json_query('{"a":1}', '$.a' returning json disallow scalars with conditional wrapper)
+[1]
+select json_query('{"a":{"x":1},"b":{"x":2}}', '$**.x' returning json with wrapper);
+json_query('{"a":{"x":1},"b":{"x":2}}', '$**.x' returning json with wrapper)
+[1, 2]
+select json_query('{"a":"雪"}', '$.a' returning json with wrapper);
+json_query('{"a":"雪"}', '$.a' returning json with wrapper)
+["雪"]
+select json_query('{"a":1,"a":2}', '$.a' returning json);
+json_query('{"a":1,"a":2}', '$.a' returning json)
+2
+select json_query(cast('{"a":[1,2]}' as json), '$.a' returning json);
+json_query(cast('{"a":[1,2]}' as json), '$.a' returning json)
+[1, 2]
+select json_query('{"a":[1,2]}', '$.missing' returning json empty array on empty);
+json_query('{"a":[1,2]}', '$.missing' returning json empty array on empty)
+[]
+select json_query('{"a":[1,2]}', '$.missing' returning json empty object on empty);
+json_query('{"a":[1,2]}', '$.missing' returning json empty object on empty)
+{}
+set @json_invalid_document = 'not-json';
+select json_query(cast(@json_invalid_document as json), '$' returning json null on error);
+ERROR 22032: Invalid JSON text in argument.
+select json_value(cast(@json_invalid_document as json), '$' null on error);
+ERROR 22032: Invalid JSON text in argument.
+set @json_invalid_document = null;
+select json_query('{}', '' returning json);
+ERROR HY000: Internal error
+select json_depth(json_query(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
+json_depth(json_query(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json))
+102
+select json_depth(json_value(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
+json_depth(json_value(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json))
+102
 select json_length(cast('{"a":1}' as json), '$**');
 ERROR 42000: Invalid JSON path expression.
 select json_contains_path(cast('{"a":1}' as json), 'one', '$.0a');

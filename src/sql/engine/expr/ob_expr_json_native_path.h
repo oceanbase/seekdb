@@ -65,7 +65,8 @@ int get_native_json_query(const ObExpr &expr,
                           MultimodeAlloctor &allocator,
                           uint16_t index,
                           std::optional<rust::Box<common::json::Query>> &query,
-                          bool &is_null);
+                          bool &is_null,
+                          bool *is_cover_by_error = nullptr);
 int get_native_json_path(const ObExpr &expr,
                          ObEvalCtx &ctx,
                          MultimodeAlloctor &allocator,

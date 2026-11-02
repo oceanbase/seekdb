@@ -187,10 +187,7 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
               && OB_FAIL(ObExprJsonValue::get_clause_param_value(expr, ctx, &param_ctx->json_param_,
                                           is_cover_by_error))) { // get param value & check param valid
   } else if (OB_FAIL(get_native_json_query(expr, ctx, temp_allocator, JSN_VAL_DOC,
-                                           document, is_null_result))) {
-    if (document.has_value() && (*document)->status() == common::json::Status::Depth) {
-      is_cover_by_error = false;
-    }
+                                           document, is_null_result, &is_cover_by_error))) {
   } else if (OB_FAIL(get_native_json_path(expr, ctx, temp_allocator, param_ctx, JSN_VAL_PATH,
                                           native_path, is_null_result, is_cover_by_error))) {
   }

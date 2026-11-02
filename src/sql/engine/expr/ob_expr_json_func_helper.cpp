@@ -110,7 +110,8 @@ int get_native_json_query(const ObExpr &expr,
                           MultimodeAlloctor &allocator,
                           uint16_t index,
                           std::optional<rust::Box<common::json::Query>> &query,
-                          bool &is_null)
+                          bool &is_null,
+                          bool *is_cover_by_error)
 {
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;
@@ -122,6 +123,9 @@ int get_native_json_query(const ObExpr &expr,
   ObJsonInType input_type = ObJsonInType::JSON_TREE;
   query.reset();
   if (OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum))) {
+    if (is_cover_by_error != nullptr) {
+      *is_cover_by_error = false;
+    }
   } else if (val_type == ObNullType || json_datum->is_null()) {
     is_null = true;
   } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
@@ -151,9 +155,17 @@ int get_native_json_query(const ObExpr &expr,
         ObJsonExprHelper::get_json_text_depth_limit(
             ObJsonExprHelper::get_json_max_depth_config())));
     if ((*query)->status() != common::json::Status::Ok) {
-      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      ret = (*query)->status() == common::json::Status::Depth
+          ? OB_ERR_JSON_OUT_OF_DEPTH : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_WARN("fail to parse JSON", K(ret), K((*query)->byte_offset()));
-      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+      if (ret == OB_ERR_JSON_OUT_OF_DEPTH) {
+        if (is_cover_by_error != nullptr) {
+          *is_cover_by_error = false;
+        }
+        LOG_USER_ERROR(OB_ERR_JSON_OUT_OF_DEPTH);
+      } else {
+        LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+      }
     }
   }
   return ret;

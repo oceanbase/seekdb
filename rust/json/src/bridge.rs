@@ -101,6 +101,8 @@ pub mod ffi {
         byte_offset: u64,
         match_count: u64,
         value_type: u8,
+        use_wrapper: bool,
+        wrapper_required: bool,
         binary: Vec<u8>,
     }
 
@@ -155,6 +157,16 @@ pub mod ffi {
         fn finish(self: &mut Query) -> BinaryResult;
         fn query(self: &Query, path: &Path, auto_wrap: bool, first_only: bool) -> PathQueryResult;
         fn query_value(self: &Query, path: &Path, wrap_result: bool) -> PathValueResult;
+        fn query_value_with_options(
+            self: &Query,
+            path: &Path,
+            wrapper: u8,
+            scalars: u8,
+            wrap_single: bool,
+            wrap_multiple: bool,
+        ) -> PathValueResult;
+        fn root_value(self: &Query, wrap_result: bool) -> PathValueResult;
+        fn empty_container(object: bool) -> Vec<u8>;
         fn object_keys(self: &Query) -> BinaryResult;
         fn object_keys_at_path(self: &Query, path: &Path) -> BinaryResult;
         fn contains(self: &Query, candidate: &Query) -> BoolResult;
@@ -248,6 +260,8 @@ impl Query {
                     byte_offset: *byte_offset,
                     match_count: 0,
                     value_type: 0,
+                    use_wrapper: false,
+                    wrapper_required: false,
                     binary: Vec::new(),
                 }
             }
@@ -258,6 +272,8 @@ impl Query {
                 byte_offset: 0,
                 match_count: output.match_count as u64,
                 value_type: output.value_type.map_or(0, |value_type| value_type as u8),
+                use_wrapper: output.use_wrapper,
+                wrapper_required: output.wrapper_required,
                 binary: output.binary.unwrap_or_default(),
             },
             Err(error) => ffi::PathValueResult {
@@ -265,6 +281,102 @@ impl Query {
                 byte_offset: error.byte_offset as u64,
                 match_count: 0,
                 value_type: 0,
+                use_wrapper: false,
+                wrapper_required: false,
+                binary: Vec::new(),
+            },
+        }
+    }
+
+    fn query_value_with_options(
+        &self,
+        path: &Path,
+        wrapper: u8,
+        scalars: u8,
+        wrap_single: bool,
+        wrap_multiple: bool,
+    ) -> ffi::PathValueResult {
+        let wrapper = match wrapper {
+            2 | 3 | 4 | 6 => crate::WrapperPolicy::With,
+            5 | 7 => crate::WrapperPolicy::Conditional,
+            _ => crate::WrapperPolicy::Without,
+        };
+        let result = match &self.state {
+            Ok(document) => document.query_output_with_options(
+                path,
+                crate::QueryOutputOptions {
+                    wrapper,
+                    allow_scalar: scalars != 1,
+                    wrap_single,
+                    wrap_multiple,
+                },
+            ),
+            Err((status, byte_offset)) => {
+                return ffi::PathValueResult {
+                    status: *status,
+                    byte_offset: *byte_offset,
+                    match_count: 0,
+                    value_type: 0,
+                    use_wrapper: false,
+                    wrapper_required: false,
+                    binary: Vec::new(),
+                }
+            }
+        };
+        match result {
+            Ok(output) => ffi::PathValueResult {
+                status: ffi::Status::Ok,
+                byte_offset: 0,
+                match_count: output.match_count as u64,
+                value_type: output.value_type.map_or(0, |value_type| value_type as u8),
+                use_wrapper: output.use_wrapper,
+                wrapper_required: output.wrapper_required,
+                binary: output.binary.unwrap_or_default(),
+            },
+            Err(error) => ffi::PathValueResult {
+                status: ffi::Status::InvalidBinary,
+                byte_offset: error.byte_offset as u64,
+                match_count: 0,
+                value_type: 0,
+                use_wrapper: false,
+                wrapper_required: false,
+                binary: Vec::new(),
+            },
+        }
+    }
+
+    fn root_value(&self, wrap_result: bool) -> ffi::PathValueResult {
+        let result = match &self.state {
+            Ok(document) => document.root_output(wrap_result),
+            Err((status, byte_offset)) => {
+                return ffi::PathValueResult {
+                    status: *status,
+                    byte_offset: *byte_offset,
+                    match_count: 0,
+                    value_type: 0,
+                    use_wrapper: false,
+                    wrapper_required: false,
+                    binary: Vec::new(),
+                }
+            }
+        };
+        match result {
+            Ok(output) => ffi::PathValueResult {
+                status: ffi::Status::Ok,
+                byte_offset: 0,
+                match_count: output.match_count as u64,
+                value_type: output.value_type.map_or(0, |value_type| value_type as u8),
+                use_wrapper: output.use_wrapper,
+                wrapper_required: output.wrapper_required,
+                binary: output.binary.unwrap_or_default(),
+            },
+            Err(error) => ffi::PathValueResult {
+                status: ffi::Status::InvalidBinary,
+                byte_offset: error.byte_offset as u64,
+                match_count: 0,
+                value_type: 0,
+                use_wrapper: false,
+                wrapper_required: false,
                 binary: Vec::new(),
             },
         }
@@ -805,6 +917,14 @@ pub(crate) fn inspect_text(
 pub struct PathParseResult {
     path: Option<crate::Path>,
     error: Option<crate::PathError>,
+}
+
+fn empty_container(object: bool) -> Vec<u8> {
+    crate::binary::serialize(if object {
+        crate::Document::Object(Vec::new())
+    } else {
+        crate::Document::Array(Vec::new())
+    })
 }
 
 impl PathParseResult {
