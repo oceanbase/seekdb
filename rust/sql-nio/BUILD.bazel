@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
 load(":features.bzl", "FEATURES")
@@ -6,11 +7,17 @@ package(default_visibility = ["//rust:__subpackages__"])
 
 exports_files(["src/bridge.rs","include/callbacks.h"], visibility = ["//rust:__pkg__"])
 
+extract_cargo_lints(
+    name = "lints",
+    manifest = "Cargo.toml",
+)
+
 rust_library(
     name = "sql_nio",
     crate_root = "src/lib.rs",
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
+    lint_config = ":lints",
     version = "0.1.0",
     crate_features = select(FEATURES),
     deps = all_crate_deps(normal = True),

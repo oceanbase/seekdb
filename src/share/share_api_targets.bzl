@@ -307,14 +307,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "geo/ob_geo_3d.h",
             "geo/ob_geo_mvt.h",
             "geo/ob_srs_wkt_parser.h",
-            "geo/ob_vector_tile.pb-c.h",
         ],
         deps = [
             ":geo_cast_interface",
             ":geo_types",
             ":geo_visitors",
             "//src/oblib:oblib_foundation",
-            "//bazel/third_party:protobuf_c_headers",
+            "//rust:cxx_headers",
         ],
     ),
     "geo_visitors": struct(

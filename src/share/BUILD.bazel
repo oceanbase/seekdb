@@ -1676,7 +1676,6 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
-    "//bazel/third_party:protobuf_c_headers",
     "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
     "//bazel/third_party:s2_headers",
@@ -1799,6 +1798,7 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":_share_implementation_headers",
         "//rust:config_headers",
+        "//rust:mvt_headers",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",
@@ -1816,28 +1816,13 @@ grouped_unity_cc_library(
     visibility = ["//src/share:__pkg__"],
 )
 
-grouped_unity_cc_library(
-    name = "share_runtime_c",
-    unity_groups = select_unity_groups(
-        SHARE_UNITY_GROUPS,
-        ["ob_share_geo_1"],
-        language = "c",
-    ),
-    language = "c",
-    implementation_deps = [
-        ":geo_serialization",
-        "//bazel/third_party:protobuf_c_headers",
-    ],
-    tags = ["manual"],
-    visibility = ["//src/share:__pkg__"],
-)
-
 cc_library(
     name = "share_static",
     implementation_deps = [
         ":share_runtime",
-        ":share_runtime_c",
     ] + _SHARE_RUNTIME_SEMANTIC_DEPS,
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
+exports_files(["geo/ob_vector_tile.proto"], visibility = ["//rust/mvt:__pkg__"])

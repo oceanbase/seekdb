@@ -14,32 +14,32 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_SERVICE_H_
-#define OCEANBASE_STANDBY_GRPC_SERVICE_H_
+#pragma once
+
+#include "standby/rpc_transport.h"
+#include "standby/restore/ob_standby_restore_rpc.h"
 
 namespace oceanbase
 {
-namespace obgrpc
+namespace storage
 {
-class ObGrpcServer;
+class ObLS;
 }
 namespace standby
 {
 
-struct StandbyConfig;
-class StandbyGrpcService;
-class IStandbyHost;
-class StandbyStateStore;
-
-int create_and_register_standby_grpc_service(
-    obgrpc::ObGrpcServer &grpc_server,
-    const StandbyConfig &config,
-    StandbyStateStore &state_store,
-    IStandbyHost &host,
-    StandbyGrpcService *&service);
-void destroy_standby_grpc_service(StandbyGrpcService *&service);
+class StandbyRpcStreamUtil final
+{
+public:
+  static int build_tablet_sstable_info(
+      const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
+      storage::ObLS *ls,
+      const rpc::Writer *writer);
+  static int build_sstable_macro_info(
+      const obcall::ObCopySSTableMacroRangeInfoHeader &header,
+      const obcall::ObCopySSTableMacroRangeInfoArg &arg,
+      const rpc::Writer *writer);
+};
 
 } // namespace standby
 } // namespace oceanbase
-
-#endif // OCEANBASE_STANDBY_GRPC_SERVICE_H_

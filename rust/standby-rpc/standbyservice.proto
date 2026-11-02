@@ -1,3 +1,18 @@
+// Copyright (c) 2026 OceanBase.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 syntax = "proto3";
 package standbyservice;
 
@@ -81,25 +96,15 @@ message FetchMacroBlockRes {
   bytes buf = 1;
   uint64 size = 2;
 }
-// 1 and 2 are protobuf field numbers (tags) used in binary encoding and should remain stable.
-message GetLSViewTabletCountReq {
-  bytes buf = 1;
-  uint64 size = 2;
-}
-
+message GetLSViewTabletCountReq {}
 message GetLSViewTabletCountRes {
-  bytes buf = 1;
-  uint64 size = 2;
+  int64 tablet_count = 1;
 }
-
-message CheckRestorePreconditionReq {
-  bytes buf = 1;
-  uint64 size = 2;
-}
-
+message CheckRestorePreconditionReq {}
 message CheckRestorePreconditionRes {
-  bytes buf = 1;
-  uint64 size = 2;
+  int64 required_disk_size = 1;
+  int64 total_tablet_size = 2;
+  uint64 data_version = 3;
 }
 
 message FetchStandbyPalfBaseInfoReq {
@@ -124,12 +129,19 @@ message FetchLogRes {
   uint64 end_scn = 4;
 }
 
-message GetPromotionBoundaryReq {
-  bytes buf = 1;
-  uint64 size = 2;
+message NodeAddress {
+  string ip = 1;
+  uint32 port = 2;
 }
-
+message SourceHop {
+  NodeAddress relay = 1;
+  NodeAddress source = 2;
+}
+message GetPromotionBoundaryReq {
+  repeated NodeAddress visited = 1;
+}
 message GetPromotionBoundaryRes {
-  bytes buf = 1;
-  uint64 size = 2;
+  NodeAddress origin = 1;
+  uint64 cutover_scn = 2;
+  repeated SourceHop source_chain = 3;
 }

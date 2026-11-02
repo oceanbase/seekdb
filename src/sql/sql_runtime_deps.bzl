@@ -122,7 +122,6 @@ SQL_RUNTIME_NATIVE_DEPS = [
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
-    "//bazel/third_party:protobuf_c_headers",
     "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
     "//bazel/third_party:s2_headers",

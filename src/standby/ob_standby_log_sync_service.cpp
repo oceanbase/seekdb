@@ -27,7 +27,7 @@
 #include "share/ob_debug_sync.h"
 #include "share/log/palf/log_define.h"
 #include "share/rc/ob_server_runtime.h"
-#include "standby/ob_standby_grpc.h"
+#include "standby/standby_rpc.h"
 #include "standby/ob_standby_source_util.h"
 #include "standby/standby_host.h"
 #include "storage/ls/ob_ls.h"
@@ -393,14 +393,14 @@ int ObStandbyLogSyncService::query_source_promotion_boundary_(
     StandbyPromotionBoundary &boundary)
 {
   int ret = OB_SUCCESS;
-  ObStandbyGrpcClient client;
+  StandbyRpcClient client;
   StandbyPromotionBoundaryRequest request;
   boundary = StandbyPromotionBoundary();
   if (OB_FAIL(request.add_visited(config_->promotion_node_id_))) {
     LOG_WARN("failed to initialize promotion boundary path",
         KR(ret), K(config_->promotion_node_id_));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
-    LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
+    LOG_WARN("failed to init standby RPC client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.get_promotion_boundary(request, boundary))) {
     LOG_WARN("failed to query source promotion boundary", KR(ret), K(source_addr));
   }
@@ -437,7 +437,7 @@ int ObStandbyLogSyncService::sync_once_(
   int ret = OB_SUCCESS;
   palf::LSN start_lsn;
   logservice::ObLogHandler *log_handler = nullptr;
-  ObStandbyGrpcClient client;
+  StandbyRpcClient client;
   made_progress = false;
   if (OB_SUCCESS != (ret = get_fatal_error_())) {
   } else if (OB_FAIL(get_log_handler(log_handler))) {
@@ -447,7 +447,7 @@ int ObStandbyLogSyncService::sync_once_(
     // submitted group again and violate PALF's strict continuity check.
     LOG_WARN("failed to get local standby log import position", KR(ret));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
-    LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
+    LOG_WARN("failed to init standby RPC client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.fetch_log(
       start_lsn,
       FETCH_BATCH_BYTES,

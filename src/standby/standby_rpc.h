@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_H_
-#define OCEANBASE_STANDBY_GRPC_H_
+#pragma once
 
 #include "lib/ob_define.h"
-#include "lib/allocator/ob_malloc.h"
 #include "lib/net/ob_addr.h"
 #ifdef _WIN32
 #include <winsock2.h>
@@ -43,8 +41,7 @@
 #undef ERROR
 #undef DELETE
 #endif
-#include "grpc/proto/standbyservice.grpc.pb.h"
-#include "grpc/ob_grpc_context.h"
+#include "standby/rpc_transport.h"
 #include "lib/container/ob_se_array.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
@@ -53,17 +50,17 @@
 #include "lib/oblog/ob_log_module.h"
 #include <climits>
 #include <string>
+#include <functional>
 
 namespace oceanbase
 {
-namespace obgrpc
+namespace rpc
 {
 
 template <typename ObType, typename ProtoType>
-int serialize_ob_to_proto(const ObType &obj, ProtoType *proto)
+int serialize_message(const ObType &obj, ProtoType *proto)
 {
   int ret = common::OB_SUCCESS;
-  common::ObArenaAllocator allocator("StandbyGrpcSer");
   const int64_t buf_len = serialization::encoded_length(obj);
   char *buf = nullptr;
   int64_t pos = 0;
@@ -74,37 +71,34 @@ int serialize_ob_to_proto(const ObType &obj, ProtoType *proto)
   } else if (buf_len < 0) {
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("invalid encoded length", K(ret), K(buf_len));
-  } else if (0 < buf_len && OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
-    ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate serialize buffer", K(ret), K(buf_len));
+  } else if (FALSE_IT(buf = proto->mutable_buf(buf_len))) {
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos, obj))) {
-    LOG_WARN("failed to encode object for grpc", K(ret), K(buf_len), K(pos));
+    LOG_WARN("failed to encode object for RPC", K(ret), K(buf_len), K(pos));
   } else {
-    proto->set_buf(buf, pos);
     proto->set_size(pos);
   }
   return ret;
 }
 
 template <typename ProtoType, typename ObType>
-int deserialize_proto_to_ob(const ProtoType &proto, ObType &obj)
+int deserialize_message(const ProtoType &proto, ObType &obj)
 {
   int ret = common::OB_SUCCESS;
-  const std::string &buf = proto.buf();
+  const auto buf = proto.buf();
   const uint64_t size = proto.size();
   int64_t pos = 0;
 
   if (size > static_cast<uint64_t>(buf.size())
       || size > static_cast<uint64_t>(INT64_MAX)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid grpc payload", K(ret), K(size), "buf_size", buf.size());
+    LOG_WARN("invalid RPC payload", K(ret), K(size), "buf_size", buf.size());
   } else if (OB_FAIL(serialization::decode(buf.data(), static_cast<int64_t>(size), pos, obj))) {
-    LOG_WARN("failed to decode object from grpc", K(ret), K(size), K(pos));
+    LOG_WARN("failed to decode object from RPC", K(ret), K(size), K(pos));
   }
   return ret;
 }
 
-} // namespace obgrpc
+} // namespace rpc
 
 namespace restore
 {
@@ -121,7 +115,6 @@ static constexpr int64_t MAX_PROMOTION_BOUNDARY_HOPS = 16;
 
 struct ObStandbyLSViewTabletCountResult final
 {
-  OB_UNIS_VERSION(1);
 public:
   bool is_valid() const { return tablet_count_ > 0; }
   ObStandbyLSViewTabletCountResult();
@@ -146,7 +139,6 @@ public:
 
 struct StandbyPromotionBoundary final
 {
-  OB_UNIS_VERSION(1);
 public:
   StandbyPromotionBoundary();
   ~StandbyPromotionBoundary() = default;
@@ -158,7 +150,6 @@ public:
 
   struct SourceHop final
   {
-    OB_UNIS_VERSION(1);
   public:
     SourceHop() : relay_(), source_() {}
     SourceHop(
@@ -190,7 +181,6 @@ public:
 
 struct StandbyPromotionBoundaryRequest final
 {
-  OB_UNIS_VERSION(1);
 public:
   StandbyPromotionBoundaryRequest() : visited_() {}
   ~StandbyPromotionBoundaryRequest() = default;
@@ -203,13 +193,13 @@ public:
   common::ObSEArray<common::ObAddr, 4> visited_;
 };
 
-class ObStandbyGrpcClient;
+class StandbyRpcClient;
 
-class ObStandbyGrpcClient
+class StandbyRpcClient
 {
 public:
-  ObStandbyGrpcClient();
-  ~ObStandbyGrpcClient();
+  StandbyRpcClient();
+  ~StandbyRpcClient();
 
   int init(const common::ObAddr& addr, int64_t timeout, bool rpc_tls_enabled);
   int get_ls_view_tablet_count(ObStandbyLSViewTabletCountResult& result);
@@ -228,29 +218,22 @@ public:
                         std::function<int(const obcall::ObCopyTabletInfo&)> callback);
   int create_tablet_info_stream(
       const obcall::ObCopyTabletInfoArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchTabletInfoRes>> &reader);
+      std::unique_ptr<rpc::Reader> &reader);
   int create_ls_view_stream(
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchLSViewRes>> &reader);
+      std::unique_ptr<rpc::Reader> &reader);
   int create_tablet_sstable_info_stream(
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchTabletSSTableInfoRes>> &reader);
+      std::unique_ptr<rpc::Reader> &reader);
   int create_sstable_macro_info_stream(
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchSSTableMacroInfoRes>> &reader);
+      std::unique_ptr<rpc::Reader> &reader);
   int create_macro_block_stream(
       const obcall::ObCopyMacroBlockRangeArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchMacroBlockRes>> &reader);
-  int translate_error(const grpc::Status &status);
+      std::unique_ptr<rpc::Reader> &reader);
   static int init_ls_view_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
-      common::ObIAllocator &allocator,
       ObLSMeta &ls_meta,
       share::SCN &physical_checkpoint_scn,
       restore::ObRestoreHelperLSViewCtx &ls_view_ctx);
@@ -259,36 +242,30 @@ public:
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx);
   static int init_sstable_macro_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx);
   static int init_macro_block_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopyMacroBlockRangeArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx);
   static int init_tablet_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopyTabletInfoArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx);
 
 private:
   bool is_inited_;
-  obgrpc::ObGrpcClient<standbyservice::StandbyService> grpc_client_;
+  rpc::Client rpc_client_;
 };
 
 } // namespace standby
 } // oceanbase
-
-#endif // OCEANBASE_STANDBY_GRPC_H_
