@@ -37,8 +37,9 @@ Android builds use the bundled, statically linked jemalloc through SeekDB's
 explicit allocator interfaces. The build sets jemalloc's page size to 16 KiB
 and disables initial-exec TLS so the allocator can also be used in a loaded
 library. Host libc allocations keep their own allocation and release APIs.
-Background workers are enabled after server initialization reaches the logger,
-rather than during allocator bootstrap.
+Server startup configures decay through `je_mallctl` for new arenas and arena 0,
+then enables background workers before the logger starts its workers. Bootstrap
+allocations use jemalloc's original defaults.
 
 Build the allocator test with the same Android toolchain, then run the resulting
 binary on the device:

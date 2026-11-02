@@ -32,9 +32,11 @@ List the checked-in test targets with:
 ```
 
 The backend smoke checks the explicit jemalloc allocation domain, aligned
-allocation and cross-thread release on Linux, Windows and Android. Linux and
+allocation and cross-thread release on Linux, macOS, Windows and Android. It
+also verifies runtime decay settings for arena 0, defaults inherited by a newly
+created arena, and repeated configuration. Linux and
 Android also check automatic idle-page reclamation and background worker
-restart. Windows verifies that background threads are unavailable and remain
+restart. Windows and macOS verify that background threads are unavailable and remain
 disabled. On Android, build with `--config=android` and run the binary on the
 matching device; see [Android](android.md).
 

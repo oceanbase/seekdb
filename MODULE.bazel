@@ -132,7 +132,7 @@ crate.annotation_select(
         "CFLAGS": "/O2 /MD /D_WIN32_WINNT=0x0A00",
         "JEMALLOC_SYS_MAKE": "make",
         "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=\nMSYS2_ARG_CONV_EXCL=*",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=x86_64-w64-mingw32\n--with-malloc-conf=background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0",
+        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=x86_64-w64-mingw32",
     },
 )
 crate.annotation_select(
@@ -144,7 +144,7 @@ crate.annotation_select(
         "CFLAGS": "/O2 /MD /D_WIN32_WINNT=0x0A00",
         "JEMALLOC_SYS_MAKE": "make",
         "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=\nMSYS2_ARG_CONV_EXCL=*",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-w64-mingw32\n--with-malloc-conf=background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0",
+        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-w64-mingw32",
     },
 )
 crate.from_cargo(

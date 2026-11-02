@@ -49,6 +49,7 @@ cc_test(
         "@platforms//os:linux": [],
         "@platforms//os:windows": [],
         "@platforms//os:android": [],
+        "@platforms//os:macos": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
 )

@@ -729,18 +729,19 @@ int ObServer::init(const ObServerOptions &opts)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
+  // Daemon startup has already forked. Configure allocator defaults before the
+  // logger or server workers can create further arenas.
+  const int allocator_config_ret = jemalloc_configure_runtime();
+
   // Config loading can fail before the rest of the server is initialized.
   // Start the log writer first so the offending config key is
   // recorded in observer.log.
   if (OB_FAIL(OB_LOGGER.init())) {
     LOG_ERROR("async log init error", KR(ret));
   }
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN) \
-    && defined(__ANDROID__)
-  if (OB_SUCC(ret) && !jemalloc_enable_background_threads()) {
-    LOG_WARN("failed to enable jemalloc background threads");
+  if (OB_SUCC(ret) && 0 != allocator_config_ret) {
+    LOG_WARN("failed to configure jemalloc runtime", K(allocator_config_ret));
   }
-#endif
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }

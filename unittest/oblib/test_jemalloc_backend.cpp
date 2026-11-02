@@ -54,6 +54,52 @@ void refresh_stats()
           "refresh allocator statistics");
 }
 
+template <typename T>
+void write_control(const char *name, T value)
+{
+  require(0 == je_mallctl(name, nullptr, nullptr, &value, sizeof(value)), name);
+}
+
+void check_arena_decay(unsigned arena)
+{
+  char name[64];
+  std::snprintf(name, sizeof(name), "arena.%u.dirty_decay_ms", arena);
+  require(read_control<std::ptrdiff_t>(name) == 1000, "arena dirty decay");
+  std::snprintf(name, sizeof(name), "arena.%u.muzzy_decay_ms", arena);
+  require(read_control<std::ptrdiff_t>(name) == 0, "arena muzzy decay");
+}
+
+void test_runtime_configuration()
+{
+  const auto startup_dirty = read_control<std::ptrdiff_t>("opt.dirty_decay_ms");
+  const auto startup_muzzy = read_control<std::ptrdiff_t>("opt.muzzy_decay_ms");
+  write_control<std::ptrdiff_t>("arena.0.dirty_decay_ms", -1);
+  write_control<std::ptrdiff_t>("arena.0.muzzy_decay_ms", -1);
+  require(0 == jemalloc_configure_runtime(), "configure allocator at runtime");
+  require(read_control<std::ptrdiff_t>("arenas.dirty_decay_ms") == 1000,
+          "default dirty decay for new arenas");
+  require(read_control<std::ptrdiff_t>("arenas.muzzy_decay_ms") == 0,
+          "default muzzy decay for new arenas");
+  check_arena_decay(0);
+
+  unsigned arena = 0;
+  size_t size = sizeof(arena);
+  require(0 == je_mallctl("arenas.create", &arena, &size, nullptr, 0),
+          "create arena after runtime configuration");
+  check_arena_decay(arena);
+  char name[64];
+  std::snprintf(name, sizeof(name), "arena.%u.destroy", arena);
+  require(0 == je_mallctl(name, nullptr, nullptr, nullptr, 0), "destroy test arena");
+
+  require(0 == jemalloc_configure_runtime(), "repeat runtime configuration");
+  check_arena_decay(0);
+  // opt.* is an immutable startup snapshot, not the live configuration.
+  require(read_control<std::ptrdiff_t>("opt.dirty_decay_ms") == startup_dirty,
+          "startup dirty decay snapshot is unchanged");
+  require(read_control<std::ptrdiff_t>("opt.muzzy_decay_ms") == startup_muzzy,
+          "startup muzzy decay snapshot is unchanged");
+}
+
 void test_allocation()
 {
   require(jemalloc_usable_size(nullptr) == 0, "null usable size");
@@ -88,20 +134,17 @@ void test_allocation()
 
 void test_background_threads()
 {
-#if defined(_WIN32)
-  require(!read_control<bool>("opt.background_thread"),
-          "Windows background threads are disabled");
+#if defined(_WIN32) || defined(__APPLE__)
   bool enabled = false;
   size_t size = sizeof(enabled);
   require(ENOENT == je_mallctl("background_thread", &enabled, &size, nullptr, 0),
-          "Windows background threads are unsupported");
+          "platform background threads are unsupported");
   require(!jemalloc_enable_background_threads(),
-          "Windows background threads cannot be enabled");
+          "platform background threads cannot be enabled");
   refresh_stats();
   require(read_control<size_t>("stats.background_thread.num_threads") == 0,
-          "no Windows background workers");
+          "no background workers on unsupported platforms");
 #else
-  require(jemalloc_enable_background_threads(), "enable background threads");
   refresh_stats();
   require(read_control<bool>("background_thread"), "background thread state");
   require(read_control<size_t>("stats.background_thread.num_threads") > 0,
@@ -146,25 +189,10 @@ void test_background_threads()
 }
 } // namespace
 
-#if !defined(_WIN32)
-extern "C" {
-const char *je_malloc_conf =
-    "background_thread:false,dirty_decay_ms:100,muzzy_decay_ms:0";
-}
-#endif
-
 int main()
 {
   std::printf("jemalloc %s\n", read_control<const char *>("version"));
-#if defined(_WIN32)
-  require(read_control<std::ptrdiff_t>("opt.dirty_decay_ms") == 1000,
-          "Windows build-time dirty decay configuration");
-  require(read_control<std::ptrdiff_t>("opt.muzzy_decay_ms") == 0,
-          "Windows build-time muzzy decay configuration");
-#else
-  require(read_control<std::ptrdiff_t>("opt.dirty_decay_ms") == 100,
-          "application malloc_conf overrides the library default");
-#endif
+  test_runtime_configuration();
   test_allocation();
   test_background_threads();
   std::puts("jemalloc backend: PASS");

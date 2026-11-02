@@ -30,27 +30,6 @@
 #include <execinfo.h>
 #endif
 
-// Windows receives these defaults through jemalloc's --with-malloc-conf option.
-#if !defined(_WIN32) && (defined(ENABLE_SANITY) \
-    || (defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__APPLE__)))
-// Keep background threads disabled for sanity builds and unsupported platforms.
-extern "C" {
-const char *je_malloc_conf =
-    "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
-}
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__ANDROID__)
-// Start Android workers from ObServer::init, after allocator bootstrap.
-extern "C" {
-const char *je_malloc_conf =
-    "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
-}
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(_WIN32)
-extern "C" {
-const char *je_malloc_conf =
-    "background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0";
-}
-#endif
-
 namespace oceanbase
 {
 namespace common
@@ -119,18 +98,6 @@ bool promote_malloc_zone(malloc_zone_t *target)
 #endif
 
 } // namespace
-
-bool restore_allocator_after_fork()
-{
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN) \
-    && !defined(__APPLE__) && !defined(_WIN32)
-  // Forked children do not inherit background threads, so jemalloc resets the
-  // state to disabled; re-enable it after returning to normal child execution.
-  return jemalloc_enable_background_threads();
-#else
-  return true;
-#endif
-}
 
 #if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
 bool configure_darwin_malloc_zone()
