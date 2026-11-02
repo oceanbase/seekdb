@@ -557,12 +557,14 @@ const DatumParameterMetadata *ObPhysicalPlanCtx::get_parameter_metadata(int64_t 
   return get_native_parameter(index) == nullptr ? nullptr : &native_parameter_metadata_.at(index);
 }
 
-const Datum *ObPhysicalPlanCtx::get_native_bigint_parameter(int64_t index) const
+bool ObPhysicalPlanCtx::read_native_bigint_parameter(int64_t index, int64_t &value) const
 {
   const SqlType *type = get_native_parameter_type(index);
-  const Datum *value = get_native_parameter(index);
-  return type != nullptr && type->kind() == ObIntType && value != nullptr && value->is_present()
-      ? value : nullptr;
+  const Datum *datum = get_native_parameter(index);
+  const bool supported = type != nullptr && type->kind() == ObIntType
+      && datum != nullptr && datum->is_present();
+  if (supported) { value = datum->get_int(); }
+  return supported;
 }
 
 const DatumParameter *ObPhysicalPlanCtx::get_group_parameter_input(int64_t index) const

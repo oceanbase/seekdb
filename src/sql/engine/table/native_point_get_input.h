@@ -48,8 +48,9 @@ public:
   NativePointGetInput &operator=(NativePointGetInput &&) = delete;
 
   // Reinitialization invalidates all old views and requires their consumers
-  // to have stopped first. Invalid inputs leave a published key unchanged.
-  int init(const common::Datum (&values)[COLUMN_COUNT], int64_t group_id);
+  // to have stopped first. The caller has checked type and NULL state.
+  // Preparation failures leave a published key unchanged.
+  int init(const int64_t (&values)[COLUMN_COUNT], int64_t group_id);
   const common::ObIArray<storage::DatumLookupKey> &lookup_keys() const { return lookup_keys_; }
   // A 24-byte fixed BIGINT layout, not an array of generic execution Datums.
   const int64_t *values() const { return values_; }

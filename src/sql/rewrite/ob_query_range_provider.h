@@ -47,10 +47,10 @@ public:
   virtual ~ObQueryRangeProvider() {}
   // Optional, conservative probe for the three signed-BIGINT point-get pilot.
   // Unsupported inputs preserve values and continue through the existing range
-  // generator. Successful values own their inline integers independently of
-  // the parameter payloads; they do not borrow parameter or graph memory.
+  // generator. Successful raw integers are copied independently of the
+  // parameter payloads; they do not borrow parameter or graph memory.
   virtual int try_get_native_bigint_point(const common::DatumParamStore &parameters,
-                                          common::Datum (&values)[3], bool &supported) const
+                                          int64_t (&values)[3], bool &supported) const
   {
     UNUSED(parameters); UNUSED(values);
     supported = false;
@@ -59,7 +59,7 @@ public:
   // A bound execution owner is an explicit source, independent of construction inputs.
   // Providers without this specialization conservatively decline the fast path.
   virtual int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
-                                          common::Datum (&values)[3], bool &supported) const;
+                                          int64_t (&values)[3], bool &supported) const;
   virtual int get_tablet_ranges(common::ObIAllocator &allocator,
                                 ObExecContext &exec_ctx,
                                 ObQueryRangeArray &ranges,

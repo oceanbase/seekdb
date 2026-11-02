@@ -81,13 +81,13 @@ protected:
 
   void expect_fallback()
   {
-    Datum values[3];
-    for (int64_t i = 0; i < 3; ++i) { values[i].set_int(100 + i); }
+    int64_t values[3];
+    for (int64_t i = 0; i < 3; ++i) { values[i] = 100 + i; }
     bool supported = true;
     const ObQueryRangeProvider &provider = graph;
     ASSERT_EQ(OB_SUCCESS, provider.try_get_native_bigint_point(parameters, values, supported));
     EXPECT_FALSE(supported);
-    for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(100 + i, values[i].get_int()); }
+    for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(100 + i, values[i]); }
   }
 
   PointAllocator owner;
@@ -105,15 +105,15 @@ TEST_F(NativeBigintPoint, real_provider_imports_extremes_without_allocating_or_b
 {
   write_parameter(0, INT64_MIN); write_parameter(1, 0); write_parameter(2, INT64_MAX);
   const int64_t before = owner.calls; owner.reject = true;
-  Datum values[3]; bool supported = false;
+  int64_t values[3]; bool supported = false;
   const ObQueryRangeProvider &provider = graph;
   ASSERT_EQ(OB_SUCCESS, provider.try_get_native_bigint_point(parameters, values, supported));
   EXPECT_TRUE(supported); EXPECT_EQ(before, owner.calls);
   MEMSET(raw, 0x55, sizeof(raw));
   for (int64_t i = 0; i < parameters.count(); ++i) { parameters.at(i).datum_.set_null(); }
-  EXPECT_EQ(INT64_MIN, values[0].get_int()); EXPECT_EQ(0, values[1].get_int());
-  EXPECT_EQ(INT64_MAX, values[2].get_int());
-  for (const Datum &value : values) { EXPECT_EQ(0, value.length()); EXPECT_TRUE(value.is_present()); }
+  EXPECT_EQ(INT64_MIN, values[0]); EXPECT_EQ(0, values[1]);
+  EXPECT_EQ(INT64_MAX, values[2]);
+  EXPECT_EQ(24U, sizeof(values));
 }
 
 TEST_F(NativeBigintPoint, final_result_indices_and_execution_parameter_indices_both_reorder)
@@ -122,10 +122,10 @@ TEST_F(NativeBigintPoint, final_result_indices_and_execution_parameter_indices_b
   graph.get_range_map().expr_final_infos_.at(0).param_idx_ = 2;
   graph.get_range_map().expr_final_infos_.at(1).param_idx_ = 0;
   graph.get_range_map().expr_final_infos_.at(2).param_idx_ = 1;
-  Datum values[3]; bool supported = false;
+  int64_t values[3]; bool supported = false;
   ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(parameters, values, supported));
   EXPECT_TRUE(supported);
-  EXPECT_EQ(11, values[0].get_int()); EXPECT_EQ(12, values[1].get_int()); EXPECT_EQ(10, values[2].get_int());
+  EXPECT_EQ(11, values[0]); EXPECT_EQ(12, values[1]); EXPECT_EQ(10, values[2]);
 }
 
 TEST_F(NativeBigintPoint, repeated_parameter_and_repeated_final_index_are_supported)
@@ -133,25 +133,25 @@ TEST_F(NativeBigintPoint, repeated_parameter_and_repeated_final_index_are_suppor
   graph.get_range_map().expr_final_infos_.at(0).param_idx_ = 2;
   graph.get_range_map().expr_final_infos_.at(1).param_idx_ = 2;
   graph.get_range_map().expr_final_infos_.at(2).param_idx_ = 2;
-  Datum values[3]; bool supported = false;
+  int64_t values[3]; bool supported = false;
   ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(parameters, values, supported));
   EXPECT_TRUE(supported);
-  for (const Datum &value : values) { EXPECT_EQ(12, value.get_int()); }
+  for (const int64_t value : values) { EXPECT_EQ(12, value); }
   start[0] = start[1] = start[2] = 1;
   end[0] = end[1] = end[2] = 1;
   ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(parameters, values, supported));
   EXPECT_TRUE(supported);
-  for (const Datum &value : values) { EXPECT_EQ(12, value.get_int()); }
+  for (const int64_t value : values) { EXPECT_EQ(12, value); }
 }
 
 TEST_F(NativeBigintPoint, adjacent_executions_read_fresh_values)
 {
-  Datum first[3], second[3]; bool supported = false;
+  int64_t first[3], second[3]; bool supported = false;
   ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(parameters, first, supported)); EXPECT_TRUE(supported);
   write_parameter(0, -91); write_parameter(1, -92); write_parameter(2, -93);
   ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(parameters, second, supported)); EXPECT_TRUE(supported);
   for (int64_t i = 0; i < 3; ++i) {
-    EXPECT_EQ(10 + i, first[i].get_int()); EXPECT_EQ(-91 - i, second[i].get_int());
+    EXPECT_EQ(10 + i, first[i]); EXPECT_EQ(-91 - i, second[i]);
   }
 }
 
@@ -275,12 +275,12 @@ TEST_F(NativeBigintPoint, target_columns_must_be_exact_signed_bigint_and_present
 
 TEST_F(NativeBigintPoint, providers_without_the_specialization_use_default_fallback)
 {
-  Datum values[3];
-  for (int64_t i = 0; i < 3; ++i) { values[i].set_int(100 + i); }
+  int64_t values[3];
+  for (int64_t i = 0; i < 3; ++i) { values[i] = 100 + i; }
   bool supported = true;
   ASSERT_EQ(OB_SUCCESS, graph.ObQueryRangeProvider::try_get_native_bigint_point(parameters, values, supported));
   EXPECT_FALSE(supported);
-  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(100 + i, values[i].get_int()); }
+  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(100 + i, values[i]); }
 }
 
 int main(int argc, char **argv)

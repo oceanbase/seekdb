@@ -554,11 +554,11 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   node.min_offset_ = 0; node.max_offset_ = 2;
   node.include_start_ = true; node.include_end_ = true;
   graph.set_range_head(&node); graph.set_node_count(1); graph.set_is_precise_get(true);
-  Datum values[3]; bool supported = false;
+  int64_t values[3]; bool supported = false;
   const ObQueryRangeProvider &provider = graph;
   ASSERT_EQ(OB_SUCCESS, provider.try_get_native_bigint_point(plan, values, supported));
   ASSERT_TRUE(supported);
-  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(expected[i], values[i].get_int()); }
+  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(expected[i], values[i]); }
 }
 
 TEST_F(NativePsParameterBinding, rebuilding_execution_context_does_not_modify_request_values)

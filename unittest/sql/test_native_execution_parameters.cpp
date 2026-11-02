@@ -264,22 +264,22 @@ protected:
 
   void expect_point(int64_t first, int64_t second, int64_t third)
   {
-    Datum values[3]; bool supported = false;
+    int64_t values[3]; bool supported = false;
     const ObQueryRangeProvider &provider = graph_;
     ASSERT_EQ(OB_SUCCESS, provider.try_get_native_bigint_point(plan(), values, supported));
     ASSERT_TRUE(supported);
-    EXPECT_EQ(first, values[0].get_int()); EXPECT_EQ(second, values[1].get_int());
-    EXPECT_EQ(third, values[2].get_int());
+    EXPECT_EQ(first, values[0]); EXPECT_EQ(second, values[1]);
+    EXPECT_EQ(third, values[2]);
   }
 
   void expect_no_point()
   {
-    Datum values[3];
-    for (int64_t i = 0; i < 3; ++i) { values[i].set_int(101 + i); }
+    int64_t values[3];
+    for (int64_t i = 0; i < 3; ++i) { values[i] = 101 + i; }
     bool supported = true;
     ASSERT_EQ(OB_SUCCESS, graph_.try_get_native_bigint_point(plan(), values, supported));
     EXPECT_FALSE(supported);
-    for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(101 + i, values[i].get_int()); }
+    for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(101 + i, values[i]); }
   }
 
   ObArenaAllocator request_arena_;
@@ -322,6 +322,9 @@ TEST_F(NativeExecutionParameters, arbitrary_count_uses_one_owner_and_real_questi
       EXPECT_EQ(reinterpret_cast<const Datum *>(expected_slot), native);
       EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(native) % 8);
       EXPECT_EQ(input[i], native->get_int());
+      int64_t extracted = 101;
+      EXPECT_TRUE(plan().read_native_bigint_parameter(i, extracted));
+      EXPECT_EQ(input[i], extracted);
       const SqlType *type = plan().get_native_parameter_type(i);
       ASSERT_NE(nullptr, type);
       EXPECT_EQ(ObIntType, type->kind());
@@ -335,6 +338,11 @@ TEST_F(NativeExecutionParameters, arbitrary_count_uses_one_owner_and_real_questi
     EXPECT_EQ(nullptr, plan().get_native_parameter(-1));
     EXPECT_EQ(nullptr, plan().get_native_parameter(count));
     EXPECT_EQ(nullptr, plan().get_native_parameter_type(count));
+    int64_t extracted = 101;
+    EXPECT_FALSE(plan().read_native_bigint_parameter(-1, extracted));
+    EXPECT_EQ(101, extracted);
+    EXPECT_FALSE(plan().read_native_bigint_parameter(count, extracted));
+    EXPECT_EQ(101, extracted);
   }
 }
 
@@ -347,7 +355,7 @@ TEST_F(NativeExecutionParameters, graph_reorders_repeats_execution_indices_and_s
   graph_.get_range_map().expr_final_infos_.at(1).param_idx_ = 4;
   graph_.get_range_map().expr_final_infos_.at(2).param_idx_ = 1;
   ASSERT_NO_FATAL_FAILURE(expect_point(20, 50, 50));
-  Datum values[3]; bool supported = false;
+  int64_t values[3]; bool supported = false;
   ASSERT_EQ(OB_SUCCESS, graph_.try_get_native_bigint_point(plan(), values, supported));
   ASSERT_TRUE(supported);
   NativePointGetInput key;
@@ -363,6 +371,14 @@ TEST_F(NativeExecutionParameters, graph_reorders_repeats_execution_indices_and_s
   EXPECT_EQ(20, key.lookup_keys().at(0).datums_[0].get_int());
   start_[0] = start_[1] = start_[2] = end_[0] = end_[1] = end_[2] = 0;
   ASSERT_NO_FATAL_FAILURE(expect_point(-50, -50, -50));
+  MEMSET(values, 0xA5, sizeof(values));
+  plan().reset_datum_param_store();
+  const int64_t expected[3] = {20, 50, 50};
+  for (int64_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(expected[i], key.values()[i]);
+    EXPECT_EQ(expected[i], key.lookup_keys().at(0).datums_[i].get_int());
+    EXPECT_EQ(expected[i], key.lookup_keys().at(0).cached_rowkey_->get_cell(i).get_int());
+  }
 }
 
 TEST_F(NativeExecutionParameters, runtime_rebind_updates_native_frame_type_and_compatibility_view)
@@ -385,6 +401,9 @@ TEST_F(NativeExecutionParameters, runtime_rebind_updates_native_frame_type_and_c
   EXPECT_EQ(slot, plan().get_native_parameter(1));
   EXPECT_EQ(UINT64_MAX, slot->get_uint());
   EXPECT_EQ(ObUInt64Type, plan().get_native_parameter_type(1)->kind());
+  int64_t extracted = 101;
+  EXPECT_FALSE(plan().read_native_bigint_parameter(1, extracted));
+  EXPECT_EQ(101, extracted);
   ASSERT_NO_FATAL_FAILURE(expect_no_point());
   replacement.datum_.set_null(); // typed NULL keeps the UInt declaration
   ASSERT_EQ(OB_SUCCESS, bind_parameter(1, replacement));
@@ -2494,7 +2513,9 @@ TEST_F(NativeExecutionParameters, typed_bigint_null_init_rejects_point_at_every_
       ASSERT_NE(nullptr, type);
       ASSERT_TRUE(slot->is_null());
       ASSERT_EQ(ObIntType, type->kind());
-      EXPECT_EQ(nullptr, plan().get_native_bigint_parameter(null_index));
+      int64_t extracted = 101 + null_index;
+      EXPECT_FALSE(plan().read_native_bigint_parameter(null_index, extracted));
+      EXPECT_EQ(101 + null_index, extracted);
       // This exercises the real bound graph and its existing independent
       // 101/102/103 sentinels, including NULL after a valid prefix.
       ASSERT_NO_FATAL_FAILURE(expect_no_point());
@@ -2526,13 +2547,17 @@ TEST_F(NativeExecutionParameters, ready_bigint_null_rebind_preserves_point_outpu
     EXPECT_EQ(ObIntType, type->kind());
     EXPECT_EQ(ObNullType, plan().get_parameter_metadata(null_index)->type_meta_.get_type());
     EXPECT_EQ(ObIntType, plan().get_parameter_metadata(null_index)->param_meta_.get_type());
-    EXPECT_EQ(nullptr, plan().get_native_bigint_parameter(null_index));
+    int64_t extracted = 101 + null_index;
+    EXPECT_FALSE(plan().read_native_bigint_parameter(null_index, extracted));
+    EXPECT_EQ(101 + null_index, extracted);
     ASSERT_NO_FATAL_FAILURE(expect_no_point());
     // A real zero is still eligible. Restoring the value uses the public ready
     // binding, without changing the graph, Type or constructing a proxy store.
     replacement.set_int(0);
     ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(null_index, replacement, *type, attributes));
-    EXPECT_EQ(slot, plan().get_native_bigint_parameter(null_index));
+    EXPECT_TRUE(plan().read_native_bigint_parameter(null_index, extracted));
+    EXPECT_EQ(0, extracted);
+    EXPECT_EQ(slot, plan().get_native_parameter(null_index));
     ASSERT_TRUE(slot->is_present());
     ASSERT_NO_FATAL_FAILURE(expect_point(0, 0, 0));
   }

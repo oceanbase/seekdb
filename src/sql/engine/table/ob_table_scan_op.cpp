@@ -1433,7 +1433,7 @@ int ObTableScanOp::try_prepare_native_point_get(int64_t group_idx, bool need_sor
       || MY_CTDEF.scan_ctdef_.table_param_.get_read_info().get_schema_rowkey_count() != 3) {
     // Fall back before allocating or publishing any native input.
   } else {
-    Datum values[3];
+    int64_t values[3];
     bool supported = false;
     if (OB_FAIL(MY_CTDEF.get_query_range_provider().try_get_native_bigint_point(
         *plan_ctx, values, supported))) {

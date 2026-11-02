@@ -15,6 +15,7 @@
  */
 
 #include "sql/engine/table/native_point_get_input.h"
+#include "sql/rewrite/ob_query_range_define.h"
 #include "common/datum/datum_copy_plan.h"
 #include "lib/charset/ob_charset.h"
 #include <array>
@@ -108,15 +109,15 @@ TEST(NativePointGetInput, concurrent_owners_share_only_immutable_layout_and_keep
       arrived.fetch_add(1, std::memory_order_release);
       while (!start.load(std::memory_order_acquire)) { std::this_thread::yield(); }
       for (int64_t bind = 0; bind < REBINDS; ++bind) {
-        Datum source[3];
+        int64_t source[3];
         const int64_t expected[3] = {t * 1000 + bind, INT64_MIN + t, INT64_MAX - bind};
-        for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
+        for (int i = 0; i < 3; ++i) { source[i] = expected[i]; }
         const int64_t group = (t + 1) << 32;
         if (owner.init(source, group) != OB_SUCCESS || owner.lookup_keys().count() != 1) {
           correct.store(false, std::memory_order_relaxed);
           break;
         }
-        for (Datum &value : source) { value.set_null(); }
+        MEMSET(source, 0xA5, sizeof(source));
         const auto &key = owner.lookup_keys().at(0);
         if (key.count_ != 3 || key.cached_rowkey_ == nullptr || key.group_id_ != group
             || key.cached_rowkey_->get_group_idx() != group) {
@@ -160,8 +161,8 @@ TEST(NativePointGetInput, compact_values_survive_the_input_lifetime_and_report_f
   NativePointGetInput owner;
   const int64_t expected[] = {INT64_MIN, -1, INT64_MAX};
   {
-    Datum source[3];
-    for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
+    int64_t source[3];
+    for (int i = 0; i < 3; ++i) { source[i] = expected[i]; }
     ASSERT_EQ(OB_SUCCESS, owner.init(source, 0));
     EXPECT_NE(reinterpret_cast<const void *>(source), reinterpret_cast<const void *>(owner.values()));
     memset(static_cast<void *>(source), 0xA5, sizeof(source));
@@ -182,13 +183,13 @@ TEST(NativePointGetInput, compact_values_survive_the_input_lifetime_and_report_f
 TEST(NativePointGetInput, source_overwrite_cannot_change_owned_inline_keys_or_their_cached_views)
 {
   const int64_t expected[] = {INT64_MIN, 0, INT64_MAX};
-  Datum source[3];
-  for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
+  int64_t source[3];
+  for (int i = 0; i < 3; ++i) { source[i] = expected[i]; }
   NativePointGetInput owner;
   EXPECT_EQ(0, owner.lookup_keys().count());
   const int64_t group_id = int64_t(7) << 32;
   ASSERT_EQ(OB_SUCCESS, owner.init(source, group_id));
-  for (Datum &value : source) { value.set_null(); }
+  MEMSET(source, 0xA5, sizeof(source));
   assert_same_key(owner, expected);
   const auto &key = owner.lookup_keys().at(0);
   EXPECT_EQ(group_id, key.group_id_);
@@ -197,16 +198,16 @@ TEST(NativePointGetInput, source_overwrite_cannot_change_owned_inline_keys_or_th
 
 TEST(NativePointGetInput, rebind_after_consumers_finish_refreshes_views_and_cached_hash)
 {
-  Datum source[3];
+  int64_t source[3];
   NativePointGetInput owner;
   const int64_t first[] = {1, 2, 3};
-  for (int i = 0; i < 3; ++i) { source[i].set_int(first[i]); }
+  for (int i = 0; i < 3; ++i) { source[i] = first[i]; }
   ASSERT_EQ(OB_SUCCESS, owner.init(source, 0));
   assert_same_key(owner, first);
   const auto *storage = owner.lookup_keys().at(0).datums_;
   const auto *cached = owner.lookup_keys().at(0).cached_rowkey_;
   const int64_t second[] = {INT64_MAX, -19, INT64_MIN};
-  for (int i = 0; i < 3; ++i) { source[i].set_int(second[i]); }
+  for (int i = 0; i < 3; ++i) { source[i] = second[i]; }
   ASSERT_EQ(OB_SUCCESS, owner.init(source, int64_t(11) << 32));
   EXPECT_EQ(storage, owner.lookup_keys().at(0).datums_);
   EXPECT_EQ(cached, owner.lookup_keys().at(0).cached_rowkey_);
@@ -215,36 +216,78 @@ TEST(NativePointGetInput, rebind_after_consumers_finish_refreshes_views_and_cach
 
 TEST(NativePointGetInput, invalid_columns_do_not_publish_or_replace_an_existing_key)
 {
+  // Invalid states belong to the real extraction boundary. The owner receives
+  // only the raw I64 domain after this provider accepts every column.
+  ObArenaAllocator input_owner;
+  ObPreRangeGraph graph(input_owner);
+  ObRangeNode node(input_owner);
+  ObColumnRefRawExpr columns[3];
+  ObSEArray<ColumnItem, 3> items;
+  int64_t start[3] = {0, 1, 2}, end[3] = {0, 1, 2};
+  for (int64_t i = 0; i < 3; ++i) {
+    columns[i].set_ref_id(1001, 16 + i);
+    columns[i].set_data_type(ObIntType);
+    ColumnItem item; item.expr_ = &columns[i]; item.set_ref_id(1001, 16 + i);
+    ASSERT_EQ(OB_SUCCESS, items.push_back(item));
+  }
+  ASSERT_EQ(OB_SUCCESS, graph.fill_column_metas(items));
+  ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(3));
+  for (int64_t i = 0; i < 3; ++i) {
+    auto &info = graph.get_range_map().expr_final_infos_.at(i);
+    info.is_param_ = true; info.param_idx_ = i;
+  }
+  node.column_cnt_ = 3; node.start_keys_ = start; node.end_keys_ = end;
+  node.min_offset_ = 0; node.max_offset_ = 2;
+  node.include_start_ = true; node.include_end_ = true;
+  graph.set_range_head(&node); graph.set_node_count(1);
+  graph.set_is_precise_get(true); graph.set_is_standard_range(true);
+  graph.set_is_equal_range(true); graph.set_is_get(true);
+
   const int64_t expected[] = {17, -23, 31};
   for (int column = 0; column < 3; ++column) {
     for (int state = 0; state < 9; ++state) {
-      Datum source[3];
-      for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
+      DatumParamStore source((ObWrapperAllocator(&input_owner)));
+      for (int i = 0; i < 3; ++i) {
+        DatumParameter parameter;
+        parameter.get_meta().set_int();
+        parameter.datum_.set_int(expected[i]);
+        ASSERT_EQ(OB_SUCCESS, source.push_back(parameter));
+      }
       NativePointGetInput owner, empty;
-      ASSERT_EQ(OB_SUCCESS, owner.init(source, int64_t(5) << 32));
+      int64_t values[3] = {101, 102, 103};
+      bool supported = false;
+      ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(source, values, supported));
+      ASSERT_TRUE(supported);
+      ASSERT_EQ(OB_SUCCESS, owner.init(values, int64_t(5) << 32));
       const auto *published_values = owner.values();
       const auto *published_storage = owner.lookup_keys().at(0).datums_;
       const auto *published_cached = owner.lookup_keys().at(0).cached_rowkey_;
       const uint64_t published_hash = published_cached->murmurhash(0);
       // All otherwise-valid columns now differ. A partial prefix publish
       // must fail even when the invalid cell is the final column.
-      for (int i = 0; i < 3; ++i) { source[i].set_int(INT64_MIN + i); }
+      for (int i = 0; i < 3; ++i) { source.at(i).datum_.set_int(INT64_MIN + i); }
       char bytes[8] = {};
+      Datum &invalid = source.at(column).datum_;
       switch (state) {
-        case 0: source[column].set_null(); break;
-        case 1: source[column].set_min(); break;
-        case 2: source[column].set_max(); break;
-        case 3: source[column].set_nop(); break;
-        case 4: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(bytes, sizeof(bytes))); break;
-        case 5: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::OutRow)); break;
-        case 6: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::HasLobHeader)); break;
-        case 7: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::LegacyExtended)); break;
-        default: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0,
+        case 0: invalid.set_null(); break;
+        case 1: invalid.set_min(); break;
+        case 2: invalid.set_max(); break;
+        case 3: invalid.set_nop(); break;
+        case 4: ASSERT_EQ(OB_SUCCESS, invalid.set_reference(bytes, sizeof(bytes))); break;
+        case 5: ASSERT_EQ(OB_SUCCESS, invalid.set_reference(nullptr, 0, Datum::OutRow)); break;
+        case 6: ASSERT_EQ(OB_SUCCESS, invalid.set_reference(nullptr, 0, Datum::HasLobHeader)); break;
+        case 7: ASSERT_EQ(OB_SUCCESS, invalid.set_reference(nullptr, 0, Datum::LegacyExtended)); break;
+        default: ASSERT_EQ(OB_SUCCESS, invalid.set_reference(nullptr, 0,
                      Datum::OutRow | Datum::HasLobHeader)); break;
       }
-      EXPECT_EQ(OB_INVALID_ARGUMENT, empty.init(source, 0));
+      ASSERT_EQ(OB_SUCCESS, graph.try_get_native_bigint_point(source, values, supported));
+      if (supported) {
+        EXPECT_EQ(OB_SUCCESS, empty.init(values, 0));
+        EXPECT_EQ(OB_SUCCESS, owner.init(values, 0));
+      }
+      EXPECT_FALSE(supported);
+      for (int i = 0; i < 3; ++i) { EXPECT_EQ(expected[i], values[i]); }
       EXPECT_EQ(0, empty.lookup_keys().count());
-      EXPECT_EQ(OB_INVALID_ARGUMENT, owner.init(source, 0));
       assert_same_key(owner, expected);
       EXPECT_EQ(published_values, owner.values());
       EXPECT_EQ(published_storage, owner.lookup_keys().at(0).datums_);
@@ -264,12 +307,12 @@ TEST(NativePointGetInput, compact_keys_preserve_signed_lexicographic_order_and_h
     {0, 0, 0}, {0, 0, INT64_MAX}, {0, 1, INT64_MIN}, {INT64_MAX, INT64_MIN, INT64_MIN}
   };
   NativePointGetInput left, right;
-  Datum source[3];
+  int64_t source[3];
   for (int i = 0; i < static_cast<int>(sizeof(sorted) / sizeof(sorted[0])) - 1; ++i) {
-    for (int column = 0; column < 3; ++column) { source[column].set_int(sorted[i][column]); }
+    for (int column = 0; column < 3; ++column) { source[column] = sorted[i][column]; }
     ASSERT_EQ(OB_SUCCESS, left.init(source, int64_t(3) << 32));
     assert_same_key(left, sorted[i]);
-    for (int column = 0; column < 3; ++column) { source[column].set_int(sorted[i + 1][column]); }
+    for (int column = 0; column < 3; ++column) { source[column] = sorted[i + 1][column]; }
     ASSERT_EQ(OB_SUCCESS, right.init(source, int64_t(9) << 32));
     assert_same_key(right, sorted[i + 1]);
     const auto &a = left.lookup_keys().at(0).cached_rowkey_->get_rowkey();

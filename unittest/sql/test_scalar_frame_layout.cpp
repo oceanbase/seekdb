@@ -167,7 +167,9 @@ void verify_parameter_layout(int64_t original, int64_t count,
   std::vector<int64_t> input(count);
   ASSERT_NO_FATAL_FAILURE(load_parameters(plan, original, input, null_index));
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
-  EXPECT_NE(nullptr, plan.get_native_bigint_parameter(0));
+  int64_t extracted = 101;
+  EXPECT_TRUE(plan.read_native_bigint_parameter(0, extracted));
+  EXPECT_EQ(INT64_MIN, extracted);
   // Request payload must no longer supply either the native-owner or clone path.
   MEMSET(input.data(), 0x5c, input.size() * sizeof(input[0]));
 
@@ -348,14 +350,17 @@ TEST(ScalarFrameLayout, failed_second_original_frame_keeps_request_descriptor_un
   owner.fail_size_ = NATIVE_SLOT_BYTES;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan.init_datum_param_store());
   EXPECT_EQ(0, plan.get_param_frame_ptrs().count());
-  EXPECT_EQ(nullptr, plan.get_native_bigint_parameter(0));
+  int64_t extracted = 101;
+  EXPECT_FALSE(plan.read_native_bigint_parameter(0, extracted));
+  EXPECT_EQ(101, extracted);
   EXPECT_FALSE(plan.native_parameters_ready());
   EXPECT_EQ(before, plan.get_parameter_inputs().at(0).get_int());
   EXPECT_EQ(INT64_MIN, plan.get_parameter_inputs().at(0).get_int());
   owner.fail_size_ = 0;
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   ASSERT_EQ(2, plan.get_param_frame_ptrs().count());
-  EXPECT_NE(nullptr, plan.get_native_bigint_parameter(0));
+  EXPECT_TRUE(plan.read_native_bigint_parameter(0, extracted));
+  EXPECT_EQ(INT64_MIN, extracted);
   for (int64_t i = 0; i < plan.get_param_frame_ptrs().count(); ++i) {
     owner.expect_frame_canary(plan.get_param_frame_ptrs().at(i));
   }

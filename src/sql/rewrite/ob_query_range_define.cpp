@@ -742,7 +742,7 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
 }
 
 int ObQueryRangeProvider::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
-                                                     Datum (&values)[3], bool &supported) const
+                                                     int64_t (&values)[3], bool &supported) const
 {
   UNUSED(plan_ctx); UNUSED(values);
   supported = false;
@@ -750,20 +750,20 @@ int ObQueryRangeProvider::try_get_native_bigint_point(const ObPhysicalPlanCtx &p
 }
 
 int ObPreRangeGraph::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
-                                                Datum (&values)[3], bool &supported) const
+                                                int64_t (&values)[3], bool &supported) const
 {
   return try_get_native_bigint_point(nullptr, &plan_ctx, values, supported);
 }
 
 int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
-                                                Datum (&values)[3], bool &supported) const
+                                                int64_t (&values)[3], bool &supported) const
 {
   return try_get_native_bigint_point(&parameters, nullptr, values, supported);
 }
 
 int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *parameters,
                                                 const ObPhysicalPlanCtx *plan_ctx,
-                                                Datum (&values)[3], bool &supported) const
+                                                int64_t (&values)[3], bool &supported) const
 {
   supported = false;
   const ObRangeNode *node = node_head_;
@@ -783,7 +783,7 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *paramete
 
   if ((parameters == nullptr) == (plan_ctx == nullptr)) { return OB_ERR_UNEXPECTED; }
   const int64_t count = plan_ctx != nullptr ? plan_ctx->get_parameter_count() : parameters->count();
-  const Datum *inputs[3] = {nullptr, nullptr, nullptr};
+  int64_t candidate[3];
   for (int64_t i = 0; i < 3; ++i) {
     const ObRangeColumnMeta *meta = column_metas_.at(i);
     const int64_t index = node->start_keys_[i];
@@ -800,21 +800,21 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *paramete
     if (plan_ctx != nullptr) {
       // This accessor validates the current execution binding and complete Type.
       // No compatibility descriptor or construction payload remains after init.
-      inputs[i] = plan_ctx->get_native_bigint_parameter(info.param_idx_);
-      if (inputs[i] == nullptr) { return OB_SUCCESS; }
+      if (!plan_ctx->read_native_bigint_parameter(info.param_idx_, candidate[i])) {
+        return OB_SUCCESS;
+      }
     } else {
       // Explicit construction-only input. Its physical metadata selects inline I64.
       const DatumParameter &input = parameters->at(info.param_idx_);
       if (input.get_type() != ObIntType || !input.datum_.is_present()
+          || input.datum_.length() != 0
           || input.datum_.reference_flags() != Datum::NoReferenceFlags) {
         return OB_SUCCESS;
       }
-      inputs[i] = &input.datum_;
+      candidate[i] = input.datum_.get_int();
     }
   }
 
-  Datum candidate[3];
-  for (int64_t i = 0; i < 3; ++i) { candidate[i].set_int(inputs[i]->get_int()); }
   for (int64_t i = 0; i < 3; ++i) { values[i] = candidate[i]; }
   supported = true;
   return OB_SUCCESS;

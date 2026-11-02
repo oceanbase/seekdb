@@ -215,7 +215,9 @@ public:
   const common::DatumParameterMetadata *get_parameter_metadata(int64_t index) const;
   const common::Datum *get_native_parameter(int64_t index) const;
   const common::SqlType *get_native_parameter_type(int64_t index) const;
-  const common::Datum *get_native_bigint_parameter(int64_t index) const;
+  // Read a present signed BIGINT without exposing its execution slot.
+  // A rejected binding leaves value unchanged.
+  bool read_native_bigint_parameter(int64_t index, int64_t &value) const;
   const common::DatumParameter *get_group_parameter_input(int64_t index) const;
   int capture_native_parameter(int64_t index, common::NativeTypedDatum &value,
       common::DatumParameterMetadata &attributes) const;

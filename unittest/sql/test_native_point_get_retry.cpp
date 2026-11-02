@@ -134,10 +134,7 @@ protected:
     // failure before the first open.
     ASSERT_EQ(OB_SUCCESS, task_.init_scan_param());
     can_release_ = true;
-    Datum values[3];
-    values[0].set_int(INT64_MIN);
-    values[1].set_int(23);
-    values[2].set_int(INT64_MAX);
+    const int64_t values[3] = {INT64_MIN, 23, INT64_MAX};
     ASSERT_EQ(OB_SUCCESS, owner_.init(values, int64_t(9) << 32));
     task_.set_native_point_get_keys(&owner_.lookup_keys());
   }

@@ -63,25 +63,10 @@ NativePointGetInput::NativePointGetInput()
     cached_rowkey_(), key_(), lookup_keys_(1, &key_)
 {}
 
-int NativePointGetInput::init(const Datum (&values)[COLUMN_COUNT], int64_t group_id)
+int NativePointGetInput::init(const int64_t (&values)[COLUMN_COUNT], int64_t group_id)
 {
-  int ret = OB_SUCCESS;
-  int64_t prepared[COLUMN_COUNT];
-  // For the fixed signed BIGINT type this is the complete scalar-shape
-  // preflight. Do it for every input before replacing any published value.
-  for (int64_t i = 0; OB_SUCC(ret) && i < COLUMN_COUNT; ++i) {
-    if (!values[i].is_present() || values[i].length() != 0
-        || values[i].reference_flags() != Datum::NoReferenceFlags) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      prepared[i] = values[i].get_int();
-    }
-  }
-  const BigintPointLayout *layout = nullptr;
-  if (OB_SUCC(ret)) {
-    layout = &bigint_point_layout();
-    ret = layout->status();
-  }
+  const BigintPointLayout &layout = bigint_point_layout();
+  int ret = layout.status();
   ObStoreRowkey prepared_rowkey;
   // assign() only binds the descriptor array and resets its hash; it does not
   // inspect the cells. Finish all fallible work before replacing any value.
@@ -89,13 +74,13 @@ int NativePointGetInput::init(const Datum (&values)[COLUMN_COUNT], int64_t group
   } else if (OB_SUCC(ret)) {
     prepared_rowkey.set_group_idx(group_id);
     for (int64_t i = 0; i < COLUMN_COUNT; ++i) {
-      values_[i] = prepared[i];
+      values_[i] = values[i];
       // The fixed storage sidecars borrow aligned int64_t bytes from this
       // owner. The generic rowkey values copy their I64 directly inline.
       const ObDatum borrowed(reinterpret_cast<const char *>(&values_[i]), sizeof(values_[i]), false);
       storage_datums_[i].shallow_copy_from_datum(borrowed);
-      Datum native; native.set_int(prepared[i]);
-      legacy_values_[i] = DatumValue(native, layout->type().legacy_meta());
+      Datum native; native.set_int(values_[i]);
+      legacy_values_[i] = DatumValue(native, layout.type().legacy_meta());
     }
     cached_rowkey_ = prepared_rowkey;
     key_.datums_ = storage_datums_;
