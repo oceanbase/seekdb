@@ -1073,6 +1073,503 @@ static int int_geometry(const SqlValueType expect_type, DatumCastParams &params,
   return ret;
 }
 
+// Preserve each source family's legacy formatting before geometry validation.
+template <typename Value>
+static int uint_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    uint64_t in_val = in.get_uint64();
+    ObFastFormatInt ffi(in_val);
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    ObString str(ffi.length(), ffi.ptr());
+    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int float_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                          const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    int64_t length = 0;
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    ObScale scale = in.get_scale();
+    if (in.get_float() == -INFINITY) {
+      length = strlen("-Inf");
+      strncpy(buf, "-Inf", length);
+    } else if (in.get_float() == INFINITY) {
+      length = strlen("Inf");
+      strncpy(buf, "Inf", length);
+    } else if (isnan(in.get_float())) {
+      length = strlen("Nan");
+      strncpy(buf, "Nan", length);
+    } else {
+      if (0 <= scale) {
+        length = ob_fcvt(in.get_float(), scale, sizeof(buf) - 1, buf, NULL);
+      } else {
+        length = ob_gcvt_opt(in.get_float(), OB_GCVT_ARG_FLOAT, sizeof(buf) - 1,
+                             buf, NULL, TRUE);
+      }
+    }
+    ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
+    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int double_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    int64_t length = 0;
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    ObScale scale = in.get_scale();
+    if (in.get_double() == -INFINITY) {
+      length = strlen("-Inf");
+      strncpy(buf, "-Inf", length);
+    } else if (in.get_double() == INFINITY) {
+      length = strlen("Inf");
+      strncpy(buf, "Inf", length);
+    } else if (isnan(in.get_double())) {
+      length = strlen("Nan");
+      strncpy(buf, "Nan", length);
+    } else {
+      if (0 <= scale) {
+        length = ob_fcvt(in.get_double(), scale, sizeof(buf) - 1, buf, NULL);
+      } else {
+        length = ob_gcvt_opt(in.get_double(), OB_GCVT_ARG_DOUBLE,
+                              sizeof(buf) - 1, buf, NULL, TRUE);
+      }
+    }
+    ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
+    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int number_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    int64_t len = 0;
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    ObScale scale = in.get_scale();
+    if (OB_FAIL(in.get_number().format(buf, sizeof(buf), len, in.get_scale()))) {
+    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int datetime_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    const ObTimeZoneInfo *tz_info = (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    int64_t len = 0;
+    ret = in.is_mysql_datetime() ?
+                ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), tz_info,
+                                                 in.get_scale(), buf, sizeof(buf), len) :
+                ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info,
+                                                 in.get_scale(), buf, sizeof(buf), len);
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int mdatetime_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(datetime_geometry(expect_type, params, in, out, cast_mode))) {
+  }
+  return ret;
+}
+
+template <typename Value>
+static int date_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    int64_t len = 0;
+    ret = in.is_mysql_date() ?
+            ObTimeConverter::mdate_to_str(in.get_mysql_date(), buf, sizeof(buf), len) :
+            ObTimeConverter::date_to_str(in.get_date(), buf, sizeof(buf), len);
+    if ((OB_FAIL(ret))) {
+    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int mdate_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(date_geometry(expect_type, params, in, out, cast_mode))) {
+  }
+  return ret;
+}
+
+template <typename Value>
+static int time_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    int64_t len = 0;
+    if (OB_FAIL(ObTimeConverter::time_to_str(in.get_time(), in.get_scale(), buf, sizeof(buf), len))) {
+    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int year_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+    int64_t len = 0;
+    if (OB_FAIL(ObTimeConverter::year_to_str(in.get_year(), buf, sizeof(buf), len))) {
+    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int bit_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    ObFastFormatInt ffi(in.get_bit());
+    if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(ffi.length(), ffi.ptr()), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(ffi.length(), ffi.ptr()),
+        geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+template <typename Value>
+static int decimalint_geometry(const SqlValueType expected_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+  int64_t length = 0;
+  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
+                  || ObGeometryTC != sql_type_class(expected_type))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
+  } else if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf,
+                                     sizeof(buf), length))) {
+  } else if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(length, buf), srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(length, buf), geo, srs,
+                                             cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else if (OB_FAIL(copy_string(params, expected_type, res_wkb, out))) {
+      } else {
+        res_length = static_cast<ObLength>(out.get_string_len());
+      }
+    }
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode)
+        && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expected_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
 ////////////////////////////////////////////////////////////////
 // UInt -> XXX
 
@@ -10283,6 +10780,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = uint_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = uint_mdatetime<Frame>; break;
           case ObBitTC: function = uint_bit<Frame>; break;
+          case ObGeometryTC: function = uint_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10303,6 +10801,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = float_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = float_mdatetime<Frame>; break;
           case ObBitTC: function = float_bit<Frame>; break;
+          case ObGeometryTC: function = float_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10324,6 +10823,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = double_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = double_mdatetime<Frame>; break;
           case ObBitTC: function = double_bit<Frame>; break;
+          case ObGeometryTC: function = double_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10345,6 +10845,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = number_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = number_mdatetime<Frame>; break;
           case ObBitTC: function = number_bit<Frame>; break;
+          case ObGeometryTC: function = number_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10388,6 +10889,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = datetime_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = datetime_mdatetime<Frame>; break;
           case ObBitTC: function = datetime_bit<Frame>; break;
+          case ObGeometryTC: function = datetime_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10408,6 +10910,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = date_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = date_mdatetime<Frame>; break;
           case ObBitTC: function = date_bit<Frame>; break;
+          case ObGeometryTC: function = date_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10428,6 +10931,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = time_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = time_mdatetime<Frame>; break;
           case ObBitTC: function = time_bit<Frame>; break;
+          case ObGeometryTC: function = time_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10448,6 +10952,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = year_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = year_mdatetime<Frame>; break;
           case ObBitTC: function = year_bit<Frame>; break;
+          case ObGeometryTC: function = year_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10469,6 +10974,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = bit_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = bit_mdatetime<Frame>; break;
           case ObBitTC: function = bit_bit<Frame>; break;
+          case ObGeometryTC: function = bit_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10490,6 +10996,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = decimalint_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = decimalint_mdatetime<Frame>; break;
           case ObBitTC: function = decimalint_bit<Frame>; break;
+          case ObGeometryTC: function = decimalint_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10571,6 +11078,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObTextTC: function = mdate_text<Frame>; break;
           case ObJsonTC: function = mdate_json<Frame>; break;
           case ObDecimalIntTC: function = mdate_decimalint<Frame>; break;
+          case ObGeometryTC: function = mdate_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10591,6 +11099,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObTextTC: function = mdatetime_text<Frame>; break;
           case ObJsonTC: function = mdatetime_json<Frame>; break;
           case ObDecimalIntTC: function = mdatetime_decimalint<Frame>; break;
+          case ObGeometryTC: function = mdatetime_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10633,6 +11142,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObTextTC: function = text_text<Frame>; break;
           case ObJsonTC: function = text_json<Frame>; break;
           case ObDecimalIntTC: function = text_decimalint<Frame>; break;
+          case ObGeometryTC: function = string_geometry<Frame>; break;
           default: break;
         }
         break;

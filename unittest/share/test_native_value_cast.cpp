@@ -835,3 +835,369 @@ TEST(NativeValueCast, enumset_inner_identity_null_alias_and_failure_ownership)
     EXPECT_EQ(label, input.get_string());
   }
 }
+
+TEST(NativeValueCast, text_wkb_to_geometry_uses_payload_and_owns_result)
+{
+  const std::string point = unhex("000000000101000000000000000000f03f0000000000000840");
+  const std::string versioned = unhex("00000000410101000000000000000000f03f0000000000000840");
+  const SqlValueType kinds[] = {ObTinyTextType, ObLongTextType};
+  const ObCastMode modes[] = {CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT};
+  for (SqlValueType kind : kinds) {
+    SCOPED_TRACE(static_cast<int>(kind));
+    for (ObCastMode mode : modes) {
+      SCOPED_TRACE(mode);
+      ObArenaAllocator destination;
+      DatumValue output;
+      {
+        ObArenaAllocator source_owner;
+        DatumValue input;
+        if (kind == ObTinyTextType) {
+          ASSERT_EQ(OB_SUCCESS, input.set_string(kind,
+              ObString(static_cast<int32_t>(point.size()), point.data()), source_owner));
+          input.meta_.set_collation_type(CS_TYPE_BINARY);
+          ASSERT_FALSE(input.has_lob_header());
+        } else {
+          // Use the real public cast to create an in-row LOB. Its locator
+          // header must be removed before the bytes reach WKB validation.
+          DatumValue string_input;
+          ASSERT_EQ(OB_SUCCESS, string_input.set_string(ObVarcharType,
+              ObString(static_cast<int32_t>(point.size()), point.data()), source_owner));
+          string_input.meta_.set_collation_type(CS_TYPE_BINARY);
+          ObCastCtx text_context(&source_owner, nullptr, CM_NONE, CS_TYPE_BINARY);
+          ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+              kind, text_context, string_input, source_owner, input));
+          ASSERT_TRUE(input.has_lob_header());
+        }
+        ASSERT_EQ(kind, input.get_type());
+        ObString input_payload;
+        ASSERT_EQ(OB_SUCCESS, input.get_string(input_payload));
+        ASSERT_EQ(ObString(static_cast<int32_t>(point.size()), point.data()), input_payload);
+        ObCastCtx context(&source_owner, nullptr, mode, CS_TYPE_BINARY);
+        ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+            ObGeometryType, context, input, destination, output));
+        EXPECT_EQ(OB_SUCCESS, context.warning_);
+        EXPECT_NE(input.datum_.get_reference(), output.datum_.get_reference());
+        MEMSET(const_cast<char *>(input_payload.ptr()), 0x5a, input_payload.length());
+      }
+      ASSERT_TRUE(output.is_geometry());
+      ASSERT_TRUE(output.has_lob_header());
+      ObString payload;
+      ASSERT_EQ(OB_SUCCESS, output.get_string(payload));
+      EXPECT_EQ(ObString(static_cast<int32_t>(versioned.size()), versioned.data()), payload);
+      DatumValue raw;
+      ObCastCtx read_context(&destination, nullptr, CM_NONE, CS_TYPE_BINARY);
+      ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+          ObVarcharType, read_context, output, destination, raw));
+      EXPECT_EQ(ObString(static_cast<int32_t>(point.size()), point.data()), raw.get_string());
+    }
+  }
+
+  ObArenaAllocator owner;
+  DatumValue aliased;
+  ASSERT_EQ(OB_SUCCESS, aliased.set_string(ObTinyTextType,
+      ObString(static_cast<int32_t>(point.size()), point.data()), owner));
+  aliased.meta_.set_collation_type(CS_TYPE_BINARY);
+  ObCastCtx context(&owner, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObGeometryType, context, aliased, owner, aliased));
+  ObString payload;
+  ASSERT_EQ(OB_SUCCESS, aliased.get_string(payload));
+  EXPECT_EQ(ObString(static_cast<int32_t>(versioned.size()), versioned.data()), payload);
+}
+
+TEST(NativeValueCast, text_geometry_failure_null_and_owner_retry_preserve_output)
+{
+  ObArenaAllocator source_owner;
+  const ObCastMode modes[] = {CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT,
+      CM_COLUMN_CONVERT | CM_WARN_ON_FAIL | CM_NULL_ON_WARN};
+  const std::string invalid[] = {std::string(), std::string("x"), unhex("0000000001")};
+  for (const std::string &bytes : invalid) {
+    SCOPED_TRACE(hex(bytes));
+    for (ObCastMode mode : modes) {
+      SCOPED_TRACE(mode);
+      DatumValue input, output;
+      ASSERT_EQ(OB_SUCCESS, input.set_string(ObTinyTextType,
+          ObString(static_cast<int32_t>(bytes.size()), bytes.data()), source_owner));
+      input.meta_.set_collation_type(CS_TYPE_BINARY);
+      ASSERT_EQ(OB_SUCCESS, output.set_int(71, source_owner));
+      const Datum before = output.datum_;
+      const SqlTypeMeta before_meta = output.meta_;
+      ObAccuracy accuracy(19, 2);
+      const uint64_t before_accuracy = accuracy.get_accuracy();
+      ObCastCtx context(&source_owner, nullptr, mode, CS_TYPE_BINARY, &accuracy);
+      EXPECT_EQ(CM_IS_COLUMN_CONVERT(mode) ? OB_ERR_CANT_CREATE_GEOMETRY_OBJECT : OB_ERR_GIS_INVALID_DATA,
+          DatumValueCaster::to_type(ObGeometryType, context, input, source_owner, output));
+      EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
+      EXPECT_EQ(0, MEMCMP(&before_meta, &output.meta_, sizeof(before_meta)));
+      EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+      EXPECT_EQ(OB_SUCCESS, context.warning_);
+    }
+  }
+  for (SqlValueType kind : {ObTinyTextType, ObLongTextType}) {
+    DatumValue input, output;
+    input.meta_.set_type(kind);
+    input.meta_.set_collation_type(CS_TYPE_BINARY);
+    input.datum_.set_null();
+    ObCastCtx no_owner(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObGeometryType, no_owner, input, source_owner, output));
+    EXPECT_TRUE(output.is_null());
+    EXPECT_EQ(kind, output.get_type());
+    EXPECT_EQ(CS_TYPE_BINARY, output.get_collation_type());
+  }
+
+  const std::string point = unhex("000000000101000000000000000000f03f0000000000000840");
+  DatumValue input, output;
+  ASSERT_EQ(OB_SUCCESS, input.set_string(ObTinyTextType,
+      ObString(static_cast<int32_t>(point.size()), point.data()), source_owner));
+  input.meta_.set_collation_type(CS_TYPE_BINARY);
+  ASSERT_EQ(OB_SUCCESS, output.set_int(71, source_owner));
+  ObCastCtx no_owner(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+      ObGeometryType, no_owner, input, source_owner, output));
+  EXPECT_EQ(71, output.get_int());
+
+  FailAfter destination;
+  destination.remaining_ = 0;
+  ObAccuracy accuracy(19, 2);
+  const uint64_t before_accuracy = accuracy.get_accuracy();
+  ObCastCtx context(&source_owner, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY, &accuracy);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, DatumValueCaster::to_type(
+      ObGeometryType, context, input, destination, output));
+  EXPECT_EQ(ObIntType, output.get_type());
+  EXPECT_EQ(71, output.get_int());
+  EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+  destination.remaining_ = -1;
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObGeometryType, context, input, destination, output));
+  EXPECT_TRUE(output.is_geometry());
+}
+
+namespace {
+void verify_scalar_geometry_error_contract(const DatumValue &input, int validation_error)
+{
+  SCOPED_TRACE(static_cast<int>(input.get_type()));
+  ObArenaAllocator owner;
+  const Datum input_before = input.datum_;
+  const SqlTypeMeta input_meta_before = input.meta_;
+  const ObCastMode modes[] = {CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT,
+      CM_COLUMN_CONVERT | CM_WARN_ON_FAIL | CM_NULL_ON_WARN};
+  for (ObCastMode mode : modes) {
+    SCOPED_TRACE(mode);
+    DatumValue output;
+    ASSERT_EQ(OB_SUCCESS, output.set_varchar(ObString::make_string("keep"), owner));
+    const Datum before = output.datum_;
+    const SqlTypeMeta before_meta = output.meta_;
+    ObAccuracy accuracy(19, 2);
+    const uint64_t before_accuracy = accuracy.get_accuracy();
+    ObCastCtx context(&owner, nullptr, mode, CS_TYPE_BINARY, &accuracy);
+    context.warning_ = OB_ERR_UNEXPECTED;
+    EXPECT_EQ(CM_IS_COLUMN_CONVERT(mode) ? OB_ERR_CANT_CREATE_GEOMETRY_OBJECT : validation_error,
+        DatumValueCaster::to_type(ObGeometryType, context, input, owner, output));
+    EXPECT_EQ(OB_SUCCESS, context.warning_);
+    EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+    EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
+    EXPECT_EQ(0, MEMCMP(&before_meta, &output.meta_, sizeof(before_meta)));
+    EXPECT_EQ(ObString::make_string("keep"), output.get_string());
+    EXPECT_EQ(0, MEMCMP(&input_before, &input.datum_, sizeof(input_before)));
+    EXPECT_EQ(0, MEMCMP(&input_meta_before, &input.meta_, sizeof(input_meta_before)));
+  }
+
+  DatumValue output;
+  ASSERT_EQ(OB_SUCCESS, output.set_int(71, owner));
+  ObCastMode point_mode = CM_NONE;
+  CM_SET_GEOMETRY_POINT(point_mode);
+  point_mode |= CM_COLUMN_CONVERT;
+  ObCastCtx point_context(&owner, nullptr, point_mode, CS_TYPE_BINARY);
+  EXPECT_EQ(validation_error, DatumValueCaster::to_type(
+      ObGeometryType, point_context, input, owner, output));
+  EXPECT_EQ(71, output.get_int());
+
+  ObCastCtx no_owner(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+      ObGeometryType, no_owner, input, owner, output));
+  EXPECT_EQ(71, output.get_int());
+
+  DatumValue aliased = input;
+  ObCastCtx alias_context(&owner, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT, DatumValueCaster::to_type(
+      ObGeometryType, alias_context, aliased, owner, aliased));
+  EXPECT_EQ(0, MEMCMP(&input_before, &aliased.datum_, sizeof(input_before)));
+  EXPECT_EQ(0, MEMCMP(&input_meta_before, &aliased.meta_, sizeof(input_meta_before)));
+
+  DatumValue typed_null = input;
+  typed_null.datum_.set_null();
+  for (ObCastMode mode : modes) {
+    ObCastCtx null_context(nullptr, nullptr, mode, CS_TYPE_BINARY);
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObGeometryType, null_context, typed_null, owner, output));
+    EXPECT_TRUE(output.is_null());
+    EXPECT_EQ(0, MEMCMP(&input_meta_before, &output.meta_, sizeof(input_meta_before)));
+  }
+}
+}
+
+TEST(NativeValueCast, numeric_geometry_preserves_each_source_formatter_and_errors)
+{
+  ObArenaAllocator owner;
+  DatumValue input;
+  const SqlValueType uint_kinds[] = {
+      ObUTinyIntType, ObUSmallIntType, ObUMediumIntType, ObUInt32Type, ObUInt64Type};
+  for (SqlValueType kind : uint_kinds) {
+    ASSERT_EQ(OB_SUCCESS, input.set_uint(kind, 127, owner));
+    // "127" cannot contain a four-byte SRID. In contrast, UINT64_MAX's
+    // unsigned decimal text is long enough and needs an actual SRS provider.
+    verify_scalar_geometry_error_contract(input, OB_ERR_GIS_INVALID_DATA);
+  }
+  ASSERT_EQ(OB_SUCCESS, input.set_uint(ObUInt64Type, UINT64_MAX, owner));
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+
+  ASSERT_EQ(OB_SUCCESS, input.set_float(0.0f, owner));
+  input.meta_.set_scale(0);
+  verify_scalar_geometry_error_contract(input, OB_ERR_GIS_INVALID_DATA);
+  ASSERT_EQ(OB_SUCCESS, input.set_float(-1.25f, owner));
+  input.meta_.set_scale(2);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  const uint32_t float_bits[] = {UINT32_C(0x7f800000), UINT32_C(0xff800000), UINT32_C(0x7fc00000)};
+  const int special_errors[] = {OB_ERR_GIS_INVALID_DATA, OB_NOT_INIT, OB_ERR_GIS_INVALID_DATA};
+  for (int i = 0; i < 3; ++i) {
+    SCOPED_TRACE(i);
+    float value = 0;
+    MEMCPY(&value, &float_bits[i], sizeof(value));
+    ASSERT_EQ(OB_SUCCESS, input.set_float(value, owner));
+    // The legacy spellings are "Inf", "-Inf" and "Nan" respectively.
+    verify_scalar_geometry_error_contract(input, special_errors[i]);
+  }
+
+  ASSERT_EQ(OB_SUCCESS, input.set_double(0.0, owner));
+  input.meta_.set_scale(0);
+  verify_scalar_geometry_error_contract(input, OB_ERR_GIS_INVALID_DATA);
+  ASSERT_EQ(OB_SUCCESS, input.set_double(-1.25, owner));
+  input.meta_.set_scale(2);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  const uint64_t double_bits[] = {
+      UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000), UINT64_C(0x7ff8000000000000)};
+  for (int i = 0; i < 3; ++i) {
+    SCOPED_TRACE(i);
+    double value = 0;
+    MEMCPY(&value, &double_bits[i], sizeof(value));
+    ASSERT_EQ(OB_SUCCESS, input.set_double(value, owner));
+    verify_scalar_geometry_error_contract(input, special_errors[i]);
+  }
+
+  number::ObNumber number;
+  ASSERT_EQ(OB_SUCCESS, number.from("0", owner));
+  ASSERT_EQ(OB_SUCCESS, input.set_number(number, owner));
+  input.meta_.set_scale(0);
+  verify_scalar_geometry_error_contract(input, OB_ERR_GIS_INVALID_DATA);
+  ASSERT_EQ(OB_SUCCESS, number.from("123.45", owner));
+  ASSERT_EQ(OB_SUCCESS, input.set_number(number, owner));
+  input.meta_.set_scale(2);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_number(ObUNumberType, number, owner));
+  input.meta_.set_scale(2);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+
+  ASSERT_EQ(OB_SUCCESS, input.set_uint(ObBitType, 7, owner));
+  verify_scalar_geometry_error_contract(input, OB_ERR_GIS_INVALID_DATA);
+  ASSERT_EQ(OB_SUCCESS, input.set_uint(ObBitType, UINT64_MAX, owner));
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+}
+
+TEST(NativeValueCast, temporal_geometry_preserves_calendar_and_packed_domains)
+{
+  ObArenaAllocator owner;
+  DatumValue input;
+  // Each temporal formatter emits at least four nonzero ASCII bytes. These
+  // inputs therefore reach the old missing-SRS-provider error, unlike an
+  // incorrect shared integer formatter that would turn zero into "0".
+  ASSERT_EQ(OB_SUCCESS, input.set_datetime(0, owner));
+  input.meta_.set_scale(0);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_timestamp(0, owner));
+  input.meta_.set_scale(0);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_date(0, owner));
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_time(0, owner));
+  input.meta_.set_scale(0);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_time(-INT64_C(183845500000), owner));
+  input.meta_.set_scale(6);
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_year(0, owner));
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ASSERT_EQ(OB_SUCCESS, input.set_year(124, owner));
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+
+  ObMySQLDate date;
+  date.year_ = 2024;
+  date.month_ = 7;
+  date.day_ = 8;
+  ASSERT_EQ(OB_SUCCESS, input.set_mysql_date(date, owner));
+  EXPECT_EQ(date, input.get_mysql_date());
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+  ObMySQLDateTime datetime;
+  datetime.year_month_ = ObMySQLDateTime::year_month(2024, 7);
+  datetime.day_ = 8;
+  datetime.hour_ = 9;
+  datetime.minute_ = 10;
+  datetime.second_ = 11;
+  datetime.microseconds_ = 123456;
+  ASSERT_EQ(OB_SUCCESS, input.set_mysql_datetime(datetime, owner));
+  input.meta_.set_scale(6);
+  EXPECT_EQ(datetime, input.get_mysql_datetime());
+  verify_scalar_geometry_error_contract(input, OB_NOT_INIT);
+}
+
+TEST(NativeValueCast, decimal_geometry_preserves_coefficient_width_scale_and_format_errors)
+{
+  ObArenaAllocator owner;
+  struct Sample {
+    int64_t coefficient;
+    ObScale scale;
+    int validation_error;
+  };
+  // Exact old wide formatter boundaries: "1", "-1", "0.01", "-1.23", "1000".
+  const Sample samples[] = {
+      {1, 0, OB_ERR_GIS_INVALID_DATA}, {-1, 0, OB_ERR_GIS_INVALID_DATA},
+      {1, 2, OB_NOT_INIT}, {-123, 2, OB_NOT_INIT}, {1, -3, OB_NOT_INIT}};
+  for (int32_t width : {4, 8, 16, 32, 64}) {
+    SCOPED_TRACE(width);
+    for (const Sample &sample : samples) {
+      SCOPED_TRACE(sample.coefficient);
+      SCOPED_TRACE(sample.scale);
+      int512_t coefficient(sample.coefficient);
+      DatumValue input;
+      ASSERT_EQ(OB_SUCCESS, input.set_decimal_int(width, sample.scale,
+          reinterpret_cast<const ObDecimalInt *>(&coefficient), owner));
+      coefficient = 777;
+      EXPECT_EQ(width, input.get_int_bytes());
+      EXPECT_EQ(sample.scale, input.get_scale());
+      verify_scalar_geometry_error_contract(input, sample.validation_error);
+    }
+  }
+  DatumValue empty_coefficient;
+  ASSERT_EQ(OB_SUCCESS, empty_coefficient.set_decimal_int(0, 2, nullptr, owner));
+  verify_scalar_geometry_error_contract(empty_coefficient, OB_ERR_GIS_INVALID_DATA);
+
+  // The old Decimal helper formats before SRS lookup and before the generic
+  // column-geometry error remapping. A formatter error must stay intact.
+  const int512_t coefficient = int512_t(1) << 500;
+  DatumValue input, output;
+  ASSERT_EQ(OB_SUCCESS, input.set_decimal_int(sizeof(coefficient), -128,
+      reinterpret_cast<const ObDecimalInt *>(&coefficient), owner));
+  ASSERT_EQ(-128, input.get_scale());
+  for (ObCastMode mode : {CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT}) {
+    SCOPED_TRACE(mode);
+    ASSERT_EQ(OB_SUCCESS, output.set_int(71, owner));
+    ObAccuracy accuracy(19, 2);
+    const uint64_t before_accuracy = accuracy.get_accuracy();
+    ObCastCtx context(&owner, nullptr, mode, CS_TYPE_BINARY, &accuracy);
+    EXPECT_EQ(OB_SIZE_OVERFLOW, DatumValueCaster::to_type(
+        ObGeometryType, context, input, owner, output));
+    EXPECT_EQ(ObIntType, output.get_type());
+    EXPECT_EQ(71, output.get_int());
+    EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+  }
+}
