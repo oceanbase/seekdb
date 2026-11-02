@@ -2499,10 +2499,63 @@ int ObPLExecState::check_routine_param_legal(ParamStore *params)
   return ret;
 }
 
+namespace
+{
+// Only the descriptors created by this initialization belong to this guard.
+// Binding a PL argument can replace one with a caller-owned descriptor; its
+// record/collection and the replacement descriptor keep their original owner.
+class PLInitialDescriptorGuard
+{
+public:
+  PLInitialDescriptorGuard(ObIAllocator &allocator, ParamStore &params)
+    : allocator_(allocator), params_(params),
+      owned_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(&allocator)),
+      pending_(nullptr), committed_(false) {}
+  ~PLInitialDescriptorGuard()
+  {
+    release(pending_);
+    for (int64_t i = 0; i < owned_.count(); ++i) { release(owned_.at(i)); }
+  }
+  int remember(const DatumParameter &value)
+  {
+    // Keep ownership even if growing the tracking array fails or throws.
+    pending_ = value.get_datum().get_reference();
+    const int ret = owned_.push_back(pending_);
+    if (OB_SUCCESS == ret) { pending_ = nullptr; }
+    return ret;
+  }
+  void commit() { committed_ = true; }
+private:
+  void release(const void *pointer)
+  {
+    if (pointer != nullptr) {
+      bool retained = false;
+      // A default expression may copy a descriptor between slots. On success
+      // keep any live reference; on failure clear all of them before freeing.
+      for (int64_t i = 0; i < params_.count(); ++i) {
+        Datum &value = params_.at(i).datum_;
+        if (value.is_ext() && value.get_reference() == pointer) {
+          retained = true;
+          // final(ret) may still visit this slot. Keep its declaration.
+          if (!committed_) { value.set_null(); }
+        }
+      }
+      if (!committed_ || !retained) { allocator_.free(const_cast<void *>(pointer)); }
+    }
+  }
+  ObIAllocator &allocator_;
+  ParamStore &params_;
+  ObSEArray<const void *, 8, ObWrapperAllocator> owned_;
+  const void *pending_;
+  bool committed_;
+};
+} // namespace
+
 int ObPLExecState::init_params(const ParamStore *params, bool is_anonymous)
 {
   int ret = OB_SUCCESS;
   int param_cnt = OB_NOT_NULL(params) ? params->count() : 0;
+  PLInitialDescriptorGuard initial_descriptors(*get_allocator(), get_params());
 
   CK (OB_NOT_NULL(ctx_.exec_ctx_));
   if (OB_SUCC(ret) && OB_ISNULL(ctx_.exec_ctx_->get_pl_ctx())) {
@@ -2533,6 +2586,7 @@ int ObPLExecState::init_params(const ParamStore *params, bool is_anonymous)
     } else {
       param.set_type(ObExtendType);
       OZ (param.set_extend(0, func_.get_variables().at(i).get_type(), *get_allocator()));
+      OZ (initial_descriptors.remember(param));
       param.set_param_meta();
       param.set_udt_id(func_.get_variables().at(i).get_user_type_id());
     }
@@ -2759,6 +2813,7 @@ do {                                                                  \
 
 #undef CHECK_NOT_NULL_VIOLATED
 
+  if (OB_SUCC(ret)) { initial_descriptors.commit(); }
   return ret;
 }
 
