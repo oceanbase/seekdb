@@ -46,6 +46,16 @@ create table ai_enhance_batch(id int primary key, content text);
 insert into ai_enhance_batch values(1,'first'),(2,null),(3,'third');
 select id, json_length(ai_embed('enhance_embed', content)) as dimension
   from ai_enhance_batch order by id;
+--disable_query_log
+--disable_result_log
+--error 1210
+select ai_embed('enhance_embed', content, 0) from ai_enhance_batch;
+--error 1210
+select ai_embed('enhance_embed', content, -1) from ai_enhance_batch;
+--error 1210
+select ai_embed(nullif(content, 'first'), content) from ai_enhance_batch order by id;
+--enable_result_log
+--enable_query_log
 drop table ai_enhance_batch;
 
 --error 0,11118

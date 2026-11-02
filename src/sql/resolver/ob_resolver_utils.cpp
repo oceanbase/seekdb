@@ -6047,13 +6047,9 @@ static const char * const server_secure_path_allowlist[] = {
   "log/alert"
 };
 
-int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv, const common::ObString &full_path)
+int ObResolverUtils::check_secure_path_root(const common::ObString &secure_file_priv, const common::ObString &full_path)
 {
   int ret = OB_SUCCESS;
-
-  const char *access_denied_notice_message =
-    "Access denied, please set suitable variable 'secure-file-priv' first, such as: SET GLOBAL secure_file_priv = '/'";
-
   if (secure_file_priv.empty() || 0 == secure_file_priv.case_compare(N_NULL)) {
     ret = OB_ERR_NO_PRIVILEGE;
   } else if (OB_UNLIKELY(secure_file_priv.length() >= DEFAULT_BUF_LENGTH)) {
@@ -6076,7 +6072,7 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       ObCStringHelper helper;
       if (NULL == (real_secure_file = ::realpath(helper.convert(secure_file_priv), buf))) {
 #endif
-        // pass
+        ret = OB_ERR_NO_PRIVILEGE;
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
 #ifdef _WIN32
@@ -6197,59 +6193,17 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     }
   }
 
-  if (OB_ERR_NO_PRIVILEGE == ret) {
-    char buf[DEFAULT_BUF_LENGTH] = { 0 };
-    const int list_size = ARRAYSIZEOF(server_secure_path_allowlist);
-    for (int i = 0; OB_ERR_NO_PRIVILEGE == ret && i < list_size; i++) {
-      const char * const secure_file_path = server_secure_path_allowlist[i];
-      struct stat path_stat;
-      MEMSET(&path_stat, 0, sizeof(path_stat));
-      if (0 != stat(secure_file_path, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
-        // continue
-      } else {
-        MEMSET(buf, 0, sizeof(buf));
-        char *real_secure_file = nullptr;
-#ifdef _WIN32
-        if (NULL == (real_secure_file = ::_fullpath(buf, secure_file_path, sizeof(buf)))) {
-#else
-        if (NULL == (real_secure_file = ::realpath(secure_file_path, buf))) {
-#endif
-          // continue
-        } else {
-          ObString secure_file_path_tmp(real_secure_file);
-          const int64_t pos = secure_file_path_tmp.length();
-#ifdef _WIN32
-          // See the symmetric comment in the secure_file_priv branch above.
-          const bool is_fs_root =
-              (secure_file_path_tmp.length() == 3
-               && secure_file_path_tmp.ptr()[1] == ':'
-               && (secure_file_path_tmp.ptr()[2] == '\\'
-                   || secure_file_path_tmp.ptr()[2] == '/'));
-          const bool prefix_ok = full_path.prefix_match_ci(secure_file_path_tmp);
-          const bool boundary_ok =
-              (full_path.length() > secure_file_path_tmp.length()
-               && (full_path[pos] == '\\' || full_path[pos] == '/'));
-#else
-          const bool is_fs_root = (secure_file_path_tmp == "/");
-          const bool prefix_ok = full_path.prefix_match(secure_file_path_tmp);
-          const bool boundary_ok =
-              (full_path.length() > secure_file_path_tmp.length()
-               && full_path[pos] == '/');
-#endif
-          if (full_path.length() < secure_file_path_tmp.length()) {
-            // continue
-          } else if (!prefix_ok) {
-            // continue
-          } else if (full_path.length() > secure_file_path_tmp.length()
-                    && !is_fs_root && !boundary_ok) {
-            // continue
-          } else {
-            ret = OB_SUCCESS;
-            LOG_INFO("server secure-path allowlist matched", K(ret), K(secure_file_path), K(full_path));
-          }
-        }
-      }
-    }
+  return ret;
+}
+
+int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv, const common::ObString &full_path)
+{
+  const char *access_denied_notice_message =
+    "Access denied, please set suitable variable 'secure-file-priv' first, such as: SET GLOBAL secure_file_priv = '/'";
+
+  int ret = check_secure_path_root(secure_file_priv, full_path);
+  for (int i = 0; OB_ERR_NO_PRIVILEGE == ret && i < ARRAYSIZEOF(server_secure_path_allowlist); ++i) {
+    ret = check_secure_path_root(ObString::make_string(server_secure_path_allowlist[i]), full_path);
   }
   if (OB_ERR_NO_PRIVILEGE == ret) {
     FORWARD_USER_ERROR_MSG(ret, "%s", access_denied_notice_message);

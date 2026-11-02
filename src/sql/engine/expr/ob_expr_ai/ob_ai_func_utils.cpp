@@ -239,6 +239,13 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
     } else {
       ObJsonArray *data_array = static_cast<ObJsonArray *>(data_node);
       ObJsonNode *embedding_node = nullptr;
+      const int64_t count = data_array->element_count();
+      ObArray<ObJsonNode *> ordered;
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        if (OB_FAIL(ordered.push_back(nullptr))) {
+        }
+      }
+      bool indexed = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < data_array->element_count(); i++) {
         if (OB_ISNULL(embedding_node = data_array->get_value(i))) {
           ret = OB_INVALID_DATA;
@@ -247,12 +254,28 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
         } else {
           ObJsonObject *embedding_obj = static_cast<ObJsonObject *>(embedding_node);
           ObJsonNode *embedding = embedding_obj->get_value("embedding");
-          if (OB_ISNULL(embedding)) {
+          ObJsonNode *index = embedding_obj->get_value("index");
+          if (0 == i) {
+            indexed = OB_NOT_NULL(index);
+          }
+          if (indexed != OB_NOT_NULL(index) || (indexed && index->json_type() != ObJsonNodeType::J_INT)) {
+            ret = OB_INVALID_DATA;
+          } else if (OB_ISNULL(embedding)) {
             ret = OB_INVALID_DATA;
           } else if (embedding->json_type() != ObJsonNodeType::J_ARRAY) {
             ret = OB_INVALID_DATA;
-          } else if (OB_FAIL(result_array->append(embedding))) {
+          } else {
+            const int64_t pos = indexed ? static_cast<ObJsonInt *>(index)->get_int() : i;
+            if (pos < 0 || pos >= count || OB_NOT_NULL(ordered.at(pos))) {
+              ret = OB_INVALID_DATA;
+            } else {
+              ordered.at(pos) = embedding;
+            }
           }
+        }
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        if (OB_FAIL(result_array->append(ordered.at(i)))) {
         }
       }
       if (OB_SUCC(ret)) {

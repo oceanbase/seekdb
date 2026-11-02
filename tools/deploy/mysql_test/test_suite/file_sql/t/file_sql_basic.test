@@ -42,6 +42,7 @@ eval select id, name, score, active, day, note
 
 --echo # inferred CSV schema using DuckDB DESCRIBE syntax
 eval describe select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
+eval describe select * from read_csv('$FILE_SQL_DATA_DIR/quoted.csv');
 
 --echo # Parquet scan and aggregate push through projected columns
 eval select count(*) AS row_count, min(c1) AS min_c1,

@@ -23,6 +23,7 @@
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "sql/parser/ob_parser.h"
 #include "lib/string/ob_sql_string.h"
+#include "lib/utility/utility.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -282,20 +283,10 @@ int ObExplainResolver::resolve_file_sql_describe(ObSelectStmt &inner_stmt, ObStm
         const bool is_nullable = file_def->column_nullables_.count() > col_idx
                                  && 0 != file_def->column_nullables_.at(col_idx);
         const ObString &src_name = file_def->column_names_.at(col_idx);
-        ObSqlString escaped_name;
-        for (int64_t k = 0; OB_SUCC(ret) && k < src_name.length(); ++k) {
-          const char c = src_name.ptr()[k];
-          if ('\'' == c) {
-            ret = escaped_name.append("''");
-          } else {
-            ret = escaped_name.append_fmt("%c", c);
-          }
-        }
-        if (OB_SUCC(ret)) {
-          ret = sql.append_fmt("%srow('%.*s','%s','%s',NULL,NULL,NULL)",
-                               r > 0 ? "," : "",
-                               static_cast<int>(escaped_name.length()), escaped_name.ptr(),
-                               type_name, is_nullable ? "YES" : "NO");
+        if (OB_FAIL(sql.append_fmt("%srow(convert(", r > 0 ? "," : ""))) {
+        } else if (OB_FAIL(sql_append_hex_escape_str(src_name, sql))) {
+        } else if (OB_FAIL(sql.append_fmt(" using utf8mb4),'%s','%s',NULL,NULL,NULL)",
+                                          type_name, is_nullable ? "YES" : "NO"))) {
         }
       }
     }

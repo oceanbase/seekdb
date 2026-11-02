@@ -163,7 +163,7 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
     }
 
     // Rows that share the same model and dimension can be merged into a single
-    // request, rows with a null model/content simply produce a null result.
+    // request. Validate active rows using the scalar argument rules.
     ObSEArray<int64_t, 16> rows;
     ObString batch_model_id;
     int64_t batch_dim = -1;
@@ -177,16 +177,22 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
       ObDatum *dim_datum = (expr.arg_cnt_ == 3) ? dim_datums.at(j) : nullptr;
       if (OB_ISNULL(model_datum) || OB_ISNULL(content_datum)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (model_datum->is_null() || content_datum->is_null()) {
+      } else if (model_datum->is_null()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id is null");
+      } else if (content_datum->is_null()) {
         res[j].set_null();
         eval_flags.set(j);
-      } else if (OB_NOT_NULL(dim_datum) && dim_datum->is_null()) {
-        res[j].set_null();
-        eval_flags.set(j);
+      } else if (model_datum->get_string().empty() || content_datum->get_string().empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or input is empty");
+      } else if (OB_NOT_NULL(dim_datum) && !dim_datum->is_null() && dim_datum->get_int() <= 0) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, dimension parameter must be a positive integer");
       } else if (OB_FAIL(rows.push_back(j))) {
       } else {
         const ObString model_id = model_datum->get_string();
-        const int64_t dim = OB_NOT_NULL(dim_datum) ? dim_datum->get_int() : 0;
+        const int64_t dim = OB_NOT_NULL(dim_datum) && !dim_datum->is_null() ? dim_datum->get_int() : 0;
         if (rows.count() == 1) {
           batch_model_id = model_id;
           batch_dim = dim;
@@ -230,10 +236,7 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
         const int64_t j = rows.at(i);
         ObDatum *content_datum = content_datums.at(j);
         const ObString content = content_datum->get_string();
-        if (content.empty()) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or input is empty");
-        } else if (OB_FAIL(contents.push_back(content))) {
+        if (OB_FAIL(contents.push_back(content))) {
         }
       }
       if (OB_FAIL(ret)) {

@@ -303,6 +303,7 @@ int ObAiColumnWorker::recover_stale_tasks()
 int ObAiColumnWorker::claim_tasks(common::ObIAllocator &alloc, common::ObIArray<TaskRow> &tasks)
 {
   int ret = OB_SUCCESS;
+  ObSEArray<TaskRow, AI_COLUMN_TASK_BATCH_SIZE> candidates;
   ObSqlString select_sql;
   ObMySQLTransaction trans;
   bool started = false;
@@ -342,23 +343,26 @@ int ObAiColumnWorker::claim_tasks(common::ObIAllocator &alloc, common::ObIArray<
           ObString predicate_copy = row.rowkey_predicate_;
           if (OB_FAIL(ob_write_string(alloc, request_copy, row.request_id_))
               || OB_FAIL(ob_write_string(alloc, predicate_copy, row.rowkey_predicate_))) {
-          } else if (OB_FAIL(tasks.push_back(row))) {
+          } else if (OB_FAIL(candidates.push_back(row))) {
           }
         }
       }
     }
   }
   if (OB_SUCC(ret) && started) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tasks.count(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
       ObSqlString update_sql;
       int64_t affected_rows = 0;
-      const TaskRow &row = tasks.at(i);
+      const TaskRow &row = candidates.at(i);
       if (OB_FAIL(update_sql.append_fmt(
             "UPDATE %s SET state = %d WHERE table_id = %lu AND column_id = %lu AND request_id = ",
             OB_ALL_AI_COLUMN_TASK_TNAME, AI_TASK_RUNNING,
             row.table_id_, row.column_id_))) {
       } else if (OB_FAIL(append_literal(row.request_id_, update_sql))) {
+      } else if (OB_FAIL(update_sql.append_fmt(" AND state = %ld AND retry_count = %ld AND eligible_ts <= now(6)",
+                                               row.state_, row.retry_count_))) {
       } else if (OB_FAIL(trans.write(update_sql.ptr(), affected_rows))) {
+      } else if (1 == affected_rows && OB_FAIL(tasks.push_back(row))) {
       }
     }
   }

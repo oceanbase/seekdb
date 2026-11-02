@@ -24,6 +24,8 @@ day	DATE	YES	NULL	NULL	NULL
 created	DATETIME	YES	NULL	NULL	NULL
 note	VARCHAR	NO	NULL	NULL	NULL
 id__2	BIGINT	NO	NULL	NULL	NULL
+column_name	column_type	null	key	default	extra
+back\'tick	BIGINT	NO	NULL	NULL	NULL
 # Parquet scan and aggregate push through projected columns
 row_count	min_c1	max_c1	sum_c1
 7	0	6	21
@@ -32,6 +34,7 @@ file
 basic.csv
 basic.jsonl
 invalid.txt
+quoted.csv
 simple.parquet
 # COPY query to CSV and read it back
 id	name	score
