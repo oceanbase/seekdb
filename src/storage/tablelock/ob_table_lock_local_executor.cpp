@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_table_lock_local_executor.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablelock/ob_table_lock_service.h"
@@ -27,17 +27,35 @@ namespace oceanbase
 using namespace transaction;
 using namespace transaction::tablelock;
 
-namespace transaction
+namespace observer
 {
-namespace tablelock
+
+int check_exist(const share::ObLSID &ls_id, ObLSHandle &ls_handle)
 {
+  int ret = OB_SUCCESS;
+  ObLSService *ls_service = nullptr;
+  ObLS *ls = nullptr;
+  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get ObLSService from MTL", K(ret), KP(ls_service));
+  } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::TABLELOCK_MOD))) {
+    LOG_WARN("failed to get ls", K(ret), K(ls_id));
+  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ls should not be NULL", K(ret), KP(ls));
+  } else {
+    // do nothing
+  }
+  return ret;
+}
 
 template <typename T>
 int check_exist(const ObLockTaskBatchRequest<T> &arg,
                 const common::ObTabletID  &tablet_id,
-                ObLS * tenant_ls)
+                ObLSHandle ls_handle)
 {
   int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObTabletStatus::Status tablet_status = ObTabletStatus::MAX;
   ObTabletCreateDeleteMdsUserData data;
@@ -48,24 +66,33 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
       ObTableLockTaskType::UNLOCK_ALONE_TABLET == arg.task_type_ ||
       ObTableLockTaskType::ADD_LOCK_INTO_QUEUE_WITHOUT_CHECK == arg.task_type_) {
     // alone tablet does not check exist
-  } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id,
-                                                    tablet_handle,
-                                                    0,
-                                                    ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ls should not be NULL", K(ret), KP(ls));
+  } else if (OB_FAIL(ls->get_tablet(tablet_id,
+                                    tablet_handle,
+                                    0,
+                                    ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+    LOG_WARN("get tablet with timeout failed", K(ret), "ls_id", ls->get_ls_id(), K(tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_latest(
       data, unused_writer, unused_trans_stat, unused_trans_version))) {
     if (OB_EMPTY_RESULT == ret) {
       // tablet is creating
       ret = OB_TABLET_NOT_EXIST;
     } else {
+      LOG_WARN("failed to get latest tablet status", KR(ret), "ls_id", ls->get_ls_id(), K(tablet_id));
     }
   } else if (FALSE_IT(tablet_status = data.get_tablet_status())) {
-  } else if (ObTabletStatus::NORMAL == tablet_status) {
+  } else if (ObTabletStatus::NORMAL == tablet_status
+             || ObTabletStatus::TRANSFER_OUT == tablet_status
+             || ObTabletStatus::TRANSFER_IN == tablet_status
+             || ObTabletStatus::SPLIT_SRC == tablet_status
+             || ObTabletStatus::SPLIT_DST == tablet_status) {
     // do nothing
   } else if (OB_UNLIKELY(data.tablet_status_.is_deleted_for_gc())) {
     // tablet shell
     ret = OB_TABLET_NOT_EXIST;
-    LOG_INFO("tablet is already deleted", KR(ret), K(tablet_id));
+    LOG_INFO("tablet is already deleted", KR(ret), "ls_id", ls->get_ls_id(), K(tablet_id));
   } else {
     // do nothing
   }
@@ -75,10 +102,10 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
 #define BATCH_PROCESS(arg, func_name, result)                           \
   ({                                                                    \
     int ret = OB_SUCCESS;                                               \
-    ObAccessService *access_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();               \
-    ObLS *tenant_ls = nullptr;                                               \
+    ObAccessService *access_srv = share::g_mp->access_service();               \
+    ObLSHandle ls_handle;                                               \
     common::ObTabletID tablet_id;                                       \
-    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {       \
+    if (OB_FAIL(check_exist(arg.lsid_, ls_handle))) {                   \
       LOG_WARN("check ls failed", K(ret), K(arg));                      \
       if (OB_LS_NOT_EXIST == ret) {                                     \
         result.can_retry_ = true;                                       \
@@ -91,24 +118,25 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
                      K(arg.params_[i].lock_id_));                       \
           } else if (OB_FAIL(check_exist(arg,                           \
                                          tablet_id,                     \
-                                         tenant_ls))) {                 \
+                                         ls_handle))) {                 \
             LOG_WARN("check tablet failed", K(ret), K(tablet_id),       \
-                     K(arg.params_[i].expired_time_), K(tenant_ls));    \
+                     K(arg.params_[i].expired_time_), K(ls_handle));    \
             if (OB_TABLET_NOT_EXIST == ret) {                           \
               result.can_retry_ = true;                                 \
             }                                                           \
           }                                                             \
         }                                                               \
         if (OB_FAIL(ret)) {                                             \
-        } else if (OB_FAIL(access_srv->func_name(*(arg.tx_desc_),       \
+        } else if (OB_FAIL(access_srv->func_name(arg.lsid_,             \
+                                                 *(arg.tx_desc_),       \
                                                  arg.params_[i]))) {    \
           LOG_WARN("failed to exec", K(ret), K(arg.params_[i]));        \
         } else if (arg.params_[i].lock_id_.is_tablet_lock() &&          \
                    OB_FAIL(check_exist(arg,                             \
                                        tablet_id,                       \
-                                       tenant_ls))) {                   \
+                                       ls_handle))) {                   \
           LOG_WARN("check tablet failed", K(ret), K(tablet_id),         \
-                   K(arg.params_[i].expired_time_), K(tenant_ls));      \
+                   K(arg.params_[i].expired_time_), K(ls_handle));      \
         } else {                                                        \
           result.success_pos_ = i;                                      \
         }                                                               \
@@ -116,6 +144,9 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
     }                                                                   \
     ret;                                                                \
   })
+
+// ObTableLockTaskP / ObHighPriorityTableLockTaskP processors removed: single-task lock RPC
+// was dead (no clients). The batch path below is the live one.
 
 int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
                            ObTableLockTaskResult &result)
@@ -130,8 +161,9 @@ int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
 
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    ObTransService *tx_srv = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+    ObTransService *tx_srv = share::g_mp->trans_service();
     switch (arg.task_type_) {
       case ObTableLockTaskType::PRE_CHECK_TABLET: {
         // NOTE: yanyuan.cxf pre check should not check timeout
@@ -150,6 +182,7 @@ int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
       case ObTableLockTaskType::LOCK_OBJECT:
       case ObTableLockTaskType::LOCK_ALONE_TABLET: {
         if (OB_FAIL(BATCH_PROCESS(arg, lock_obj, result))) {
+          LOG_WARN("failed to exec lock obj operation", K(ret), K(arg));
         }
         break;
       }
@@ -169,13 +202,16 @@ int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
   }
 
   result.ret_code_ = ret;
+  LOG_DEBUG("handle_batch_lock_task", KR(ret), K(result), K(arg));
   ret = OB_SUCCESS;
+
   return ret;
 }
 
 static int process_for_replace_lock_table_(const ObLockTaskBatchRequest<ObReplaceLockParam> &arg,
                                            ObTableLockTaskResult &result);
-static int replace_lock_for_tablet_in_table_(transaction::ObTxDesc &tx_desc,
+static int replace_lock_for_tablet_in_table_(const share::ObLSID &ls_id,
+                                              transaction::ObTxDesc &tx_desc,
                                               const ObReplaceLockParam &lock_param);
 
 int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockParam> &arg,
@@ -191,11 +227,13 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
 
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    ObTransService *tx_srv = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+    ObTransService *tx_srv = share::g_mp->trans_service();
     switch (arg.task_type_) {
       case ObTableLockTaskType::REPLACE_LOCK_TABLE: {
         if (OB_FAIL(process_for_replace_lock_table_(arg, result))) {
+          LOG_WARN("failed to exec replace_obj_lock operation for table", K(ret), K(arg));
         }
         break;
       }
@@ -205,6 +243,7 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
       case ObTableLockTaskType::REPLACE_LOCK_OBJECTS:
       case ObTableLockTaskType::REPLACE_LOCK_ALONE_TABLET: {
         if (OB_FAIL(BATCH_PROCESS(arg, replace_obj_lock, result))) {
+          LOG_WARN("failed to exec replace_obj_lock operation", K(ret), K(arg));
         }
         break;
       }
@@ -224,7 +263,9 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
   }
 
   result.ret_code_ = ret;
+  LOG_DEBUG("handle_batch_replace_lock_task", KR(ret), K(result), K(arg));
   ret = OB_SUCCESS;
+
   return ret;
 }
 
@@ -232,10 +273,11 @@ static int process_for_replace_lock_table_(const ObLockTaskBatchRequest<ObReplac
                                            ObTableLockTaskResult &result)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
-  ObLS *tenant_ls = nullptr;
+  ObAccessService *access_srv = share::g_mp->access_service();
+  ObLSHandle ls_handle;
   common::ObTabletID tablet_id;
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+  if (OB_FAIL(check_exist(arg.lsid_, ls_handle))) {
+    LOG_WARN("check ls failed", K(ret), K(arg));
     if (OB_LS_NOT_EXIST == ret) {
       result.can_retry_ = true;
     }
@@ -243,29 +285,35 @@ static int process_for_replace_lock_table_(const ObLockTaskBatchRequest<ObReplac
     for (int i = 0; i < arg.params_.count() && OB_SUCC(ret); i++) {
       if (arg.params_[i].lock_id_.is_tablet_lock()) {
         if (OB_FAIL(arg.params_[i].lock_id_.convert_to(tablet_id))) {
-        } else if (OB_FAIL(check_exist(arg, tablet_id, tenant_ls))) {
+          LOG_WARN("convert lock id to tablet id failed", K(ret), K(arg.params_[i].lock_id_));
+        } else if (OB_FAIL(check_exist(arg, tablet_id, ls_handle))) {
+          LOG_WARN("check tablet failed", K(ret), K(tablet_id), K(arg.params_[i].expired_time_), K(ls_handle));
           if (OB_TABLET_NOT_EXIST == ret) {
             result.can_retry_ = true;
           }
-        } else if (OB_FAIL(replace_lock_for_tablet_in_table_(*(arg.tx_desc_), arg.params_[i]))) {
-        } else if (OB_FAIL(check_exist(arg, tablet_id, tenant_ls))) {
+        } else if (OB_FAIL(replace_lock_for_tablet_in_table_(arg.lsid_, *(arg.tx_desc_), arg.params_[i]))) {
+          LOG_WARN("failed to replace lock for tablet in table", K(ret), K(arg.params_[i]));
+        } else if (OB_FAIL(check_exist(arg, tablet_id, ls_handle))) {
+          LOG_WARN("check tablet failed", K(ret), K(tablet_id), K(arg.params_[i].expired_time_), K(ls_handle));
         } else {
           result.success_pos_ = i;
         }
-      } else if (OB_FAIL(access_srv->replace_obj_lock(*(arg.tx_desc_), arg.params_[i]))) {
+      } else if (OB_FAIL(access_srv->replace_obj_lock(arg.lsid_, *(arg.tx_desc_), arg.params_[i]))) {
+        LOG_WARN("failed to replace lock table", K(ret), K(arg.params_[i]));
       }
     }
   }
   return ret;
 }
 
-static int replace_lock_for_tablet_in_table_(transaction::ObTxDesc &tx_desc,
+static int replace_lock_for_tablet_in_table_(const share::ObLSID &ls_id,
+                                             transaction::ObTxDesc &tx_desc,
                                              const ObReplaceLockParam &lock_param)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+  ObAccessService *access_srv = share::g_mp->access_service();
   if (is_need_lock_tablet_mode(lock_param.lock_mode_) && !is_need_lock_tablet_mode(lock_param.new_lock_mode_)) {
-    ret = access_srv->unlock_obj(tx_desc, lock_param);
+    ret = access_srv->unlock_obj(ls_id, tx_desc, lock_param);
   } else if (!is_need_lock_tablet_mode(lock_param.lock_mode_) && is_need_lock_tablet_mode(lock_param.new_lock_mode_)) {
     ObLockParam new_lock_param;
     // we should set new_owner_id and new_lock_mode to owner_id and lock_mode in lock progress
@@ -277,11 +325,12 @@ static int replace_lock_for_tablet_in_table_(transaction::ObTxDesc &tx_desc,
                                    lock_param.is_deadlock_avoid_enabled_,
                                    lock_param.is_try_lock_,
                                    lock_param.expired_time_))) {
+      LOG_WARN("set lock_param for replace tablet lock failed", K(ret), K(lock_param));
     } else {
-      ret = access_srv->lock_obj(tx_desc, new_lock_param);
+      ret = access_srv->lock_obj(ls_id, tx_desc, new_lock_param);
     }
   } else {
-    ret = access_srv->replace_obj_lock(tx_desc, lock_param);
+    ret = access_srv->replace_obj_lock(ls_id, tx_desc, lock_param);
   }
   return ret;
 }
@@ -299,8 +348,9 @@ int handle_high_priority_batch_lock_task(const ObLockTaskBatchRequest<ObLockPara
 
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    ObTransService *tx_srv = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+    ObTransService *tx_srv = share::g_mp->trans_service();
     switch (arg.task_type_) {
       case ObTableLockTaskType::UNLOCK_TABLE:
       case ObTableLockTaskType::UNLOCK_PARTITION:
@@ -309,6 +359,7 @@ int handle_high_priority_batch_lock_task(const ObLockTaskBatchRequest<ObLockPara
       case ObTableLockTaskType::UNLOCK_OBJECT:
       case ObTableLockTaskType::UNLOCK_ALONE_TABLET: {
         if (OB_FAIL(BATCH_PROCESS(arg, unlock_obj, result))) {
+          LOG_WARN("failed to exec unlock obj operation", K(ret), K(arg));
         }
         break;
       }
@@ -328,10 +379,15 @@ int handle_high_priority_batch_lock_task(const ObLockTaskBatchRequest<ObLockPara
   }
 
   result.ret_code_ = ret;
+  LOG_DEBUG("handle_high_priority_batch_lock_task", KR(ret), K(result), K(arg));
   ret = OB_SUCCESS;
+
   return ret;
 }
 
-} // tablelock
-} // transaction
+// ObOutTransLockTableP / ObOutTransUnlockTableP processors removed: the out-trans lock RPC
+// (ObTableLockRpcProxy::lock_table/unlock_table) was dead (no callers).
+
+
+} // observer
 } // oceanbase

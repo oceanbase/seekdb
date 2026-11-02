@@ -73,27 +73,31 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, func_name);
   ObDatum *datum = NULL;
 
   // get wkt
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
+    LOG_WARN("eval wkt arg failed", K(ret));
   } else if(datum->is_null()){
     res.set_null();
   } else {
     ObGeoSrid srid = 0;
     const ObSrsItem *srs_item = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     ObGeometry *geo = NULL;
     bool is_geog = false;
     ObString wkt = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkt))) {
+      LOG_WARN("fail to get real data.", K(ret), K(wkt));
+    } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkt.length()))) {
     } else if (OB_NOT_NULL(wkt.find(';'))) {
       ObString srid_str = wkt.split_on(';');
       if (OB_FAIL(ObGeoExprUtils::parse_srid(srid_str, srid))) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
+        LOG_WARN("parse_srid failed", K(ret), K(srid_str));
       } else if (srid == 0) {
         srid = OB_GEO_DEFAULT_GEOGRAPHY_SRID;
       }
@@ -102,10 +106,13 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
-                   ctx, srs_guard, srid, srs_item))) {
+    } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+      LOG_WARN("failed to get srs guard", K(ret));
+    } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+      LOG_WARN("failed to get srs item", K(ret));
     } else if (OB_ISNULL(srs_item)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null srs item", K(ret));
     } else {
       is_geog = srs_item->is_geographical_srs();
     }
@@ -114,17 +121,22 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     } else if (!is_geog) {
       ret = OB_ERR_SRS_NOT_GEOGRAPHIC;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
+      LOG_WARN("Only lon/lat coordinate systems are supported in geography.", K(ret), K(srid));
     } else if (OB_FAIL(ObWktParser::parse_wkt(tmp_allocator, wkt, geo, true, is_geog))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
+      LOG_WARN("failed to parse wkt", K(ret));
     } else if (OB_ISNULL(geo)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null geo after parse_wkt", K(ret), K(wkt));
     } else if (OB_FAIL(ObGeoExprUtils::correct_coordinate_range(srs_item, geo, func_name))) {
+      LOG_WARN("check geo coordinate range failed", K(ret));
     } 
     
     if (OB_SUCC(ret)) {
       ObString res_wkb;
       if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs_item, res_wkb))) {
+        LOG_WARN("failed to write geometry to wkb", K(ret));
       } else {
         res.set_string(res_wkb);
       }

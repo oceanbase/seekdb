@@ -14,5 +14,92 @@
  * limitations under the License.
  */
 
-#pragma once
-#include "data_plane/fts/dict/ob_gen_dic_loader.h"
+#ifndef OCEANBASE_STORAGE_DICT_OB_GEN_DIC_LOADER_H_
+#define OCEANBASE_STORAGE_DICT_OB_GEN_DIC_LOADER_H_
+
+#include "lib/lock/ob_tc_rwlock.h"
+#include "storage/fts/dict/ob_dic_loader.h"
+#include "share/ob_plugin_helper.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObGenDicLoader
+{
+public:
+  class ObGenDicLoaderKey final
+  {
+  public:
+    ObGenDicLoaderKey() : charset_(CHARSET_INVALID) 
+    {
+      MEMSET(parser_name_, '\0', share::OB_PLUGIN_NAME_LENGTH);
+    }
+    ~ObGenDicLoaderKey() = default;
+    int init(const ObString &parser_name, const ObCharsetType charset);
+    int assign(const ObGenDicLoaderKey &other);
+    bool operator==(const ObGenDicLoaderKey &other) const
+    {
+      return true 
+             && 0 == STRCMP(parser_name_, other.parser_name_)
+             && charset_ == other.charset_;
+    }
+    bool is_valid() const
+    {
+      return true && 0 != STRLEN(parser_name_) && CHARSET_INVALID != charset_;
+    }
+    int hash(uint64_t &hash_val) const;
+    
+    OB_INLINE const char *get_parser_name() const { return parser_name_; }
+    OB_INLINE ObCharsetType get_charset() const { return charset_; }
+    TO_STRING_KV(KCSTRING_(parser_name), K_(charset));
+
+  private:
+    uint64_t hash() const;
+    int set_parser_name(const char *parser_name);
+    int set_parser_name(const ObString &parser_name);
+
+  private:
+    char parser_name_[share::OB_PLUGIN_NAME_LENGTH];
+    ObCharsetType charset_;
+  };
+
+  class ObNeedDeleteDicLoadersFn final
+  {
+  public:
+    ObNeedDeleteDicLoadersFn() = default;
+    ~ObNeedDeleteDicLoadersFn() = default;
+    int operator() (hash::HashMapPair<ObGenDicLoaderKey, ObTenantDicLoader*> &entry);
+    
+  public:
+    ObArray<ObGenDicLoaderKey> need_delete_loaders_;
+  };
+
+public:
+  static ObGenDicLoader& get_instance()
+  {
+    static ObGenDicLoader ins;
+    return ins;
+  }
+  int init();
+  int get_dic_loader(const ObString &parser_name, 
+                     const ObCharsetType charset, 
+                     ObTenantDicLoaderHandle &loader_handle);
+  int destroy_dic_loader_for_tenant();
+
+private:
+  ObGenDicLoader() 
+      : is_inited_(false), lock_(), dic_loader_map_() { }
+  ~ObGenDicLoader() { dic_loader_map_.destroy(); }
+  int gen_dic_loader(const ObGenDicLoaderKey &dic_loader_key, 
+                     ObTenantDicLoader *&dic_loader);
+
+private:
+  bool is_inited_;
+  common::TCRWLock lock_;
+  hash::ObHashMap<ObGenDicLoaderKey, ObTenantDicLoader*> dic_loader_map_;
+  DISALLOW_COPY_AND_ASSIGN(ObGenDicLoader);
+};
+} //end storage
+} // end oceanbase
+#endif //OCEANBASE_STORAGE_DICT_OB_GEN_DIC_LOADER_H_

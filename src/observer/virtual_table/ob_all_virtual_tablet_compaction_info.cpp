@@ -46,10 +46,14 @@ void ObAllVirtualTabletCompactionInfo::reset()
 
 int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
 {
+  // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
+  ObITable *table = nullptr;
   ObArenaAllocator allocator;
   const compaction::ObMediumCompactionInfoList *medium_info_list = nullptr;
+  ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
+  const ObTabletTableStore *table_store = nullptr;
   if (OB_UNLIKELY(!start_to_read_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "not inited", K(start_to_read_), K(ret));
@@ -66,12 +70,20 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
       } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "tablet is null", K(ret), K(tablet_handle_));
+      } else if (!tablet->get_tablet_meta().ha_status_.is_data_status_complete()) {
+        ret = OB_EAGAIN;
+        LOG_DEBUG("query all_virtual_tablet_compaction_info, tablet_data not complete", K(ret), K(tablet->get_tablet_id()), K(tablet->get_ls_id()));
       }
     // quit while, excepted errcode : OB_ITER_END, OB_SUCCESS
     } while(OB_EAGAIN == ret);
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tablet->read_medium_info_list(allocator, medium_info_list))) {
+    SERVER_LOG(WARN, "tablet read medium info list failed", K(ret), K(tablet_handle_), KPC(tablet_handle_.get_obj()));
+  } else if (OB_FAIL(tablet->fetch_table_store(table_store_wrapper))) {
+    SERVER_LOG(WARN,"fail to fetch table store", K(ret));
+  } else if (OB_FAIL(table_store_wrapper.get_member(table_store))) {
+    SERVER_LOG(WARN,"fail to get table store", K(ret), K(table_store_wrapper));
   } else {
     const int64_t col_count = output_column_ids_.count();
     int64_t max_sync_medium_scn = 0;
@@ -99,15 +111,25 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
           break;
         case SERIALIZE_SCN_LIST:
           if (medium_info_list->size() > 0
-            || compaction::ObMediumCompactionInfo::MAJOR_COMPACTION == medium_info_list->get_last_compaction_type()) {
+            || compaction::ObMediumCompactionInfo::MAJOR_COMPACTION == medium_info_list->get_last_compaction_type()
+            || !table_store->get_major_ckm_info().is_empty()) {
             int64_t pos = 0;
             MEMSET(medium_info_buf_, '\0', OB_MAX_VARCHAR_LENGTH);
             medium_info_list->gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
+            table_store->get_major_ckm_info().gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
             cur_row_.cells_[i].set_varchar(medium_info_buf_);
+            SERVER_LOG(DEBUG, "get medium info mgr", KPC(medium_info_list), K(medium_info_buf_));
           } else {
             cur_row_.cells_[i].set_varchar("");
           }
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        case VALIDATED_SCN:
+          if (table_store->get_major_ckm_info().is_empty()) {
+            cur_row_.cells_[i].set_int(0);
+          } else {
+            cur_row_.cells_[i].set_int(table_store->get_major_ckm_info().get_compaction_scn());
+          }
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

@@ -24,7 +24,7 @@
 #include "common/ob_string_buf.h"
 #include "common/object/ob_object.h"
 #include "common/row/ob_row.h"
-#include "query/engine/expr/ob_sql_expression.h"
+#include "share/ob_i_sql_expression.h"
 #include "sql/parser/ob_item_type.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -79,6 +79,7 @@ public:
       ret = OB_SIZE_OVERFLOW;
       SQL_ENG_LOG(WARN, "sql fixed array size overflow", K(ret), K(cap_), K(count_));
     } else if (OB_FAIL(copy_assign(data_[count_], obj))) {
+      SQL_ENG_LOG(WARN, "failed to copy assign data", K(ret));
     } else {
       count_++;
     }
@@ -107,6 +108,7 @@ public:
       SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(cap));
     } else if (NULL == data_) {
       if (OB_FAIL(init(cap, allocator))) {
+        SQL_ENG_LOG(WARN, "failed to init array", K(ret));
       }
     } else {
       if (cap > cap_) {
@@ -249,6 +251,7 @@ OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &p
     case T_QUESTIONMARK: {
       // column convert's value comes from param store or itself
       if (OB_FAIL(get_indirect_const(plan_ctx, value))) {
+        SQL_ENG_LOG(WARN, "get indirect const from value item failed", K(ret), K(*this));
       }
       break;
     }
@@ -273,6 +276,7 @@ OB_INLINE int ObPostExprItem::get_indirect_const(const ObPhysicalPlanCtx &plan_c
       int64_t param_idx = -1;
       const auto &param_store = plan_ctx.get_param_store();
       if (OB_FAIL(get_obj().get_unknown(param_idx))) {
+        SQL_ENG_LOG(WARN, "fail to get unknown", K(ret), K(get_obj()));
       } else if (OB_UNLIKELY(param_idx < 0 || param_idx >= param_store.count())) {
         ret = common::OB_ARRAY_OUT_OF_RANGE;
         SQL_ENG_LOG(WARN, "wrong index of question mark position", K(param_idx), "param_count", param_store.count());
@@ -290,6 +294,12 @@ OB_INLINE int ObPostExprItem::get_indirect_const(const ObPhysicalPlanCtx &plan_c
   return ret;
 }
 
+enum ObWriteExprItemFlag
+{
+  NEW_OP_WHEN_COPY,
+  NO_NEW_OP_WHEN_COPY
+};
+
 enum ObSqlParamNumFlag
 {
   TWO_OR_THREE = -3,
@@ -297,12 +307,82 @@ enum ObSqlParamNumFlag
   MORE_THAN_ZERO = -1,
 };
 
-struct ObExpressionCalcStack
+struct ObPostfixExpressionCalcStack
 {
   // should be larger than MAX_SQL_EXPRESSION_SYMBOL_COUNT(=256)
   static const int64_t STACK_SIZE = 1024 * 8;
   common::ObObj stack_[STACK_SIZE];
 };
+
+class ObPostfixExpression
+{
+public:
+  ObPostfixExpression(common::ObIAllocator &alloc, int64_t item_count);
+  ~ObPostfixExpression();
+  int assign(const ObPostfixExpression &other);
+
+  inline void set_output_column_count(int64_t output_column_count) { output_column_count_ = output_column_count; }
+  inline int64_t get_output_column_count() const { return output_column_count_; }
+
+  int set_item_count(int64_t count) { return post_exprs_.init(count, str_buf_); }
+  // add expression object into array directly,
+  // user assure objects of postfix expr sequence.
+  // int add_expr_obj(const common::ObObj &obj);
+  int add_expr_item(const ObPostExprItem &item);
+  inline const ObSqlFixedArray<ObPostExprItem> &get_expr_items() const { return post_exprs_; }
+  void reset();
+  /* Substitute the values in row into expr for calculation result */
+  int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result_val) const;
+  int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1, const common::ObNewRow &row2,
+           common::ObObj &result_val) const;
+  int uk_fast_project(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result_val) const;
+  int calc_result_row(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
+                      common::ObNewRow &result_row) const;
+  int calc_result_row(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1,
+                      const common::ObNewRow &row2, common::ObNewRow &result_row) const;
+  int calc_ref_column(const common::ObNewRow &row,
+                      common::ObNewRow &result_row, const ObPostExprItem &item,
+                      common::ObObj *stack, int64_t &stack_top) const;
+  int calc_ref_column(const common::ObNewRow &row1, const common::ObNewRow &row2,
+                      common::ObNewRow &result_row, const ObPostExprItem &item,
+                      common::ObObj *stack, int64_t &stack_top) const;
+  int calc_question_mark(common::ObExprCtx &expr_ctx,
+                         common::ObNewRow &result_row, const ObPostExprItem &item,
+                         common::ObObj *stack, int64_t &stack_top) const;
+  int calc_other_op(common::ObExprCtx &expr_ctx, const ObPostExprItem &item,
+                    common::ObObj *stack, int64_t &stack_top) const;
+  int calc_agg_param_list(common::ObNewRow &result_row, const ObPostExprItem &item,
+                          common::ObObj *stack, int64_t stack_top) const;
+  template <ObItemType item_type>
+  int calc_row(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
+               common::ObNewRow &result_row, const ObPostExprItem &item,
+               common::ObObj *stack, int64_t stack_top) const;
+  bool is_empty() const;
+  bool is_equijoin_cond(int64_t &c1, int64_t &c2,
+                        common::ObObjType &cmp_type, common::ObCollationType &cmp_cs_type,
+                        bool &is_null_safe) const;
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+  NEED_SERIALIZE_AND_DESERIALIZE;
+private:
+  // Helper function, check if the expression represents const or column index
+  int check_expr_type(const int64_t type_val, bool &is_type, const int64_t stack_len) const;
+private:
+  static const int64_t DEF_STRING_BUF_SIZE = 64 * 1024L;
+  static const int64_t BASIC_SYMBOL_COUNT = 64;
+  typedef ObSqlFixedArray<ObPostExprItem> PostfixExprArray;
+  void data_clear();
+private:
+  PostfixExprArray post_exprs_;
+  common::ObIAllocator &str_buf_;
+  int64_t output_column_count_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObPostfixExpression);
+}; // class ObPostfixExpression
+
+inline bool ObPostfixExpression::is_empty() const
+{
+  return (0 == post_exprs_.count());
+}
 
 } // namespace sql
 }// namespace oceanbase

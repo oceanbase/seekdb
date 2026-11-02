@@ -36,6 +36,11 @@ class ObOptEstCost
 {
 public:
   const static int64_t MAX_STORAGE_RANGE_ESTIMATION_NUM;
+  enum MODEL_TYPE {
+      NORMAL_MODEL = 0,
+      VECTOR_MODEL
+  };
+
   static int cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
                            double &cost,
                            const ObOptimizerContext &opt_ctx);
@@ -57,6 +62,7 @@ public:
                                     const double input_width,
                                     const double input_cost,
                                     const int64_t out_parallel,
+                                    const int64_t in_server_cnt,
                                     const int64_t in_parallel,
                                     const ObIArray<OrderItem> &expected_ordering,
                                     const bool need_sort,
@@ -111,6 +117,10 @@ public:
                                    const ObOptimizerContext &opt_ctx);
 
   static double cost_get_rows(double rows, 
+                              const ObOptimizerContext &opt_ctx);
+
+  static double cost_sequence(double rows, 
+                              double uniq_sequence_cnt, 
                               const ObOptimizerContext &opt_ctx);
 
   static double cost_material(const double rows, 

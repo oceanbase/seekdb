@@ -25,7 +25,8 @@
 #include "lib/ob_define.h"                  // OB_MAX_FILE_NAME_LENGTH
 #include "lib/lock/ob_tc_rwlock.h"          // ObTCRWLock
 #include "lib/lock/ob_spin_lock.h"          // ObSpinLock
-#include "share/log/palf/log_define.h"      // block_id_t
+#include "lib/function/ob_function.h"       // ObFunction
+#include "palf/log_define.h"                // block_id_t
 #include "palf/log_block_pool_interface.h"  // ObIServerLogBlockPool
 #include "palf/log_io_utils.h"              // ObBaseDirFunctor
 
@@ -68,9 +69,6 @@ private:
   typedef RWLock::WLockGuard WLockGuard;
 
 public:
-  typedef int (*GetLogDiskInfoInConfig)(int64_t &log_disk_size,
-                                        int64_t &log_disk_percentage,
-                                        int64_t &total_log_disk_size);
   ObServerLogBlockMgr();
   ~ObServerLogBlockMgr();
   // @brief initialize ObServerLogBlockMgr, reload myself if has reserved.
@@ -78,18 +76,7 @@ public:
   // @retval
   //   OB_SUCCESS
   //   OB_IO_ERROR
-  int init(const char *log_disk_base_path,
-           GetLogDiskInfoInConfig get_log_disk_info_in_config);
-  void bind_log_service(ObLogService &log_service)
-  {
-    log_service_ = &log_service;
-  }
-  void unbind_log_service(ObLogService &log_service)
-  {
-    if (log_service_ == &log_service) {
-      log_service_ = nullptr;
-    }
-  }
+  int init(const char *log_disk_base_path);
   int start(const int64_t log_disk_size);
   void destroy();
   int get_disk_usage(int64_t &in_use_size_byte);
@@ -110,16 +97,17 @@ public:
   int remove_block_at(const palf::FileDesc &src_dir_fd,
                       const char *src_block_path) override final;
 
-  // @brief before 'update_server_log_disk_size' in ObServerRuntimeController, need update it.
-  // @param[in] current and requested local runtime log-disk sizes.
-  // @param[out] the log-disk size accepted by the log service.
+  // @brief before 'update_tenant_log_disk_size' in ObMultiTenant, need update it.
+  // @param[in] the log disk size used by tenant.
+  // @param[in] the log disk size need by tenant.
+  // @param[in] the log disk size allowed by tenant
   // @param[in] ObLogService*
   //   OB_SUCCESS
   //   OB_MACHINE_RESOURCE_NOT_ENOUGH
-  int update_log_disk_size(const int64_t old_log_disk_size,
-                           const int64_t new_log_disk_size,
-                           int64_t &allowed_log_disk_size,
-                           ObLogService *log_service);
+  int update_tenant(const int64_t old_log_disk_size,
+                    const int64_t new_log_disk_size,
+                    int64_t &allowed_log_disk_size,
+                    ObLogService *log_service);
   TO_STRING_KV(K_(is_inited));
 
 private:
@@ -127,23 +115,23 @@ private:
   int scan_log_disk_dir_(const char *log_disk_path, int64_t &has_allocated_block_cnt);
 
   bool check_space_is_enough_(const int64_t log_disk_size) const;
-  int get_runtime_log_disk_size_(int64_t &log_disk_size) const;
+  int get_all_tenants_log_disk_size_(int64_t &log_disk_size) const;
 private:
   int64_t get_in_use_size_();
   int allocate_block_at_(const palf::FileDesc &dir_fd, const char *block_path, const int64_t block_size);
   int free_block_at_(const palf::FileDesc &dir_fd, const char *block_path);
   int get_has_allocated_blocks_cnt_in_(const char *log_disk_path,
                                        int64_t &has_allocated_block_cnt);
-  int remove_tmp_file_or_directory_for_runtime_(const char *log_disk_path);
+  int remove_tmp_file_or_directory_for_tenant_(const char *log_disk_path);
 private:
   int unlinkat_until_success_(const palf::FileDesc &src_dir_fd, const char *block_path,
                               const int flag);
   int fsync_until_success_(const palf::FileDesc &src_fd);
-  int scan_runtime_dir_(const char *runtime_dir, int64_t &has_allocated_block_cnt);
-  int scan_ls_dir_(const char *ls_dir, int64_t &has_allocated_block_cnt);
+  int scan_tenant_dir_(const char *tenant_dir, int64_t &has_allocated_block_cnt);
+  int scan_ls_dir_(const char *tenant_dir, int64_t &has_allocated_block_cnt);
 private:
-  GetLogDiskInfoInConfig get_log_disk_info_in_config_func_;
-  ObLogService *log_service_;
+  typedef common::ObFunction<int(int64_t&)> GetTenantsLogDiskSize;
+  GetTenantsLogDiskSize get_tenants_log_disk_size_func_;
   // NB: in progress of expanding, the free size byte calcuated by BLOCK_SIZE * (max_block_id_ - min_block_id_) may be greater than
   //     curr_total_size_, if we calcuated log disk in use by curr_total_size_ - 'free size byte', the resule may be negative.
   int64_t block_cnt_in_use_;

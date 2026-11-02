@@ -47,6 +47,12 @@ public:
       init_channel_count_(0)
   {}
   virtual ~ObPxReceiveOpInput() {}
+  virtual int init(ObTaskInfo &task_info)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(task_info);
+    return ret;
+  }
   void set_child_dfo_id(int64_t child_dfo_id) { child_dfo_id_ = child_dfo_id; }
   int64_t get_child_dfo_id() const { return child_dfo_id_; }
   // Set up by sqc and sent to task, this pointer will be serialized to task
@@ -174,6 +180,7 @@ protected:
   dtl::ObDtlChTotalInfo ch_info_;
   // stored rows used for get batch rows from DTL reader.
   const ObChunkDatumStore::StoredRow **stored_rows_;
+  const ObCompactRow **vector_rows_;
 };
 
 class ObPxFifoReceiveOpInput : public ObPxReceiveOpInput
@@ -214,6 +221,7 @@ protected:
 private:
   // try get %row_cnt rows from channels
   int get_rows_from_channels(const int64_t row_cnt, int64_t timeout_us);
+  int get_rows_from_channels_vec(const int64_t row_cnt, int64_t timeout_us);
 private:
   ObPxInterruptP interrupt_proc_;
 };

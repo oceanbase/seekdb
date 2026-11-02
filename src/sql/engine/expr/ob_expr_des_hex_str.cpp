@@ -36,6 +36,7 @@ int ObExprDesHexStr::calc_result_type1(ObExprResType &type, ObExprResType &type1
 
   if (!type1.is_varchar()) {
     ret = common::OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid type1 argument.", K(ret), K(type1));
   } else {
     type.set_varchar();
     type.set_collation_level(type1.get_collation_level());
@@ -58,6 +59,7 @@ int ObExprDesHexStr::deserialize_hex_cstr(const char *buf,
   char *res_buf = NULL;
   if (OB_ISNULL(buf) || buf_len < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments.", K(ret), K(buf_len));
   } else if (NULL == (res_buf = static_cast<char*>(string_buf.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to allocate memory for res_buf.", K(ret), K(buf_len));
@@ -66,7 +68,11 @@ int ObExprDesHexStr::deserialize_hex_cstr(const char *buf,
                                                       res_buf,
                                                       static_cast<int32_t>(buf_len)))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("transfer str to hex failed.",
+        K(ret), K(buf), K(buf_len), K(ret_len));
   } else if (OB_FAIL(obj.deserialize(res_buf, ret_len/2, pos))) {
+    LOG_WARN("deserialize obj failed.",
+        K(ret), K(buf), K(buf_len), K(pos));
   }
 
   return ret;
@@ -89,16 +95,20 @@ int ObExprDesHexStr::eval_des_hex_str(
   ObIAllocator &alloc = alloc_guard.get_allocator();
   ObObj obj;
   if (OB_FAIL(expr.eval_param_value(ctx, in))) {
+    LOG_WARN("evaluate parameter failed", K(ret));
   } else if (in->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(deserialize_hex_cstr(in->ptr_, in->len_, alloc, obj))) {
+    LOG_WARN("unhex or deserialize failed", K(ret));
   } else {
     const int64_t len = std::max(128, in->len_ * 2);
     char *buf = expr.get_str_res_mem(ctx, len);
     int64_t pos = 0;
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(obj.print_plain_str_literal(buf, len, pos))) {
+      LOG_WARN("print sql literal failed", K(ret), K(obj));
     } else {
       expr_datum.set_string(buf, pos);
     }

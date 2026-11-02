@@ -17,7 +17,6 @@
 #ifndef _OB_SQL_PX_DTL_MSG_H_
 #define _OB_SQL_PX_DTL_MSG_H_
 
-#include "data_plane/transaction/ob_tx_exec_result.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_msg_type.h"
@@ -27,9 +26,10 @@
 #include "sql/ob_sql_trans_util.h"
 #include "sql/engine/px/ob_px_row_store.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
+#include "rpc/frame/ob_result_code.h"
 #include "common/row/ob_row.h"
-#include "lib/oblog/ob_warning_buffer.h"
-#include "query/engine/px/ob_px_tablet_range.h"
+#include "lib/compress/ob_compress_util.h"
+#include "storage/tx/ob_trans_define.h"
 #include "sql/engine/ob_exec_feedback_info.h"
 #include "sql/ob_sql_define.h"
 
@@ -38,24 +38,7 @@ namespace oceanbase
 namespace sql
 {
 
-class ObPhysicalPlanCtx;
-
-struct ObPxUserErrorMsg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPxUserErrorMsg() : rcode_(OB_SUCCESS), warnings_() { msg_[0] = '\0'; }
-  void reset()
-  {
-    rcode_ = OB_SUCCESS;
-    msg_[0] = '\0';
-    warnings_.reset();
-  }
-  TO_STRING_KV(K_(rcode), K_(msg), K_(warnings));
-  int32_t rcode_;
-  char msg_[common::OB_MAX_ERROR_MSG_LEN];
-  common::ObSEArray<common::ObWarningBuffer::WarningItem, 1> warnings_;
-};
+typedef rpc::frame::ObResultCode ObPxUserErrorMsg;
 
 struct ObPxTabletInfo
 {
@@ -99,6 +82,32 @@ public:
   int64_t row_deleted_count_;
 };
 
+// keep for compatiblity. never should be used anymore
+class ObPxTaskMonitorInfo
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObPxTaskMonitorInfo() : sched_exec_time_start_(0), sched_exec_time_end_(0),
+                          exec_time_start_(0), exec_time_end_(0) {}
+  ObPxTaskMonitorInfo &operator = (const ObPxTaskMonitorInfo &other)
+  {
+    sched_exec_time_start_ = other.sched_exec_time_start_;
+    sched_exec_time_end_ = other.sched_exec_time_end_;
+    exec_time_start_ = other.exec_time_start_;
+    exec_time_end_ = other.exec_time_end_;
+    metrics_.assign(other.metrics_);
+    return *this;
+  }
+  TO_STRING_KV(K_(sched_exec_time_start), K_(sched_exec_time_end), K_(exec_time_start), K_(exec_time_end), K(metrics_.count()));
+private:
+  int64_t sched_exec_time_start_;          // sqc observed task execution start timestamp
+  int64_t sched_exec_time_end_;            // sqc observed task execution end timestamp
+  int64_t exec_time_start_;                // task execution start time
+  int64_t exec_time_end_;                  // task execution end time
+  common::ObSEArray<sql::ObOpMetric, 1> metrics_;     // operator metric
+};
+
+typedef common::ObSEArray<ObPxTaskMonitorInfo, 1> ObPxTaskMonitorInfoArray;
 // Each Task has a set of output channels, connecting to all Tasks of the consumer DFO
 class ObPxTaskChSet : public dtl::ObDtlChSet
 {
@@ -339,6 +348,7 @@ public:
         sqc_id_(common::OB_INVALID_ID),
         rc_(common::OB_SUCCESS),
         das_retry_rc_(common::OB_SUCCESS),
+        task_monitor_info_array_(),
         sqc_affected_rows_(0),
         dml_row_info_(),
         temp_table_id_(common::OB_INVALID_ID),
@@ -357,6 +367,7 @@ public:
     rc_ = common::OB_SUCCESS;
     das_retry_rc_ = common::OB_SUCCESS;
     trans_result_.reset();
+    task_monitor_info_array_.reset();
     dml_row_info_.reset();
     interm_result_ids_.reset();
     fb_info_.reset();
@@ -371,6 +382,7 @@ public:
   int rc_; // error code
   int das_retry_rc_; //record the error code that cause DAS to retry
   transaction::ObTxExecResult trans_result_;
+  ObPxTaskMonitorInfoArray task_monitor_info_array_; // deprecated, keep for compatiblity
   int64_t sqc_affected_rows_; // pdml case, the number of rows affected by an sqc
   ObPxDmlRowInfo dml_row_info_; // SQC exists DML operator, need to statistics row information
   uint64_t temp_table_id_;
@@ -408,6 +420,69 @@ public:
   int64_t task_id_;
   int rc_;
 };
+
+class ObPxTabletRange final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObPxTabletRange();
+  ~ObPxTabletRange() = default;
+  void reset();
+  bool is_valid() const;
+  template <bool use_allocator>
+  int deep_copy_from(const ObPxTabletRange &other, common::ObIAllocator &allocator,
+                     char *buf, int64_t size, int64_t &pos);
+  int assign(const ObPxTabletRange &other);
+  int64_t get_range_col_cnt() const { return range_cut_.empty() ? 0 :
+      range_cut_.at(0).count(); }
+  TO_STRING_KV(K_(tablet_id), K_(range_cut), K_(range_weights));
+public:
+  static const int64_t DEFAULT_RANGE_COUNT = 8;
+  typedef common::ObSEArray<common::ObRowkey, DEFAULT_RANGE_COUNT> EndKeys;
+  typedef ObTMSegmentArray<ObDatum> DatumKey;
+  typedef ObSEArray<int64_t, 2> RangeWeight;
+  typedef ObTMArray<DatumKey> RangeCut; // not include MAX at last nor MIN at first
+  typedef ObSEArray<RangeWeight, DEFAULT_RANGE_COUNT> RangeWeights;
+
+  int64_t tablet_id_;
+  int64_t range_weights_;
+  RangeCut range_cut_;
+};
+
+template <bool use_allocator>
+int ObPxTabletRange::deep_copy_from(const ObPxTabletRange &other, common::ObIAllocator &allocator,
+                                    char *buf, int64_t size, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  reset();
+  tablet_id_ = other.tablet_id_;
+  range_weights_ = other.range_weights_;
+  if (OB_FAIL(range_cut_.reserve(other.range_cut_.count()))) {
+    SQL_LOG(WARN, "reserve end keys failed", K(ret), K(other.range_cut_.count()));
+  }
+  DatumKey copied_key;
+  RangeWeight range_weight;
+  ObDatum tmp_datum;
+  for (int64_t i = 0; OB_SUCC(ret) && i < other.range_cut_.count(); ++i) {
+    const DatumKey &cur_key = other.range_cut_.at(i);
+    copied_key.reuse();
+    range_weight.reuse();
+    for (int64_t j = 0; OB_SUCC(ret) && j < cur_key.count(); ++j) {
+      if (use_allocator && OB_FAIL(tmp_datum.deep_copy(cur_key.at(j), allocator))) {
+        SQL_LOG(WARN, "deep copy datum failed", K(ret), K(i), K(j), K(cur_key.at(j)));
+      } else if (!use_allocator && OB_FAIL(tmp_datum.deep_copy(cur_key.at(j), buf, size, pos))) {
+        SQL_LOG(WARN, "deep copy datum failed", K(ret), K(i), K(j), K(cur_key.at(j)), K(size), K(pos));
+      } else if (OB_FAIL(copied_key.push_back(tmp_datum))) {
+        SQL_LOG(WARN, "push back datum failed", K(ret), K(i), K(j), K(tmp_datum));
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(range_cut_.push_back(copied_key))) {
+      SQL_LOG(WARN, "push back rowkey failed", K(ret), K(copied_key), K(i));
+    }
+  }
+  return ret;
+}
 
 }
 }

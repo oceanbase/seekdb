@@ -22,6 +22,7 @@
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
+#include "sql/optimizer/ob_log_sequence.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_for_update.h"
@@ -44,10 +45,13 @@
 #include "sql/optimizer/ob_log_temp_table_insert.h"
 #include "sql/optimizer/ob_log_temp_table_transformation.h"
 #include "sql/optimizer/ob_log_insert.h"
+#include "sql/optimizer/ob_log_err_log.h"
 #include "sql/engine/basic/ob_limit_op.h"
+#include "sql/engine/basic/ob_limit_vec_op.h"
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
+#include "sql/optimizer/ob_log_sequence.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_for_update.h"
@@ -69,10 +73,13 @@
 #include "sql/optimizer/ob_log_temp_table_access.h"
 #include "sql/optimizer/ob_log_temp_table_insert.h"
 #include "sql/optimizer/ob_log_temp_table_transformation.h"
+#include "sql/optimizer/ob_log_err_log.h"
 #include "sql/optimizer/ob_log_stat_collector.h"
 #include "sql/optimizer/ob_log_expand.h"
 #include "sql/engine/aggregate/ob_merge_distinct_op.h"
+#include "sql/engine/aggregate/ob_merge_distinct_vec_op.h"
 #include "sql/engine/aggregate/ob_hash_distinct_op.h"
+#include "sql/engine/basic/ob_material_vec_op.h"
 #include "sql/engine/basic/ob_topk_op.h"
 #include "sql/engine/sort/ob_sort_op.h"
 #include "sql/engine/basic/ob_values_op.h"
@@ -90,6 +97,7 @@
 #include "sql/engine/dml/ob_table_insert_up_op.h"
 #include "sql/engine/dml/ob_table_replace_op.h"
 #include "sql/engine/join/ob_hash_join_op.h"
+#include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
 #include "sql/engine/join/ob_nested_loop_join_op.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/engine/subquery/ob_subplan_scan_op.h"
@@ -97,35 +105,58 @@
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/engine/basic/ob_monitoring_dump_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
+#include "sql/engine/sequence/ob_sequence_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
+#include "sql/engine/px/exchange/ob_px_ms_receive_vec_op.h"
 #include "sql/engine/px/exchange/ob_px_dist_transmit_op.h"
 #include "sql/engine/px/exchange/ob_px_repart_transmit_op.h"
 #include "sql/engine/px/exchange/ob_px_reduce_transmit_op.h"
 #include "sql/engine/px/exchange/ob_px_fifo_coord_op.h"
 #include "sql/engine/px/exchange/ob_px_ordered_coord_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_coord_op.h"
+#include "sql/engine/px/exchange/ob_px_ms_coord_vec_op.h"
 #include "sql/engine/aggregate/ob_merge_groupby_op.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
-#include "sql/engine/aggregate/ob_scalar_aggregate_op.h"
-#include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/table/ob_table_row_store_op.h"
 #include "sql/engine/table/ob_row_sample_scan_op.h"
 #include "sql/engine/table/ob_block_sample_scan_op.h"
+#include "sql/executor/ob_direct_receive_op.h"
+#include "sql/executor/ob_direct_transmit_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_delete_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_update_op.h"
 #include "sql/engine/basic/ob_temp_table_insert_op.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
 #include "sql/engine/basic/ob_temp_table_transformation_op.h"
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
+#include "sql/engine/dml/ob_err_log_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
 #include "sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.h"
+#include "sql/engine/aggregate/ob_hash_distinct_vec_op.h"
+#include "sql/engine/aggregate/ob_scalar_aggregate_vec_op.h"
+#include "sql/engine/basic/ob_temp_table_insert_vec_op.h"
+#include "sql/engine/basic/ob_temp_table_access_vec_op.h"
+#include "sql/engine/basic/ob_temp_table_transformation_vec_op.h"
+#include "sql/engine/sort/ob_sort_vec_op.h"
+#include "sql/engine/set/ob_hash_union_vec_op.h"
+#include "sql/engine/set/ob_hash_union_vec_op.h"
+#include "sql/engine/set/ob_hash_intersect_vec_op.h"
+#include "sql/engine/set/ob_hash_except_vec_op.h"
+#include "sql/engine/window_function/ob_window_function_vec_op.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
+#include "sql/engine/aggregate/ob_merge_groupby_vec_op.h"
+#include "sql/engine/join/ob_merge_join_vec_op.h"
+#include "sql/engine/set/ob_merge_union_vec_op.h"
+#include "sql/engine/set/ob_merge_intersect_vec_op.h"
+#include "sql/engine/set/ob_merge_except_vec_op.h"
 #include "sql/engine/expand/ob_expand_vec_op.h"
+#include "sql/engine/join/ob_nested_loop_join_vec_op.h"
+#include "sql/engine/subquery/ob_subplan_filter_vec_op.h"
+#include "sql/engine/direct_load/ob_table_direct_insert_op.h"
 #include "sql/engine/table/ob_ddl_block_sample_scan_op.h"
 
 namespace oceanbase
@@ -146,6 +177,7 @@ template <int TYPE>
 int report_not_registered()
 {
   int ret = OB_ERR_UNEXPECTED;
+  LOG_WARN("not registered", K(ret));
   return ret;
 }
 
@@ -193,6 +225,7 @@ struct AllocSpecHelper
     typedef typename op_reg::ObOpTypeTraits<TYPE>::Spec SpecType;
     if (type != TYPE || child_cnt < 0) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(type), LITERAL_K(TYPE), K(child_cnt));
     } else {
       const int64_t child_ptrs_bytes = child_cnt * sizeof(SpecType *);
       const int64_t aligned_child_ptrs_bytes = (child_ptrs_bytes + 15) & ~15;
@@ -200,11 +233,13 @@ struct AllocSpecHelper
       ObOpSpec **mem = static_cast<ObOpSpec **>(alloc.alloc(alloc_size));
       if (OB_ISNULL(mem)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(ret), K(alloc_size));
       } else {
         memset(mem, 0, sizeof(SpecType *) * child_cnt);
         void *spec_addr = reinterpret_cast<char *>(mem) + aligned_child_ptrs_bytes;
         spec = new (spec_addr) SpecType(alloc, type);
         if (OB_FAIL(spec->set_children_pointer(mem, child_cnt))) {
+          LOG_WARN("set children pointer failed", K(ret));
           spec->~ObOpSpec();
           spec = NULL;
           alloc.free(mem);
@@ -228,8 +263,11 @@ struct AllocOpHelper
     if ((Traints::has_input_ && NULL == input)
         || (!Traints::has_input_ && NULL != input)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("input argument mismatch with registered status",
+               K(ret), KP(input), LITERAL_K(Traints::has_input_));
     } else if (child_cnt < 0) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), LITERAL_K(TYPE), K(child_cnt));
     } else {
       const int64_t child_ptrs_bytes = child_cnt * sizeof(OpType *);
       const int64_t aligned_child_ptrs_bytes = (child_ptrs_bytes + 15) & ~15;
@@ -237,6 +275,7 @@ struct AllocOpHelper
       ObOperator **mem = static_cast<ObOperator **>(alloc.alloc(alloc_size));
       if (OB_ISNULL(mem)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(ret), K(alloc_size));
       } else {
         if (child_cnt > 0) {
           memset(mem, 0, sizeof(OpType *) * child_cnt);
@@ -245,6 +284,7 @@ struct AllocOpHelper
         op = new (op_addr) OpType(exec_ctx, spec, input);
         if (OB_FAIL(op->set_children_pointer(mem, child_cnt))
             || OB_FAIL(op->init())) {
+          LOG_WARN("set children pointer or init failed", K(ret));
           op->~ObOperator();
           op = NULL;
           alloc.free(mem);
@@ -266,6 +306,7 @@ struct AllocInputHelper
     input = static_cast<InputType *>(alloc.alloc(sizeof(InputType)));
     if (OB_ISNULL(input)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc memory failed", K(ret));
     } else {
       input = new (input) InputType(exec_ctx, spec);
     }
@@ -295,6 +336,8 @@ struct GenSpecHelper
                K(ret), KP(derived_op), KP(derived_spec),
                K(log_op.get_name()), K(ob_phy_operator_type_str(spec.type_)));
     } else if (OB_FAIL(cg.generate_spec(*derived_op, *derived_spec, in_root_job))) {
+      LOG_WARN("generate operator specification failed",
+               K(ret), K(log_op.get_name()), K(ob_phy_operator_type_str(spec.type_)));
     }
 
     return ret;
@@ -310,6 +353,10 @@ ObOperatorFactory::AllocFun *ObOperatorFactory::G_ALL_ALLOC_FUNS_ = G_ALLOC_FUNC
 
 static bool G_VECTORIZED_OP_ARRAY[PHY_END];
 bool *ObOperatorFactory::G_VECTORIZED_OP_ARRAY_ = G_VECTORIZED_OP_ARRAY;
+static uint64_t G_OB_VERSION_ARRAY[PHY_END];
+uint64_t *ObOperatorFactory::G_OB_VERSION_ARRAY_ = G_OB_VERSION_ARRAY;
+static bool G_SUPPORT_RICH_FMT_ARRAY[PHY_END];
+bool *ObOperatorFactory::G_SUPPORT_RICH_FMT_ARRAY_ = G_SUPPORT_RICH_FMT_ARRAY;
 
 template <int N>
 struct InitAllocFunc
@@ -326,6 +373,8 @@ struct InitAllocFunc
     };
 
     G_VECTORIZED_OP_ARRAY[N] = op_reg::ObOpTypeTraits<N>::vectorized_;
+    G_OB_VERSION_ARRAY[N] = op_reg::ObOpTypeTraits<N>::ob_version_;
+    G_SUPPORT_RICH_FMT_ARRAY[N] = op_reg::ObOpTypeTraits<N>::support_rich_format_;
   }
 };
 
@@ -339,10 +388,13 @@ int ObOperatorFactory::alloc_op_spec(ObIAllocator &alloc, const ObPhyOperatorTyp
   int ret = OB_SUCCESS;
   if (!is_registered(type)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("static engine not implement", K(type), K(ret));
   } else if (child_cnt < 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid child cnt", K(ret), K(child_cnt), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].spec_func_(
               alloc, type, child_cnt, spec))) {
+    LOG_WARN("allocate operator specification failed", K(ret));
   }
   return ret;
 }
@@ -355,8 +407,12 @@ int ObOperatorFactory::alloc_operator(ObIAllocator &alloc, ObExecContext &exec_c
   int ret = OB_SUCCESS;
   if (child_cnt < 0 || !is_registered(type)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid child cnt or operator not registered, "
+             "please register in ob_operator_reg.h with REGISTER_OPERATOR",
+             K(ret), K(child_cnt), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].op_func_(
               alloc, exec_ctx, spec, input, child_cnt, op))) {
+    LOG_WARN("allocate operator failed", K(ret));
   }
 
   return ret;
@@ -370,8 +426,12 @@ int ObOperatorFactory::alloc_op_input(ObIAllocator &alloc, ObExecContext &exec_c
   const ObPhyOperatorType type = spec.type_;
   if (!has_op_input(type)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("operator input not registered, "
+             "please register in ob_operator_reg.h with REGISTER_OPERATOR",
+             K(ret), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].input_func_(
               alloc, exec_ctx, spec, input))) {
+    LOG_WARN("allocate operator input failed", K(ret));
   }
   return ret;
 }
@@ -384,8 +444,12 @@ int ObOperatorFactory::generate_spec(ObStaticEngineCG &cg,
   int ret = OB_SUCCESS;
   if (!is_registered(type)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid child cnt or operator not registered, "
+             "please register in ob_operator_reg.h with REGISTER_OPERATOR",
+             K(ret), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].gen_spec_func_(
               cg, log_op, spec, in_root_job))) {
+    LOG_WARN("generate operator spec failed", K(type), K(ret));
   }
 
   return ret;

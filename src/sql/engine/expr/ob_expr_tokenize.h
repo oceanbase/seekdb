@@ -21,13 +21,12 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "data_plane/fts/ob_fts_parser_property.h"
+#include "storage/fts/ob_fts_parser_property.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-class MultimodeAlloctor;
 class ObExprTokenize : public ObStringExprOperator
 {
 public:
@@ -63,8 +62,8 @@ private:
     int parse_json_param(const ObIJsonBase *obj);
 
     // check and reform parser properties to standard format
-    int reform_parser_properties(const ObString &properties);
-    int try_load_dictionary_for_ik();
+    int reform_parser_properties(const ObString &properties,
+                                 const ObString &database_name);
 
   public:
     // for property and tmp json string
@@ -90,12 +89,12 @@ private:
   static int parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_properties(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     MultimodeAlloctor &mm_alloc,
                                      TokenizeParam &param);
 
   static int tokenize_fulltext(const TokenizeParam &param,
                                TokenizeParam::OUTPUT_MODE mode,
                                common::ObIAllocator &allocator,
+                               const uint64_t dictionary_epoch,
                                ObIJsonBase *&result);
 
   static int construct_ft_parser_inner_name(const ObString &input_str, TokenizeParam &param);

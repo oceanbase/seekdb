@@ -39,7 +39,7 @@
 #include "share/geo/ob_geo_point_location_visitor.h"
 #include "share/geo/ob_geo_zoom_in_visitor.h"
 #include "share/geo/ob_geo_close_ring_visitor.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "common/mysqlclient/ob_mysql_global.h" // DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE
 
 namespace oceanbase
@@ -98,6 +98,7 @@ int ObGeoTypeUtil::get_pg_reserved_prj4text(ObIAllocator *allocator, uint32_t sr
         lon_0 = 90.0 * (xzone - 2) + 45.0;
       } else {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid pg srid", K(ret), K(srid), K(xzone), K(yzone));
       }
       if (OB_SUCC(ret)) {
         while (lon_0 > 180) {
@@ -111,11 +112,13 @@ int ObGeoTypeUtil::get_pg_reserved_prj4text(ObIAllocator *allocator, uint32_t sr
       }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid pg srid", K(ret), K(srid));
   }
 
   if (OB_SUCC(ret)) {
     ObString prj4_tmp = ObString::make_string(tmp_buf);
     if (OB_FAIL(ob_write_string(*allocator, prj4_tmp, prj4_param, true))) {
+      LOG_WARN("failed to write string to buffer", K(ret), K(srid));
     }
   }
   return ret;
@@ -231,6 +234,53 @@ const char *ObGeoTypeUtil::get_geo_name_by_type(ObGeoType type)
   return type_name;
 }
 
+const char *ObGeoTypeUtil::get_geo_name_by_type_oracle(ObGeoType type)
+{
+  const char *type_name = "UNKNOWN";
+  switch (type) {
+    case ObGeoType::POINT:
+    case ObGeoType::POINTZ:{
+      type_name =  "POINT";
+      break;
+    }
+    case ObGeoType::LINESTRING:
+    case ObGeoType::LINESTRINGZ:{
+      type_name =  "LINESTRING";
+      break;
+    }
+    case ObGeoType::POLYGON:
+    case ObGeoType::POLYGONZ:{
+      type_name = "POLYGON";
+      break;
+    }
+    case ObGeoType::MULTIPOINT:
+    case ObGeoType::MULTIPOINTZ:{
+      type_name = "MULTIPOINT";
+      break;
+    }
+    case ObGeoType::MULTILINESTRING:
+    case ObGeoType::MULTILINESTRINGZ:{
+      type_name = "MULTILINESTRING";
+      break;
+    }
+    case ObGeoType::MULTIPOLYGON:
+    case ObGeoType::MULTIPOLYGONZ:{
+      type_name = "MULTIPOLYGON";
+      break;
+    }
+    case ObGeoType::GEOMETRYCOLLECTION:
+    case ObGeoType::GEOMETRYCOLLECTIONZ:{
+      type_name = "GEOMETRYCOLLECTION";
+      break;
+    }
+    default:{
+      LOG_WARN_RET(OB_INVALID_ARGUMENT, "unknown geometry type", K(type));
+      break;
+    }
+  }
+  return type_name;
+}
+
 int ObGeoTypeUtil::get_st_geo_name_by_type(ObGeoType type, ObString &res)
 {
   int ret = OB_SUCCESS;
@@ -266,6 +316,7 @@ int ObGeoTypeUtil::get_st_geo_name_by_type(ObGeoType type, ObString &res)
     }
     default: {
       ret = OB_ERR_INVALID_GEOMETRY_TYPE;
+      LOG_WARN("unknown geometry type", K(ret), K(type));
       break;
     }
   }
@@ -306,6 +357,7 @@ int ObGeoTypeUtil::create_geo_by_type(ObIAllocator &allocator,
   } else if (is_3d_geo_type(geo_type)) {
     if (OB_ISNULL(geo = OB_NEWx(ObGeometry3D, (&allocator), srid))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to create 3d geo object", K(ret), K(geo_type));
     } else {
       ObGeoCRS crs = is_geographical ? ObGeoCRS::Geographic : ObGeoCRS::Cartesian;
       static_cast<ObGeometry3D*>(geo)->set_crs(crs);
@@ -315,6 +367,7 @@ int ObGeoTypeUtil::create_geo_by_type(ObIAllocator &allocator,
   }
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("fail to create geo by type", K(ret), K(geo_type), K(is_geographical), K(is_geo_bin));
   }
 
   return ret;
@@ -332,12 +385,15 @@ int ObGeoTypeUtil::create_geo_by_wkb(ObIAllocator &allocator,
 
   if (swkb.length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid swkb length", K(ret), K(swkb.length()));
   } else {
     ObGeoWkbHeader header;
     ObGeoCRS crs = ObGeoCRS::Cartesian;
     if (OB_FAIL(ObGeoTypeUtil::get_header_info_from_wkb(swkb, header))) {
+      LOG_WARN("fail to get swkb header info from swkb", K(ret), K(swkb));
     } else if (!allow_3d && is_3d_geo_type(header.type_)) {
       ret = OB_ERR_INVALID_GEOMETRY_TYPE;
+      LOG_WARN("3d geo type is not allow", K(ret), K(header.type_));
     } else if (OB_NOT_NULL(srs)) {
       crs = (srs->srs_type() == ObSrsType::PROJECTED_SRS)
           ? ObGeoCRS::Cartesian : ObGeoCRS::Geographic;
@@ -347,15 +403,18 @@ int ObGeoTypeUtil::create_geo_by_wkb(ObIAllocator &allocator,
       // do nothing
     } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator, header.type_,
         crs == ObGeoCRS::Geographic, true, geo))) {
+      LOG_WARN("fail to create geo by type", K(ret), K(crs), K(header));
     } else {
       geo->set_srid(header.srid_);
       uint32_t offset = 0;
       ObString wkb;
       if (OB_FAIL(ObGeoTypeUtil::get_wkb_from_swkb(swkb, wkb, offset))) {
+        LOG_WARN("fail to get wkb from swkb", K(ret), K(swkb));
       } else {
         if (need_copy) {
           ObString wkb_data;
           if (OB_FAIL(ob_write_string(allocator, wkb, wkb_data))) {
+            LOG_WARN("Failed to copy swkb memory", K(ret));
           } else {
             geo->set_data(wkb_data);
           }
@@ -370,14 +429,17 @@ int ObGeoTypeUtil::create_geo_by_wkb(ObIAllocator &allocator,
         if (ObGeoTypeUtil::is_3d_geo_type(geo->type())) {
           ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(geo);
           if (OB_FAIL(geo_3d->check_wkb_valid())) {
+            LOG_WARN("check wkb is invalid", K(ret));
           }
         } else {
           ObGeoWkbCheckVisitor wkb_check(wkb, header.bo_, false);
           ObIWkbGeometry *geo_bin = static_cast<ObIWkbGeometry *>(geo);
           if (OB_FAIL(geo->do_visit(wkb_check))) {
             ret = OB_ERR_GIS_INVALID_DATA;
+            LOG_WARN("fail to check swkb by swkb checker", K(ret), K(swkb), K(header), K(crs));
           } else if (geo->length() + offset != swkb.length()) {
             ret = OB_ERR_GIS_INVALID_DATA;
+            LOG_WARN("invalid swkb length", K(ret), K(geo->length()), K(swkb.length()), K(offset));
           }
         }
       }
@@ -402,6 +464,7 @@ int ObGeoTypeUtil::convert_geometry_3D_to_2D(
     ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(g3d);
     uint32_t srid = (g3d == geo) ? geo->get_srid() : 0;
     if (OB_FAIL(geo_3d->to_2d_geo(allocator, geo, srid))) {
+      LOG_WARN("fail to convert 3d to 2d geo", K(ret), K(geo_3d->type()));
     } else {
       // geo has been transform to 2d
       wkb_data.assign_ptr(geo->val(), geo->length());
@@ -416,6 +479,7 @@ int ObGeoTypeUtil::convert_geometry_3D_to_2D(
       }
       if (OB_SUCC(ret) && (build_flag & ObGeoBuildFlag::GEO_CORRECT) &&
               OB_FAIL(correct_polygon(allocator, srs, wkb_check.is_ring_closed(), *geo))) {
+        LOG_WARN("correct geo failed", K(ret), K(geo));
       }
     }
   }
@@ -428,10 +492,12 @@ int ObGeoTypeUtil::normalize_geometry(ObGeometry &geo, const ObSrsItem *srs)
   if (is_3d_geo_type(geo.type())) {
     ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(&geo);
     if (OB_FAIL(geo_3d->normalize(srs))) {
+      LOG_WARN("fail to check coordinate range", K(ret));
     }
   } else {
     ObGeoNormalizeVisitor normalize_visitor(srs);
     if (OB_FAIL(geo.do_visit(normalize_visitor))) {
+      LOG_WARN("normalize geo failed", K(ret));
     }
   }
   return ret;
@@ -455,13 +521,16 @@ int ObGeoTypeUtil::build_geometry(ObIAllocator &allocator,
   // parse wkb_nosrid
   if (OB_FAIL(ObGeoTypeUtil::get_header_info_from_wkb(swkb, header))) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("get swkb header info from swkb failed", K(swkb), K(ret));
   } else if (ObGeoWkbByteOrder::LittleEndian != header.bo_) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid byte order", K(ret), K(header.bo_));
   } else if (ObGeoType::GEOMETRY > header.type_ || ObGeoType::GEOMETRYCOLLECTION < header.type_) {
     if ((build_flag & ObGeoBuildFlag::GEO_ALLOW_3D) && is_3d_geo_type(header.type_)) {
       // skip
     } else {
       ret = OB_ERR_GIS_INVALID_DATA;
+      LOG_WARN("invalid geo type", K(ret), K(header.type_));
     }
   }
   bool is_ring_closed = true;
@@ -472,17 +541,20 @@ int ObGeoTypeUtil::build_geometry(ObIAllocator &allocator,
                                                         true,
                                                         geo))) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("failed to create swkb", K(ret), K(crs), K(header.type_));
   } else {
     geo->set_srid(header.srid_);
     ObString wkb;
     uint32_t offset = 0;
     if (OB_FAIL(ObGeoTypeUtil::get_wkb_from_swkb(swkb, wkb, offset))) {
+        LOG_WARN("fail to get wkb from swkb", K(ret), K(swkb));
     } else {
       ObString wkb_data;
       if (build_flag & ObGeoBuildFlag::GEO_NOT_COPY_WKB) {
         wkb_data = wkb;
       } else {
         if (OB_FAIL(ob_write_string(allocator, wkb, wkb_data))) {
+          LOG_WARN("Failed to copy swkb memory", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -495,23 +567,28 @@ int ObGeoTypeUtil::build_geometry(ObIAllocator &allocator,
           LOG_WARN("invalid swkb", K(swkb), K(header.type_), K(header.srid_), K(crs));
         } else if (geo->length() + offset != swkb.length()) {
           ret = OB_ERR_GIS_INVALID_DATA;
+          LOG_WARN("invalid swkb length", K(ret), K(geo->length()), K(swkb.length()), K(offset));
         } else {
           is_ring_closed = wkb_check.is_ring_closed();
         }
       } else if (build_flag & GEO_RESERVE_3D) {
         // do not convert to 2D geometry
       } else if (OB_FAIL(convert_geometry_3D_to_2D(srs, allocator, geo, build_flag, geo))) {
+        // will do wkb check and polygon correct in convert_geometry_3D_to_2D
+        LOG_WARN("fail to convert 3D geometry to 2D", K(ret));
       }
     }
   }
   // both 3D and 2D are available
   if (OB_SUCC(ret) && (build_flag & ObGeoBuildFlag::GEO_NORMALIZE) && ObGeoCRS::Geographic == crs) {
     if (OB_FAIL(normalize_geometry(*geo, srs))) {
+      LOG_WARN("fail to normalize geometry", K(ret));
     }
   }
   // only for 2D geometry
   if (OB_SUCC(ret) && !is_3d_geo_type(geo->type()) && (build_flag & ObGeoBuildFlag::GEO_CORRECT)) {
     if (OB_FAIL(correct_polygon(allocator, srs, is_ring_closed, *geo))) {
+      LOG_WARN("correct geo failed", K(ret), K(geo));
     }
   }
   // check coordinate range
@@ -519,7 +596,9 @@ int ObGeoTypeUtil::build_geometry(ObIAllocator &allocator,
     if (!(build_flag & ObGeoBuildFlag::GEO_CHECK_RANGE)) {
       // do nothing
     } else if ((build_flag & ObGeoBuildFlag::GEO_NORMALIZE) && OB_FAIL(check_coordinate_range(srs, geo, log_info, true, true))) {
+      LOG_WARN("failed to check coordinate range", K(ret));
     } else if (!(build_flag & ObGeoBuildFlag::GEO_NORMALIZE) && OB_FAIL(check_coordinate_range(srs, geo, log_info, true))) {
+      LOG_WARN("failed to check coordinate range", K(ret));
     }
   }
 
@@ -546,13 +625,16 @@ int ObGeoTypeUtil::construct_geometry(ObIAllocator &allocator,
   if (OB_FAIL(ObGeoTypeUtil::get_wkb_from_swkb(swkb, wkb, offset))) {
     // adapt mysql
     ret = OB_ERR_GIS_DATA_WRONG_ENDIANESS;
+    LOG_WARN("fail to get wkb from swkb", K(ret), K(swkb));
   } else if (FALSE_IT(bo = static_cast<ObGeoWkbByteOrder>(*(data + offset)))) {
   } else if (ObGeoWkbByteOrder::LittleEndian != bo) {
     ret = OB_ERR_GIS_DATA_WRONG_ENDIANESS;
+    LOG_WARN("invalid byte order", K(ret), K(bo));
   } else if (FALSE_IT(type = static_cast<ObGeoType>(ObGeoWkbByteOrderUtil::read<uint32_t>(
         data + offset + WKB_GEO_BO_SIZE, bo)))) {
   } else if (!is_2d_geo_type(type) && !is_3d_geo_type(type)) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid geo type", K(ret), K(type));
   } else {
     ObGeoCRS crs = ObGeoCRS::Cartesian;
     ObGeoSrid srid = 0;
@@ -571,9 +653,11 @@ int ObGeoTypeUtil::construct_geometry(ObIAllocator &allocator,
       // do nothing
     } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator, type,
         crs == ObGeoCRS::Geographic, true, geo))) {
+      LOG_WARN("fail to create geo by type", K(ret), K(crs), K(type));
     } else if (FALSE_IT(geo->set_srid(srid))) {
     } else if (ObGeoType::POINT == type && (len - offset - wkb_header_sz < WKB_POINT_DATA_SIZE)) {
       ret = OB_ERR_GIS_INVALID_DATA;
+      LOG_WARN("invalid point data length", K(ret), K(len));
     } else {
       if (has_srid) {
         geo->set_srid(srid);
@@ -581,6 +665,7 @@ int ObGeoTypeUtil::construct_geometry(ObIAllocator &allocator,
       if (with_copy) {
         ObString wkb_copy;
         if (OB_FAIL(ob_write_string(allocator, wkb, wkb_copy))) {
+          LOG_WARN("Failed to copy wkb memory", K(ret));
         } else {
           geo->set_data(wkb_copy);
         }
@@ -593,14 +678,17 @@ int ObGeoTypeUtil::construct_geometry(ObIAllocator &allocator,
       } else if (is_3d_geo_type(geo->type())) {
         ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(geo);
         if (OB_FAIL(geo_3d->check_wkb_valid())) {
+          LOG_WARN("fail to check geo 3d is valid", K(ret));
         }
       } else {
         ObGeoWkbCheckVisitor wkb_check(wkb, bo, false);
         ObIWkbGeometry *geo_bin = static_cast<ObIWkbGeometry *>(geo);
         if (OB_FAIL(geo->do_visit(wkb_check))) {
+          LOG_WARN("fail to check wkb by wkb checker", K(ret), K(wkb), K(crs));
           ret = OB_ERR_GIS_INVALID_DATA;
         } else if (has_srid && (geo->length() + offset) != len) {
           ret = OB_ERR_GIS_INVALID_DATA;
+          LOG_WARN("fail to check wkb data len", K(ret), K(len), K(geo->length()));
         }
       }
     }
@@ -617,7 +705,9 @@ int ObGeoTypeUtil::copy_geometry(lib::MemoryContext& ctx,
   copy_geo = nullptr;
   ObString data;
   if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(ctx->get_arena_allocator(), origin_geo.type(), origin_geo.crs() == ObGeoCRS::Geographic, true, copy_geo))) {
+    LOG_WARN("fail to create geo by type", K(ret));
   } else if (OB_FAIL(ob_write_string(ctx->get_arena_allocator(), ObString(origin_geo.length(), origin_geo.val()), data))) {
+    LOG_WARN("fail to copy geo data", K(ret));
   } else {
     copy_geo->set_data(data);
     copy_geo->set_srid(origin_geo.get_srid());
@@ -635,13 +725,16 @@ int ObGeoTypeUtil::correct_polygon(ObIAllocator &alloc,
       || geo.type() == ObGeoType::MULTIPOLYGON
       || geo.type() == ObGeoType::GEOMETRYCOLLECTION) {
     if (!is_ring_closed && OB_FAIL(ObGeoTypeUtil::geo_close_ring(geo, alloc))) {
+      LOG_WARN("wkb close ring failed", K(ret));
     }
     if (OB_SUCC(ret)) {
       CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
         ObGeoEvalCtx correct_context(CURRENT_CONTEXT, srs);
         int res_unused;
         if (OB_FAIL(correct_context.append_geo_arg(&geo))) {
+          LOG_WARN("build geo gis context failed", K(ret));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(correct_context, res_unused))) {
+          LOG_WARN("eval geo correct failed", K(ret));
         }
       }
     }
@@ -660,14 +753,17 @@ int ObGeoTypeUtil::check_coordinate_range(const ObSrsItem *srs,
   ObGeoCoordRangeResult result;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("geo is NULL", K(ret));
   } else if (is_3d_geo_type(geo->type())) {
     ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(geo);
     if (OB_FAIL(geo_3d->check_3d_coordinate_range(srs, is_normalized, result))) {
+      LOG_WARN("fail to check coordinate range", K(ret));
     }
   } else {
     ObGeoCoordinateRangeVisitor range_visitor(srs, is_normalized);
     if (OB_FAIL(geo->do_visit(range_visitor))) {
       ret = OB_ERR_GIS_INVALID_DATA;
+      LOG_WARN("failed to reverse geometry coordinate", K(ret));
     } else {
       range_visitor.get_coord_range_result(result);
     }
@@ -677,7 +773,9 @@ int ObGeoTypeUtil::check_coordinate_range(const ObSrsItem *srs,
   } else if (result.is_long_out_range_) {
     // handle log user error message
     if (OB_FAIL(srs->longtitude_convert_from_radians(-M_PI, log_info.min_long_val_))) {
+      LOG_WARN("failed to convert longitude from radians", K(ret));
     } else if (OB_FAIL(srs->longtitude_convert_from_radians(M_PI, log_info.max_long_val_))) {
+      LOG_WARN("failed to convert longitude from radians", K(ret));
     } else {
       log_info.value_out_of_range_ = result.value_out_range_;
       if (is_param) {
@@ -693,7 +791,9 @@ int ObGeoTypeUtil::check_coordinate_range(const ObSrsItem *srs,
   } else if (result.is_lati_out_range_) {
     // handle log user error message
     if (OB_FAIL(srs->latitude_convert_from_radians(-M_PI_2, log_info.min_lat_val_))) {
+      LOG_WARN("failed to convert latitude from radians", K(ret));
     } else if (OB_FAIL(srs->latitude_convert_from_radians(M_PI_2, log_info.max_lat_val_))) {
+      LOG_WARN("failed to convert latitude from radians", K(ret));
     } else {
       log_info.value_out_of_range_ = result.value_out_range_;
       if (is_param) {
@@ -727,16 +827,23 @@ int ObGeoTypeUtil::get_buffered_geo(ObArenaAllocator *allocator,
     buf_strat.distance_val_ = distance;
     ObGeoErrLogInfo log_info;
     if (OB_FAIL(ObGeoTypeUtil::build_geometry(*allocator, wkb_str, geo, srs, log_info, ObGeoBuildFlag::GEO_ALLOW_3D))) {
+      LOG_WARN("fail to build geometry", K(ret));
     } else if (OB_FAIL(gis_context.append_geo_arg(geo))) {
+      LOG_WARN("failed to append geo arg to gis context", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(gis_context, correct_result))) {
+      LOG_WARN("eval boost correct failed", K(ret));
     } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
+      LOG_WARN("failed to append buffer strategy to gis context", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
+      LOG_WARN("eval st_buffer failed", K(ret));
     } else if (OB_ISNULL(res_geo)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("eval st_buffer null result", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(*allocator,
                                             *res_geo,
                                             srs,
                                             res_wkb))) {
+      LOG_WARN("transform to binary failed", K(ret));
     }
   }
   return ret;
@@ -763,6 +870,7 @@ int ObGeoTypeUtil::get_header_info_from_wkb(const ObString &wkb, ObGeoWkbHeader 
       header.bo_ = static_cast<ObGeoWkbByteOrder>(*(wkb.ptr() + offset));
       if (ObGeoWkbByteOrder::BigEndian != header.bo_ && ObGeoWkbByteOrder::LittleEndian != header.bo_) {
         ret = OB_ERR_GIS_INVALID_DATA;
+        LOG_WARN("invalid byte order", K(ret), K(header.bo_));
       } else {
         const char *ptr = (const char *)(wkb.ptr() + offset + WKB_GEO_BO_SIZE);
         header.srid_ = ObGeoWkbByteOrderUtil::read<uint32_t>((const char *)wkb.ptr(), header.bo_);
@@ -778,6 +886,7 @@ int ObGeoTypeUtil::get_type_srid_from_wkb(const ObString &wkb, ObGeoType &type, 
   int ret = OB_SUCCESS;
   ObGeoWkbHeader header;
   if (OB_FAIL(get_header_info_from_wkb(wkb, header))) {
+    LOG_WARN("failed to get info from wkb", K(ret));
   } else {
     type = header.type_;
     srid = header.srid_;
@@ -790,6 +899,7 @@ int ObGeoTypeUtil::get_srid_from_wkb(const ObString &wkb, uint32_t &srid)
   int ret = OB_SUCCESS;
   ObGeoWkbHeader header;
   if (OB_FAIL(get_header_info_from_wkb(wkb, header))) {
+    LOG_WARN("failed to get info from wkb", K(ret));
   } else {
     srid = header.srid_;
   }
@@ -801,6 +911,7 @@ int ObGeoTypeUtil::get_type_from_wkb(const ObString &wkb, ObGeoType &type)
   int ret = OB_SUCCESS;
   ObGeoWkbHeader header;
   if (OB_FAIL(get_header_info_from_wkb(wkb, header))) {
+    LOG_WARN("failed to get info from wkb", K(ret));
   } else {
     type = header.type_;
   }
@@ -812,6 +923,7 @@ int ObGeoTypeUtil::get_bo_from_wkb(const ObString &wkb, ObGeoWkbByteOrder &bo)
   int ret = OB_SUCCESS;
   ObGeoWkbHeader header;
   if (OB_FAIL(get_header_info_from_wkb(wkb, header))) {
+    LOG_WARN("failed to get info from wkb", K(ret));
   } else {
     bo = header.bo_;
   }
@@ -829,6 +941,7 @@ int ObGeoTypeUtil::add_geo_version(ObIAllocator &allocator, const ObString &src,
     char *res_buf = reinterpret_cast<char *>(allocator.alloc(res_size));
     if (OB_ISNULL(res_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory", K(ret), K(res_size));
     } else {
       MEMCPY(res_buf, src.ptr(), WKB_GEO_SRID_SIZE);
       *(res_buf + WKB_GEO_SRID_SIZE) = ENCODE_GEO_VERSION(GEO_VESION_1);
@@ -839,6 +952,7 @@ int ObGeoTypeUtil::add_geo_version(ObIAllocator &allocator, const ObString &src,
     res_wkb = src;
   } else {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid byte order", K(ret), K(version));
   }
 
   return ret;
@@ -854,12 +968,14 @@ int ObGeoTypeUtil::to_wkb(ObIAllocator &allocator,
   ObGeoWkbSizeVisitor wkb_size_visitor;
 
   if (OB_FAIL(geo.do_visit(wkb_size_visitor))) {
+    LOG_WARN("failed to do wkb size visitor", K(ret));
   } else {
     // swkb format : srid + version + wkb
     uint64_t res_size = WKB_GEO_SRID_SIZE + WKB_VERSION_SIZE + wkb_size_visitor.geo_size();
     char *res_buf = reinterpret_cast<char *>(allocator.alloc(res_size));
     if (OB_ISNULL(res_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory", K(ret), K(res_size));
     } else {
       uint32_t srid = srs_item == NULL ? 0 : srs_item->get_srid();
       ObGeoWkbByteOrderUtil::write<uint32_t>(res_buf, srid);
@@ -868,6 +984,7 @@ int ObGeoTypeUtil::to_wkb(ObIAllocator &allocator,
       ObString wkb_nosrid_buf(res_size, WKB_GEO_SRID_SIZE + WKB_VERSION_SIZE, res_buf);
       ObGeoWkbVisitor wkb_visitor(srs_item, &wkb_nosrid_buf, need_convert);
       if (OB_FAIL(geo.do_visit(wkb_visitor))) {
+        LOG_WARN("failed to do wkb visit", K(ret), K(srid));
       } else {
         res_wkb.assign_ptr(res_buf, res_size);
       }
@@ -1054,6 +1171,7 @@ int ObGeoBoxUtil::caculate_line_box(ObPoint3d &start, ObPoint3d &end, ObGeogBox 
     // do nothing
   } else if (is_completely_opposite(start, end)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid point", K(ret));
   } else {
     ObPoint3d tmp;
     ObPoint3d point3d;
@@ -1282,12 +1400,14 @@ int ObGeoBoxUtil::get_geog_poly_box(const ObWkbGeogPolygon &poly, ObGeogBox &box
 
   const ObWkbGeogLinearRing& exterior = poly.exterior_ring();
   if (OB_FAIL(get_geog_line_box(exterior, box_tmp))) {
+    LOG_WARN("failed to caculate exterior ring box", K(ret));
   } else {
     box = box_tmp;
     const ObWkbGeogPolygonInnerRings& inner_rings = poly.inner_rings();
     ObWkbGeogPolygonInnerRings::iterator iter = inner_rings.begin();
     for ( ; iter != inner_rings.end() && OB_SUCC(ret); iter++) {
       if (OB_FAIL(get_geog_line_box(*iter, box_tmp))) {
+        LOG_WARN("failed to caculate line box", K(ret));
       } else {
         box_union(box_tmp, box);
       }
@@ -1335,12 +1455,14 @@ int ObGeoBoxUtil::clip_by_box(ObGeometry &geo_in, lib::MemoryContext &mem_ctx, c
   if (geo_in.is_tree()) {
     geo_tree = &geo_in;
     if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(tmp_allocator, geo_tree, geo_bin, nullptr))) {
+      LOG_WARN("fail to do tree to bin", K(ret));
     }
   } else {
     geo_bin = &geo_in;
     ObGeoToTreeVisitor tree_visitor(&allocator);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(geo_in.do_visit(tree_visitor))) {
+      LOG_WARN("fail to do tree visitor", K(ret));
     } else {
       geo_tree = tree_visitor.get_geometry();
     }
@@ -1348,18 +1470,22 @@ int ObGeoBoxUtil::clip_by_box(ObGeometry &geo_in, lib::MemoryContext &mem_ctx, c
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(geo_tree) || OB_ISNULL(geo_bin)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory for geometry", K(ret));
   }
   // calculate 2d box of geo2, then convert the box to a rectangle geo
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(box_ctx.append_geo_arg(geo_bin))) {
+    LOG_WARN("build gis context failed", K(ret), K(box_ctx.get_geo_count()));
   } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Box>::geo_func::eval(box_ctx, gbox_in))) {
+    LOG_WARN("failed to do box functor failed", K(ret));
   } else if (boxes_contains(gbox, *gbox_in)) {
     geo_out = &geo_in;
   } else if (!boxes_overlaps(*gbox_in, gbox)) {
     geo_out = OB_NEWx(ObCartesianGeometrycollection, &allocator, geo_in.get_srid(), allocator);
     if (OB_ISNULL(geo_out)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory for geometry", K(ret));
     }
   } else if (!ObGeoBoxUtil::is_box_valid(gbox)) {
     geo_out = nullptr;
@@ -1371,8 +1497,10 @@ int ObGeoBoxUtil::clip_by_box(ObGeometry &geo_in, lib::MemoryContext &mem_ctx, c
         ret = OB_SUCCESS;
         geo_out = nullptr;
       } else {
+        LOG_WARN("fail to do tree visitor", K(ret));
       }
     } else if (OB_FAIL(clip_visitor.get_geometry(geo_out))) {
+      LOG_WARN("fail to get geometry", K(ret));
     } else {
       geo_out->set_srid(geo_in.get_srid());
     }
@@ -1390,13 +1518,16 @@ int ObGeoBoxUtil::get_geom_poly_box(const ObWkbGeomPolygon &poly, bool not_calc_
   int ret = OB_SUCCESS;
   if (poly.size() <= 0) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("empty polygon has not box", K(ret), K(poly.size()));
   } else if (OB_FAIL(get_geom_line_box(poly.exterior_ring(), res))) {
+    LOG_WARN("fail to get poly box", K(ret));
   } else if (!not_calc_inner_ring) {
     const ObWkbGeomPolygonInnerRings &inners = poly.inner_rings();
     ObWkbGeomPolygonInnerRings::const_iterator iter = inners.begin();
     for (; OB_SUCC(ret) && iter != inners.end(); ++iter) {
       ObGeogBox tmp_box;
       if (OB_FAIL(get_geom_line_box(*iter, tmp_box))) {
+        LOG_WARN("fail to get poly box", K(ret));
       } else {
         box_union(tmp_box, res);
       }
@@ -1415,9 +1546,12 @@ int ObGeoTypeUtil::check_geo_type(const ObGeoType column_type, const ObString &w
 
   if (wkb_str.empty()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("wkb str is empty", K(ret), K(wkb_str));
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_from_wkb(wkb_str, inser_type))) {
+    LOG_WARN("fail to get geo type by wkb", K(ret), K(wkb_str));
   } else if (column_type >= ObGeoType::GEOTYPEMAX || inser_type >= ObGeoType::GEO3DTYPEMAX) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid geo type", K(ret), K(column_type), K(inser_type));
   } else if (ObGeoType::GEOMETRY == column_type) {
     // do nothing, geometry type can store all sub type.
   } else if (ObGeoType::GEOMETRYCOLLECTION == column_type) {
@@ -1426,9 +1560,13 @@ int ObGeoTypeUtil::check_geo_type(const ObGeoType column_type, const ObString &w
         ObGeoType::MULTIPOLYGON != inser_type &&
         ObGeoType::GEOMETRYCOLLECTION != inser_type) {
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("column geo type not match insert geo type",
+          K(ret), K(column_type), K(inser_type));
     }
   } else if (column_type != inser_type) {
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("column geo type not match insert geo type",
+        K(ret), K(column_type), K(inser_type));
   }
 
   return ret;
@@ -1445,6 +1583,7 @@ int ObGeoTypeUtil::tree_to_bin(ObIAllocator &allocator,
   ObString wkb_buf;
   if (OB_FAIL(ObGeoTypeUtil::to_wkb(allocator, *geo_tree, srs_item,
                                     wkb_buf, need_convert))) {
+    LOG_WARN("failed to transform geo to binary", K(ret));
   } else {
     bool is_geographical = false;
     uint32_t srid = (NULL == srs_item ? 0 : srs_item->get_srid());
@@ -1453,6 +1592,7 @@ int ObGeoTypeUtil::tree_to_bin(ObIAllocator &allocator,
     }
     if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator, geo_tree->type(),
         is_geographical, true, geo_bin, srid))) {
+      LOG_WARN("fail to create geo by type", K(ret), K(is_geographical), K(srid));
     } else {
       uint32_t offset = WKB_GEO_SRID_SIZE + WKB_VERSION_SIZE;
       ObString wkb_nosrid((wkb_buf.length() - offset), (wkb_buf.ptr() + offset));
@@ -1465,7 +1605,7 @@ int ObGeoTypeUtil::tree_to_bin(ObIAllocator &allocator,
 // (s)wkb to ewkt
 // 1. axis-order in ob_storage/ewkt/ewkb always long-lat.
 // 2. uint of geographic srs should be degree
-// 3. this formatting path does not perform an SRS lookup
+// 3. should not srs in this function, because srs will not implement in liboblog
 int ObGeoTypeUtil::geo_to_ewkt(const ObString &swkb,
                                ObString &ewkt,
                                ObIAllocator &allocator,
@@ -1483,24 +1623,32 @@ int ObGeoTypeUtil::geo_to_ewkt(const ObString &swkb,
   }
 
   if (OB_FAIL(ObGeoTypeUtil::get_header_info_from_wkb(swkb, header))) {
+    LOG_WARN("get wkb header info from wkb failed", K(ret));
   } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator, header.type_,
                                                        false, true, geo, header.srid_))) {
+    LOG_WARN("failed to create geo by wkb", K(ret), K(header.type_), K(header.srid_));
   } else if (OB_FAIL(ObGeoTypeUtil::get_wkb_from_swkb(swkb, wkb, offset))) {
+    LOG_WARN("fail to get wkb from swkb", K(ret), K(swkb));
   } else if (FALSE_IT(geo->set_data(wkb))) {
   } else if (geo->length() + offset != swkb.length()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid wkb", K(ret), K(geo->length()), K(swkb.length()), K(offset));
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (is_3d_geo_type(geo->type())) {
     ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(geo);
     if (OB_FAIL(geo_3d->to_wkt(allocator, ewkt, header.srid_, -1, output_srid0))) {
+      LOG_WARN("fail to transform ewkt from 3d-wkb", K(ret));
     }
   } else {
     if (OB_FAIL(wkt_visitor.init(header.srid_, max_decimal_digits, output_srid0))) {
+      LOG_WARN("failed to init wkt_visitor with srid_", K(ret), K(header.srid_));
     } else if (OB_FAIL(geo->do_visit(wkt_visitor))) {
+      LOG_WARN("failed to transform geo to wkt", K(ret));
     } else {
       wkt_visitor.get_wkt(ewkt);
+      LOG_DEBUG("eval ob geometry type to ewkt", K(ewkt));
     }
   }
   return ret;
@@ -1516,6 +1664,7 @@ int ObGeoTypeUtil::poly_close_ring(const ObString &wkb_in, ObGeoStringBuffer &re
   uint32_t pos = 0;
   if (ObGeoWkbByteOrder::BigEndian != bo && ObGeoWkbByteOrder::LittleEndian != bo) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid byte order", K(ret), K(bo));
   } else if (FALSE_IT(type = static_cast<ObGeoType>(ObGeoWkbByteOrderUtil::read<uint32_t>(val + WKB_GEO_BO_SIZE, bo)))) {
   } else if (type != ObGeoType::POLYGON) {
     ret = OB_INVALID_ARGUMENT;
@@ -1525,6 +1674,7 @@ int ObGeoTypeUtil::poly_close_ring(const ObString &wkb_in, ObGeoStringBuffer &re
     // do nothing
   } else {
     if (OB_FAIL(res.append(val, WKB_COMMON_WKB_HEADER_LEN))) {
+      LOG_WARN("failed to append geo common header", K(ret), K(res.length()));
     } else {
       pos = WKB_COMMON_WKB_HEADER_LEN;
       for (uint32_t i = 0; i < ring_num && OB_SUCC(ret); i++) {
@@ -1539,9 +1689,12 @@ int ObGeoTypeUtil::poly_close_ring(const ObString &wkb_in, ObGeoStringBuffer &re
         char raw_data[WKB_GEO_ELEMENT_NUM_SIZE] = {0};
         ObGeoWkbByteOrderUtil::write<uint32_t>(const_cast<char *>(raw_data), point_num_correct, bo);
         if (OB_FAIL(res.append(const_cast<char *>(raw_data), WKB_GEO_ELEMENT_NUM_SIZE))) {
+          LOG_WARN("failed to append point num", K(ret), K(point_num));
         } else if (OB_FAIL(res.append(val + pos, point_num * WKB_POINT_DATA_SIZE))) {
+          LOG_WARN("failed to append geo ring", K(ret), K(point_num), K(pos));
         } else if (point_num_correct != point_num && // ring is not closed
                   OB_FAIL(res.append(val + pos, WKB_POINT_DATA_SIZE))) {
+          LOG_WARN("failed to close geo ring", K(ret), K(point_num), K(pos));
         } else {
           pos += (point_num * WKB_POINT_DATA_SIZE);
         }
@@ -1562,6 +1715,7 @@ int ObGeoTypeUtil::multipoly_close_ring(const ObString &wkb_in, ObGeoStringBuffe
   uint32_t poly_num = 0;
   if (ObGeoWkbByteOrder::BigEndian != bo && ObGeoWkbByteOrder::LittleEndian != bo) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid byte order", K(ret), K(bo));
   } else if (FALSE_IT(type = static_cast<ObGeoType>(ObGeoWkbByteOrderUtil::read<uint32_t>(val + WKB_GEO_BO_SIZE, bo)))) {
   } else if (type != ObGeoType::MULTIPOLYGON) {
     ret = OB_INVALID_ARGUMENT;
@@ -1571,6 +1725,7 @@ int ObGeoTypeUtil::multipoly_close_ring(const ObString &wkb_in, ObGeoStringBuffe
     // do nothing
   } else {
     if (OB_FAIL(res.append(val, WKB_COMMON_WKB_HEADER_LEN))) {
+      LOG_WARN("failed to append geo common header", K(ret), K(res.length()));
     } else {
       int pos = WKB_COMMON_WKB_HEADER_LEN;
       for (uint32_t i = 0; i < poly_num && OB_SUCC(ret); i++) {
@@ -1578,6 +1733,7 @@ int ObGeoTypeUtil::multipoly_close_ring(const ObString &wkb_in, ObGeoStringBuffe
         ObString poly(wkb_in.length() - pos, val + pos);
         uint32_t offset = 0;
         if (OB_FAIL(ObGeoTypeUtil::poly_close_ring(poly, res, offset))) {
+          LOG_WARN("failed to close poly in multipoly", K(type));
         } else {
           pos += offset;
         }
@@ -1599,11 +1755,13 @@ int ObGeoTypeUtil::collection_close_ring(ObIAllocator &allocator, const ObString
   uint32_t geo_num = 0;
   if (ObGeoWkbByteOrder::BigEndian != bo && ObGeoWkbByteOrder::LittleEndian != bo) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid byte order", K(ret), K(bo));
   } else if (FALSE_IT(type = static_cast<ObGeoType>(ObGeoWkbByteOrderUtil::read<uint32_t>(val + WKB_GEO_BO_SIZE, bo)))) {
   } else if (type != ObGeoType::GEOMETRYCOLLECTION) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid geo type", K(type));
   } else if (OB_FAIL(res.append(val, WKB_COMMON_WKB_HEADER_LEN))) {
+    LOG_WARN("failed to append geo common header", K(ret), K(res.length()));
   } else if (FALSE_IT(geo_num = ObGeoWkbByteOrderUtil::read<uint32_t>(val + WKB_GEO_BO_SIZE + WKB_GEO_TYPE_SIZE, bo))) {
   } else if (geo_num == 0) {
     // do nothing, empty collection
@@ -1617,16 +1775,19 @@ int ObGeoTypeUtil::collection_close_ring(ObIAllocator &allocator, const ObString
       switch (sub_type) {
         case ObGeoType::MULTIPOLYGON : {
           if (OB_FAIL(ObGeoTypeUtil::multipoly_close_ring(sub_geo, res, offset))) {
+            LOG_WARN("failed to close multipoly ring", K(ret));
           }
           break;
         }
         case ObGeoType::POLYGON : {
           if (OB_FAIL(ObGeoTypeUtil::poly_close_ring(sub_geo, res, offset))) {
+            LOG_WARN("failed to close multipoly ring", K(ret));
           }
           break;
         }
         case ObGeoType::GEOMETRYCOLLECTION : {
           if (OB_FAIL(ObGeoTypeUtil::collection_close_ring(allocator, sub_geo, res, offset))) {
+            LOG_WARN("failed to close multipoly ring", K(ret));
           }
           break;
         }
@@ -1637,9 +1798,11 @@ int ObGeoTypeUtil::collection_close_ring(ObIAllocator &allocator, const ObString
           ObGeometry *sub_g = NULL;
           // whether is geog  doesn't matter
           if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator, sub_type, false, true, sub_g))) {
+            LOG_WARN("failed to create wkb", K(ret), K(sub_type));
           } else {
             sub_g->set_data(sub_geo);
             if (OB_FAIL(res.append(sub_geo.ptr(), sub_g->length()))) {
+              LOG_WARN("failed to append geo to buffer", K(ret), K(sub_type));
             } else {
               offset = sub_g->length();
             }
@@ -1669,29 +1832,37 @@ int ObGeoTypeUtil::geo_close_ring(ObGeometry &geo, ObIAllocator &allocator)
   if (geo.is_tree()) {
     ObGeoCloseRingVisitor cr_visitor;
     if (OB_FAIL(geo.do_visit(cr_visitor))) {
+      LOG_WARN("fail to do close ring visitor", K(ret));
     }
   } else if (OB_ISNULL(geo.val())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geo value is null", K(ret));
   } else if (geo.type() == ObGeoType::POLYGON) {
     ObString wkb(geo.length(), geo.val());
     uint32_t offset = 0;
     // at least add one point
     if (OB_FAIL(res.extend(geo.length() + WKB_POINT_DATA_SIZE))) {
+      LOG_WARN("failed to extend buffer", K(geo.length()));
     } else if (OB_FAIL(ObGeoTypeUtil::poly_close_ring(wkb, res, offset))) {
+      LOG_WARN("failed to close poly ring", K(ret));
     }
   } else if (geo.type() == ObGeoType::MULTIPOLYGON) {
     ObString wkb(geo.length(), geo.val());
     uint32_t offset = 0;
     // at least add one point
     if (OB_FAIL(res.extend(geo.length() + WKB_POINT_DATA_SIZE))) {
+      LOG_WARN("failed to extend buffer", K(geo.length()));
     } else if (OB_FAIL(ObGeoTypeUtil::multipoly_close_ring(wkb, res, offset))) {
+      LOG_WARN("failed to close multipoly ring", K(ret));
     }
   } else if (geo.type() == ObGeoType::GEOMETRYCOLLECTION) {
     ObString wkb(geo.length(), geo.val());
     uint32_t offset = 0;
     // at least add one point
     if (OB_FAIL(res.extend(geo.length() + WKB_POINT_DATA_SIZE))) {
+      LOG_WARN("failed to extend buffer", K(geo.length()));
     } else if (OB_FAIL(ObGeoTypeUtil::collection_close_ring(allocator, wkb, res, offset))) {
+      LOG_WARN("failed to close multipoly ring", K(ret));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -1718,17 +1889,23 @@ int ObGeoTypeUtil::get_cellid_mbr_from_geom(const ObString &wkb_str,
   char *mbr = mbr_val.ptr();
   int64_t mbr_len = 0;
   if (OB_FAIL(s2object.init(wkb_str, srs_bound))) {
+    STORAGE_LOG(WARN, "Init s2object failed", K(ret));
   } else if (OB_FAIL(s2object.get_cellids(cellids, false))) {
+    STORAGE_LOG(WARN, "Get cellids from s2object failed", K(ret));
   } else if (OB_FAIL(s2object.get_mbr(spa_mbr))) {
+    STORAGE_LOG(WARN, "Get mbr from s2object failed", K(ret));
   } else if (spa_mbr.is_empty()) {
     if (cellids.size() == 0) {
+      LOG_DEBUG("it's might be empty geometry collection", K(wkb_str));
     } else {
       ret = OB_ERR_GIS_INVALID_DATA;
+      LOG_WARN("invalid geometry", K(ret), K(wkb_str));
     }
   } else if (OB_ISNULL(mbr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc memory for spatial index row mbr", K(ret), K(mbr));
   } else if (OB_FAIL(spa_mbr.to_char(mbr, mbr_len))) {
+    STORAGE_LOG(WARN, "failed transfrom ObSpatialMBR to string", K(ret));
   } else {
     mbr_val.assign_ptr(mbr, mbr_len);
   }
@@ -1751,6 +1928,7 @@ static int srs_bounds_to_mbr_box(const ObSrsBoundsItem *bounds, ObCartesianBox &
   }
   if (OB_SUCC(ret) && box.is_empty()) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("get srs bound box failed", K(ret), K(*bounds));
   }
   return ret;
 }
@@ -1793,33 +1971,49 @@ static int mbr_box_to_geometry(uint32_t srid,
 
   if (OB_ISNULL(res_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory for mbr geo failed", K(ret), K(res_size), K(type));
   } else {
     if (OB_FAIL(wkb_visitor.write_to_buffer(srid, WKB_GEO_SRID_SIZE))) {
+      LOG_WARN("failed to append srid", K(ret));
     } else if (OB_FAIL(wkb_visitor.write_to_buffer(ENCODE_GEO_VERSION(GEO_VESION_1), WKB_VERSION_SIZE))) {
+      LOG_WARN("failed to append version", K(ret));
     } else if (OB_FAIL(wkb_visitor.write_to_buffer(ObGeoWkbByteOrder::LittleEndian, 1))) {
+      LOG_WARN("failed to write little endian", K(ret));
     } else if (OB_FAIL(wkb_visitor.write_to_buffer(static_cast<uint32_t>(type),
                                                     sizeof(uint32_t)))) {
+      LOG_WARN("failed to write type", K(ret));
     } else { /* do nothing */ }
   }
 
   if (OB_SUCC(ret)) {
     if (type == ObGeoType::POINT) {
       if (OB_FAIL(wkb_visitor.write_cartesian_point(min_x, min_y))) {
+        LOG_WARN("failed to write point(x, y)", K(ret));
       }
     } else if (type == ObGeoType::LINESTRING) {
       if (OB_FAIL(wkb_visitor.write_to_buffer(mbr_linestring_point_num, sizeof(uint32_t)))) {
+        LOG_WARN("failed to write ring number", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(min_x, min_y))) {
+        LOG_WARN("failed to write point(min_x, min_y)", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(max_x, max_y))) {
+         LOG_WARN("failed to write point(max_x, min_y)", K(ret));
       } else { /* do nothing */ }
     } else {
       // must be polygon
       if (OB_FAIL(wkb_visitor.write_to_buffer(mbr_polygon_ring_num, sizeof(uint32_t)))) {
+        LOG_WARN("failed to write ring number", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_to_buffer(mbr_polygon_point_num, sizeof(uint32_t)))) {
+        LOG_WARN("failed to write external ring point number", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(min_x, min_y))) {
+        LOG_WARN("failed to write point(min_x, min_y)", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(max_x, min_y))) {
+        LOG_WARN("failed to write point(max_x, min_y)", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(max_x, max_y))) {
+        LOG_WARN("failed to write point(max_x, max_y)", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(min_x, max_y))) {
+        LOG_WARN("failed to write point(min_x, max_y)", K(ret));
       } else if (OB_FAIL(wkb_visitor.write_cartesian_point(min_x, min_y))) {
+        LOG_WARN("failed to write point(min_x, min_y)", K(ret));
       } else { /* do nothing */ }
     }
   }
@@ -1832,13 +2026,16 @@ static int mbr_box_to_geometry(uint32_t srid,
                                                        true,
                                                        geo_bin_out,
                                                        srid))) {
+    LOG_WARN("failed to create geo", K(ret), K(type));
   } else if (OB_ISNULL(geo_bin_out)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate geo point", K(ret));
   } else {
     ObString wkb_nosrid((res_size - head_len), (res_buf + head_len));
     geo_bin_out->set_data(wkb_nosrid);
     if (OB_SUCC(ret) && geo_bin_out->length() + head_len != res_size) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid wkb geo", K(ret), K(type), K(geo_bin_out->length()), K(res_size));
     }
   }
 
@@ -1857,17 +2054,23 @@ int ObGeoTypeUtil::get_mbr_polygon(ObIAllocator &allocator,
   CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
     ObGeoEvalCtx gis_context(CURRENT_CONTEXT, NULL);
     if (OB_FAIL(srs_bounds_to_mbr_box(bounds, bounds_box))) {
+      LOG_WARN("get srs bounds box failed", K(ret));
     } else if (OB_FAIL(gis_context.append_geo_arg(&geo_bin))) {
+      LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFuncEnvelope::eval(gis_context, box))) {
+      LOG_WARN("get mbr box failed", K(ret));
     } else if (box.is_empty()) {
       ret = OB_ERR_GIS_INVALID_DATA;
       // how about some box points is nan?
+      LOG_WARN("get mbr box failed", K(ret));
     } else {
       ObCartesianBox final; // result box
       boost::geometry::intersection(box, bounds_box, final);
       if (final.is_empty()) {
         ret = OB_EMPTY_RESULT;
+        LOG_WARN("no intersection in bounds", K(ret), K(*bounds), K(box));
       } else if (OB_FAIL(mbr_box_to_geometry(geo_bin.get_srid(), allocator, final, geo_bin_out))) {
+        LOG_WARN("failed to convert box to geo", K(ret), K(final));
       } else { /* do nothing */ }
     }
   }
@@ -1883,6 +2086,7 @@ int ObGeoTypeUtil::eval_point_box_intersects(const ObSrsItem *srs_item,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo1) || OB_ISNULL(geo2) || OB_ISNULL(geo1->val()) || OB_ISNULL(geo2->val())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Null input", KP(geo1), KP(geo2));
   } else if (geo1->crs() != geo2->crs()) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_WARN("crs inconsistancy", K(geo1->crs()), K(geo2->crs()));
@@ -1924,6 +2128,7 @@ int ObGeoTypeUtil::geo_type_in_collection(uint64_t etype, uint64_t interpretatio
         type = ObGeoType::MULTIPOINT;
       } else {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("the type is not supported", K(ret), K(interpretation), K(etype));
       }
       break;
     }
@@ -1933,6 +2138,7 @@ int ObGeoTypeUtil::geo_type_in_collection(uint64_t etype, uint64_t interpretatio
         type = ObGeoType::LINESTRING;
       } else {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("the type is not supported", K(ret), K(interpretation), K(etype));
       }
       break;
     }
@@ -1942,6 +2148,7 @@ int ObGeoTypeUtil::geo_type_in_collection(uint64_t etype, uint64_t interpretatio
         type = ObGeoType::POLYGON;
       } else {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("the type is not supported", K(ret), K(interpretation), K(etype));
       }
       break;
     }
@@ -1951,12 +2158,14 @@ int ObGeoTypeUtil::geo_type_in_collection(uint64_t etype, uint64_t interpretatio
         type = ObGeoType::POLYGON;
       } else {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("the type is not supported", K(ret), K(interpretation), K(etype));
       }
       break;
     }
 
     default: {
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("the type is not supported", K(ret), K(interpretation), K(etype));
       break;
     }
   }
@@ -2012,6 +2221,7 @@ int ObGeoTypeUtil::get_num_by_gtype(ObGeoType geo_type, uint64_t &num)
       break;
     default :
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("get num by gtype failed", K(ret), K(geo_type));
   }
   return ret;
 }
@@ -2020,7 +2230,9 @@ int ObGeoTypeUtil::append_point(double x, double y, ObWkbBuffer &wkb_buf)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(wkb_buf.append(x))) {
+    LOG_WARN("fail to append x to point wkb buf", K(ret), K(x));
   } else if (OB_FAIL(wkb_buf.append(y))) {
+    LOG_WARN("fail to append y to point wkb buf", K(ret), K(y));
   }
   return ret;
 }
@@ -2032,17 +2244,28 @@ int ObGeoTypeUtil::rectangle_to_swkb(double xmin, double ymin, double xmax, doub
   const uint32_t RING_NUM = 1;
   const uint32_t RING_POINT_NUM = 5;
   if (OB_FAIL(wkb_buf.append(srid))) {
+    LOG_WARN("fail to append srid to polygon wkb buf", K(ret), K(srid));
   } else if (with_version && OB_FAIL(wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
     // must have version info, or it will fail in ob_datum_cast
+    LOG_WARN("fail to append version to point wkb buf", K(ret));
   } else if (OB_FAIL(wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
+    LOG_WARN("fail to append little endian byte order to point wkb buf", K(ret));
   } else if (OB_FAIL(wkb_buf.append(static_cast<uint32_t>(ObGeoType::POLYGON)))) {
+    LOG_WARN("fail to append geo type to polygon wkb buf", K(ret));
   } else if (OB_FAIL(wkb_buf.append(static_cast<uint32_t>(RING_NUM)))) {
+    LOG_WARN("fail to append ring num to polygon wkb buf", K(ret));
   } else if (OB_FAIL(wkb_buf.append(static_cast<uint32_t>(RING_POINT_NUM)))) {
+    LOG_WARN("fail to append ring point num to polygon wkb buf", K(ret));
   } else if (OB_FAIL(append_point(xmin, ymin, wkb_buf))) {
+    LOG_WARN("fail to append point to polygon wkb buf", K(ret), K(xmin), K(ymin));
   } else if (OB_FAIL(append_point(xmin, ymax, wkb_buf))) {
+    LOG_WARN("fail to append point to polygon wkb buf", K(ret), K(xmax), K(ymin));
   } else if (OB_FAIL(append_point(xmax, ymax, wkb_buf))) {
+    LOG_WARN("fail to append point to polygon wkb buf", K(ret), K(xmax), K(ymax));
   } else if (OB_FAIL(append_point(xmax, ymin, wkb_buf))) {
+    LOG_WARN("fail to append point to polygon wkb buf", K(ret), K(xmin), K(ymax));
   } else if (OB_FAIL(append_point(xmin, ymin, wkb_buf))) {
+    LOG_WARN("fail to append point to polygon wkb buf", K(ret), K(xmin), K(ymin));
   }
 
   return ret;
@@ -2057,12 +2280,15 @@ int ObGeoTypeUtil::number_to_double(const number::ObNumber &num_val, double &res
   char buf[MAX_DOUBLE_PRINT_SIZE] = {0};
   int64_t pos = 0;
   if (OB_FAIL(num_val.format(buf, sizeof(buf), pos, -1))) {
+    LOG_WARN("fail to format number", K(ret), K(num_val));
   } else {
     char *endptr = NULL;
     int err = 0;
     double val = ObCharset::strntod(buf, pos, &endptr, &err);
     if (EOVERFLOW == err && (-DBL_MAX == res || DBL_MAX == res)) {
       ret = OB_DATA_OUT_OF_RANGE;
+      LOG_WARN("faild to cast string to double, cause data is out of range",
+          K(ret), K(val), K(pos), K(num_val));
     } else {
       res = val;
     }
@@ -2101,6 +2327,7 @@ int ObGeoTypeUtil::get_coll_dimension(ObIWkbGeomCollection *geo, int8_t &dimensi
     typename ObWkbGeomCollection::const_pointer sub_ptr = iter.operator->();
     if (pos + WKB_GEO_TYPE_SIZE + WKB_GEO_BO_SIZE > total_len) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid wkb geo", K(ret), K(total_len), K(pos));
     } else {
       ObGeoType sub_type = collection->get_sub_type(sub_ptr);
       switch (sub_type) {
@@ -2125,6 +2352,7 @@ int ObGeoTypeUtil::get_coll_dimension(ObIWkbGeomCollection *geo, int8_t &dimensi
           ObString data(total_len - pos, reinterpret_cast<const char *>(subgc));
           sub_collection.set_data(data);
           if (OB_FAIL(get_coll_dimension(&sub_collection, dimension))) {
+            LOG_WARN("failed to do wkb geom sub collection visit", K(ret));
           } else {
             pos += sub_collection.length();
           }
@@ -2132,6 +2360,7 @@ int ObGeoTypeUtil::get_coll_dimension(ObIWkbGeomCollection *geo, int8_t &dimensi
         }
         default: {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid geo type", K(ret), K(sub_type));
           break;
         }
       }
@@ -2144,8 +2373,10 @@ int ObLineSegment::get_box(ObCartesianBox &box)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(verts)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("vertexes is null", K(ret));
   } else if (begin >= end) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("line segment don't have enough points", K(begin), K(end), K(ret));
   } else {
     double min_x = (*verts)[begin].x;
     double min_y = (*verts)[begin].y;
@@ -2216,10 +2447,12 @@ int ObGeoTypeUtil::check_empty(ObGeometry *geo, bool &is_empty)
   if (is_3d_geo_type(geo->type())) {
     ObGeometry3D *geo3D = reinterpret_cast<ObGeometry3D *>(geo);
     if (OB_FAIL(geo3D->check_empty(is_empty))) {
+      LOG_WARN("fail to check 3D geometry empty", K(ret));
     }
   } else {
     ObGeoCheckEmptyVisitor check_empty_visitor;
     if (OB_FAIL(geo->do_visit(check_empty_visitor))) {
+      LOG_WARN("check empty geo failed", K(ret));
     } else {
       is_empty = check_empty_visitor.get_result();
     }
@@ -2237,6 +2470,7 @@ int ObGeoTypeUtil::is_in_geometry(lib::MemoryContext &mem_ctx, const ObGeometry 
     if (OB_FAIL(gis_context.append_geo_arg(&geo)) || OB_FAIL(gis_context.append_geo_arg(&multi_geo[j]))) {
       OB_LOG(WARN, "build gis context failed", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Equals>::geo_func::eval(gis_context, res))) {
+      OB_LOG(WARN, "eval st intersection failed", K(ret));
     }
   }
   return ret;
@@ -2247,17 +2481,22 @@ int ObGeoTypeUtil::remove_duplicate_geo(ObGeometry *&geo, lib::MemoryContext &me
   INIT_SUCC(ret);
   if (geo == NULL) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("input geo is null", K(ret));
   } else if ((srs == NULL || srs->srs_type() != ObSrsType::GEOGRAPHIC_SRS)
       && geo->crs() == ObGeoCRS::Geographic) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid srs type", K(ret), KP(srs), K(geo->crs()));
   } else {
     bool is_duplicate = false;
     switch (geo->crs()) {
       case ObGeoCRS::Geographic : {
         if (OB_FAIL(check_if_geo_duplicate<ObGeographGeometrycollection>(geo, mem_ctx, srs, is_duplicate))) {
+          LOG_WARN("fail to check if geometry has duplicate", K(ret));
         } else if (is_duplicate && OB_FAIL(remove_duplicate_multi_geo<ObGeographGeometrycollection>(geo, mem_ctx, srs))) {
+          LOG_WARN("failed to remove duplicate geo", K(ret), K(geo->crs()));
         } else if (need_simplify) {
           if (OB_FAIL((simplify_multi_geo<ObGeographGeometrycollection>(geo, mem_ctx->get_arena_allocator())))) {
+            OB_LOG(WARN, "fail to simplify result", K(ret));
           } else if (geo->type() == ObGeoType::GEOMETRYCOLLECTION
               && OB_FAIL(simplify_geo_collection<ObGeographGeometrycollection>(geo, mem_ctx->get_arena_allocator(), srs))) {
             OB_LOG(WARN, "fail to simplify_geo_collection", K(ret));
@@ -2267,9 +2506,12 @@ int ObGeoTypeUtil::remove_duplicate_geo(ObGeometry *&geo, lib::MemoryContext &me
       }
       case ObGeoCRS::Cartesian : {
         if (OB_FAIL(check_if_geo_duplicate<ObCartesianGeometrycollection>(geo, mem_ctx, srs, is_duplicate))) {
+          LOG_WARN("fail to check if geometry has duplicate", K(ret));
         } else if (is_duplicate && OB_FAIL(remove_duplicate_multi_geo<ObCartesianGeometrycollection>(geo, mem_ctx, srs))) {
+          LOG_WARN("failed to remove duplicate geo", K(ret), K(geo->crs()));
         } else if (need_simplify) {
           if (OB_FAIL((simplify_multi_geo<ObCartesianGeometrycollection>(geo, mem_ctx->get_arena_allocator())))) {
+            OB_LOG(WARN, "fail to simplify result", K(ret));
           } else if (geo->type() == ObGeoType::GEOMETRYCOLLECTION
               && OB_FAIL(simplify_geo_collection<ObCartesianGeometrycollection>(geo, mem_ctx->get_arena_allocator(), srs))) {
             OB_LOG(WARN, "fail to simplify_geo_collection", K(ret));
@@ -2291,9 +2533,11 @@ int ObGeoMVTUtil::affine_transformation(ObGeometry *geo, const ObAffineMatrix &a
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry can not be null", K(ret));
   } else {
     ObGeoAffineVisitor affine_visitor(&affine);
     if (OB_FAIL(geo->do_visit(affine_visitor))) {
+      LOG_WARN("fail to do affine visitor", K(ret));
     }
   }
   return ret;
@@ -2306,6 +2550,7 @@ int ObGeoTypeUtil::create_cached_geometry(ObIAllocator &allocator, ObGeometry *g
   CachedGeoType *tmp_cached = reinterpret_cast<CachedGeoType *>(allocator.alloc(sizeof(CachedGeoType)));
   if (OB_ISNULL(tmp_cached)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc cached polygon", K(ret));
   } else {
     cached_geo = new(tmp_cached) CachedGeoType(geo, allocator, srs);
   }
@@ -2324,6 +2569,7 @@ int ObGeoTypeUtil::magnify_and_recheck(lib::MemoryContext& ctx, ObGeometry &geo,
   if (OB_FAIL(copy_geometry(ctx, geo, tmp_geo)) || OB_ISNULL(tmp_geo)) {
     // do nothing, return invalid_for_cache
   } else if (OB_FAIL(tmp_geo->do_visit(zoom_in_visitor))) {
+    LOG_WARN("failed to zoom in visit", K(ret));
   } else {
     gis_context.ut_set_geo_arg(0, tmp_geo);
     ret = check_valid_and_self_intersects(gis_context, invalid_for_cache, need_recheck);
@@ -2337,11 +2583,13 @@ int ObGeoTypeUtil::check_valid_and_self_intersects(ObGeoEvalCtx& gis_context, bo
   bool valid = false;
   const ObGeoNormalVal *val_arg = nullptr;
   if (OB_FAIL(ObGeoFunc<ObGeoFuncType::IsValid>::geo_func::eval(gis_context, valid))) {
+    LOG_WARN("eval geo func isvalid failed", K(ret));
   } else if (valid) {
     invalid_for_cache = false;
   } else if (OB_FALSE_IT(val_arg = gis_context.get_val_arg(0))) {
   } else if (OB_ISNULL(val_arg)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should not be null", K(ret));
   } else if (static_cast<int64_t>(bg::validity_failure_type::failure_self_intersections) == val_arg->int64_) {
     invalid_for_cache = true;
     need_recheck = true;
@@ -2363,10 +2611,15 @@ int ObGeoTypeUtil::polygon_check_self_intersections(lib::MemoryContext& ctx, ObG
   const ObGeoNormalVal *val_arg = nullptr;
   bool need_recheck = false;
   if (OB_FAIL(gis_context.append_geo_arg(&geo))) {
+    LOG_WARN("build geo gis context failed", K(ret));
   } else if (OB_FAIL(gis_context.append_val_arg(reason))) {
+    LOG_WARN("add reason val to context failed", K(ret));
   } else if (OB_FAIL(check_valid_and_self_intersects(gis_context, invalid_for_cache, need_recheck))) {
+    LOG_WARN("fail to check_valid_if_self_intersects.", K(ret));
   } else if (invalid_for_cache && need_recheck && OB_FAIL(magnify_and_recheck(ctx, geo, gis_context, invalid_for_cache))) {
+    LOG_WARN("fail to magnify_and_recheck.", K(ret));
   } else if (invalid_for_cache) {
+    LOG_WARN("self intersects, use geo cache base.", K(ret));
   }
   return ret;
 }
@@ -2380,6 +2633,7 @@ int ObGeoTypeUtil::create_cached_geometry(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should not be null", K(ret));
   } else {
     switch (geo->type()) {
       case ObGeoType::POINT:
@@ -2404,6 +2658,7 @@ int ObGeoTypeUtil::create_cached_geometry(ObIAllocator &allocator,
       }
       default: {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("type not supported yet.", K(geo->type()) ,K(ret));
         break;
       }
     }
@@ -2417,6 +2672,7 @@ int ObGeoTypeUtil::get_geo_dimension(ObGeometry *geo, ObGeoDimension& dim)
   dim = ObGeoDimension::MAX_DIMENSION;
   if (OB_ISNULL(geo)) {
     ret = OB_BAD_NULL_ERROR;
+    LOG_WARN("should not be null.", K(ret));
   } else {
     switch (geo->type()) {
       case ObGeoType::POINT:
@@ -2445,12 +2701,14 @@ int ObGeoTypeUtil::get_geo_dimension(ObGeometry *geo, ObGeoDimension& dim)
       }
       default: {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("type not supported yet.", K(geo->type()), K(ret));
         break;
       }
     }
     if (OB_FAIL(ret)) {
     } else if (dim == ObGeoDimension::MAX_DIMENSION) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get geo dimension.", K(ret));
     }
   }
   return ret;
@@ -2476,14 +2734,14 @@ int ObGeoTypeUtil::has_dimension(ObGeometry& geo, ObGeoDimension dim, bool& res)
   return ret;
 }
 
-bool ObGeoTypeUtil::use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObGeoPredicate predicate)
+bool ObGeoTypeUtil::use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObItemType func_type)
 {
   bool ret_bool = false;
-  if (predicate == ObGeoPredicate::INTERSECTS) {
+  if (func_type == ObItemType::T_FUN_SYS_ST_INTERSECTS) {
     ret_bool = (is_point(geo1) && is_polygon(geo2)) || (is_point(geo2) && is_polygon(geo1));
-  } else if (predicate == ObGeoPredicate::COVERS || predicate == ObGeoPredicate::CONTAINS){
+  } else if (func_type == ObItemType::T_FUN_SYS_ST_COVERS || func_type == ObItemType::T_FUN_SYS_ST_CONTAINS){
     ret_bool = is_polygon(geo1) && is_point(geo2);
-  } else if (predicate == ObGeoPredicate::WITHIN) {
+  } else if (func_type == ObItemType::T_FUN_SYS_ST_WITHIN) {
     ret_bool = is_point(geo1) && is_polygon(geo2);
   }
   return ret_bool;
@@ -2499,6 +2757,7 @@ int ObGeoTypeUtil::point_polygon_short_circuit(ObGeometry *poly, ObGeometry *poi
     p.y = tmp_p->y();
     ObGeoPointLocationVisitor point_loc_visitor(p);
     if (OB_FAIL(poly->do_visit(point_loc_visitor))) {
+      LOG_WARN("failed to do point location visitor", K(ret));
     } else {
       loc = point_loc_visitor.get_point_location();
       has_internal = (loc == ObPointLocation::INTERIOR);
@@ -2508,12 +2767,14 @@ int ObGeoTypeUtil::point_polygon_short_circuit(ObGeometry *poly, ObGeometry *poi
     ObVertexes input_vertexes;
     ObGeoVertexCollectVisitor vertex_visitor(input_vertexes);
     if (OB_FAIL(point->do_visit(vertex_visitor))) {
+      LOG_WARN("failed to collect geo vertexes", K(ret));
     } else {
       ObPointLocation tmp_loc = ObPointLocation::INVALID;
       int size = input_vertexes.size();
       for (uint32_t i = 0; i < size && OB_SUCC(ret) && (loc == ObPointLocation::INVALID); i++) {
         ObGeoPointLocationVisitor point_loc_visitor(input_vertexes[i]);
         if (OB_FAIL(poly->do_visit(point_loc_visitor))) {
+          LOG_WARN("failed to do point location visitor", K(ret));
         } else if (!get_fartest && (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
                   || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY)) {
           loc = point_loc_visitor.get_point_location();
@@ -2538,7 +2799,7 @@ int ObGeoTypeUtil::point_polygon_short_circuit(ObGeometry *poly, ObGeometry *poi
   return ret;
 }
 
-int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObGeoPredicate predicate, bool& result)
+int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObItemType func_type, bool& result)
 {
   int ret = OB_SUCCESS;
   ObPointLocation loc = ObPointLocation::INVALID;
@@ -2546,12 +2807,14 @@ int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObG
   ObGeometry *point = nullptr;
   if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
     ret = OB_BAD_NULL_ERROR;
+    LOG_WARN("should not be null.", K(ret));
   } else {
     point = is_point(*geo1) ? geo1 : geo2;
     poly = is_point(*geo1) ? geo2 : geo1;
-    bool get_fartest = (predicate != ObGeoPredicate::INTERSECTS);
+    bool get_fartest = (func_type != ObItemType::T_FUN_SYS_ST_INTERSECTS);
     bool has_internal = false;
     if (OB_FAIL(point_polygon_short_circuit(poly, point, loc, has_internal, get_fartest))) {
+      LOG_WARN("fail to get point polygon position.", K(ret));
     } else if (!get_fartest) {
       result = (loc == ObPointLocation::INTERIOR || loc == ObPointLocation::BOUNDARY);
     } else if (get_fartest) {
@@ -2560,7 +2823,7 @@ int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObG
       } else if (loc == ObPointLocation::INTERIOR || (loc == ObPointLocation::BOUNDARY && has_internal)) {
         result = true;
       } else {
-        result = (predicate == ObGeoPredicate::COVERS);
+        result = (func_type == ObItemType::T_FUN_SYS_ST_COVERS);
       }
     }
   }
@@ -2607,6 +2870,7 @@ int ObGeoTypeUtil::get_collection_dimension(T_IBIN *geo, ObGeoDimension& dim)
           sub_collection.set_data(data);
           ret = get_collection_dimension<T_IBIN, T_BIN>(&sub_collection, tmp_dim);
           if (OB_FAIL(ret)) {
+            LOG_WARN("failed to do wkb geom sub collection visit", K(ret));
           } else {
             pos += sub_collection.length();
           }
@@ -2614,6 +2878,7 @@ int ObGeoTypeUtil::get_collection_dimension(T_IBIN *geo, ObGeoDimension& dim)
         }
         default : {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid geo type", K(ret), K(sub_type));
           break;
         }
       }
@@ -2665,6 +2930,7 @@ int ObGeoTypeUtil::collection_has_dimension(T_IBIN *geo, ObGeoDimension dim, boo
         }
         default : {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid geo type", K(ret), K(sub_type));
           break;
         }
       }
@@ -2687,11 +2953,13 @@ int ObGeoTypeUtil::print_double(double val, ObStringBuffer &buf)
   INIT_SUCC(ret);
 
   if (OB_FAIL(buf.reserve(DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE + 1))) {
+    LOG_WARN("fail to reserve memory for j_buf", K(ret));
   } else {
     char *start = buf.ptr() + buf.length();
     uint64_t len = ob_gcvt(val, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE,
         DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE, start, NULL);
     if (OB_FAIL(buf.set_length(buf.length() + len))) {
+      LOG_WARN("fail to set j_buf len", K(ret), K(buf.length()), K(len));
     }
   }
 
@@ -2703,9 +2971,11 @@ int ObGeoMVTUtil::snap_to_grid(ObGeometry *geo, const ObGeoGrid &grid, bool use_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry can not be null", K(ret));
   } else {
     ObGeoGridVisitor grid_visitor(&grid, use_floor);
     if (OB_FAIL(geo->do_visit(grid_visitor))) {
+      LOG_WARN("fail to do affine visitor", K(ret));
     }
   }
   return ret;
@@ -2716,9 +2986,11 @@ int ObGeoMVTUtil::simplify_geometry(ObGeometry *geo, double tolerance, bool keep
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry can not be null", K(ret));
   } else {
     ObGeoSimplifyVisitor simplify_visitor(tolerance, keep_collapsed);
     if (OB_FAIL(geo->do_visit(simplify_visitor))) {
+      LOG_WARN("fail to do affine visitor", K(ret));
     }
   }
   return ret;
@@ -2739,8 +3011,10 @@ int ObGeoBoostAllocGuard::init()
        .set_properties(lib::USE_TL_PAGE_OPTIONAL) // todo: need thread safe?
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+    LOG_WARN("failed to create memory context", K(ret));
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("failed to create memory context", K(ret));
   } else {
     inited_ = true;
   }

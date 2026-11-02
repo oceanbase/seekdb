@@ -19,8 +19,8 @@
 
 #include <stdint.h>
 #include "lib/utility/ob_macro_utils.h"
-#include "data_plane/access/ob_tablet_scan.h"
-#include "query/engine/basic/ob_pushdown_filter.h"
+#include "share/ob_i_tablet_scan.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
 namespace oceanbase
 {
@@ -213,6 +213,9 @@ public:
       sql::PushdownFilterInfo &filter_info,
       const bool is_major,
       common::ObBitmap &result_bitmap) = 0;
+  virtual int apply_sample_filter( // for column store
+      const ObCSRange &range, 
+      common::ObBitmap &result_bitmap) = 0; 
   virtual void set_block_row_range(
       const int64_t fetch_idx, 
       const int64_t current,
@@ -263,6 +266,9 @@ public:
   int apply_sample_filter( // for row store
       sql::PushdownFilterInfo &filter_info,
       const bool is_major,
+      common::ObBitmap &result_bitmap) override;
+  int apply_sample_filter( // for column store
+      const ObCSRange &range, 
       common::ObBitmap &result_bitmap) override;
   int increase_row_num(const int64_t count) override
   {
@@ -332,6 +338,9 @@ public:
       sql::PushdownFilterInfo &filter_info,
       const bool is_major,
       common::ObBitmap &result_bitmap) override;
+  int apply_sample_filter( // for column store
+      const ObCSRange &range, 
+      common::ObBitmap &result_bitmap) override; 
   void set_block_row_range(
       const int64_t fetch_idx, 
       const int64_t current,
@@ -351,7 +360,7 @@ public:
                         KP_(data_row_id_handle), KP_(index_row_id_handle), KP_(allocator));
 private:
   int init_sample_segment_length(const double percent);
-  int update_pd_row_range(const int64_t start, const int64_t end);
+  int update_pd_row_range(const int64_t start, const int64_t end, const bool in_cg = false);
   void reset_row_id_handle();
   int parse_interval_info(const int64_t row_num, ObSampleIntervalParser &interval_parser) const;
   int check_single_row_filtered(const int64_t row_num, bool &filtered);

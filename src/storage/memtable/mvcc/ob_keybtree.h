@@ -97,6 +97,7 @@ public:
     BtreeNode *p = nullptr;
     int ret = OB_SUCCESS;
     if (OB_FAIL(pop(p))) {
+      OB_LOG(WARN, "alloc_block fail", K(get_allocated()));
     }
     return p;
   }
@@ -136,7 +137,7 @@ private:
 private:
   common::ObIAllocator &allocator_;
   int64_t alloc_memory_;
-  // free lists partitioned by CPU to achieve better scalability
+  // free lists partitioned by cpu to archive better scalability
   BtreeNodeList free_list_array_[MAX_LIST_COUNT] CACHE_ALIGNED;
 };
 
@@ -282,11 +283,8 @@ public:
   static int batch_destroy();
 
   // ===================== Ob Btree Operator  =====================
-  typedef typename WriteHandle::BtreeKvCreator BtreeKvCreator;
   int insert(const BtreeKey key, BtreeVal &value);
-  int insert_or_get(const BtreeKey key, const BtreeKvCreator &creator, BtreeVal &val);
   int get(const BtreeKey key, BtreeVal &value);
-  int get(const BtreeKey key, BtreeVal &value, BtreeKey &copy_inner_key);
   int set_key_range(BtreeIterator &iter, const BtreeKey min_key, const bool start_exclude,
                     const BtreeKey max_key, const bool end_exclude) const;
   int set_key_range(BtreeRawIterator &handle, const BtreeKey min_key, const bool start_exclude,

@@ -1,0 +1,87 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_FILE_DIRECTORY_UTILS_H_
+#define OCEANBASE_COMMON_FILE_DIRECTORY_UTILS_H_
+
+#include <string>
+#include <vector>
+#include <stdint.h>
+#ifdef _WIN32
+#include <sys/types.h>
+#ifndef _MODE_T_DEFINED
+typedef int mode_t;
+#define _MODE_T_DEFINED
+#endif
+#endif
+
+namespace oceanbase
+{
+namespace common
+{
+class ObSqlString;
+
+#ifndef S_IRWXUGO
+# define S_IRWXUGO (S_IRWXU | S_IRWXG | S_IRWXO)
+#endif
+
+#ifdef _WIN32
+#pragma push_macro("MAX_PATH")
+#undef MAX_PATH
+#endif
+class FileDirectoryUtils
+{
+public:
+  static const int MAX_PATH = 512;
+#ifdef _WIN32
+#pragma pop_macro("MAX_PATH")
+#endif
+  static int is_exists(const char *file_path, bool &result);
+  static int is_writable(const char *file_path, bool &result);
+  static int is_accessible(const char *file_path, bool &result);
+  static int is_directory(const char *directory_path, bool &result);
+  static int is_link(const char *link_path, bool &result);
+  static int create_directory(const char *directory_path);
+  static int create_full_path(const char *fullpath);
+  static int delete_file(const char *filename);
+  static int delete_directory(const char *dirname);
+  static int get_file_size(const char *filename, int64_t &size);
+  static int is_valid_path(const char *path, const bool print_error);
+  static int is_empty_directory(const char *directory_path, bool &result);
+  static int open(const char *directory_path, int flags, mode_t mode, int &fd);
+  static int close(const int fd);
+  static int symlink(const char *oldpath, const char *newpath);
+  static int unlink_symlink(const char *link_path);
+  static int dup_fd(const int fd, int &dup_fd);
+  static int get_disk_space(const char *path, int64_t &total_space, int64_t &free_space);
+  static int delete_directory_rec(const char *path);
+  static int delete_tmp_file_or_directory_at(const char *path);
+  static int fsync_dir(const char *dir_path);
+
+  /**
+  * convert relative path to absolute path
+  * @note ensure the path exists
+  */
+  static int to_absolute_path(ObSqlString &path);
+
+private:
+  static int check_directory_mode(const char *file_path, int mode, bool &result);
+};
+
+typedef FileDirectoryUtils FSU;
+}       //end namespace common
+}       //end namespace oceanbase
+#endif

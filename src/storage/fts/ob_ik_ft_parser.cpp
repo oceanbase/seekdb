@@ -23,8 +23,8 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
-#include "data_plane/fts/ob_fts_struct.h"
-#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
@@ -35,6 +35,9 @@
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "storage/fts/ik/ob_ik_quantifier_processor.h"
 #include "storage/fts/ik/ob_ik_surrogate_processor.h"
+#include "plugin/sys/ob_plugin_mgr.h"
+
+using namespace oceanbase::plugin;
 
 namespace oceanbase
 {
@@ -46,24 +49,75 @@ int ObIKFTParser::init(const ObFTParserParam &param)
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("Parser already inited once", K(ret));
   } else {
     coll_type_ = ObCollationType::CS_TYPE_INVALID;
     if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Invalid parser param.", K(ret));
     } else if (CS_TYPE_INVALID == (coll_type_ = ObCharset::collation_type(param.cs_->name))) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Invalid collation type.", K(ret));
     } else if (OB_FAIL(init_dict(param))) {
+      LOG_WARN("Failed to init dict", K(ret));
     } else if (OB_FAIL(init_ctx(param))) {
+      LOG_WARN("Failed to init ctx", K(ret));
     } else if (OB_FAIL(init_segmenter(param))) {
+      LOG_WARN("Failed to init segmenters", K(ret));
+    } else if (OB_ISNULL(arbitrator_ = OB_NEWx(ObIKArbitrator, &allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate IK arbitrator", K(ret));
     }
 
     if (OB_FAIL(ret)) {
       reset();
     } else {
+      ik_param_ = param.ik_param_;
       is_inited_ = true;
     }
   }
 
+  return ret;
+}
+
+int ObIKFTParser::reuse(const ObFTParserParam &param)
+{
+  int ret = OB_SUCCESS;
+  ObCollationType coll_type = CS_TYPE_INVALID;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("parser has not been initialized", K(ret));
+  } else if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)
+             || OB_ISNULL(param.fulltext_) || param.ft_length_ <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid parser param", K(ret), K(param));
+  } else if (CS_TYPE_INVALID == (coll_type = ObCharset::collation_type(param.cs_->name))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid collation type", K(ret), K(param));
+  } else if (coll_type != coll_type_
+             || param.ik_param_.mode_ != ik_param_.mode_
+             || param.ik_param_.main_dict_ != ik_param_.main_dict_
+             || param.ik_param_.quan_dict_ != ik_param_.quan_dict_
+             || param.ik_param_.stopword_dict_ != ik_param_.stopword_dict_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("cannot change IK parser configuration during reuse",
+             K(ret), K(coll_type), K(coll_type_),
+             K(param.ik_param_.main_dict_), K(ik_param_.main_dict_),
+             K(param.ik_param_.quan_dict_), K(ik_param_.quan_dict_),
+             K(param.ik_param_.stopword_dict_), K(ik_param_.stopword_dict_));
+  } else {
+    for (ObIIKProcessor *segmenter : segmenters_) {
+      if (OB_NOT_NULL(segmenter)) {
+        segmenter->reuse();
+      }
+    }
+    if (OB_FAIL(ctx_->reuse(coll_type_,
+                                 param.fulltext_,
+                                 param.ft_length_,
+                                 param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
+      LOG_WARN("failed to reuse tokenize context", K(ret), K(param));
+    }
+  }
   return ret;
 }
 
@@ -80,22 +134,23 @@ int ObIKFTParser::get_next_token(const char *&word,
 
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("Parser has not been inited", K(ret));
   } else {
     bool accept_token = false;
     while (OB_SUCC(ret) && !accept_token) {
       if (OB_FAIL(produce())) {
+        LOG_WARN("Failed to produce new token", K(ret));
       } else if (OB_FAIL(ctx_->get_next_token(output_word, len, offset, cnt))) {
         if (OB_ITER_END == ret) {
           // ok, end this iter
         } else {
+          LOG_WARN("Failed to get next token", K(ret));
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (OB_FAIL(match_stopword(output_word + offset, len, is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -110,6 +165,57 @@ int ObIKFTParser::get_next_token(const char *&word,
   return ret;
 }
 
+int ObIKFTParser::match_stopword(const char *word,
+                                 const int64_t word_len,
+                                 bool &is_stopword)
+{
+  int ret = OB_SUCCESS;
+  const char *lookup_word = word;
+  int64_t uppercase_pos = 0;
+  is_stopword = false;
+  if (OB_ISNULL(word) || OB_UNLIKELY(word_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid stopword", K(ret), KP(word), K(word_len));
+  } else if (OB_ISNULL(dict_stop_)) {
+    // No stopword dictionary is configured.
+  } else {
+    while (uppercase_pos < word_len
+           && (word[uppercase_pos] < 'A' || word[uppercase_pos] > 'Z')) {
+      ++uppercase_pos;
+    }
+    if (uppercase_pos < word_len) {
+      if (word_len > normalized_token_capacity_) {
+        char *new_buffer = static_cast<char *>(allocator_.alloc(word_len));
+        if (OB_ISNULL(new_buffer)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to grow normalized token buffer", K(ret), K(word_len),
+              K(normalized_token_capacity_));
+        } else {
+          if (OB_NOT_NULL(normalized_token_)) {
+            allocator_.free(normalized_token_);
+          }
+          normalized_token_ = new_buffer;
+          normalized_token_capacity_ = word_len;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        MEMCPY(normalized_token_, word, word_len);
+        for (int64_t index = uppercase_pos; index < word_len; ++index) {
+          if (normalized_token_[index] >= 'A' && normalized_token_[index] <= 'Z') {
+            normalized_token_[index] =
+                static_cast<char>(normalized_token_[index] + ('a' - 'A'));
+          }
+        }
+        lookup_word = normalized_token_;
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(dict_stop_->match(ObString(word_len, lookup_word), is_stopword))) {
+      LOG_WARN("failed to match stopword dictionary", K(ret), K(word_len));
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::produce()
 {
   int ret = OB_SUCCESS;
@@ -119,6 +225,7 @@ int ObIKFTParser::produce()
       if (OB_ITER_END == ret) {
         // ok
       } else {
+        LOG_WARN("Failed to load next batch", K(ret));
       }
     }
   }
@@ -138,7 +245,8 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    if (OB_FAIL((*iter)->process(ctx, ch, char_len, type))) {
+      LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
   return ret;
@@ -159,9 +267,10 @@ int ObIKFTParser::process_next_batch()
       const char *ch;
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
-      if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-      } else if (OB_FAIL(ctx_->current_char_type(type))) {
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("failed to get current character", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
+        LOG_WARN("Failed to process one char", K(ret));
       } else {
         // 1. check segmention
         if (ctx_->handle_size() > SEGMENT_LIMIT && type == ObFTCharUtil::CharType::USELESS) {
@@ -172,15 +281,20 @@ int ObIKFTParser::process_next_batch()
         if (OB_FAIL(ctx_->step_next())) {
           if (OB_ITER_END == ret) {
           } else {
+            LOG_WARN("Failed to step next", K(ret));
           }
         }
       } // end of one batch
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      if (OB_ISNULL(arbitrator_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("IK arbitrator is nullptr", K(ret), KP(arbitrator_));
+      } else if (OB_FAIL(arbitrator_->process(*ctx_))) {
+        LOG_WARN("Failed to process arbitrator", K(ret));
+      } else if (OB_FAIL(arbitrator_->output_result(*ctx_))) {
+        LOG_WARN("Failed to make result list");
       }
     } else {
       // Already logged.
@@ -190,33 +304,71 @@ int ObIKFTParser::process_next_batch()
   return ret;
 }
 
-int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
+int ObIKFTParserDesc::init(ObPluginParam *param)
+{
+  is_inited_ = true;
+  return OB_SUCCESS;
+}
+
+int ObIKFTParserDesc::deinit(ObPluginParam *param)
+{
+  is_inited_ = false;
+  return OB_SUCCESS;
+}
+
+int ObIKFTParserDesc::create_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObIKFTParser *parser = nullptr;
   ObFTDictHub *hub = nullptr;
-  if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->parser_allocator_)
+             || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObFTParseData::instance().get_dict_hub(hub))) {
-  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
+    LOG_WARN("invalid argument", K(ret), KPC(param));
+  } else if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("Failed to get dict hub.", K(ret));
+  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser,
+                                        param->parser_allocator_,
+                                        *(param->parser_allocator_),
+                                        hub))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate ik ft parser", K(ret));
   } else if (OB_FAIL(parser->init(*param))) {
+    LOG_WARN("fail to init ik parser", K(ret), KPC(param));
   } else {
     iter = parser;
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObIKFTParser, param->allocator_, parser);
+    OB_DELETEx(ObIKFTParser, param->parser_allocator_, parser);
   }
 
   return ret;
 }
 
-void ObIKFTParserDesc::free_token_iter(ObFTParserParam *param,
-                                       ObITokenIterator *&iter) const
+int ObIKFTParserDesc::reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const
 {
-  iter->~ObITokenIterator();
-  param->allocator_->free(iter);
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param) || OB_ISNULL(iter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KPC(param), KP(iter));
+  } else if (OB_FAIL(static_cast<ObIKFTParser *>(iter)->reuse(*param))) {
+    LOG_WARN("failed to reuse IK parser", K(ret), KPC(param));
+  }
+  return ret;
+}
+
+void ObIKFTParserDesc::destroy_token_iter(ObFTParserParam *param,
+                                          ObITokenIterator *&iter) const
+{
+  if (OB_NOT_NULL(iter)) {
+    iter->~ObITokenIterator();
+    param->parser_allocator_->free(iter);
+    iter = nullptr;
+  }
 }
 
 
@@ -228,60 +380,53 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
   return ret;
 }
 
-int ObIKFTParser::init_dict(const ObFTParserParam &param)
+int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
   ObIFTDict *tmp_dict = nullptr;
 
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Dict hub is not inited", K(ret));
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  ObFTDictDesc main_dict_desc(param.ik_param_.main_dict_,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(param.ik_param_.quan_dict_,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(param.ik_param_.stopword_dict_,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  if (OB_ISNULL(hub_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (should_read_newest_table()) {
+  if (should_read_newest_table()) {
     // clear dict cache, always false now
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-    }
-    if (OB_FAIL(ret)) {
-      // already logged.
-    } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-    } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-    }
   } else {
-    // The built-in dictionaries do not change within a process, so the
-    // parsed dictionaries are built once by the dict hub and then shared
-    // by all the parses.  Building them per parse costs a KV cache
-    // handle for every dictionary range.
-    if (OB_FAIL(hub_->get_or_build_dict(main_dict_desc, dict_main_))) {
-    } else {
-      dict_main_owned_ = false;
-      if (OB_FAIL(hub_->get_or_build_dict(quan_dict_desc, dict_quan_))) {
-      } else {
-        dict_quan_owned_ = false;
-      }
+    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
+      LOG_WARN("Failed to init main dict", K(ret));
+    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+      LOG_WARN("Failed to init quantifier dict", K(ret));
+    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+      LOG_WARN("Failed to init stopword dict", K(ret));
     }
   }
-  // The IK stopword dictionary is not consulted: the only place that used it
-  // is commented out in get_next_token(), so loading it costs a cache handle,
-  // a range dictionary and a cache dictionary on every parse for nothing.
+
+  if (OB_FAIL(ret)) {
+    // already logged.
+  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
+    LOG_WARN("Failed to build dict main", K(ret));
+  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
+    LOG_WARN("Failed to build dict quantifier", K(ret));
+  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
+    LOG_WARN("Failed to build dict stopword", K(ret));
+  }
 
   return ret;
 }
@@ -292,8 +437,10 @@ int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &c
   if (OB_FAIL(hub_->load_cache(desc, container))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       if (OB_FAIL(hub_->build_cache(desc, container))) {
+        LOG_WARN("Failed to read newest main table", K(ret));
       }
     } else {
+      LOG_WARN("Failed to load cache", K(ret));
     }
   }
   return ret;
@@ -305,15 +452,17 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
 
   if (coll_type_ == common::CS_TYPE_INVALID) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Illegal collation type", K(ret));
   } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
                                       &allocator_,
                                       coll_type_,
-                                      allocator_,
                                       param.fulltext_,
                                       param.ft_length_,
                                       param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc ctx", K(ret));
   } else if (OB_FAIL(ctx_->init())) {
+    LOG_WARN("Failed to init ctx", K(ret));
   }
   if (OB_FAIL(ret)) {
     OB_DELETEx(TokenizeContext, &allocator_, ctx_);
@@ -331,23 +480,33 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   ObIKSurrogateProcessor *surrogate_seg = nullptr;
   if (OB_ISNULL(letter_seg = OB_NEWx(ObIKLetterProcessor, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc letter segmenter", K(ret));
   } else if (OB_ISNULL(dict_quan_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_, allocator_))) {
+    LOG_WARN("Dict quan is null.", K(ret));
+  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc cn quantifier segmenter", K(ret));
   } else if (OB_ISNULL(dict_main_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, allocator_))) {
+    LOG_WARN("Dict main is null.", K(ret));
+  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc cjk segmenter", K(ret));
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
   } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
+    LOG_WARN("Failed to push back letter segmenter", K(ret));
   } else if (FALSE_IT(letter_seg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
+    LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
   } else if (FALSE_IT(cnqsg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
+    LOG_WARN("Failed to push back cjk segmenter", K(ret));
   } else if (FALSE_IT(cjksg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
+    LOG_WARN("Failed to push back surrogate segmenter");
   } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
   }
   // push back by order, quantifier is before cjk
@@ -366,6 +525,13 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
     allocator_.free(ctx_);
+    ctx_ = nullptr;
+  }
+
+  if (OB_NOT_NULL(arbitrator_)) {
+    arbitrator_->~ObIKArbitrator();
+    allocator_.free(arbitrator_);
+    arbitrator_ = nullptr;
   }
 
   for (ObIIKProcessor *segmenter : segmenters_) {
@@ -380,28 +546,30 @@ void ObIKFTParser::reset()
   cache_quan_.reset();
   cache_stop_.reset();
 
+  if (OB_NOT_NULL(normalized_token_)) {
+    allocator_.free(normalized_token_);
+    normalized_token_ = nullptr;
+  }
+  normalized_token_capacity_ = 0;
+
   if (!OB_ISNULL(dict_main_)) {
-    if (dict_main_owned_) {
-      dict_main_->~ObIFTDict();
-      allocator_.free(dict_main_);
-    }
+    dict_main_->~ObIFTDict();
+    allocator_.free(dict_main_);
     dict_main_ = nullptr;
   }
   if (!OB_ISNULL(dict_quan_)) {
-    if (dict_quan_owned_) {
-      dict_quan_->~ObIFTDict();
-      allocator_.free(dict_quan_);
-    }
+    dict_quan_->~ObIFTDict();
+    allocator_.free(dict_quan_);
     dict_quan_ = nullptr;
   }
   if (!OB_ISNULL(dict_stop_)) {
-    if (dict_stop_owned_) {
-      dict_stop_->~ObIFTDict();
-      allocator_.free(dict_stop_);
-    }
+    dict_stop_->~ObIFTDict();
+    allocator_.free(dict_stop_);
     dict_stop_ = nullptr;
   }
 
+  coll_type_ = ObCollationType::CS_TYPE_INVALID;
+  ik_param_ = ObFTIKParam();
   is_inited_ = false;
 }
 
@@ -413,9 +581,12 @@ int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Hub is null", K(ret));
   } else if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &allocator_, allocator_, &container, desc))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc dict", K(ret));
   } else if (OB_FAIL(dict->init())) {
+    LOG_WARN("Failed to init dict", K(ret));
   }
   if (OB_FAIL(ret)) {
     OB_DELETEx(ObIFTDict, &allocator_, dict);

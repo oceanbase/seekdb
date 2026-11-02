@@ -48,6 +48,7 @@ int ObExprLeft::cast_param_type(const ObObj& in,
   if (ObVarcharType == in.get_type()) {
     int64_t tmp = 0;
     if (OB_FAIL(ObExprUtil::get_trunc_int64(in, expr_ctx, tmp))) {
+      LOG_WARN("ObExprLeft get_trunc_int64 failed", K(in.get_type()));
     } else if (INT_MAX < tmp) {
       out.set_int(INT_MAX);
     } else if (INT_MIN > tmp) {
@@ -56,6 +57,7 @@ int ObExprLeft::cast_param_type(const ObObj& in,
       out.set_int(static_cast<int>(tmp));
     }
   } else if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, in, out))) {
+    LOG_WARN("ObExprLeft to_type failed", K(in.get_type()));
   }
   return ret;
 }
@@ -69,6 +71,7 @@ int ObExprLeft::calc_result_type2(ObExprResType &type,
   ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
   } else if (session->is_varparams_sql_prepare()) {
     // the ps prepare stage does not do type deduction, and directly gives a default type.
     type.set_char();
@@ -87,6 +90,7 @@ int ObExprLeft::calc_result_type2(ObExprResType &type,
     tmp_expr_ctx.calc_buf_ = &allocator;
     tmp_expr_ctx.cast_mode_ = type_ctx.get_cast_mode();
     if (OB_FAIL(cast_param_type(result_len_obj, tmp_expr_ctx, int_obj))) {
+      LOG_WARN("cast_param_type failed", K(result_len_obj.get_type()));
     } else if (int_obj.get_int() <= 0) {
       type.set_char();
       type.set_length(0);
@@ -110,6 +114,7 @@ int calc_left(ObString &res_str, const ObString &text, const ObCollationType typ
 	int64_t str_length = text.length();
 	if(OB_ISNULL(str_ptr) && 0 != str_length) {
 		ret = OB_INVALID_ARGUMENT;
+		LOG_WARN("invalid argument", K(ret));
 	} else {
 		int64_t input_num_char = ObCharset::strlen_char(type, text.ptr(), text.length());
 		int64_t expected_num_char = min(required_num_char, input_num_char);
@@ -118,6 +123,7 @@ int calc_left(ObString &res_str, const ObString &text, const ObCollationType typ
 		while((start_pos < str_length) && OB_SUCC(ret) && (0 < expected_num_char)) {
 			if(OB_FAIL(ObCharset::first_valid_char(type, str_ptr + start_pos,
                                              str_length - start_pos, char_length))) {
+				LOG_WARN("get char failed", K(ret));
 			} else {
 				start_pos += char_length;
 				--expected_num_char;
@@ -138,6 +144,7 @@ int calc_left_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *n_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, n_datum))) {
+    LOG_WARN("eval arg failed", K(ret), KP(s_datum), KP(n_datum));
   } else if (s_datum->is_null() || n_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -145,6 +152,7 @@ int calc_left_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     ObString res_str;
     const ObCollationType arg_cs_type = expr.args_[0]->datum_meta_.cs_type_;
     if (OB_FAIL(calc_left(res_str, s_datum->get_string(), arg_cs_type, n_datum->get_int()))) {
+      LOG_WARN("failed to calculate left expression", K(ret));
     } else {
       res_datum.set_string(res_str);
     }

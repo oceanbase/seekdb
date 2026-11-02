@@ -29,6 +29,7 @@ namespace common
 {
 class ObVTableScanParam;
 class ObVirtualTableIterator;
+class ObServerConfig;
 }
 namespace share
 {
@@ -40,16 +41,17 @@ class ObTableSchema;
 }
 namespace rootserver
 {
-class ObLocalManagementService;
+class ObRootService;
 }
 namespace observer
 {
 class ObVTIterCreator
 {
 public:
-  ObVTIterCreator(rootserver::ObLocalManagementService &local_management_service, common::ObAddr &addr)
-    : local_management_service_(local_management_service),
-      addr_(addr)
+  ObVTIterCreator(rootserver::ObRootService &root_service, common::ObAddr &addr, common::ObServerConfig *config = NULL)
+    : root_service_(root_service),
+      addr_(addr),
+      config_(config)
   {}
   virtual ~ObVTIterCreator() {}
   int get_latest_expected_schema(const uint64_t table_id,
@@ -59,23 +61,24 @@ public:
   virtual int create_vt_iter(common::ObVTableScanParam &params,
                              common::ObVirtualTableIterator *&vt_iter);
   virtual int check_can_create_iter(common::ObVTableScanParam &params);
-  rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
+  rootserver::ObRootService &get_root_service() { return root_service_; }
 
 public:
   int check_is_index(const share::schema::ObTableSchema &table,
       const char *index_name, bool &is_index) const;
 
 private:
-  rootserver::ObLocalManagementService &local_management_service_;
+  rootserver::ObRootService &root_service_;
   common::ObAddr &addr_;
+  common::ObServerConfig *config_;
 };
 
 class ObVirtualTableIteratorFactory : public sql::ObIVirtualTableIteratorFactory
 {
 public:
   explicit ObVirtualTableIteratorFactory(ObVTIterCreator &vt_iter_creator);
-  ObVirtualTableIteratorFactory(rootserver::ObLocalManagementService &local_management_service,
-                                common::ObAddr &addr);
+  ObVirtualTableIteratorFactory(rootserver::ObRootService &root_service, common::ObAddr &addr,
+                                common::ObServerConfig *config = NULL);
   virtual ~ObVirtualTableIteratorFactory();
   virtual int create_virtual_table_iterator(common::ObVTableScanParam &params,
                                             common::ObVirtualTableIterator *&vt_iter);

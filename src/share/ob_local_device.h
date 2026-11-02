@@ -50,7 +50,6 @@ static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t co
 #endif
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "lib/restore/ob_io_device.h"
-#include "share/ob_i_local_device_space_provider.h"
 
 namespace oceanbase {
 namespace share {
@@ -109,9 +108,6 @@ public:
   ObLocalDevice();
   virtual ~ObLocalDevice();
   virtual int init(const common::ObIODOpts &opts) override;
-  int init(
-      const common::ObIODOpts &opts,
-      const ObILocalDeviceSpaceProvider &space_provider);
   virtual int reconfig(const common::ObIODOpts &opts) override;
   virtual int get_config(common::ObIODOpts &opts) override;
   virtual void destroy() override;
@@ -120,13 +116,19 @@ public:
 
   //file/dir interfaces
   virtual int open(const char *pathname, const int flags, const mode_t mode, common::ObIOFd &fd, common::ObIODOpts *opts = NULL) override;
+  virtual int complete(const ObIOFd &fd) override;
+  virtual int abort(const ObIOFd &fd) override;
   virtual int close(const common::ObIOFd &fd) override;
   virtual int mkdir(const char *pathname, mode_t mode) override;
   virtual int rmdir(const char *pathname) override;
   virtual int unlink(const char *pathname) override;
+  virtual int batch_del_files(
+      const ObIArray<ObString> &files_to_delete, ObIArray<int64_t> &failed_files_idx) override;
   virtual int rename(const char *oldpath, const char *newpath) override;
+  virtual int seal_file(const common::ObIOFd &fd) override;
   virtual int scan_dir(const char *dir_name, int (*func)(const dirent *entry)) override;
   virtual int scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op) override;
+  virtual int is_tagging(const char *pathname, bool &is_tagging) override;
   virtual int fsync(const common::ObIOFd &fd) override;
   virtual int fdatasync(const common::ObIOFd &fd) override;
   virtual int fallocate(const common::ObIOFd &fd, mode_t mode, const int64_t offset, const int64_t len) override;
@@ -135,6 +137,13 @@ public:
   virtual int exist(const char *pathname, bool &is_exist) override;
   virtual int stat(const char *pathname, common::ObIODFileStat &statbuf) override;
   virtual int fstat(const common::ObIOFd &fd, common::ObIODFileStat &statbuf) override;
+
+  //for object device, local device should not use these
+  int del_unmerged_parts(const char *pathname);
+  int adaptive_exist(const char *pathname, bool &is_exist);
+  int adaptive_stat(const char *pathname, ObIODFileStat &statbuf);
+  int adaptive_unlink(const char *pathname);
+  int adaptive_scan_dir(const char *dir_name, ObBaseDirEntryOperator &op);
 
   //block interfaces
   virtual int mark_blocks(common::ObIBlockIterator &block_iter) override;
@@ -172,6 +181,20 @@ public:
     const void *buf,
     const int64_t size,
     int64_t &write_size) override;
+
+  virtual int upload_part(
+    const ObIOFd &fd,
+    const char *buf,
+    const int64_t size,
+    const int64_t part_id,
+    int64_t &write_size) override;
+  virtual int buf_append_part(
+    const ObIOFd &fd,
+    const char *buf,
+    const int64_t size,
+    bool &is_full) override;
+  virtual int get_part_id(const ObIOFd &fd, bool &is_exist, int64_t &part_id) override;
+  virtual int get_part_size(const ObIOFd &fd, const int64_t part_id, int64_t &part_size) override;
 
   //async io interfaces
   virtual int io_setup(
@@ -250,7 +273,6 @@ private:
   common::ObVSliceAlloc allocator_;
   ObIOCBPool<ObLocalIOCB> iocb_pool_;
   bool is_fs_support_punch_hole_;
-  const ObILocalDeviceSpaceProvider *space_provider_;
 };
 
 OB_INLINE int64_t ObLocalDevice::get_block_file_offset(const common::ObIOFd &fd, const int64_t offset)

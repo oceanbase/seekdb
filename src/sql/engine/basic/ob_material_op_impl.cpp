@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
 #include "ob_material_op_impl.h"
 
 namespace oceanbase
@@ -68,8 +67,10 @@ int ObMaterialOpImpl::init(ObEvalCtx *eval_ctx,
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice");
   } else if (OB_ISNULL(eval_ctx) || OB_ISNULL(exec_ctx)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("get null argument", K(eval_ctx), K(exec_ctx));
   } else {
     
     eval_ctx_ = eval_ctx;
@@ -80,13 +81,16 @@ int ObMaterialOpImpl::init(ObEvalCtx *eval_ctx,
       param.set_mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+        LOG_WARN("create entity failed");
       } else if (OB_ISNULL(mem_context_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null memory entity returned");
       }
     }
     
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(datum_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
+      LOG_WARN("init row store failed");
     } else {
       datum_store_.set_allocator(mem_context_->get_malloc_allocator());
       datum_store_.set_callback(&sql_mem_processor_);
@@ -105,7 +109,9 @@ int ObMaterialOpImpl::add_row(const common::ObIArray<ObExpr*> &exprs,
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow *sr = NULL;
   if (OB_FAIL(before_add_row())) {
+    LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_row(exprs, eval_ctx_, &sr))) {
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
   } else {
     store_row = sr;
   }
@@ -118,7 +124,9 @@ int ObMaterialOpImpl::add_row(const ObChunkDatumStore::StoredRow &src_sr,
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow *sr = NULL;
   if (OB_FAIL(before_add_row())) {
+    LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_row(src_sr, &sr))) {
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
   } else {
     store_row = sr;
   }
@@ -133,7 +141,9 @@ int ObMaterialOpImpl::add_row(const ObDatum *src_datums,
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow *sr = NULL;
   if (OB_FAIL(before_add_row())) {
+    LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_row(src_datums, datum_cnt, extra_size, &sr))) {
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
   } else {
     store_row = sr;
   }
@@ -147,7 +157,9 @@ int ObMaterialOpImpl::add_batch(const common::ObIArray<ObExpr *> &exprs,
   int ret = OB_SUCCESS;
   int64_t read_rows = -1;
   if (OB_FAIL(before_add_row())) {
+    LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_batch(exprs, *eval_ctx_, skip, batch_size, read_rows))) {
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
   }
   return ret;
 }
@@ -156,7 +168,9 @@ int ObMaterialOpImpl::finish_add_row()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(datum_store_.finish_add_row(false))) {
+    LOG_WARN("failed to finish add row to row store");
   } else if (OB_FAIL(datum_store_.begin(datum_store_it_))) {
+    LOG_WARN("failed to begin iterator for chunk row store");
   }
   return ret;
 }
@@ -167,10 +181,12 @@ int ObMaterialOpImpl::before_add_row()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init");
   } else if (OB_UNLIKELY(!got_first_row_)) {
     int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
     if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size, op_type_,
                                         op_id_, exec_ctx_))) {
+      LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else {
       got_first_row_ = true;
       datum_store_.set_dir_id(sql_mem_processor_.get_dir_id());
@@ -180,6 +196,7 @@ int ObMaterialOpImpl::before_add_row()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(process_dump())) {
+      LOG_WARN("failed to process dump", K(ret));
     }
   }
   return ret;
@@ -197,15 +214,18 @@ int ObMaterialOpImpl::process_dump()
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return datum_store_.get_row_cnt_in_memory() > cur_cnt; },
       updated))) {
-  } else if (need_dump() && config::enable_sql_operator_dump()
+    LOG_WARN("failed to update max available memory size periodically", K(ret));
+  } else if (need_dump() && GCONF.is_sql_operator_dump_enabled()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
             [&](int64_t max_memory_size) {
               return sql_mem_processor_.get_data_size() > max_memory_size;
             },
             dumped, sql_mem_processor_.get_data_size()))) {
+    LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped) {
     if (OB_FAIL(datum_store_.dump(false, true))) {
+      LOG_WARN("failed to dump row store", K(ret));
     } else {
       sql_mem_processor_.reset();
       sql_mem_processor_.set_number_pass(1);

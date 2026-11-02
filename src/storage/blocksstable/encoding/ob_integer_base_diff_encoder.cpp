@@ -106,13 +106,18 @@ int ObIntegerBaseDiffEncoder::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
+    LOG_WARN("init base column encoder failed",
+        K(ret), K(ctx), K(column_index), "row count", rows.count());
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
     type_store_size_ = get_type_size_map()[column_type_.get_type()];
     if ((ObIntSC != sc && ObUIntSC != sc) || type_store_size_ < 0) {
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not supported type for integer base diff",
+          K(ret), K(sc), K_(type_store_size), K_(column_index));
     } else {
       mask_ = INTEGER_MASK_TABLE[type_store_size_];
       if (ObIntSC == sc) {
@@ -147,6 +152,7 @@ int ObIntegerBaseDiffEncoder::traverse_cells(T &integer_data)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     for (int64_t i = 0; i < ctx_->col_datums_->count(); ++i) {
       const ObDatum &datum = ctx_->col_datums_->at(i);
@@ -163,15 +169,18 @@ int ObIntegerBaseDiffEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     int64_t null_cnt = ctx_->null_cnt_;
     int64_t nope_cnt = ctx_->nope_cnt_;
     suitable = false;
     if (integer_data_ == &int64_data_) {
       if (OB_FAIL(traverse_cells(int64_data_))) {
+        LOG_WARN("traverse signed integers failed", K(ret));
       }
     } else {
       if (OB_FAIL(traverse_cells(uint64_data_))) {
+        LOG_WARN("traverse unsigned integers failed", K(ret));
       }
     }
 
@@ -191,6 +200,7 @@ int ObIntegerBaseDiffEncoder::traverse(bool &suitable)
         if (!bit_packing) {
           delta_size *= CHAR_BIT;
         }
+        LOG_DEBUG("integer base diff size", K_(column_index), K(delta_size), K(orig_size));
         if ((orig_size - delta_size) * rows_->count()
             > (sizeof(*header_) + type_store_size_) * CHAR_BIT) {
           suitable = true;
@@ -229,13 +239,16 @@ int ObIntegerBaseDiffEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     char *data = buf_writer.current();
     header_ = reinterpret_cast<ObIntegerBaseDiffHeader *>(data);
     data += sizeof(*header_);
     if (OB_FAIL(buf_writer.advance_zero(sizeof(*header_) + type_store_size_))) {
+      LOG_WARN("advance meta store size failed", K(ret), K_(type_store_size));
     } else {
       const uint64_t base = integer_data_->base();
+      LOG_DEBUG("integer base", K(base));
       MEMCPY(data, &base, type_store_size_);
     }
   }
@@ -260,15 +273,18 @@ int ObIntegerBaseDiffEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else {
     DeltaGetter getter(integer_data_);
     FixDataSetter setter(integer_data_);
     header_->length_ = static_cast<uint8_t>(desc_.bit_packing_length_ > 0
         ? desc_.bit_packing_length_
         : desc_.fix_data_length_);
-    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, setter))) {
+    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, setter))) {
+      LOG_WARN("fill column store failed", K(ret));
     }
   }
   return ret;

@@ -39,8 +39,10 @@ int ObExprElt::calc_result_typeN(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num < 2)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, input arguments should > 2", K(ret));
   } else if (OB_ISNULL(types_stack)){
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null stack", K(types_stack), K(ret));
   } else {
     type.set_varchar();
     ret = aggregate_charsets_for_string_result(
@@ -81,9 +83,11 @@ int ObExprElt::eval_elt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   ObDatum *first = NULL;
   ObDatum *d = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, first))) {
+    LOG_WARN("evaluate parameter failed", K(ret));
   } else if (first->is_null() || first->get_int() <= 0 || first->get_int() >= expr.arg_cnt_) {
     expr_datum.set_null();
   } else if (OB_FAIL(expr.args_[first->get_int()]->eval(ctx, d))) {
+    LOG_WARN("evaluate parameter failed", K(ret));
   } else {
     expr_datum.set_datum(*d);
   }

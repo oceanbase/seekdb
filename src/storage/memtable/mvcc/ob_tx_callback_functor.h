@@ -21,6 +21,10 @@
 #include "storage/memtable/mvcc/ob_mvcc.h"
 namespace oceanbase
 {
+namespace transaction
+{
+class ObCLogEncryptInfo;
+}
 namespace memtable
 {
 class ObMutatorWriter;
@@ -131,8 +135,9 @@ public:
     int ret = OB_SUCCESS;
     if (checksumer_ && callback->get_scn() >= checksum_scn_
         && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-      TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
+      TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
     } else if (OB_FAIL(callback->checkpoint_callback())) {
+      TRANS_LOG(ERROR, "row remove callback failed", K(ret), K(*callback));
     } else {
       need_remove_callback_ = true;
       --need_remove_count_;
@@ -240,6 +245,7 @@ public:
       TRANS_LOG(ERROR, "remove synced will never go here", K(ret), KPC(callback));
     } else if (need_checksum_ && callback->get_scn() >= checksum_scn_ ) {
       if (OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
+      TRANS_LOG(WARN, "row remove callback failed", K(ret), K(*callback));
       } else if (FALSE_IT(checksum_last_scn_ = callback->get_scn())) {
       }
     }
@@ -307,7 +313,7 @@ public:
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (callback->need_submit_log()) {
-      // Case 1: callback has not been submitted to the local log.
+      // Case 1: callback has not been proposed to paxos
       if (cond_for_remove(callback, ret)) {
         if (need_remove_data_ && OB_FAIL(callback->rollback_callback())) {
           TRANS_LOG(WARN, "rollback callback failed", K(ret), K(*callback));
@@ -325,7 +331,7 @@ public:
       if (cond_for_remove(callback, ret)) {
         if (checksumer_ && callback->get_scn() >= checksum_scn_
             && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-          TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
+          TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
         } else if (need_remove_data_ && OB_FAIL(callback->rollback_callback())) {
           TRANS_LOG(WARN, "rollback callback failed", K(ret), K(*callback));
         } else if (!need_remove_data_ && OB_FAIL(callback->checkpoint_callback())) {
@@ -485,6 +491,8 @@ public:
       TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (!callback->need_submit_log()) { // log has been submitted out
       if (OB_FAIL(callback->log_sync_fail_cb(max_committed_scn_))) {
+        // log_sync_fail_cb will never report error
+        TRANS_LOG(ERROR, "log sync fail cb report error", K(ret));
       } else {
         need_remove_callback_ = true;
       }
@@ -551,6 +559,7 @@ public:
     int ret = OB_SUCCESS;
 
     if (OB_FAIL(callback->merge_memtable_key(memtable_key_arr_))) {
+      TRANS_LOG(WARN, "fail to merge memtable key", K(ret));
     }
 
     return ret;
@@ -607,13 +616,13 @@ public:
     int ret = OB_SUCCESS;
     if (NULL == checksumer_) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "checksumer is lost", K(ret), K(*callback));
+      TRANS_LOG(WARN, "checksumer is lost", K(ret), K(*callback));
     } else if (callback->get_scn() > target_scn_) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "callback is begind the target, should iter end", K(ret), K(*callback));
     } else if (callback->get_scn() >= checksum_scn_
                && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-      TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
+      TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
     } else {
       checksum_last_scn_ = callback->get_scn();
     }

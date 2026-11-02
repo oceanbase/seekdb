@@ -34,18 +34,15 @@ public:
   virtual int cal_min_phy_resource_needed(const int64_t num, ObMinPhyResourceResult &min_phy_res) = 0;
 };
 
-class ObResourceLimitCalculator;
-
 class ObLogicResourceStatIterator
 {
 public:
   ObLogicResourceStatIterator() : is_ready_(false),
-                                  curr_type_(0),
-                                  calculator_(nullptr) {}
+                                  curr_type_(0) {}
   ~ObLogicResourceStatIterator() {}
   void reset();
 
-  int set_ready(ObResourceLimitCalculator &calculator);
+  int set_ready();
   bool is_ready() const { return is_ready_; }
 
   int get_next(ObResourceInfo &info);
@@ -54,7 +51,6 @@ public:
 private:
   bool is_ready_;
   int64_t curr_type_;
-  ObResourceLimitCalculator *calculator_;
 };
 
 class ObResourceConstraintIterator
@@ -68,7 +64,7 @@ public:
   ~ObResourceConstraintIterator() {}
   void reset();
 
-  int set_ready(ObResourceLimitCalculator &calculator, const int64_t res_type);
+  int set_ready(const int64_t res_type);
   bool is_ready() const { return is_ready_; }
   int get_next(int64_t &val);
   int64_t get_curr_type() const { return curr_constraint_type_; }
@@ -112,14 +108,10 @@ class ObResourceLimitCalculator
   using RLockGuard = common::SpinRLockGuard;
   using WLockGuard = common::SpinWLockGuard;
 public:
-  ObResourceLimitCalculator() : is_inited_(false)
-  {
-    for (int64_t i = 0; i < MAX_LOGIC_RESOURCE; ++i) {
-      handlers_[i] = nullptr;
-    }
-  }
+  ObResourceLimitCalculator() : is_inited_(false) { }
   ~ObResourceLimitCalculator() { destroy(); }
-  int init(ObIResourceLimitCalculatorHandler *tablet_handler);
+  static int mtl_init(ObResourceLimitCalculator *&calculator);
+  int init();
   void destroy()
   {
     WLockGuard guard(lock_);
@@ -135,11 +127,11 @@ public:
   int get_logic_resource_constraint_value(const int64_t type,
                                           ObResoureConstraintValue &val);
 
-  int get_runtime_logical_resource(ObUserResourceCalculateArg &arg);
+  int get_tenant_logical_resource(ObUserResourceCalculateArg &arg);
   // CALCULCATOR
-  int get_min_phy_resource_value(
-      const ObUserResourceCalculateArg &arg,
-      ObMinPhyResourceResult &res);
+  int get_tenant_min_phy_resource_value(ObMinPhyResourceResult &res);
+  int get_tenant_min_phy_resource_value(const ObUserResourceCalculateArg &arg,
+                                        ObMinPhyResourceResult &res);
 private:
   bool is_inited_;
   RWLock lock_;

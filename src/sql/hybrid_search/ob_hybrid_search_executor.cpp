@@ -15,9 +15,7 @@
  */
 
 #include "ob_hybrid_search_executor.h"
-#include "query/ob_sql_name_service.h"
-#include "query/session/ob_inner_sql_connection_access.h"
-#include "sql/session/ob_inner_sql_connection.h"
+#include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
 
 #define USING_LOG_PREFIX SHARE
 
@@ -33,6 +31,7 @@ int ObHybridSearchExecutor::init_search_arg(const ObHybridSearchArg &arg) {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(arg));
   }
   search_arg_.search_params_ = arg.search_params_;
   search_arg_.search_type_ = arg.search_type_;
@@ -47,7 +46,9 @@ int ObHybridSearchExecutor::init(const pl::ObPLExecCtx &ctx, const ObHybridSearc
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("exec context is not initialized", K(ret));
   } else if (OB_FAIL(init(ctx.exec_ctx_, arg))) {
+    LOG_WARN("fail to init", KR(ret));
   }
   return ret;
 }
@@ -56,8 +57,10 @@ int ObHybridSearchExecutor::init(sql::ObExecContext *ctx, const ObHybridSearchAr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx->get_my_session())) {
     ret = OB_NOT_INIT;
+    LOG_WARN("session is not initialized", K(ret));
   } else if (init_search_arg(arg)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(arg));
   } else {
     ctx_ = ctx;
     session_info_ = ctx_->get_my_session();
@@ -68,62 +71,36 @@ int ObHybridSearchExecutor::init(sql::ObExecContext *ctx, const ObHybridSearchAr
 int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   int ret = OB_SUCCESS;
   ObString query_sql;
-  common::ObMySQLProxy *sql_proxy = NULL;
-  common::sqlclient::ObISQLConnection *base_conn = NULL;
-  sql::ObIInnerSQLConnection *conn = NULL;
-  common::sqlclient::ObISQLConnectionGuard conn_guard;
   if (OB_ISNULL(ctx_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(session_info_)) {
-    ret = OB_NOT_INIT;
+    LOG_WARN("exec context is not initialized", K(ret));
   } else if (OB_FAIL(do_get_sql(search_arg_.search_params_, query_sql, true))) {
-  } else if (OB_ISNULL(sql_proxy = ctx_->get_sql_proxy())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(
-                 query::ObInnerSQLConnectionAccess::
-                     create_spi_connection_with_external_session(
-                         session_info_, conn_guard))) {
-  } else if (OB_ISNULL(base_conn = conn_guard.get_ptr())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(conn = sql::as_inner_sql_connection(base_conn))) {
-    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to do get sql", KR(ret));
   } else {
-    sql::ObSQLSessionInfo::StmtSavedValue saved_session;
-    sql::ObIInnerSQLConnection::SavedValue saved_conn;
-    // Execute on the caller's session. begin/end_nested_session only isolates
-    // statement state; retry state is intentionally left to inner SQL.
-    if (OB_FAIL(conn->begin_nested_session(saved_session, saved_conn,
-                                           false /* skip_cur_stmt_tables */))) {
-    } else {
-      SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-        if (OB_FAIL(conn->execute_read(query_sql,
-                                       result,
-                                       session_info_->is_user_session()
-                                           && !session_info_->is_real_inner_session()))) {
-        } else if (OB_NOT_NULL(result.get_result())) {
-          if (OB_SUCCESS == (ret = result.get_result()->next())) {
-            ObObj tmp_res;
-            if (OB_FAIL(result.get_result()->get_obj("hits", tmp_res))) {
-              if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
-                query_res.set_null();
-                ret = OB_SUCCESS;
-              } else {
-              }
-            } else if (OB_FAIL(common::deep_copy_obj(ctx_->get_allocator(), tmp_res, query_res))) {
+    common::ObMySQLProxy* sql_proxy = ctx_->get_sql_proxy();
+    SMART_VAR(ObMySQLProxy::MySQLResult, result) {
+      if (OB_FAIL(sql_proxy->read(result, query_sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(query_sql));
+      } else if (OB_NOT_NULL(result.get_result())) {
+        if (OB_SUCCESS == (ret = result.get_result()->next())) {
+          ObObj tmp_res;
+          if (OB_FAIL(result.get_result()->get_obj("hits", tmp_res))) {
+            if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
+              query_res.set_null();
+              ret = OB_SUCCESS;
+            } else {
+              LOG_WARN("fail to extract result. ", K(ret));
             }
-          } else if (OB_ITER_END == ret) {
-            LOG_INFO("no result return!", K(ret));
-            query_res.set_null();
-            ret = OB_SUCCESS;
-          } else {
+          } else if (OB_FAIL(common::deep_copy_obj(ctx_->get_allocator(), tmp_res, query_res))) {
+            LOG_WARN("deep copy query result failed", K(ret));
           }
+        } else if (OB_ITER_END == ret) {
+          LOG_INFO("no result return!", K(ret));
+          query_res.set_null();
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to get next", K(ret));
         }
-      }
-
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = conn->end_nested_session(saved_session, saved_conn))) {
-        LOG_ERROR("failed to restore session after hybrid search", K(tmp_ret));
-        ret = COVER_SUCC(tmp_ret);
       }
     }
   }
@@ -134,6 +111,7 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
 int ObHybridSearchExecutor::execute_get_sql(ObString &sql_result) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(do_get_sql(search_arg_.search_params_, sql_result))) {
+      LOG_WARN("fail to do get sql", KR(ret));
   }
   return ret;
 }
@@ -145,10 +123,13 @@ int ObHybridSearchExecutor::do_get_sql(const ObString &search_params_str,
 
   if (OB_ISNULL(ctx_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("exec context is not initialized", K(ret));
   } else {
     if (OB_FAIL(parse_search_params(search_params_str, query_req, need_wrap_result))) {
+      LOG_WARN("fail to parse search params", KR(ret));
     } else if (OB_ISNULL(query_req)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("query request is null", KR(ret));
     } else {
       char *buf = NULL;
       int64_t res_len = 0;
@@ -159,8 +140,10 @@ int ObHybridSearchExecutor::do_get_sql(const ObString &search_params_str,
         res_len = 0;
         if (OB_ISNULL(buf = static_cast<char*>(alloc.alloc(length)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to alloc memory for sql", K(ret), K(length));
         } else if (FALSE_IT(MEMSET(buf, 0, length))) {
         } else if (OB_FAIL(query_req->translate(buf, length, res_len))) {
+          LOG_WARN("fail to translate to sql", KR(ret));
         }
         if (OB_SUCC(ret)) {
           is_complete = true;
@@ -185,18 +168,25 @@ int ObHybridSearchExecutor::parse_search_params(
   ObString database_name;
   if (OB_ISNULL(search_params_str.ptr()) || search_params_str.length() <= 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("search_params_str is invalid", K(ret), K(search_params_str));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
+    LOG_WARN("fail to get name case mode", KR(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-  } else if (OB_FAIL(query::ObSQLNameService::resolve_table_name(
+    LOG_WARN("fail to get collation_connection", KR(ret));
+  } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
               cs_type, case_mode, search_arg_.table_name_,
               database_name, table_name))) {
+    LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode), K(search_arg_.table_name_));
   } else if (database_name.empty() && FALSE_IT(database_name = session_info_->get_database_name())) {
   } else if (OB_UNLIKELY(database_name.empty())) {
     ret = OB_ERR_NO_DB_SELECTED;
+    LOG_WARN("No database selected", KR(ret));
   } else {
     ObESQueryParser parser(allocator_, need_wrap_result, &table_name, &database_name);
     if (OB_FAIL(construct_column_index_info(allocator_, parser))) {
+      LOG_WARN("fail to construnct column index info", KR(ret), K(search_params_str));
     } else if (OB_FAIL(parser.parse(search_params_str, query_req))) {
+      LOG_WARN("fail to parse search params", KR(ret), K(search_params_str));
     }
   }
   return ret;
@@ -216,23 +206,31 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
 
   if (OB_ISNULL(schema_guard = ctx_->get_virtual_table_ctx().schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema guard is null", KR(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( database_name, table_name,
                   false, data_table_schema))) {
+    LOG_WARN("failed to get table id", K(ret), K(database_name), K(table_name));
   } else if (data_table_schema == NULL) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
   } else if (!data_table_schema->is_table_with_hidden_pk_column()) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "table with user provided primary key");
+    LOG_WARN("table with user provided primary key isn't supported", K(ret));
   } else if (OB_FAIL(data_table_schema->get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("fail to get simple index infos failed", K(ret));
   } else if (OB_FAIL(get_basic_column_names(data_table_schema, col_names))) {
+    LOG_WARN("fail to get all column names", K(ret));
   } else if (OB_FAIL(get_partition_info(data_table_schema, parser))) {
+    LOG_WARN("fail to get partition column names and init alias exprs", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
       if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
       } else if (index_table_schema->is_built_in_index()) {
         // skip built in vector index table
       } else {
@@ -244,6 +242,7 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
           const ObColumnSchemaV2 *col_schema = nullptr;
           if (OB_ISNULL(col_schema = index_table_schema->get_column_schema(column_id))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected col_schema, is nullptr", K(ret), K(column_id), KPC(index_table_schema));
           } else if ((index_table_schema->is_fts_index() && !col_schema->is_fulltext_column()) ||
                      (index_table_schema->is_vec_index() && col_schema->is_vec_hnsw_vid_column()) ||
                      (!index_table_schema->is_fts_index() && !index_table_schema->is_vec_index())) {
@@ -257,33 +256,42 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
             ObStringBuffer column_names(&alloc);
             if (OB_ISNULL(table_column)) {
               ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected table column", K(ret));
             } else if (OB_FAIL(table_column->get_cascaded_column_ids(cascaded_column_ids))) {
+              LOG_WARN("failed to get cascaded column ids", K(ret));
             } else {
               for (int64_t k = 0; OB_SUCC(ret) && k < cascaded_column_ids.count(); ++k) {
                 const ObColumnSchemaV2 *cascaded_column = NULL;
                 ObString new_col_name;
                 if (OB_ISNULL(cascaded_column = data_table_schema->get_column_schema(cascaded_column_ids.at(k)))) {
                   ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("unexpected cascaded column", K(ret));
                 } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                           alloc,
                           cascaded_column->get_column_name_str(),
                           new_col_name))) {
+                  LOG_WARN("fail to generate new name with escape character", K(ret), K(cascaded_column->get_column_name_str()));
                 } else if (OB_FAIL(column_names.append(new_col_name))) {
+                  LOG_WARN("fail to print column name", K(ret), K(new_col_name));
                 } else if (k != cascaded_column_ids.count() - 1 && OB_FAIL(column_names.append(", "))) {
+                  LOG_WARN("fail to print column name", K(ret), K(new_col_name));
                 }
               }
               ObString index_name;
               ObColumnIndexInfo *index_info = NULL;
               if (OB_FAIL(ret)) {
               } else if (!column_index_info.created() && OB_FAIL(column_index_info.create(simple_index_infos.count(), "HybridSearch"))) {
+                LOG_WARN("fail to create column index info map", KR(ret));
               } else if (OB_FAIL(column_index_info.get_refactored(column_names.string(), index_info))) {
                 if (ret == OB_HASH_NOT_EXIST) {
                   ret = OB_SUCCESS;
                   index_info = OB_NEWx(ObColumnIndexInfo, &alloc);
                   if (OB_ISNULL(index_info)) {
                     ret = OB_ALLOCATE_MEMORY_FAILED;
+                    LOG_WARN("fail to create index info", K(ret));
                   } else if (OB_FAIL(ObTableSchema::get_index_name(alloc, data_table_schema->get_table_id(),
                               ObString::make_string(index_table_schema->get_table_name()), index_name))) {
+                    LOG_WARN("get index table name failed", K(ret));
                   } else if (FALSE_IT(index_info->index_name_ = index_name)) {
                   } else if (FALSE_IT(index_info->index_type_ = index_table_schema->get_index_type())) {
                   } else if (index_table_schema->is_vec_index()) {
@@ -295,12 +303,14 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
                     }
                     ObVectorIndexParam index_param;
                     if (OB_FAIL(ObVectorIndexUtil::parser_params_from_string(index_table_schema->get_index_params(), index_type, index_param))) {
+                      LOG_WARN("failed to parser vec index param", K(ret), K(index_table_schema->get_index_params()));
                     } else {
                       index_info->dist_algorithm_ = index_param.dist_algorithm_;
                     }
                   }
                   if (OB_FAIL(ret)) {
                   } else if (OB_FAIL(column_index_info.set_refactored(column_names.string(), index_info))) {
+                    LOG_WARN("failed to set_refactored column name", K(ret), K(column_names.string()));
                   } else {
                     LOG_INFO("column index info", K(ret), K(column_names.string()), K(index_name));
                   }
@@ -324,15 +334,18 @@ int ObHybridSearchExecutor::get_basic_column_names(const ObTableSchema *table_sc
   while (OB_SUCC(ret) && OB_SUCC(iter.next(column_schema))) {
     if (OB_ISNULL(column_schema)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("The column is null", K(ret));
     } else if (column_schema->is_shadow_column() ||
                column_schema->is_invisible_column() ||
                column_schema->is_hidden()) {
       // don't show shadow columns for select * from idx
       continue;
     } else  if (OB_FAIL(col_names.push_back(column_schema->get_column_name_str()))) {
+      LOG_WARN("push back column name failed", K(ret));
     }
   }
   if (ret != OB_ITER_END) {
+    LOG_WARN("Failed to iterate all table columns. iter quit. ", K(ret));
   } else {
     ret = OB_SUCCESS;
   }
@@ -347,15 +360,19 @@ int ObHybridSearchExecutor::extract_partition_column_ids(const ObPartitionKeyInf
   uint64_t column_id = OB_INVALID_ID;
   for (int64_t i = 0; OB_SUCC(ret) && i < part_key_info.get_size(); i++) {
     if (OB_FAIL(part_key_info.get_column_id(i, column_id))) {
+      LOG_WARN("failed to get column id from partition key info", K(ret), K(i));
     } else {
       int hash_ret = column_id_set.exist_refactored(column_id);
       if (OB_HASH_EXIST == hash_ret) {
       } else if (OB_HASH_NOT_EXIST == hash_ret) {
         if (OB_FAIL(column_id_set.set_refactored(column_id))) {
+          LOG_WARN("failed to set column id in hash set", K(ret), K(column_id));
         } else if (OB_FAIL(column_ids.push_back(column_id))) {
+          LOG_WARN("failed to push back column id", K(ret), K(column_id));
         }
       } else {
         ret = hash_ret;
+        LOG_WARN("failed to check column id existence", K(ret), K(column_id));
       }
     }
   }
@@ -367,6 +384,7 @@ int ObHybridSearchExecutor::get_partition_info(const ObTableSchema *table_schema
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(table_schema));
   } else if (table_schema->get_part_level() != PARTITION_LEVEL_ZERO) {
     hash::ObPlacementHashSet<uint64_t, 32> column_id_set; // to deduplicate column ids
     ObSEArray<uint64_t, 4> column_ids;
@@ -374,7 +392,9 @@ int ObHybridSearchExecutor::get_partition_info(const ObTableSchema *table_schema
     const ObPartitionKeyInfo &part_key_info = table_schema->get_partition_key_info();
     const ObPartitionKeyInfo &subpart_key_info = table_schema->get_subpartition_key_info();
     if (OB_FAIL(extract_partition_column_ids(part_key_info, column_id_set, column_ids))) {
+      LOG_WARN("failed to extract column ids from partition key info", K(ret));
     } else if (table_schema->get_part_level() == PARTITION_LEVEL_TWO && OB_FAIL(extract_partition_column_ids(subpart_key_info, column_id_set, column_ids))) {
+      LOG_WARN("failed to extract column ids from subpartition key info", K(ret));
     } else if (column_ids.count() > 0) {
       lib::ob_sort(column_ids.begin(), column_ids.end());
     }
@@ -382,10 +402,13 @@ int ObHybridSearchExecutor::get_partition_info(const ObTableSchema *table_schema
       const ObColumnSchemaV2 *column_schema = table_schema->get_column_schema(column_ids.at(i));
       if (OB_ISNULL(column_schema)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected column schema", K(ret), K(column_ids.at(i)));
       } else if (OB_FAIL(column_names.push_back(column_schema->get_column_name_str()))) {
+        LOG_WARN("failed to push back column name", K(ret));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(parser.construct_partition_cols(column_names))) {
+      LOG_WARN("failed to construct partition column and alias exprs", K(ret));
     }
   }
   return ret;

@@ -15,7 +15,7 @@
  */
 
 #include "ob_memstore_allocator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_shared_memory_allocator_mgr.h"
 
 // Undefine macOS system macro to avoid conflict with ObFifoArena::PAGE_SIZE
@@ -26,27 +26,25 @@
 namespace oceanbase
 {
 using namespace share;
-namespace share
+namespace share 
 {
+// moved definition to storage ob_tenant_freezer.cpp(storage real user)
 
+// moved definition to storage ob_tenant_freezer.cpp(storage real user)
 
 int ObMemstoreAllocator::AllocHandle::init()
 {
   int ret = OB_SUCCESS;
 
-  ObMemstoreAllocator &host = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
+  ObMemstoreAllocator &host = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
   (void)host.init_handle(*this);
   return ret;
 }
 
 int ObMemstoreAllocator::init()
 {
-  throttle_tool_ = &(::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->share_resource_throttle_tool());
-  int ret = arena_.init();
-  if (OB_SUCC(ret)) {
-    set_nway_per_group(1);
-  }
-  return ret;
+  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
+  return arena_.init();
 }
 
 void ObMemstoreAllocator::init_handle(AllocHandle& handle)
@@ -54,14 +52,18 @@ void ObMemstoreAllocator::init_handle(AllocHandle& handle)
   handle.do_reset();
   handle.set_host(this);
   {
+    int64_t nway = nway_per_group();
     LockGuard guard(lock_);
     hlist_.init_handle(handle);
+    arena_.update_nway_per_group(nway);
   }
+  COMMON_LOG(TRACE, "MTALLOC.init", KP(&handle.mt_));
 }
 
 void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 {
   ObTimeGuard time_guard("ObMemstoreAllocator::destroy_handle", 100 * 1000);
+  COMMON_LOG(TRACE, "MTALLOC.destroy", KP(&handle.mt_));
   arena_.free(handle.arena_handle_);
   time_guard.click();
   {
@@ -77,18 +79,18 @@ void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
   handle.do_reset();
 }
 
+// moved definition to storage ob_tenant_freezer.cpp(storage real user)
 
 void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 {
+  COMMON_LOG(TRACE, "MTALLOC.set_frozen", KP(&handle.mt_));
   LockGuard guard(lock_);
   hlist_.set_frozen(handle);
 }
 
-void ObMemstoreAllocator::set_nway_per_group(const int64_t nway)
-{
-  LockGuard guard(lock_);
-  arena_.update_nway_per_group(nway);
-}
+// moved definition to the upper-layer owner cpp(omt/timer real user)
+
+// moved definition to observer/omt/ob_multi_tenant.cpp(omt/freezer real user)
 
 int ObMemstoreAllocator::set_memstore_threshold()
 {
@@ -97,6 +99,7 @@ int ObMemstoreAllocator::set_memstore_threshold()
   return ret;
 }
 
+// moved definition to storage ob_tenant_freezer.cpp(storage real user)
 
 int64_t ObMemstoreAllocator::resource_unit_size()
 {
@@ -104,6 +107,7 @@ int64_t ObMemstoreAllocator::resource_unit_size()
   return MEMSTORE_RESOURCE_UNIT_SIZE;
 }
 
+// moved definition to storage ob_tenant_freezer.cpp(storage real user)
 
 void ObMemstoreAllocator::adaptive_update_limit(const int64_t holding_size,
                                                 const int64_t config_specify_resource_limit,

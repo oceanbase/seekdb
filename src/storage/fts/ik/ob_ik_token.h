@@ -19,6 +19,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/list/ob_list.h"
+#include "lib/utility/ob_print_utils.h"
 namespace oceanbase
 {
 namespace storage
@@ -69,6 +70,8 @@ public:
   {
     return offset_ < token.offset_ || (offset_ == token.offset_ && length_ > token.length_);
   }
+
+  TO_STRING_KV(K(offset_), K(length_), K(char_cnt_));
 };
 
 class ObFTSortList
@@ -105,6 +108,14 @@ public:
   ~ObIKTokenChain() { list_.reset(); }
 
 public:
+  void reset()
+  {
+    min_offset_ = -1;
+    max_offset_ = -1;
+    payload_ = -1;
+    list_.reset();
+  }
+
   int add_token_if_conflict(const ObIKToken &token, bool &added);
 
   int add_token_if_no_conflict(const ObIKToken &token, bool &added);

@@ -16,10 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_kill_session_arg.h"
-#include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/engine/ob_exec_context.h"
-#include "sql/engine/ob_physical_plan.h"
 
 namespace oceanbase
 {
@@ -39,7 +37,9 @@ int ObKillSessionArg::init(ObExecContext &ctx, const ObKillStmt &stmt)
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret), K(ctx));
   } else if (OB_FAIL(calculate_sessid(ctx, stmt))) {
+    LOG_WARN("fail to calculate sessid", K(ret), K(ctx), K(stmt));
   } else {
     user_id_ = session->get_user_id();
     is_query_ = stmt.is_query();
@@ -65,6 +65,7 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(my_session) || OB_ISNULL(plan_ctx) || OB_ISNULL(ctx.get_sql_ctx())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("data member from ObExecContext is Null", K(ret), K(my_session), K(plan_ctx));
     } else {
       ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC,
                                  OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -86,12 +87,16 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
         ObTempExpr *temp_expr = NULL;
         if (OB_ISNULL(value_expr = stmt.get_value_expr())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fail to get value expr", K(ret), K(value_expr));
         } else if (OB_FAIL(ObStaticEngineExprCG::gen_expr_with_row_desc(value_expr,
              row_desc, ctx.get_allocator(), ctx.get_my_session(),
              ctx.get_sql_ctx()->schema_guard_, temp_expr))) {
+          LOG_WARN("fail to fill sql expression", K(ret));
         } else if (OB_ISNULL(temp_expr)) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("fail to gen temp expr", K(ret));
         } else if (OB_FAIL(temp_expr->eval(ctx, tmp_row, value_obj))) {
+          LOG_WARN("fail to calc value", K(ret), K(stmt.get_value_expr()));
         } else {
           const ObObj *res_obj = NULL;
           if (stmt.is_alter_system_kill()) {
@@ -106,8 +111,10 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
           EXPR_CAST_OBJ_V2(ObIntType, value_obj, res_obj);
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD == ret ? OB_SUCCESS : ret;
           if (OB_FAIL(ret)) {
+            LOG_WARN("fail to cast expr", "orig type", value_obj.get_type(), "dest type", "ObUint32type", K(ret), K(res_obj));
           } else if (OB_ISNULL(res_obj)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("fail to cast expr", "orig type", value_obj.get_type(), "dest type", "ObUint32type", K(ret), K(res_obj));
           } else {
             sess_id_ = static_cast<uint32_t>(res_obj->get_int());
           }

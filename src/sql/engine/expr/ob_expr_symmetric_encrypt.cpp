@@ -32,7 +32,9 @@ int get_cipher_op_mode(share::ObCipherOpMode &op_mode, const ObSQLSessionInfo *s
   int64_t encryption = -1;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_BLOCK_ENCRYPTION_MODE, encryption))) {
+    LOG_WARN("fail to get block encryption variable", K(ret));
   } else if (encryption >= 0 && encryption <= 17) {
     encryption++;
     op_mode = static_cast<share::ObCipherOpMode>(encryption);
@@ -71,6 +73,7 @@ int ObExprBaseEncrypt::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(param_num > 3 || param_num < 2)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(param_num));
@@ -100,9 +103,12 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
   bool is_ecb = true;
   if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, key))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (OB_ISNULL(src) || OB_ISNULL(key)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("got null ptr", K(ret));
   } else if (src->is_null() || key->is_null()) {
     res.set_null();
   } else if (FALSE_IT(is_ecb = ObEncryptionUtil::is_ecb_mode(op_mode))) {
@@ -123,11 +129,13 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     if (OB_ISNULL(buf = static_cast<char *>(calc_alloc.alloc(buf_length)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc memory failed", K(ret), K(buf_length));
     } else if (is_ecb) {
       if (OB_FAIL(ObBlockCipher::encrypt(key_str.ptr(), key_str.length(),
                                          src_str.ptr(), src_str.length(),
                                          buf_length, NULL, 0, NULL, 0, 0, op_mode,
                                          buf, out_len, NULL))) {
+        LOG_WARN("failed to encrypt", K(ret));
       }
     } else if (!is_ecb) {
       ObString iv_str = expr.locate_param_datum(ctx, 2).get_string();
@@ -139,6 +147,7 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
                                                 src_str.ptr(), src_str.length(),
                                                 buf_length, iv_str.ptr(), iv_str.length(), NULL, 0,
                                                 0, op_mode, buf, out_len, NULL))) {
+        LOG_WARN("failed to encrypt", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -146,6 +155,7 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
       char *res_buf = NULL;
       if (OB_ISNULL(res_buf = static_cast<char*>(res_alloc.alloc(out_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(ret), K(out_len));
       } else {
         MEMCPY(res_buf, buf, out_len);
         res.set_string(res_buf, out_len);
@@ -174,6 +184,7 @@ int ObExprBaseDecrypt::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(param_num > 3 || param_num < 2)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(param_num));
@@ -200,10 +211,12 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
   bool is_null = false;
   bool is_ecb = true;
   if (OB_FAIL(expr.eval_param_value(ctx, src, key))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (src->is_null() || key->is_null()) {
     res.set_null();
   } else if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error", K(ret), K(expr.arg_cnt_));  
   } else if (FALSE_IT(is_ecb= ObEncryptionUtil::is_ecb_mode(op_mode))) {
   } else if (!is_ecb && 3 != expr.arg_cnt_) {
     ret = OB_ERR_PARAM_SIZE;
@@ -221,10 +234,12 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     if (OB_ISNULL(buf = static_cast<char *>(calc_alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc mem failed", K(ret), K(buf_len));
     } else if (is_ecb) {
       if (OB_FAIL(ObBlockCipher::decrypt(key_str.ptr(), key_str.length(),
                                          src_str.ptr(), src_str.length(), buf_len, NULL, 0, NULL, 0,
                                          NULL, 0, op_mode, buf, out_len))) {
+        LOG_WARN("failed to decrypt", K(ret));
       }
     } else {
       ObString iv_str = expr.locate_param_datum(ctx, 2).get_string();
@@ -236,6 +251,7 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
                                                 src_str.ptr(), src_str.length(), buf_len,
                                                 iv_str.ptr(), iv_str.length(), NULL, 0, NULL, 0,
                                                 op_mode, buf, out_len))) {
+        LOG_WARN("failed to decrypt", K(ret));
       }
     }
     if (OB_ERR_AES_DECRYPT == ret) {
@@ -249,6 +265,7 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
         res.set_null();
       } else if (OB_ISNULL(res_buf = static_cast<char*>(res_alloc.alloc(out_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(ret), K(out_len));
       } else {
         MEMCPY(res_buf, buf, out_len);
         res.set_string(res_buf, out_len);
@@ -280,10 +297,12 @@ int ObExprAesEncrypt::eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_AES_ENCRYPT), N_AES_ENCRYPT);
   if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+    LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_aes_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using aes_encrypt with not aes block_encryption_mode");
   } else if (OB_FAIL(eval_encrypt(expr, ctx, op_mode, func_name, res))) {
+    LOG_WARN("failed to eval aes encrypt", K(ret));
   } else { /* do nothing */ }
   return ret;
 }
@@ -310,10 +329,12 @@ int ObExprAesDecrypt::eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_AES_DECRYPT), N_AES_DECRYPT);
   if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+    LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_aes_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using aes_decrypt with not aes block_encryption_mode");
   } else if (OB_FAIL(eval_decrypt(expr, ctx, op_mode, func_name, res))) {
+    LOG_WARN("failed to eval aes decrypt", K(ret));
   } else { /* do nothing */ }
   return ret;
 }
@@ -341,6 +362,7 @@ int ObExprSm4Encrypt::eval_sm4_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObString func_name(strlen(N_SM4_ENCRYPT), N_SM4_ENCRYPT);
 #ifdef OB_USE_BABASSL
   if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+    LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_sm4_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using sm4_encrypt with not sm4 block_encryption_mode");
@@ -378,6 +400,7 @@ int ObExprSm4Decrypt::eval_sm4_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObString func_name(strlen(N_SM4_DECRYPT), N_SM4_DECRYPT);
 #ifdef OB_USE_BABASSL
   if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+    LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_sm4_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using sm4_decrypt with not sm4 block_encryption_mode");

@@ -16,7 +16,7 @@
 
 #include "ob_tx_data_op.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -86,6 +86,7 @@ ObTxOp *ObTxOpVector::at(int64_t idx)
   ObTxOp *tx_op = nullptr;
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stat())) {
+    STORAGE_LOG(WARN, "tx_op vector stat error", KPC(this), KR(ret), K(lbt()));
   } else if (idx >= 0 && idx < count_) {
     tx_op = &tx_op_[idx];
   } else {
@@ -98,6 +99,7 @@ int ObTxOpVector::push_back(ObTxOp &tx_op)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stat())) {
+    STORAGE_LOG(WARN, "tx_op vector stat error", KR(ret));
   } else if (count_ < capacity_) {
     tx_op_[count_] = tx_op;
     count_++;
@@ -124,6 +126,7 @@ int ObTxOpVector::try_extend_space(int64_t count, ObIAllocator &allocator)
   if (count < 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_stat())) {
+    STORAGE_LOG(WARN, "check_stat failed", KR(ret));
   } else if (count == 0) {
     // do nothing
   } else if (count_ + count <= capacity_) {
@@ -161,9 +164,11 @@ int ObTxOpVector::serialize(char *buf, const int64_t buf_len, int64_t &pos) cons
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, count_))) {
+    STORAGE_LOG(WARN, "serialize fail", KR(ret));
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < count_; idx++) {
       if (OB_FAIL(tx_op_[idx].serialize(buf, buf_len, pos))) {
+        STORAGE_LOG(WARN, "serialize fail", KR(ret));
       }
     }
   }
@@ -174,6 +179,7 @@ int ObTxOpVector::deserialize(const char *buf, const int64_t buf_len, int64_t &p
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &count_))) {
+    STORAGE_LOG(WARN, "deserialize fail", KR(ret), K(buf), K(buf_len), K(pos), K(count_));
   } else if (count_ > 0) {
     if (OB_ISNULL(tx_op_ = (ObTxOp*)allocator.alloc(count_ * sizeof(ObTxOp)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -187,6 +193,7 @@ int ObTxOpVector::deserialize(const char *buf, const int64_t buf_len, int64_t &p
     }
     for (int64_t idx = 0; OB_SUCC(ret) && idx < count_; idx++) {
       if (OB_FAIL(tx_op_[idx].deserialize(buf, buf_len, pos, allocator))) {
+        STORAGE_LOG(WARN, "deserialize fail", KR(ret));
       }
     }
   }
@@ -198,7 +205,9 @@ int ObTxDataOp::add_tx_op(ObTxOp &tx_op)
   int ret = OB_SUCCESS;
   SpinWLockGuard lock_guard(lock_);
   if (OB_FAIL(tx_op_list_.try_extend_space(1, *op_allocator_))) {
+    STORAGE_LOG(WARN, "try_extend_space fail", KR(ret), K(tx_op));
   } else if (OB_FAIL(tx_op_list_.push_back(tx_op))) {
+    STORAGE_LOG(WARN, "push tx_op to array failed", KR(ret));
   }
   return ret;
 }
@@ -208,28 +217,31 @@ int ObTxDataOp::reserve_tx_op_space(int64_t count)
   int ret = OB_SUCCESS;
   SpinWLockGuard lock_guard(lock_);
   if (OB_FAIL(tx_op_list_.try_extend_space(count, *op_allocator_))) {
+    STORAGE_LOG(WARN, "try_extend_space fail", KR(ret), K(count));
   }
   return ret;
 }
 
-int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::SCN op_scn, ObTxOpArray &tx_op_batch)
+int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_id, share::SCN op_scn, ObTxOpArray &tx_op_batch)
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard lock_guard(lock_);
   if (OB_FAIL(tx_op_list_.try_extend_space(tx_op_batch.count(), *op_allocator_))) {
+    STORAGE_LOG(WARN, "try_extend_space fail", KR(ret), K(tx_op_batch));
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < tx_op_batch.count(); idx++) {
       if (OB_FAIL(tx_op_list_.push_back(tx_op_batch.at(idx)))) {
+        STORAGE_LOG(WARN, "push tx_op to array failed", KR(ret));
       }
     }
     // !!! we must promise tx_op_batch atomic append into tx_op_list
     // otherwise tx_op replay filter with log_scn compare op_scn will cause serious problem
     if (OB_FAIL(ret)) {
-      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
+      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(ls_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
       ob_abort();
     }
   }
-  STORAGE_LOG(INFO, "add_tx_op", K(ret), K(tx_id), K(op_scn), K(tx_op_batch.count()), K(tx_op_list_.get_count()), K(tx_op_batch));
+  STORAGE_LOG(INFO, "add_tx_op", K(ret), K(tx_id), K(ls_id), K(op_scn), K(tx_op_batch.count()), K(tx_op_list_.get_count()), K(tx_op_batch));
   return ret;
 }
 
@@ -256,7 +268,9 @@ int ObTxOp::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, int64_t(op_code_)))) {
+    STORAGE_LOG(WARN, "serialize fail", K(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(op_scn_.serialize(buf, buf_len, pos))) {
+    STORAGE_LOG(WARN, "serialize fail", K(ret), K(buf_len), K(pos));
   } else if (OB_ISNULL(op_val_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "tx_op op_val is null", KR(ret), KPC(this));
@@ -280,7 +294,9 @@ int ObTxOp::deserialize(const char *buf, const int64_t data_len, int64_t &pos, O
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, (int64_t*)&op_code_))) {
+    STORAGE_LOG(WARN, "deserialize fail", K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(op_scn_.deserialize(buf, data_len, pos))) {
+    STORAGE_LOG(WARN, "deserialize fail", K(ret), K(data_len), K(pos));
   }
   #define DESERIALIZE_TX_OP_TMP(OP_CODE, OP_TYPE)                 \
   if (OB_SUCC(ret) && op_code_ ==  OP_CODE) {                     \
@@ -305,7 +321,7 @@ int ObTxOp::deserialize(const char *buf, const int64_t data_len, int64_t &pos, O
 
 void ObTxOp::release()
 {
-  ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
+  ObIAllocator &allocator = share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
   #define RELEASE_TX_OP_TMP(OP_CODE, OP_TYPE)                  \
   if (OB_NOT_NULL(op_val_) && op_code_ ==  OP_CODE             \
       && op_val_ != &DEFAULT_TX_DUMMY_OP) {                    \

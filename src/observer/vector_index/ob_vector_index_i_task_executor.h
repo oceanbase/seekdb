@@ -24,8 +24,6 @@ namespace oceanbase
 namespace share 
 {
 
-class ObPluginVectorIndexService;
-
 class ObVecITaskExecutor
 {
 public: 
@@ -47,9 +45,11 @@ public:
 
 protected:
   static const int64_t VEC_INDEX_TASK_MAX_RETRY_TIME = 3; // 200
+  static const int64_t INVALID_TG_ID = -1;
   static const int64_t MAX_ASYNC_TASK_PROCESSING_COUNT = 128; // the thread pool max paralell processing cnt is 8
 
-  int get_index_mgr(ObPluginVectorIndexMgr *&index_mgr);
+  int get_index_ls_mgr(ObPluginVectorIndexMgr *&index_ls_mgr);
+  virtual bool check_operation_allow() = 0;
   int update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_ctx);
   int clear_task_ctx(ObVecIndexAsyncTaskOption &task_opt, ObVecIndexAsyncTaskCtx *task_ctx);
   int check_task_result(ObVecIndexAsyncTaskCtx *task_ctx);

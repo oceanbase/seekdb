@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_server_struct.h"
-#include "ob_share_util.h"
 namespace oceanbase
 {
 namespace share
@@ -24,7 +23,7 @@ namespace share
 
 void ObGlobalContext::init()
 {
-  server_role_ = share::ObServerRole::PRIMARY_ROLE;
+  server_role_ = common::PRIMARY_CLUSTER;
 }
 
 ObGlobalContext &ObGlobalContext::get_instance()
@@ -32,28 +31,54 @@ ObGlobalContext &ObGlobalContext::get_instance()
   static ObGlobalContext global_context;
   return global_context;
 }
+
+
+
+
+uint64_t ObGlobalContext::get_server_index() const
+{
+  uint64_t server_index = 0;
+  uint64_t server_id = ATOMIC_LOAD(&server_id_);
+  if (OB_UNLIKELY(!is_valid_server_id(server_id))) {
+    // return 0;
+  } else {
+    server_index = ObShareUtil::compute_server_index(server_id);
+  }
+  return server_index;
+}
+
 DEF_TO_STRING(ObGlobalContext)
 {
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(self_addr_seq),
+       KP_(root_service),
+       KP_(ob_service),
        KP_(schema_service),
+       KP_(config),
        KP_(config_mgr),
        KP_(tablet_operator),
+       KP_(storage_rpc_proxy),
+       KP_(executor_rpc),
        KP_(sql_proxy),
        KP_(bandwidth_throttle),
+       KP_(vt_par_ser),
+       KP_(session_mgr),
+       KP_(sql_engine),
+       KP_(omt),
+       KP_(vt_iter_creator),
        K_(start_time),
        KP_(warm_up_start_time));
   J_COMMA();
-  J_KV(K_(status),
+  J_KV(K_(server_id),
+       K_(status),
        K_(start_service_time),
        KP_(diag),
        KP_(scramble_rand),
        KP_(schema_status_proxy),
        K_(ssl_key_expired_time),
        K_(inited),
-       K_(in_bootstrap),
-       K_(embedded));
+       K_(in_bootstrap));
   J_OBJ_END();
   return pos;
 }

@@ -22,7 +22,7 @@
 #include "common/object/ob_object.h"
 #include "common/ob_action_flag.h"
 #include "storage/blocksstable/ob_datum_row.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -71,27 +71,28 @@ enum ObObjTypeStoreClass
   ObStringSC, // varchar, char, binary, raw, nvarchar2, nchar, udt_bitmap
   ObTextSC, // text
   ObOTimestampSC, // timestamptz, timestamp ltz, timestamp nano
-  ObIntervalSC, // interval year to month, interval day to second
+  ObIntervalSC, //oracle interval year to month interval day to second
   ObLobSC,  //lob
   ObJsonSC, // json
   ObGeometrySC, // geometry
+  ObRoaringBitmapSC, // roaringbitmap
   ObMaxSC,
 };
 
 OB_INLINE bool is_string_encoding_valid(const ObObjTypeStoreClass sc)
 {
-  return sc == ObStringSC || sc == ObTextSC || sc == ObJsonSC || sc == ObGeometrySC;
+  return (sc == ObStringSC || sc == ObTextSC || sc == ObJsonSC || sc == ObGeometrySC || sc == ObRoaringBitmapSC);
 }
 
 OB_INLINE bool store_class_might_contain_lob_locator(const ObObjTypeStoreClass sc)
 {
-  return sc == ObTextSC || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC;
+  return (sc == ObTextSC || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC || sc == ObRoaringBitmapSC);
 }
 
 OB_INLINE bool is_var_length_type(const ObObjTypeStoreClass sc)
 {
-  return sc == ObNumberSC || sc == ObDecimalIntSC || sc == ObStringSC || sc == ObTextSC
-      || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC;
+  return (sc == ObNumberSC || sc == ObDecimalIntSC || sc == ObStringSC || sc == ObTextSC
+      || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC || sc == ObRoaringBitmapSC);
 }
 
 OB_INLINE ObObjTypeStoreClass *get_store_class_map()
@@ -126,6 +127,7 @@ OB_INLINE ObObjTypeStoreClass *get_store_class_map()
     ObTextSC, // ObCollectionSQLTC
     ObIntSC,  // ObMySQLDateTC
     ObIntSC,  // ObMySQLDateTimeTc
+    ObRoaringBitmapSC, // ObRoaringBitmapTC
     ObMaxSC // ObMaxTC
   };
   STATIC_ASSERT(ARRAYSIZEOF(store_class_map) == common::ObMaxTC + 1,
@@ -179,6 +181,7 @@ OB_INLINE int64_t *get_type_size_map()
     -1, //ObCollectionSQLType
     4, // ObMySQLDateType
     8, // ObMySQLDateTimeType
+    -1, //RoaringBitmap
     -1 // ObMaxType
   };
   STATIC_ASSERT(ARRAYSIZEOF(type_size_map) == common::ObMaxType + 1,
@@ -233,6 +236,7 @@ OB_INLINE int64_t *get_estimate_base_store_size_map()
     8, // ObCollectionSQLType
     8, // ObMySQLDateType
     8, // ObMySQLDateTimeType
+    9, // ObRoaringBitmapType
     -1 // ObMaxType
   };
   STATIC_ASSERT(ARRAYSIZEOF(estimate_base_store_size_map) == common::ObMaxType + 1,
@@ -399,6 +403,7 @@ inline static int batch_load_data_to_datum(
     if (OB_FAIL(get_uint_data_datum_len(
         common::ObDatum::get_obj_datum_map_type(obj_type),
         datum_len))) {
+      STORAGE_LOG(WARN, "Failed to get datum len for int data", K(ret));
     } else {
       uint64_t value = 0;
       for (int64_t i = 0; i < row_cap; ++i) {
@@ -419,6 +424,7 @@ inline static int batch_load_data_to_datum(
   }
   case ObNumberSC: {
     if (OB_FAIL(batch_load_number_data_to_datum(cell_datas, row_cap, datums))) {
+      STORAGE_LOG(WARN, "Failed to load batch data to datum", K(ret));
     }
     break;
   }
@@ -434,7 +440,8 @@ inline static int batch_load_data_to_datum(
   case ObStringSC:
   case ObTextSC:
   case ObJsonSC:
-  case ObGeometrySC: {
+  case ObGeometrySC:
+  case ObRoaringBitmapSC: {
     for (int64_t i = 0; i < row_cap; ++i) {
       if (!datums[i].is_null()) {
         datums[i].ptr_ = cell_datas[i];
@@ -473,6 +480,7 @@ inline static int load_data_to_datum(
         if (OB_FAIL(get_uint_data_datum_len(
             common::ObDatum::get_obj_datum_map_type(obj_type),
             datum_len))) {
+          STORAGE_LOG(WARN, "Failed to get datum len for int data", K(ret));
         } else {
           uint64_t value = 0;
           MEMCPY(&value, cell_data, cell_len);
@@ -505,6 +513,7 @@ inline static int load_data_to_datum(
       case ObTextSC:
       case ObJsonSC:
       case ObGeometrySC:
+      case ObRoaringBitmapSC:
       {
         datum.pack_= static_cast<uint32_t>(cell_len);
         datum.ptr_ = cell_data;
@@ -546,7 +555,8 @@ inline static int compare_datum(
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
   //TODo @yunsong, support datum compare
-  if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret, nullptr))) {
+  if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret))) {
+    STORAGE_LOG(WARN, "Failed to compare datum", K(ret), K(datum1), K(datum2));
   } else {
     switch (cmp_op) {
       case CO_EQ: { // WHITE_OP_EQ
@@ -630,6 +640,7 @@ public:
       const int64_t pos = size_ / BLOCK_ITEM_CNT;
       if (OB_UNLIKELY(NULL == block_list_[pos])) {
         if (OB_FAIL(extend(1))) {
+          STORAGE_LOG(WARN, "extend block failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -656,6 +667,7 @@ public:
   int resize(const int64_t size) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(reserve(size))) {
+      STORAGE_LOG(WARN, "reserve failed", K(ret));
     } else {
       size_ = size;
     }
@@ -668,6 +680,7 @@ public:
       int64_t cur_blocks_cnt = (size_ + BLOCK_ITEM_CNT - 1) / BLOCK_ITEM_CNT;
       if (total_block_cnt > cur_blocks_cnt) {
         if (OB_FAIL(extend(total_block_cnt - cur_blocks_cnt))) {
+          STORAGE_LOG(WARN, "extend failed", K(ret), K(cur_blocks_cnt), K(total_block_cnt));
         }
       }
     }

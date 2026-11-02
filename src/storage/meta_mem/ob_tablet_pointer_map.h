@@ -73,7 +73,7 @@ public:
       const ObMetaDiskAddr &old_addr,
       const ObMetaDiskAddr &new_addr,
       const bool set_pool /* whether to set pool */,
-      ObIStorageMetaObjPool *pool);
+      ObITenantMetaObjPool *pool);
   template <typename Operator> int for_each_value_store(Operator &op);
   int wash_meta_obj(const ObTabletMapKey &key, ObMetaObjGuard<ObTablet> &guard, void *&free_obj);
   int64_t count() const { return ResourceMap::map_.size(); }
@@ -143,6 +143,7 @@ int ObTabletPointerMap::for_each_value_store(Operator &op)
       } else {
         locked = true;
         if (OB_FAIL(ResourceMap::map_.foreach_refactored(op))) {
+          STORAGE_LOG(WARN, "fail to foreach refactored", K(ret));
         }
       }
     }

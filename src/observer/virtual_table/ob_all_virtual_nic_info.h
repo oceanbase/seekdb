@@ -27,7 +27,8 @@ class ObAllVirtualNicInfo : public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
-    SPEED_MBPS = common::OB_APP_MIN_COLUMN_ID
+        DEVNAME = common::OB_APP_MIN_COLUMN_ID,
+    SPEED_MBPS
   };
 
 public:
@@ -38,6 +39,9 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
 private:
   bool is_end_;
+  char svr_ip_[common::MAX_IP_ADDR_LENGTH];
+  char devname_[common::MAX_IFNAME_LENGTH];
+  int32_t svr_port_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualNicInfo);

@@ -1,0 +1,173 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_tsc_timestamp.h"
+#include "lib/oblog/ob_log.h"
+#ifdef _WIN32
+#include "lib/hash/ob_hashutils.h"
+#include <windows.h>
+#endif
+
+using namespace oceanbase;
+using namespace oceanbase::common;
+
+
+int ObTscTimestamp::init()
+{
+  int ret = OB_SUCCESS;
+  struct timeval tv;
+  if (gettimeofday(&tv, NULL) < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LIB_LOG(WARN, "get time of day error", K(ret));
+  } else {
+    if (!is_support_invariant_tsc_()) {
+      ret = OB_NOT_SUPPORTED;
+      LIB_LOG(WARN, "invariant TSC not support", K(ret));
+    } else {
+      const int64_t cpu_freq_khz = get_cpufreq_khz_();
+      tsc_count_ = rdtscp();
+      start_us_ = tv.tv_sec * 1000000 + tv.tv_usec;
+      // judge if cpu frequency and tsc are legal
+      if (tsc_count_ > 0 && cpu_freq_khz > 0) {
+        // bitwise will lose precision.
+        scale_ = (1000 << 20) / cpu_freq_khz;
+        MEM_BARRIER();
+        WEAK_BARRIER();
+        is_init_ = true;
+        LIB_LOG(INFO, "TSC TIMESTAMP init succ", K(cpu_freq_khz));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LIB_LOG(WARN, "TSC TIMESTAMP init fail", K(ret), K_(tsc_count), K(cpu_freq_khz));
+      }
+    }
+  }
+  if (OB_NOT_SUPPORTED == ret) {
+    ret = OB_SUCCESS;
+  }
+  return ret;
+}
+
+int64_t ObTscTimestamp::current_time()
+{
+  int ret = OB_SUCCESS;
+  // init failed, use system call.
+  struct timeval tv;
+  if (gettimeofday(&tv, NULL) < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LIB_LOG(WARN, "sys gettimeofday unexpected", K(ret));
+  }
+  return (static_cast<int64_t>(tv.tv_sec) * static_cast<int64_t>(1000000) + static_cast<int64_t>(tv.tv_usec));
+}
+
+int64_t ObTscTimestamp::fast_current_time()
+{
+  int64_t result_time = 0;
+  if (OB_UNLIKELY(!is_init_)) {
+    result_time = current_time();
+  } else {
+    const uint64_t current_tsc = rdtsc();
+    result_time = current_tsc * scale_ >> 20;
+  }
+  return result_time;
+}
+
+
+#if defined(__x86_64__)
+#ifdef _WIN32
+uint64_t ObTscTimestamp::get_cpufreq_khz_()
+{
+  uint64_t freq_khz = 0;
+  HKEY hKey;
+  DWORD mhz = 0;
+  DWORD size = sizeof(mhz);
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+                    "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                    0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+    if (RegQueryValueExA(hKey, "~MHz", NULL, NULL, (LPBYTE)&mhz, &size) == ERROR_SUCCESS) {
+      freq_khz = (uint64_t)mhz * 1000ULL;
+    }
+    RegCloseKey(hKey);
+  }
+  LIB_LOG(INFO, "TSC freq : ", K(freq_khz));
+  return freq_khz;
+}
+#else
+uint64_t ObTscTimestamp::get_cpufreq_khz_()
+{
+  int ret = OB_SUCCESS;
+  char line[256];
+  FILE *stream = NULL;
+  double freq_mhz = 0.0;
+  uint64_t freq_khz = 0;
+  stream = fopen("/proc/cpuinfo", "r");
+  if (NULL == stream) {
+    ret = OB_FILE_NOT_EXIST;
+    LIB_LOG(WARN, "/proc/cpuinfo not exist", K(ret));
+  } else {
+    while (fgets(line, sizeof(line), stream)) {
+      // FIXME: TSC frequency is not easy to retrieve from user-space
+      // see: https://stackoverflow.com/questions/35123379/getting-tsc-rate-from-x86-kernel/57835630#57835630
+      // cpu MHz was not stable and not equals to TSC frequency
+      // don't depends on to calculate and then comapre to real clock time
+      if (sscanf(line, "cpu MHz\t: %lf", &freq_mhz) == 1) {
+        freq_khz = (uint64_t)(freq_mhz * 1000UL);
+        break;
+      }
+    }
+    fclose(stream);
+  }
+  LIB_LOG(INFO, "TSC freq : ", K(freq_khz));
+  return freq_khz;
+}
+#endif
+
+// judge if it support tsc, entry is CPUID.80000007H:EDX[8].
+bool ObTscTimestamp::is_support_invariant_tsc_()
+{
+  int ret = true;
+  unsigned int cpu_info[4];
+  cpu_info[3] = 0;
+  getcpuid(cpu_info, 0x80000007);
+  if (cpu_info[3] & 0x100) {
+    // invariant tsc is supported
+  } else {
+    ret = false;
+  }
+  if (ret) {
+    cpu_info[3] = 0;
+    getcpuid(cpu_info, 0x80000001);
+    if (cpu_info[3] & (1<<27)) {
+      // RDTSCP is supported
+    } else {
+      ret = false;
+    }
+  }
+  return ret;
+}
+
+#elif defined(__aarch64__)
+
+uint64_t ObTscTimestamp::get_cpufreq_khz_(void)
+{
+  uint64_t timer_frequency = 0;
+  asm volatile("mrs %0, cntfrq_el0":"=r"(timer_frequency));
+  LIB_LOG(INFO, "TSC freq : ", "freq", timer_frequency/1000);
+  return timer_frequency/1000;
+}
+
+#else
+
+#endif

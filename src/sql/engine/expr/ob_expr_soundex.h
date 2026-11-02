@@ -52,8 +52,7 @@ public:
                        const bool input_has_lob_header,
                        ObIAllocator &tmp_alloc, ObIAllocator &res_alloc,
                        ObString &out,
-                       bool has_lob_header,
-                       const common::ObLobReadOptions &lob_read_options);
+                       bool has_lob_header);
   static int eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
   

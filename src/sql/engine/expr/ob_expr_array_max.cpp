@@ -52,21 +52,27 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObExecContext is null", K(ret));
   } else if (ob_is_null(type1.get_type())) {
     type.set_utinyint(); // default type
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
+    LOG_WARN("failed to get elem meta.", K(ret), K(type1.get_subschema_id()));
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObSqlCollectionInfo is null", K(ret));
   } else if (coll_info->collection_meta_->type_id_ != ObNestedType::OB_ARRAY_TYPE
              && coll_info->collection_meta_->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("invalid collection type", K(ret), K(coll_info->collection_meta_->type_id_ ));
   } else if (OB_ISNULL(arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObCollectionArrayType is null", K(ret));
   } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
     ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
     type.set_meta(elem_type->basic_meta_.get_meta_type());
@@ -78,6 +84,7 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "nested array");
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected ObNestedType type", K(ret), K(arr_type->element_type_->type_id_));
   }
   return ret;
 }
@@ -90,6 +97,7 @@ int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool
 
   if (OB_ISNULL(elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("source array collection element type is null", K(ret));
   } else if (src_arr->get_format() == Nested_Array) {
     // TODO: support array of array
     ret = OB_NOT_SUPPORTED;
@@ -101,6 +109,7 @@ int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool
       if (src_arr->is_null(i)) {
         // do nothing
       } else if (OB_FAIL(src_arr->elem_at(i, elem_obj))) {
+        LOG_WARN("failed to get element", K(ret), K(i));
       } else if (res_obj.is_null()) {
         res_obj = elem_obj;
       } else if (elem_obj.is_varchar()) {
@@ -133,13 +142,17 @@ int ObExprArrayExtreme::eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, O
   ObObj res_obj;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
+    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (arr_datum->is_null()) {
     res.set_null();
-  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
+  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) { 
+    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+    LOG_WARN("calc array extreme value failed", K(ret));
   } else {
     res.from_obj(res_obj);
     if (res_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
+      LOG_WARN("fail to deep copy for res datum", K(ret), K(res_obj), K(res));
     }
   }
   return ret;
@@ -160,6 +173,7 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
   ObObj res_obj;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -170,12 +184,62 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
       eval_flags.set(j);
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
-      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) {
+      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) { 
+        LOG_WARN("construct array obj failed", K(ret));
       } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+        LOG_WARN("calc array extreme value failed", K(ret));
       } else {
         res_datum.at(j)->from_obj(res_obj);
         if (res_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
+          LOG_WARN("fail to deep copy for res datum", K(ret), K(res_obj), KPC(res_datum.at(j)));
         }
+      }
+    } // end for
+  }
+  return ret;
+}
+
+int ObExprArrayExtreme::eval_array_extreme_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                            const ObBitVector &skip, const EvalBound &bound,
+                                            bool is_max)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+  ObExprStrResAlloc res_alloc(expr, ctx);
+  const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
+  ObIArrayType *src_arr = NULL;
+
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("eval source array failed", K(ret));
+  } else {
+    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
+    VectorFormat arr_format = arr_vec->get_format();
+    ObIVector *res_vec = expr.get_vector(ctx);
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    ObObj res_obj;
+    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
+      bool is_null_res = false;
+      int64_t arr_idx = 0;
+      if (skip.at(idx) || eval_flags.at(idx)) {
+        continue;
+      }
+      eval_flags.set(idx);
+      if (arr_vec->is_null(idx)) {
+        is_null_res = true;
+      } else {
+        ObString arr_str = arr_vec->get_string(idx);
+        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
+          LOG_WARN("construct array obj failed", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (is_null_res) {
+        res_vec->set_null(idx);
+      } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+        LOG_WARN("calc array extreme value failed", K(ret));
+      } else if (OB_FAIL(ObArrayExprUtils::set_obj_to_vector(res_vec, idx, res_obj, res_alloc))) {
+        LOG_WARN("failed to set object value to result vector", K(ret), K(idx), K(res_obj));
       }
     } // end for
   }
@@ -202,6 +266,13 @@ int ObExprArrayMax::eval_array_max_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ObExprArrayExtreme::eval_array_extreme_batch(expr, ctx, skip, batch_size, true);
 }
 
+int ObExprArrayMax::eval_array_max_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                          const ObBitVector &skip, const EvalBound &bound)
+
+{
+  return ObExprArrayExtreme::eval_array_extreme_vector(expr, ctx, skip, bound, true);
+}
+
 int ObExprArrayMax::cg_expr(ObExprCGCtx &expr_cg_ctx,
                             const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const
@@ -210,6 +281,7 @@ int ObExprArrayMax::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_max;
   rt_expr.eval_batch_func_ = eval_array_max_batch;
+  rt_expr.eval_vector_func_ = eval_array_max_vector; 
   return OB_SUCCESS;
 }
 
@@ -233,6 +305,13 @@ int ObExprArrayMin::eval_array_min_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ObExprArrayExtreme::eval_array_extreme_batch(expr, ctx, skip, batch_size, false);
 }
 
+int ObExprArrayMin::eval_array_min_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                          const ObBitVector &skip, const EvalBound &bound)
+
+{
+  return ObExprArrayExtreme::eval_array_extreme_vector(expr, ctx, skip, bound, false);
+}
+
 int ObExprArrayMin::cg_expr(ObExprCGCtx &expr_cg_ctx,
                             const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const
@@ -241,6 +320,7 @@ int ObExprArrayMin::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_min;
   rt_expr.eval_batch_func_ = eval_array_min_batch;
+  rt_expr.eval_vector_func_ = eval_array_min_vector; 
   return OB_SUCCESS;
 }
 

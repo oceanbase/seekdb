@@ -20,6 +20,8 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_raw_se_array.h"
 #include "storage/ob_i_store.h"
+#include "storage/blocksstable/ob_bloom_filter_data_writer.h"
+#include "storage/blocksstable/ob_bloom_filter_data_reader.h"
 #include "ob_partition_merge_iter.h"
 #include "ob_partition_merge_fuser.h"
 #include "ob_partition_merge_progress.h"
@@ -214,6 +216,7 @@ protected:
                                            MERGE_ITER_ARRAY &minimum_iters,
                                            common::ObIArray<int64_t> &iter_idxs);
   int skip_shadow_row(MERGE_ITER_ARRAY &merge_iters);
+  int check_need_prebuild_bloomfilter();
   virtual int rewrite_macro_block(MERGE_ITER_ARRAY &minimum_iters) override;
 private:
   virtual int inner_init() override;
@@ -233,9 +236,16 @@ private:
                                   ObPartitionMergeIter *merge_iter,
                                   int64_t iter_idx,
                                   bool &need_remove);
+  int compact_delete_insert_iters(MERGE_ITER_ARRAY &merge_iters,
+                                  MERGE_ITER_ARRAY &minimum_iters,
+                                  const ObIArray<int64_t> &iter_idxs,
+                                  bool need_add_shadow_row);
 
 protected:
   common::ObSEArray<int64_t, DEFAULT_ITER_COUNT> minimum_iter_idxs_;
+  common::ObArenaAllocator obj_copy_allocator_;
+  storage::ObNopPos *nop_pos_[ObRowQueue::QI_MAX];
+  blocksstable::ObRowQueue row_queue_;
 };
 
 class ObPartitionMergeDumper

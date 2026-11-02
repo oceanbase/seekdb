@@ -180,6 +180,7 @@ public:
     int ret = OB_SUCCESS;
     if (size > vec_.size()) {
       if (OB_FAIL(vec_.prepare_allocate(size))) {
+        OB_LOG(WARN, "failed to resize ObGeomVector", K(ret), K(size));
       }
     } else {
       while (size != vec_.size()) {
@@ -1178,8 +1179,9 @@ private:
 class ObCartesianGeometrycollection : public ObGeometrycollection
 {
 public:
-  typedef ObArray<ObGeometry *>::iterator iterator;
-  typedef ObArray<ObGeometry *>::const_iterator const_iterator;
+  typedef PageArena<ObGeometry *, ModulePageAllocator> ObCGeoModuleArena;
+  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::iterator iterator;
+  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::const_iterator const_iterator;
   typedef ObCartesianMultipolygon sub_mp_type;
   typedef ObCartesianMultipoint sub_mpt_type;
   typedef ObCartesianMultilinestring sub_ml_type;
@@ -1240,8 +1242,9 @@ private:
 class ObGeographGeometrycollection : public ObGeometrycollection
 {
 public:
-  typedef ObArray<ObGeometry *>::iterator iterator;
-  typedef ObArray<ObGeometry *>::const_iterator const_iterator;
+  typedef PageArena<ObGeometry *, ModulePageAllocator> ObCGeoModuleArena;
+  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::iterator iterator;
+  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::const_iterator const_iterator;
   typedef ObGeographMultipolygon sub_mp_type;
   typedef ObGeographMultipoint sub_mpt_type;
   typedef ObGeographMultilinestring sub_ml_type;

@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_pointer_status.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -26,6 +26,7 @@ namespace observer
 {
 ObAllVirtualTabletPtr::ObAllVirtualTabletPtr()
   : ObVirtualTableScannerIterator(),
+    addr_(),
     tablet_iter_(nullptr),
     iter_buf_(nullptr)
 {
@@ -39,9 +40,10 @@ ObAllVirtualTabletPtr::~ObAllVirtualTabletPtr()
 void ObAllVirtualTabletPtr::reset()
 {
   if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTabletPtrWithInMemObjIterator();
+    tablet_iter_->~ObTenantTabletPtrWithInMemObjIterator();
     tablet_iter_ = nullptr;
   }
+  addr_.reset();
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
     iter_buf_ = nullptr;
@@ -49,7 +51,7 @@ void ObAllVirtualTabletPtr::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualTabletPtr::init(ObIAllocator *allocator)
+int ObAllVirtualTabletPtr::init(ObIAllocator *allocator, common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(start_to_read_)) {
@@ -58,11 +60,12 @@ int ObAllVirtualTabletPtr::init(ObIAllocator *allocator)
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid argument", K(ret));
-  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTabletPtrWithInMemObjIterator)))) {
+  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTenantTabletPtrWithInMemObjIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(WARN, "fail to alloc tablet iter buf", K(ret));
   } else {
     allocator_ = allocator;
+    addr_ = addr;
     start_to_read_ = true;
   }
   return ret;
@@ -75,9 +78,12 @@ int ObAllVirtualTabletPtr::get_next_tablet_pointer(
 {
   int ret = OB_SUCCESS;
   if (nullptr == tablet_iter_) {
-    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
-    tablet_iter_ = new (iter_buf_) ObTabletPtrWithInMemObjIterator(*t3m);
-    OB_ASSERT(tablet_iter_ != nullptr);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+    tablet_iter_ = new (iter_buf_) ObTenantTabletPtrWithInMemObjIterator(*t3m);
+    if (OB_ISNULL(tablet_iter_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
+    }
   }
   if (OB_FAIL(ret)) {
     // do nothing
@@ -155,7 +161,8 @@ int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
           break;
         case OLD_CHAIN:
           MEMSET(old_chain_, 0, STR_LEN);
-          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
+          if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
+            SERVER_LOG(WARN, "fail to print old chain", K(ret), K(key), KPC(tablet_pointer));
           } else {
             cur_row_.cells_[i].set_varchar(old_chain_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

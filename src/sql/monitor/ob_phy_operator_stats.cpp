@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_MONITOR
 #include "ob_phy_operator_stats.h"
+#include "sql/monitor/ob_phy_operator_monitor_info.h"
 #include "sql/engine/ob_physical_plan.h"
 using namespace oceanbase::common;
 namespace oceanbase
@@ -28,6 +29,7 @@ int ObPhyOperatorStats::init(ObIAllocator *alloc, int64_t op_count)
   void *ptr = NULL;
   if (OB_ISNULL(alloc) || OB_UNLIKELY(op_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret),K(alloc), K(op_count));
   } else {
     array_size_ = op_count * StatId::MAX_STAT * COPY_COUNT;
     //2 is to save plan_id and operation_id
@@ -59,6 +61,29 @@ int ObPhyOperatorStats::init(ObIAllocator *alloc, int64_t op_count)
  * COPY = 10
  */
 
+int ObPhyOperatorStats::add_op_stat(ObPhyOperatorMonitorInfo &info)
+{
+  int ret = OB_SUCCESS;
+  const int64_t COPY_SIZE = op_count_ * StatId::MAX_STAT;
+  int64_t copy_start_index = (get_cpu_id() % COPY_COUNT) * COPY_SIZE;
+  int64_t stat_start_index = copy_start_index + info.get_op_id() * StatId::MAX_STAT;
+  if (stat_start_index < 0 || stat_start_index + StatId::MAX_STAT > array_size_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid array index", K(stat_start_index), K(array_size_));
+  } else {
+    int64_t last_input_rows = 0;
+    int64_t last_output_rows = 0;
+    int64_t rescan_times = 0;
+    info.get_value(INPUT_ROW_COUNT, last_input_rows);
+    info.get_value(OUTPUT_ROW_COUNT, last_output_rows);
+    info.get_value(RESCAN_TIMES, rescan_times);
+    ATOMIC_AAF(&(op_stats_array_[stat_start_index + StatId::INPUT_ROWS]), last_input_rows);
+    ATOMIC_AAF(&(op_stats_array_[stat_start_index + StatId::OUTPUT_ROWS]), last_output_rows);
+    ATOMIC_AAF(&(op_stats_array_[stat_start_index + StatId::RESCAN_TIMES]), rescan_times);
+  }
+  return ret;
+}
+
 int ObPhyOperatorStats::get_op_stat_accumulation(ObPhysicalPlan *plan,
                                                  int64_t op_id,
                                                  ObOperatorStat &stat)
@@ -66,6 +91,7 @@ int ObPhyOperatorStats::get_op_stat_accumulation(ObPhysicalPlan *plan,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(plan));
   } else {
     int64_t exec_times = 0;
     int64_t op_first_index = op_id * StatId::MAX_STAT;

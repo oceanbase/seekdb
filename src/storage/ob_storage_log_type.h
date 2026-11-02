@@ -27,7 +27,7 @@ enum ObStorageLogType
 {
   //attention:!!!
   //you should modify storage_log_type_to_string() below at the same when adding new log type
-  // If you add a new log type, also update external log consumers such as liboblog.
+  //In addition, if you add new log types, please consider liboblog, archive and other consumption log applications outside
   //OB as supporting support
   OB_LOG_UNKNOWN = 0,
 
@@ -66,6 +66,9 @@ enum ObStorageLogType
   OB_LOG_MINOR_FREEZE = 10004,
   OB_LOG_MAJOR_FREEZE = 10005,
 
+  OB_LOG_SPLIT_SOURCE_PARTITION = 11001,
+  OB_LOG_SPLIT_DEST_PARTITION = 11002,
+
   OB_LOG_STORAGE_SCHEMA = 11005,
 
   OB_LOG_TRANS_CHECKPOINT = 12000,
@@ -76,10 +79,17 @@ enum ObStorageLogType
   // for test
   OB_LOG_TEST = 30000,
 
+  OB_LOG_TRANSFER_ADD_SSTORE = 40001,
+  OB_LOG_TRANSFER_PREPARE = 40002,
+  OB_LOG_TRANSFER_COMMIT = 40003,
+  OB_LOG_TRANSFER_ABORT = 40004,
+  OB_LOG_TRANSFER_CLEAR = 40005,
+  OB_LOG_TRANS_LITE = 40006,
   OB_LOG_ADD_PARTITION_TO_PG = 40007,
   OB_LOG_REMOVE_PARTITION_FROM_PG = 40008,
   OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG = 40009,
 
+  OB_LOG_FLASHBACK_PARTITION = 50001,
   OB_LOG_DDL_REDO_LOG = 60001,
   OB_LOG_DDL_COMMIT_LOG = 60002,
 };
@@ -174,6 +184,12 @@ public:
       case OB_LOG_MAJOR_FREEZE:
         log_type_str = "MAJOR_FREEZE";
         break;
+      case OB_LOG_SPLIT_SOURCE_PARTITION:
+        log_type_str = "SPLIT_SOURCE_PARTITION";
+        break;
+      case OB_LOG_SPLIT_DEST_PARTITION:
+        log_type_str = "SPLIT_DEST_PARTITION";
+        break;
       case OB_LOG_STORAGE_SCHEMA:
         log_type_str = "OB_LOG_STORAGE_SCHEMA";
         break;
@@ -189,6 +205,24 @@ public:
       case OB_LOG_TEST:
         log_type_str = "TEST";
         break;
+      case OB_LOG_TRANSFER_ADD_SSTORE:
+        log_type_str = "TRANSFER_ADD_SSTORE";
+        break;
+      case OB_LOG_TRANSFER_PREPARE:
+        log_type_str = "TRANSFER_PREPARE";
+        break;
+      case OB_LOG_TRANSFER_COMMIT:
+        log_type_str = "TRANSFER_COMMIT";
+        break;
+      case OB_LOG_TRANSFER_ABORT:
+        log_type_str = "TRANSFER_ABORT";
+        break;
+      case OB_LOG_TRANSFER_CLEAR:
+        log_type_str = "TRANSFER_CLEAR";
+        break;
+      case OB_LOG_TRANS_LITE:
+        log_type_str = "TRANS_LITE";
+        break;
       case OB_LOG_ADD_PARTITION_TO_PG:
         log_type_str = "ADD_PARTITION_TO_PG";
         break;
@@ -197,6 +231,9 @@ public:
         break;
       case OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG:
         log_type_str = "OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG";
+        break;
+      case OB_LOG_FLASHBACK_PARTITION:
+        log_type_str = "FLASHBACK_PARTITION";
         break;
       case OB_LOG_DDL_REDO_LOG:
         log_type_str = "OB_LOG_DDL_REDO_LOG";
@@ -292,9 +329,28 @@ public:
   {
     return OB_LOG_OFFLINE_PARTITION_V2 == log_type;
   }
+  static bool is_transfer_log(const int64_t log_type)
+  {
+    return (OB_LOG_TRANSFER_ADD_SSTORE == log_type
+        || OB_LOG_TRANSFER_PREPARE == log_type
+        || OB_LOG_TRANSFER_COMMIT == log_type
+        || OB_LOG_TRANSFER_ABORT == log_type
+        || OB_LOG_TRANSFER_CLEAR == log_type
+        || OB_LOG_TRANS_LITE == log_type);
+  }
+  static bool is_split_log(const int64_t log_type)
+  {
+    return (OB_LOG_SPLIT_SOURCE_PARTITION == log_type ||
+            OB_LOG_SPLIT_DEST_PARTITION == log_type);
+  }
   static bool is_checkpoint_log(const int64_t log_type)
   {
     return (OB_LOG_TRANS_CHECKPOINT == log_type);
+  }
+
+  static bool is_flashback_log(const int64_t log_type)
+  {
+    return (OB_LOG_FLASHBACK_PARTITION == log_type);
   }
 
   static bool is_start_membership_log(const int64_t log_type)
@@ -325,6 +381,7 @@ public:
   static bool is_partition_meta_log(const int64_t log_type)
   {
     return (OB_LOG_STORAGE_SCHEMA == log_type);
+    // TODO: split log
   }
 
   static bool is_log_replica_need_replay_log(const int64_t log_type) 
@@ -337,15 +394,18 @@ public:
 
     return (OB_LOG_START_MEMBERSHIP_STORAGE == log_type
             || is_offline_partition_log(log_type)
+            || OB_LOG_SPLIT_SOURCE_PARTITION == log_type
             || is_partition_meta_log(log_type)
-            || is_remove_partition_from_pg_log(log_type));
+            || is_remove_partition_from_pg_log(log_type)
+            || is_flashback_log(log_type));
   }
 
   static bool is_post_barrier_required_log(const int64_t log_type)
   {
     return (is_start_membership_log(log_type)
             || is_partition_meta_log(log_type)
-            || is_add_partition_to_pg_log(log_type));
+            || is_add_partition_to_pg_log(log_type)
+            || is_flashback_log(log_type));
   }
 
   static bool is_valid_log_type(const int64_t log_type)
@@ -354,9 +414,12 @@ public:
            || is_test_log(log_type)
            || is_freeze_log(log_type)
            || is_offline_partition_log(log_type)
+           || is_transfer_log(log_type)
+           || is_split_log(log_type)
            || is_start_membership_log(log_type)
            || is_checkpoint_log(log_type)
            || is_partition_meta_log(log_type)
+           || is_flashback_log(log_type)
            || is_add_partition_to_pg_log(log_type)
            || is_remove_partition_from_pg_log(log_type)
            || is_schema_version_change_log(log_type)

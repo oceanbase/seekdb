@@ -1,6 +1,6 @@
 #package_name: dbms_trusted_certificate_manager
 #author: tony.wzh
---available in the server runtime
+--only support SYS tenant
 
 CREATE OR REPLACE PACKAGE dbms_trusted_certificate_manager AUTHID CURRENT_USER
 

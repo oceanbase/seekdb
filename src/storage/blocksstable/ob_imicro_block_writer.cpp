@@ -93,6 +93,7 @@ int ObMicroBlockDesc::deep_copy(
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "can't copy invalid desc", K(ret), K(*this));
     } else if (OB_FAIL(last_rowkey_.deep_copy(dst.last_rowkey_, allocator))) {
+      STORAGE_LOG(WARN, "failed to copy last key", K(ret));
     } else {
       const int64_t block_size = header_->header_size_ + buf_size_;
       int64_t pos = 0;
@@ -104,6 +105,7 @@ int ObMicroBlockDesc::deep_copy(
         STORAGE_LOG(WARN, "failed to alloc micro block buf", K(ret));
       } else if (FALSE_IT(micro_header = reinterpret_cast<ObMicroBlockHeader *>(block_buffer))) {
       } else if (OB_FAIL(header_->deep_copy(block_buffer, block_size, pos, micro_header))) {
+        STORAGE_LOG(WARN, "failed to deep copy header", K(ret));
       } else if (OB_UNLIKELY(pos != micro_header->header_size_)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "header deep copy size mismatch", K(ret), K(*micro_header), K(pos));
@@ -133,7 +135,9 @@ int ObMicroBlockDesc::deep_copy(
             STORAGE_LOG(WARN, "failed to alloc row buf", K(ret));
           } else if (FALSE_IT(agg_row = new (row_buffer) ObSkipIndexAggResult())) {
           } else if (OB_FAIL(agg_row->init(aggregated_row_->get_agg_col_cnt(), allocator))) {
+            STORAGE_LOG(WARN, "failed to init datum row", K(ret));
           } else if (OB_FAIL(agg_row->deep_copy(*aggregated_row_, allocator))) {
+            STORAGE_LOG(WARN, "failed to copy datum row", K(ret));
           } else {
             dst.aggregated_row_ = agg_row;
           }
@@ -178,6 +182,7 @@ int ObMicroBufferWriter::write_row(const ObDatumRow &row, const int64_t rowkey_c
         STORAGE_LOG(WARN, "failed to write row", K(ret), KPC(this));
       } else if (!check_could_expand()) { //break
       } else if (OB_FAIL(expand(ObCompactionBuffer::size()))) {
+        STORAGE_LOG(WARN, "failed to reserve", K(ret));
       }
     }
   }
@@ -199,6 +204,7 @@ int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_de
   char *block_buffer = NULL;
   int64_t block_size = 0;
   if (OB_FAIL(build_block(block_buffer, block_size))) {
+    STORAGE_LOG(WARN, "failed to build micro block", K(ret));
   } else {
     ObMicroBlockHeader *micro_header = reinterpret_cast<ObMicroBlockHeader *>(block_buffer);
     micro_block_desc.header_ = micro_header;
@@ -215,7 +221,7 @@ int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_de
     micro_block_desc.has_lob_out_row_ = has_lob_out_row_;
     micro_block_desc.original_size_ = get_original_size();
     micro_block_desc.is_last_row_last_flag_ = is_last_row_last_flag();
-    // fill micro header for bugfix on micro block that bypasses compression
+    // fill micro header for bugfix on micro block that bypass compression/encryption
     // since these fields will be only filled on compression in current implementation
     micro_header->data_length_ = micro_block_desc.buf_size_;
     micro_header->data_zlength_ = micro_block_desc.buf_size_;

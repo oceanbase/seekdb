@@ -36,6 +36,7 @@ public:
       const uint64_t index_table_id,
       const int64_t schema_version,
       const int64_t parent_task_id,
+      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);
@@ -44,7 +45,7 @@ public:
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
   virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
-  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(local_management_service));
+  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(root_service));
 private:
   int check_switch_succ();
 
@@ -69,7 +70,7 @@ private:
 private:
   static const int64_t OB_DROP_INDEX_TASK_VERSION = 1;
 private:
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   obcall::ObDropIndexArg drop_index_arg_;
 };
 

@@ -46,11 +46,13 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
 
   if (OB_UNLIKELY(param_num < 11)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid param number", K(ret), K(param_num));
   } else {
     //type.set_json();
     // json doc : 0
     bool is_json_input = false;
     if (OB_FAIL(ObExprJsonValue::calc_input_type(types_stack[0], is_json_input))) {
+      LOG_WARN("fail to calc input type", K(ret));
     }
 
     // json path : 1
@@ -70,7 +72,9 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
     ObExprResType dst_type;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObJsonExprHelper::get_cast_type(types_stack[JSN_VAL_RET], dst_type, type_ctx))) {
+        LOG_WARN("get cast dest type failed", K(ret));
       } else if (OB_FAIL(ObJsonExprHelper::set_dest_type(types_stack[JSN_VAL_DOC], type, dst_type, type_ctx))) {
+        LOG_WARN("set dest type failed", K(ret));
       } else {
         type.set_calc_collation_type(type.get_collation_type());
       }
@@ -87,11 +91,13 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
     // empty : 5, 6
     if (OB_SUCC(ret)) {
       if (OB_FAIL(calc_empty_error_type(types_stack, JSN_VAL_EMPTY, dst_type, type_ctx))) {
+        LOG_WARN("fail to parse empty value", K(ret));
       }
     }
     // error : 7, 8
     if (OB_SUCC(ret)) {
       if (OB_FAIL(calc_empty_error_type(types_stack, JSN_VAL_ERROR, dst_type, type_ctx))) {
+        LOG_WARN("fail to parse empty value", K(ret));
       }
     }
     // mismatch : 9, 
@@ -99,6 +105,7 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
       for (size_t i = JSN_VAL_MISMATCH; OB_SUCC(ret) && i < param_num; i++) {
         if (types_stack[i].get_type() == ObNullType) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("<empty type> param type is unexpected", K(types_stack[i].get_type()), K(ret), K(i));
         } else if (types_stack[i].get_type() != ObIntType) {
           types_stack[i].set_calc_type(ObIntType);
         }
@@ -117,10 +124,12 @@ int ObExprJsonValue::calc_input_type(ObExprResType& types_stack, bool &is_json_i
   } else if (!ObJsonExprHelper::is_convertible_to_json(doc_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 1, "json_value");
+    LOG_WARN("Invalid type for json doc", K(doc_type), K(ret));
   } else if (ob_is_string_type(doc_type)) {
     if (types_stack.get_collation_type() == CS_TYPE_BINARY) {
     // unsuport string type with binary charset
       ret = OB_ERR_INVALID_JSON_CHARSET;
+      LOG_WARN("Unsupport for string type with binary charset input.", K(ret), K(doc_type));
     } else if (types_stack.get_charset_type() != CHARSET_UTF8MB4) {
       types_stack.set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
     }
@@ -146,6 +155,7 @@ int ObExprJsonValue::calc_empty_error_type(ObExprResType* types_stack, uint8_t p
   } else if (types_stack[pos + 1].get_type() == ObNullType) {
     // do nothing
   } else if (OB_FAIL(ObJsonExprHelper::set_dest_type(types_stack[pos + 1], temp_type, dst_type, type_ctx))) {
+    LOG_WARN("set dest type failed", K(ret));
   } else {
     types_stack[pos + 1].set_calc_type(temp_type.get_type());
     types_stack[pos + 1].set_calc_collation_type(temp_type.get_collation_type());
@@ -165,7 +175,7 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *return_val = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBin st_json(&temp_allocator);
   ObIJsonBase *j_base = &st_json;
@@ -184,16 +194,20 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   // init flag
   if (param_ctx->is_first_exec_ && OB_FAIL(init_ctx_var(expr, param_ctx))) {
     is_cover_by_error = false;
+    LOG_WARN("fail to init param ctx", K(ret));
   } else if (param_ctx->is_first_exec_ 
               && OB_FAIL(ObExprJsonValue::get_clause_param_value(expr, ctx, &param_ctx->json_param_,
                                           is_cover_by_error))) { // get param value & check param valid
+    LOG_WARN("fail to get param value", K(ret));
   } else if (OB_FAIL(ObJsonUtil::get_json_doc(expr.args_[JSN_VAL_DOC], ctx,
                     temp_allocator, j_base, is_null_result, 
-                    is_cover_by_error))) {
+                    is_cover_by_error))) { // parse json doc
+    LOG_WARN("fail to parse json doc", K(ret));
   } else if (OB_ISNULL(param_ctx->json_param_.json_path_)
              && OB_FAIL(ObJsonUtil::get_json_path(expr.args_[JSN_VAL_PATH], 
                             ctx, is_null_result, param_ctx, temp_allocator, 
                             is_cover_by_error))) { // parse json path
+    LOG_WARN("fail to get json path", K(ret));
   }
   // parse empty error default value
   if ((OB_SUCC(ret) && !is_null_result) || is_cover_by_error) {
@@ -207,12 +221,15 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
                                   is_null_result, &param_ctx->json_param_, j_base,
                                   expr, ctx, is_cover_by_error,
                                   return_val, is_type_mismatch))) { // do seek
+    LOG_WARN("doc do seek fail", K(ret));
   }
 
   // fill output and deal error case
   if (OB_FAIL(ret)) {
     if (is_cover_by_error && !try_set_error_val(expr, ctx, res, ret, &param_ctx->json_param_, is_type_mismatch)) {
+      LOG_WARN("set error val fail", K(ret));
     }
+    LOG_WARN("json_values failed", K(ret));
   } else {
     ret = set_result(expr, &param_ctx->json_param_, ctx, is_null_result, is_cover_by_error, is_type_mismatch,
                     res, return_val, &temp_allocator, hits);
@@ -234,7 +251,9 @@ int ObExprJsonValue::extract_plan_cache_param(const ObExprJsonQueryParamInfo *in
   json_param.is_init_from_cache_ = true;
   for (int i = 0; OB_SUCC(ret) && i < info->on_mismatch_.count(); i++) {
     if (OB_FAIL(json_param.on_mismatch_.push_back(info->on_mismatch_.at(i)))) {
+      LOG_WARN("fail to push node to mismatch type", K(ret));
     } else if (OB_FAIL(json_param.on_mismatch_type_.push_back(info->on_mismatch_type_.at(i)))) {
+      LOG_WARN("fail to push node to mismatch type", K(ret));
     }
   }
   return ret;
@@ -248,6 +267,7 @@ int ObExprJsonValue::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
           = OB_NEWx(ObExprJsonQueryParamInfo, (&alloc), alloc, T_FUN_SYS_JSON_VALUE);
   if (OB_ISNULL(info)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_FAIL(info->init_jsn_val_expr_param(alloc, expr_cg_ctx, &raw_expr))) {
     ret = OB_SUCCESS; // not use plan cache
   } else {
@@ -267,9 +287,11 @@ int ObExprJsonQueryParamInfo::get_int_val_from_raw(ObIAllocator &alloc, ObExecCo
                                                         const_data,
                                                         got_data,
                                                         alloc))) {
+    LOG_WARN("failed to calc offset expr", K(ret));
   } else if (!got_data || const_data.is_null() 
               || !ob_is_integer_type(const_data.get_type())) {
     ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+    LOG_WARN("fail to get int value", K(ret));
   }
   return ret;
 }
@@ -285,20 +307,26 @@ int ObExprJsonQueryParamInfo::init_mismatch_array(const ObRawExpr* raw_expr,
   for(uint32_t i = JSN_VAL_MISMATCH; OB_SUCC(ret) 
                     && i < raw_expr->get_param_count(); i++) {
     if (OB_FAIL(get_int_val_from_raw(allocator_, exec_ctx, raw_expr->get_param_expr(i), const_data))) {
+      LOG_WARN("failed to calc offset expr", K(ret));
     } else {
       int64_t option_type = const_data.get_int();
       if (OB_FAIL(ObJsonUtil::set_mismatch_val(val, type, option_type, pos))) {
+        LOG_WARN("fail to eval mismatch value", K(ret));
       }
     }
   }
   pos = val.size();
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(on_mismatch_.init(pos))) {
+    LOG_WARN("fail to init type array", K(ret));
   } else if (OB_FAIL(on_mismatch_type_.init(pos))) {
+    LOG_WARN("fail to init type array", K(ret));
   } else {
     for (uint32_t i = 0; OB_SUCC(ret) && i < pos; i++) {
       if (OB_FAIL(on_mismatch_.push_back(val.at(i)))) {
+        LOG_WARN("fail to init type array", K(ret));
       } else if (OB_FAIL(on_mismatch_type_.push_back(type.at(i)))) {
+        LOG_WARN("fail to init type array", K(ret));
       }
     }
   }
@@ -318,7 +346,9 @@ int ObExprJsonQueryParamInfo::init_jsn_val_expr_param(ObIAllocator &alloc, ObExp
     if (i == JSN_VAL_EMPTY_DEF
         || i == JSN_VAL_ERROR_DEF) {
     } else if (OB_FAIL(get_int_val_from_raw(alloc, exec_ctx, raw_expr->get_param_expr(i), const_data))) {
+      LOG_WARN("failed to calc offset expr", K(ret));
     } else if (OB_FAIL(param_vec.push_back(const_data.get_tinyint()))) {
+      LOG_WARN("fail to push val into array", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -330,7 +360,9 @@ int ObExprJsonQueryParamInfo::init_jsn_val_expr_param(ObIAllocator &alloc, ObExp
   // parse mismatch 1. init array 2. push_back node
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(init_mismatch_array(raw_expr, exec_ctx))) {
-  } else if (OB_FAIL(ObJsonUtil::init_json_path(alloc, op_cg_ctx, path, *this))) {
+    LOG_WARN("fail to eval mismatch array", K(ret));
+  } else if (OB_FAIL(ObJsonUtil::init_json_path(alloc, op_cg_ctx, path, *this))) { // parse json path
+    LOG_WARN("fail to init path from str", K(ret));
   }
   return ret;
 }
@@ -362,6 +394,7 @@ int ObExprJsonValue::set_result(const ObExpr &expr,
       if (OB_FAIL(ret)) {
         try_set_error_val(expr, ctx, res, ret, json_param, is_type_mismatch);
       } else if (OB_FAIL(ObJsonUtil::set_lob_datum(allocator, expr, ctx, json_param->dst_type_, json_param->ascii_type_,res))) {
+        LOG_WARN("fail to set lob datum from string val", K(ret));
       }
     }
   }
@@ -378,6 +411,7 @@ int ObExprJsonValue::get_default_empty_error_value(const ObExpr &expr,
     if (!json_param->is_empty_default_const_ || OB_ISNULL(json_param->empty_val_)) {
       if (OB_FAIL(get_default_value(expr.args_[JSN_VAL_EMPTY + 1], ctx,
                json_param->accuracy_, &json_param->empty_val_))) {
+        LOG_WARN("failed to get empty datum", K(ret));
       }
     }
   }
@@ -386,6 +420,7 @@ int ObExprJsonValue::get_default_empty_error_value(const ObExpr &expr,
     if (!json_param->is_error_default_const_ || OB_ISNULL(json_param->error_val_)) {
       if (OB_FAIL(get_default_value(expr.args_[JSN_VAL_ERROR + 1], ctx,
                json_param->accuracy_, &json_param->error_val_))) {
+        LOG_WARN("failed to get empty datum", K(ret));
       }
     }
   }
@@ -406,6 +441,7 @@ int ObExprJsonValue::init_ctx_var(const ObExpr &expr, ObJsonParamCacheCtx* param
                   = static_cast<ObExprJsonQueryParamInfo *>(expr.extra_info_);
   if (OB_NOT_NULL(info)
       && OB_FAIL(extract_plan_cache_param(info, param_ctx->json_param_))) {
+    LOG_WARN("fail to extract param from plan cache", K(ret));
   }
   return ret;
 }
@@ -432,8 +468,10 @@ int ObExprJsonValue::get_clause_param_value(const ObExpr &expr, ObEvalCtx &ctx,
         || i == JSN_VAL_ERROR_DEF) {
     } else if (OB_FAIL(ObJsonExprHelper::get_clause_opt(expr.args_[i], ctx, val))) {
       is_cover_by_error = false;
+      LOG_WARN("fail to get clause option", K(ret));
     } else if (OB_FAIL(param_vec.push_back(val))) {
       is_cover_by_error = false;
+      LOG_WARN("fail to push val into array", K(ret));
     }
   }
   if (json_param->is_init_from_cache_) {
@@ -450,6 +488,7 @@ int ObExprJsonValue::get_clause_param_value(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (OB_SUCC(ret)) { // should use prior branch
     is_cover_by_error = false;
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get param value", K(ret));
   }
   
   return ret;
@@ -467,6 +506,7 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
     case ObNumberTC: {
       number::ObNumber temp(obj->get_number());
       ret = ObJsonUtil::number_range_check(accuracy, NULL, temp, true);
+      LOG_WARN("number range is invalid for json_value", K(ret));
       break;
     }
     case ObDecimalIntTC : {
@@ -474,7 +514,9 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
       number::ObNumber temp;
       if (OB_FAIL(wide::to_number(obj->get_decimal_int(), obj->get_int_bytes(),
                                   accuracy.scale_, tmp_alloc, temp))) {
+        LOG_WARN("to_number failed", K(ret));
       } else if (OB_FAIL(ObJsonUtil::number_range_check(accuracy, NULL, temp, true))) {
+        LOG_WARN("number range is invalid for json_value", K(ret));
       }
       break;
     }
@@ -483,6 +525,7 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
       if (val == ObTimeConverter::ZERO_DATE) {
         // check zero date for scale over mode
         ret = OB_INVALID_DATE_VALUE;
+        LOG_WARN("Zero date is invalid for json_value", K(ret));
       }
       break;
     }
@@ -505,9 +548,12 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
       if (OB_SUCC(ret)) {
         if (max_accuracy_len == DEFAULT_STR_LENGTH) { // default string len
         } else if (max_accuracy_len <= 0 || str_len_char > max_accuracy_len) {
-          {
+          if (true) {
             ret = OB_OPERATE_OVERFLOW;
             LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "STRING", "json_value");
+          } else {
+            ret = OB_ERR_VALUE_EXCEEDED_MAX;
+            LOG_USER_ERROR(OB_ERR_VALUE_EXCEEDED_MAX, str_len_char, max_accuracy_len);
           }
         }
       }
@@ -536,12 +582,14 @@ int ObExprJsonValue::doc_do_seek(ObJsonSeekResult &hits, bool &is_null_result, O
         is_type_mismatch = true;
         ret = OB_INVALID_NUMERIC;
       }
+      LOG_WARN("json seek failed", K(ret));
     } else if (hits.size() == 0) {
       // get empty clause
       if (OB_FAIL(get_empty_option(return_val, is_cover_by_error, 
                                     json_param->empty_type_, 
                                     json_param->empty_val_, 
                                     is_null_result))) {
+        LOG_WARN("fail to get empty option", K(ret));
       }
     } else if (hits.size() > 1) {
       // return val decide by error option
@@ -567,6 +615,7 @@ int ObExprJsonValue::get_empty_option(ObDatum *&empty_res,
       is_cover_by_error = false;
       ret = OB_ERR_MISSING_JSON_VALUE;
       LOG_USER_ERROR(OB_ERR_MISSING_JSON_VALUE, "json_value");
+      LOG_WARN("json value seek result empty.", K(ret));
       break;
     }
     case JSN_VALUE_DEFAULT: {
@@ -609,6 +658,174 @@ void ObExprJsonValue::get_error_option(int8_t error_type,
   }
 }
 
+/*
+template<>
+void ObExprJsonValue::wrapper_set_error_result(
+  const ObExpr &expr,
+  ObEvalCtx &ctx,
+  ObObj &res, int &ret, uint8_t &error_type, 
+  ObDatum *&error_val, ObVector<uint8_t> &mismatch_val, 
+  ObVector<uint8_t> &mismatch_type, 
+  uint8_t &is_type_cast, 
+  const ObAccuracy &accuracy, 
+  ObObjType dst_type, 
+  ObObjMeta& meta)
+{
+  bool has_lob_header = is_lob_storage(dst_type);
+  ObTextStringObObjResult text_result(dst_type, nullptr, &res, has_lob_header);
+  if (!try_set_error_val<ObObj>(expr, ctx, res, ret, error_type, error_val, mismatch_val, mismatch_type, is_type_cast, accuracy, dst_type, meta)) {
+    text_result.set_result();
+  }
+}
+
+template<>
+void ObExprJsonValue::wrapper_set_error_result(
+  const ObExpr &expr,
+  ObEvalCtx &ctx,
+  ObDatum &res, int &ret, uint8_t &error_type, 
+  ObDatum *&error_val, ObVector<uint8_t> &mismatch_val, 
+  ObVector<uint8_t> &mismatch_type, 
+  uint8_t &is_type_cast, 
+  const ObAccuracy &accuracy, 
+  ObObjType dst_type,
+  ObObjMeta& meta)
+{
+  ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
+  if (!try_set_error_val<ObDatum>(expr, ctx, res, ret, error_type, error_val, mismatch_val, mismatch_type, is_type_cast, accuracy, dst_type, meta)) {
+    text_result.set_result();
+  }
+}
+
+template<>
+int ObExprJsonValue::wrapper_text_string_result(common::ObIAllocator *allocator,
+                                                const ObExpr &expr,
+                                                ObEvalCtx &ctx,
+                                                ObString& result_value,
+                                                uint8_t error_type,
+                                                ObDatum *error_val,
+                                                ObAccuracy &accuracy,
+                                                ObObjType dst_type,
+                                                ObDatum &res,
+                                                ObVector<uint8_t> &mismatch_val,
+                                                ObVector<uint8_t> &mismatch_type,
+                                                uint8_t &is_type_cast,
+                                                uint8_t ascii_type,
+                                                ObObjMeta& res_meta)
+{
+  int ret = OB_SUCCESS;
+  ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
+
+  if (dst_type == ObJsonType) {
+    if (OB_FAIL(text_result.init(result_value.length()))) {
+      LOG_WARN("init lob result failed");
+    } else if (OB_FAIL(text_result.append(result_value))) {
+      LOG_WARN("failed to append realdata", K(ret), K(result_value), K(text_result));
+    }
+  } else {
+    if (ascii_type == 0) {
+      if (OB_FAIL(text_result.init(result_value.length()))) {
+        LOG_WARN("init lob result failed");
+      } else if (OB_FAIL(text_result.append(result_value))) {
+        LOG_WARN("failed to append realdata", K(ret), K(result_value), K(text_result));
+      }
+    } else {
+      char *buf = NULL;
+      int64_t buf_len = result_value.length() * ObCharset::MAX_MB_LEN * 2;
+      int64_t reserve_len = 0;
+      int32_t length = 0;
+
+      if (OB_FAIL(text_result.init(buf_len))) {
+        LOG_WARN("init lob result failed");
+      } else if (OB_FAIL(text_result.get_reserved_buffer(buf, reserve_len))) {
+        LOG_WARN("fail to get reserved buffer", K(ret));
+      } else if (reserve_len != buf_len) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get reserve len is invalid", K(ret), K(reserve_len), K(buf_len));
+      } else if (OB_FAIL(ObJsonExprHelper::calc_asciistr_in_expr(result_value, expr.args_[0]->datum_meta_.cs_type_,
+                                                                  expr.datum_meta_.cs_type_,
+                                                                  buf, reserve_len, length))) {
+        LOG_WARN("fail to calc unistr", K(ret));
+      } else if (OB_FAIL(text_result.lseek(length, 0))) {
+        LOG_WARN("text_result lseek failed", K(ret), K(text_result), K(length));
+      }
+    }
+  }
+
+  if (!try_set_error_val<ObDatum>(expr, ctx, res, ret, error_type, error_val, mismatch_val, mismatch_type, is_type_cast, accuracy, dst_type, res_meta)) {
+    // old engine set same alloctor for wrapper, so we can use val without copy
+    text_result.set_result();
+  }
+
+  return ret;
+}
+
+template<>
+int ObExprJsonValue::wrapper_text_string_result(common::ObIAllocator *allocator,
+                                                const ObExpr &expr,
+                                                ObEvalCtx &ctx,
+                                                ObString& result_value,
+                                                uint8_t error_type,
+                                                ObDatum *error_val,
+                                                ObAccuracy &accuracy,
+                                                ObObjType dst_type,
+                                                ObObj &res,
+                                                ObVector<uint8_t> &mismatch_val,
+                                                ObVector<uint8_t> &mismatch_type,
+                                                uint8_t &is_type_cast,
+                                                uint8_t ascii_type,
+                                                ObObjMeta& res_meta)
+{
+  int ret = OB_SUCCESS;
+  bool has_lob_header = is_lob_storage(dst_type);
+  ObTextStringObObjResult text_result(dst_type, nullptr, &res, has_lob_header);
+  if (dst_type == ObJsonType) {
+    if (OB_FAIL(text_result.init(result_value.length(), allocator))) {
+      LOG_WARN("init lob result failed");
+    } else if (OB_FAIL(text_result.append(result_value))) {
+      LOG_WARN("failed to append realdata", K(ret), K(result_value), K(text_result));
+    } else {
+      text_result.set_result();
+    }
+  } else {
+    if (ascii_type == 0) {
+      if (OB_FAIL(text_result.init(result_value.length(), allocator))) {
+        LOG_WARN("init lob result failed");
+      } else if (OB_FAIL(text_result.append(result_value))) {
+        LOG_WARN("failed to append realdata", K(ret), K(result_value), K(text_result));
+      } else {
+        text_result.set_result();
+      }
+    } else {
+      char *buf = NULL;
+      int64_t buf_len = result_value.length() * ObCharset::MAX_MB_LEN * 2;
+      int64_t reserve_len = 0;
+      int32_t length = 0;
+
+      if (OB_FAIL(text_result.init(buf_len, allocator))) {
+        LOG_WARN("init lob result failed");
+      } else if (OB_FAIL(text_result.get_reserved_buffer(buf, reserve_len))) {
+        LOG_WARN("fail to get reserved buffer", K(ret));
+      } else if (reserve_len != buf_len) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get reserve len is invalid", K(ret), K(reserve_len), K(buf_len));
+      } else if (OB_FAIL(ObJsonExprHelper::calc_asciistr_in_expr(result_value, expr.args_[0]->datum_meta_.cs_type_,
+                                                                  expr.datum_meta_.cs_type_,
+                                                                  buf, reserve_len, length))) {
+        LOG_WARN("fail to calc unistr", K(ret));
+      } else if (OB_FAIL(text_result.lseek(length, 0))) {
+        LOG_WARN("text_result lseek failed", K(ret), K(text_result), K(length));
+      }
+    }
+  }
+
+  if (!try_set_error_val<ObObj>(expr, ctx, res, ret, error_type, error_val, mismatch_val, mismatch_type, is_type_cast, accuracy, dst_type, res_meta)) {
+    // old engine set same alloctor for wrapper, so we can use val without copy
+    text_result.set_result();
+  }
+
+  return ret;
+}
+*/
 
 bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
                                         ObEvalCtx &ctx,
@@ -635,6 +852,7 @@ bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
     } else if (set_default_val) {
       if (OB_ISNULL(json_param->error_val_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get error val", K(ret));
       } else {
         res.set_datum(*json_param->error_val_);
         ret = OB_SUCCESS;
@@ -664,8 +882,10 @@ int ObExprJsonValue::get_default_value(ObExpr *expr,
     expr->extra_ |= CM_EXPLICIT_CAST; // make cast json fail return error
   }
   if (OB_FAIL(expr->eval(ctx, json_datum))) {
+    LOG_WARN("eval json arg failed", K(ret));
   } else if (val_type == ObNullType || json_datum->is_null()) {
   } else if (OB_FAIL(check_default_val_accuracy<ObDatum>(accuracy, val_type, json_datum))) {
+    LOG_WARN("failed check default value", K(ret));
   } else {
     *default_value = json_datum;
   }

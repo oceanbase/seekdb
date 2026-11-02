@@ -33,9 +33,18 @@ class ObMPChangeUser : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_CHANGE_USER;
-  explicit ObMPChangeUser(const share::ObGlobalContext &gctx)
-      : ObMPBase(gctx), username_(), auth_response_(), database_(), charset_(0),
-        has_charset_(false) {}
+  explicit ObMPChangeUser(const ObGlobalContext &gctx)
+      :ObMPBase(gctx),
+      pkt_(),
+      username_(),
+      auth_response_(),
+      auth_plugin_name_(),
+      database_(),
+      charset_(0),
+      sys_vars_(),
+      user_vars_()
+  {
+  }
 
   virtual ~ObMPChangeUser() {}
 
@@ -45,11 +54,24 @@ protected:
   int load_login_info(sql::ObSQLSessionInfo *session);
 
 private:
+  static int decode_string_kv(const char* attrs_end, const char *&pos, obmysql::ObStringKV &kv);
+  int decode_session_vars(const char *&pos, const int64_t session_vars_len);
+  int replace_user_variables(sql::ObBasicSessionInfo &session) const;
+  int parse_var_node(const ParseNode *node, common::ObCastCtx &cast_ctx,
+                     sql::ObBasicSessionInfo &session) const;
+  int handle_user_var(const common::ObString &var, const common::ObString &val,
+                      const common::ObObjType type, common::ObCastCtx &cast_ctx,
+                      sql::ObBasicSessionInfo &session) const;
+
+private:
+  obmysql::ObMySQLRawPacket pkt_;
   common::ObString username_;
   common::ObString auth_response_;
+  common::ObString auth_plugin_name_;
   common::ObString database_;
   uint16_t charset_;
-  bool has_charset_;
+  common::ObSEArray<obmysql::ObStringKV, 128> sys_vars_;
+  common::ObSEArray<obmysql::ObStringKV, 16> user_vars_;
   DISALLOW_COPY_AND_ASSIGN(ObMPChangeUser);
 };// end of class
 

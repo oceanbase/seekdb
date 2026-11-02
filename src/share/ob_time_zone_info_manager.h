@@ -23,6 +23,10 @@
 #include "common/timezone/ob_timezone_info.h"
 namespace oceanbase
 {
+namespace rootserver
+{
+class ObRootService;
+}
 namespace common
 {
 class ObISQLClient;
@@ -106,6 +110,7 @@ public:
 ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy)
     : sql_proxy_(sql_proxy),
       tz_info_map_(),
+      tz_info_map_buf_(),
       inited_(false),
       is_usable_(false),
       last_version_(-1)
@@ -118,12 +123,14 @@ ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy)
   //rs fetch tz_info from time_zone tables
   int fetch_time_zone_info();
   int response_time_zone_info(ObRequestTZInfoResult &tz_result);
+  int update_sys_time_zone_info_version();
   int get_time_zone();
   int find_time_zone_info(const common::ObString &tz_name, ObTimeZoneInfoPos &tz_info);
   int64_t get_version() const { return last_version_; }
   ObTZInfoMap *get_tz_info_map() { return &tz_info_map_; }
 
   static const char *FETCH_TZ_INFO_SQL;
+  static const char *FETCH_TENANT_TZ_INFO_SQL;
   static const char *FETCH_LATEST_TZ_VERSION_SQL;
   // calculate the offset between any two time zones
   static int calc_tz_info_offsets(ObTZInfoMap &tz_info_map);
@@ -132,21 +139,30 @@ ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy)
       ObTimeZoneInfoPos *&stored_tz_info,
       ObTimeZoneInfoPos &new_tz_info,
       ObTZInfoMap &tz_info_map);
+  static bool cmp_tz_info_map(ObTZInfoMap &tz_info_map1, ObTZInfoMap &tz_info_map2);
 private:
 
-  int refresh_time_zone_info(const int64_t current_tz_version);
+  int fetch_time_zone_info_from_tenant_table(const int64_t current_tz_version);
   static int calc_default_tran_type(const common::ObIArray<ObTZTransitionTypeInfo> &types_with_null,
                              ObTimeZoneInfoPos &type_info);
   static int prepare_tz_info(const common::ObIArray<ObTZTransitionTypeInfo> &types_with_null,
                       ObTimeZoneInfoPos &type_info);
 
 private:
+  static ObTZInfoMap shared_tz_info_map_;
+  static int64_t loaded_tz_info_count_;
+  static SpinRWLock sys_rwlock_;
   common::ObMySQLProxy &sql_proxy_;
   ObTZInfoMap tz_info_map_;
+  ObTZInfoMap tz_info_map_buf_;
   bool inited_;
-  // is_usable_ is set after the server has loaded enough time-zone data to serve requests.
+  //is_usable_ == true when the server can provide services to the outside; situations where it is set to true
+  //If time_zone_info_version in __all_zone is 0, set to true upon receiving the first heartbeat
+  //If the time_zone_info_version in __all_zone is greater than 0, set to true after brushing timezone info
   volatile bool is_usable_;
   int64_t last_version_;
+  // Record tenant_ for obtaining the tz_info_version of this tenant
+  
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeZoneInfoManager);
 };

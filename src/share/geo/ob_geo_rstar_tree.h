@@ -53,7 +53,9 @@ public:
     for (uint32_t i = start; i < elements.size() && OB_SUCC(ret); i++) {
       ObCartesianBox box;
       if (OB_FAIL(elements[i].get_box(box))) {
+        LOG_WARN("failed to get segment box", K(ret));
       } else if (OB_FAIL(rtree_nodes.push_back(std::make_pair(box, &elements[i])))) {
+        LOG_WARN("failed to record rtree node", K(ret));
       }
     }
 
@@ -75,6 +77,7 @@ public:
     int ret = OB_SUCCESS;
     if (!is_built_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rtree isn't built", K(ret));
     } else if (relation == QueryRelation::INTERSECTS) {
       try {
         rtree_index_.query(bgi::intersects(box), std::back_inserter(res));
@@ -83,6 +86,7 @@ public:
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("query type isn't supported", K(ret), K(relation));
     }
     return ret;
   }

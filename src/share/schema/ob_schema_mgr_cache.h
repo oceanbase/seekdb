@@ -73,14 +73,15 @@ struct ObSchemaMgrItem
     MOD_REMOTE_EXE           = 5,
     MOD_CACHED_GUARD         = 6,
     MOD_UNIQ_CHECK           = 7,
-    MOD_RELATIVE_TABLE       = 8,
-    MOD_VIRTUAL_TABLE        = 9,
-    MOD_DAS_CTX              = 10,
-    MOD_SCHEMA_RECORDER      = 11,
-    MOD_SPI_RESULT_SET       = 12,
-    MOD_PL_PREPARE_RESULT    = 13,
-    MOD_PARTITION_BALANCE    = 14,
-    MOD_RS_MAJOR_CHECK       = 15,
+    MOD_SSTABLE_SPLIT_CTX    = 8,
+    MOD_RELATIVE_TABLE       = 9,
+    MOD_VIRTUAL_TABLE        = 10,
+    MOD_DAS_CTX              = 11,
+    MOD_SCHEMA_RECORDER      = 12,
+    MOD_SPI_RESULT_SET       = 13,
+    MOD_PL_PREPARE_RESULT    = 14,
+    MOD_PARTITION_BALANCE    = 15,
+    MOD_RS_MAJOR_CHECK       = 16,
     MOD_MAX
   };
   ObSchemaMgrItem()
@@ -116,9 +117,14 @@ private:
 class ObSchemaMgrCache
 {
 public:
+  enum Mode {
+    REFRESH = 0,
+    FALLBACK = 1
+  };
+public:
   ObSchemaMgrCache();
   virtual ~ObSchemaMgrCache();
-  int init(int64_t init_cached_num);
+  int init(int64_t init_cached_num, Mode mode);
   int check_schema_mgr_exist(const int64_t schema_version, bool &is_exist);
   int get(const int64_t schema_version,
           const ObSchemaMgr *&schema_mgr,
@@ -126,11 +132,13 @@ public:
   int get_nearest(const int64_t schema_version,
           const ObSchemaMgr *&schema_mgr,
           ObSchemaMgrHandle &handle);
+  int get_recycle_schema_version(int64_t &schema_version) const;
   int get_slot_info(common::ObIAllocator &allocator,
-                    common::ObIArray<ObSchemaSlot> &schema_slot_infos);
+                    common::ObIArray<ObSchemaSlot> &tenant_slot_infos);
   int put(ObSchemaMgr *schema_mgr,
           ObSchemaMgr *&eli_schema_mgr,
           ObSchemaMgrHandle *handle = NULL);
+  int try_gc_tenant_schema_mgr(ObSchemaMgr *&eli_schema_mgr);
   int try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr);
   void dump() const;
 public:
@@ -150,6 +158,7 @@ private:
   int64_t max_cached_num_;
   int64_t last_get_schema_idx_;
   int64_t cur_cached_num_;
+  Mode mode_;
   int64_t latest_schema_idx_;
 };
 

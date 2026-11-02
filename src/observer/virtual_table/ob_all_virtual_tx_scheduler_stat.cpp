@@ -15,9 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
-#include "storage/tx/ob_trans_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::transaction;
@@ -29,6 +28,7 @@ namespace observer
 
 ObGVTxSchedulerStat::ObGVTxSchedulerStat()
     : ObVirtualTableScannerIterator(),
+      xid_(),
       tx_scheduler_stat_iter_()
 {
 }
@@ -44,6 +44,7 @@ void ObGVTxSchedulerStat::reset()
   parts_buffer_[0] = '\0';
   tx_desc_addr_buffer_[0] = '\0';
   savepoints_buffer_[0] = '\0';
+  xid_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -71,14 +72,15 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (!tx_scheduler_stat_iter_.is_ready()) {
-    transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
-    if (OB_ISNULL(txs)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "transaction service is null", KR(ret));
-    } else if (OB_FAIL(txs->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
+    if (OB_FAIL(share::g_mp->trans_service()->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
+      SERVER_LOG(WARN, "iterate transaction scheduler error", KR(ret));
+      if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
+        ret = OB_SUCCESS;
+      }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tx_scheduler_stat_iter_.set_ready())) {
+      SERVER_LOG(WARN, "ObTransSchedulerIterator set ready error", KR(ret));
     }
   }
 
@@ -89,11 +91,12 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
+    xid_ = tx_scheduler_stat.xid_;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case SESSION_ID:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.sess_id_);
+          cur_row_.cells_[i].set_int(tx_scheduler_stat.client_sid_);
           break;
         case TX_ID:
           cur_row_.cells_[i].set_int(tx_scheduler_stat.tx_id_.get_id());
@@ -101,8 +104,14 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
         case STATE:
           cur_row_.cells_[i].set_int(tx_scheduler_stat.state_);
           break;
-        case WRITE_STATE:
-          if (tx_scheduler_stat.has_write_state_) {
+        case CLUSTER_ID:
+          cur_row_.cells_[i].set_int(tx_scheduler_stat.cluster_id_);
+          break;
+        case COORDINATOR:
+          cur_row_.cells_[i].set_int(tx_scheduler_stat.coord_id_.id());
+          break;
+        case PARTICIPANTS:
+          if (0 < tx_scheduler_stat.parts_.count()) {
             tx_scheduler_stat.get_parts_str(parts_buffer_, OB_MAX_BUFFER_SIZE);
             cur_row_.cells_[i].set_varchar(parts_buffer_);
             cur_row_.cells_[i].set_default_collation_type();
@@ -172,6 +181,29 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
           break;
         case CAN_EARLY_LOCK_RELEASE:
           cur_row_.cells_[i].set_bool(tx_scheduler_stat.can_elr_);
+          break;
+        case GTRID:
+          if (!xid_.empty()) {
+            cur_row_.cells_[i].set_varchar(xid_.get_gtrid_str());
+            cur_row_.cells_[i].set_default_collation_type();
+          } else {
+            cur_row_.cells_[i].reset();
+          }
+          break;
+        case BQUAL:
+          if (!xid_.empty()) {
+            cur_row_.cells_[i].set_varchar(xid_.get_bqual_str());
+            cur_row_.cells_[i].set_default_collation_type();
+          } else {
+            cur_row_.cells_[i].reset();
+          }
+          break;
+        case FORMAT_ID:
+          if (!xid_.empty()) {
+            cur_row_.cells_[i].set_int(xid_.get_format_id());
+          } else {
+            cur_row_.cells_[i].set_int(-1);
+          }
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

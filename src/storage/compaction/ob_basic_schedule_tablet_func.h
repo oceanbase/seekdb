@@ -25,6 +25,7 @@ namespace storage
 class ObLS;
 class ObTablet;
 class ObTabletHandle;
+class ObLSHandle;
 }
 namespace compaction
 {
@@ -32,7 +33,7 @@ struct ObBasicScheduleTabletFunc
 {
   ObBasicScheduleTabletFunc(const int64_t merge_version, const int64_t loop_cnt = 0);
   virtual ~ObBasicScheduleTabletFunc() { destroy(); }
-  int init(storage::ObLS *ls);
+  int switch_ls(storage::ObLSHandle &ls_handle);
   void destroy();
   const ObLSStatusCache &get_ls_status() const { return ls_status_; }
   ObScheduleTabletCnt &get_schedule_tablet_cnt() { return tablet_cnt_; }
@@ -40,20 +41,21 @@ struct ObBasicScheduleTabletFunc
   virtual const ObCompactionTimeGuard &get_time_guard() const = 0;
   int64_t get_loop_cnt() const { return loop_cnt_; }
   VIRTUAL_TO_STRING_KV(K_(merge_version), K_(ls_status),
-    K_(ls_could_schedule_new_round), K_(ls_could_schedule_merge), K_(should_skip_merge),
+    K_(ls_could_schedule_new_round), K_(ls_could_schedule_merge), K_(is_skip_merge_tenant),
     K_(tablet_cnt), K_(loop_cnt));
   /*
    * diagnose section
   */
-  int diagnose_init(storage::ObLS *ls);
+  int diagnose_switch_ls(storage::ObLSHandle &ls_handle);
 protected:
-  void update_runtime_cached_status();
+  void update_tenant_cached_status();
   virtual void schedule_freeze_dag(const bool force);
   int check_with_schedule_scn(
     const storage::ObTablet &tablet,
     const int64_t schedule_scn,
     const ObTabletStatusCache &tablet_status,
-    bool &can_merge);
+    bool &can_merge,
+    const ObCOMajorMergePolicy::ObCOMajorMergeType co_major_merge_type = ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE);
   int check_need_force_freeze(
     const storage::ObTablet &tablet,
     const int64_t schedule_scn,
@@ -67,7 +69,7 @@ protected:
   ObBatchFreezeTabletsParam freeze_param_;
   bool ls_could_schedule_new_round_;
   bool ls_could_schedule_merge_;  // suspend merge OR during restore inner_table
-  bool should_skip_merge_; // Database role or restore state may temporarily suspend major merge.
+  bool is_skip_merge_tenant_; // remote tenant OR during restore tenant with(Standby role)
   int64_t loop_cnt_;
 };
 

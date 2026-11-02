@@ -50,7 +50,9 @@ int ObExprJsonLength::calc_result_typeN(ObExprResType& type,
 
   // 0 position is json doc
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_LENGTH))) {
+    LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[0].get_type()));
   } else if (param_num > 1 && OB_FAIL(ObJsonExprHelper::is_valid_for_path(types_stack, 1))) {
+    LOG_WARN("wrong type for json path.", K(ret), K(types_stack[1].get_type()));
   }
 
   return ret;
@@ -74,17 +76,20 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(type1));
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type1, cs_type1))) {
+    LOG_WARN("fail to ensure collation", K(ret), K(type1), K(cs_type1));
   } else {
     ObString j_doc = data1.get_string();
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type1);
     if (j_doc.length() == 0) {
       ret = OB_ERR_INVALID_JSON_TEXT;
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                   ctx.exec_ctx_, *allocator, data1, meta1, has_lob_header1, j_doc))) {
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data1, meta1, has_lob_header1, j_doc))) {
+      LOG_WARN("fail to get real data.", K(ret), K(j_doc));
+    } else if (OB_FALSE_IT(allocator->add_baseline_size(j_doc.length()))) {
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_doc, j_in_type,
                                                         j_in_type, j_base, 0,
                                                         ObJsonExprHelper::get_json_max_depth_config()))) {
+      LOG_WARN("fail to get json base", K(ret), K(type1), K(j_doc), K(j_in_type));
     }
   }
 
@@ -100,10 +105,13 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
         ObJsonSeekResult hit;
         ObString j_path_text = data2->get_string();
         ObJsonPath *j_path = NULL;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, *allocator, *data2, meta2, has_lob_header2, j_path_text))) {
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, *data2, meta2, has_lob_header2, j_path_text))) {
+          LOG_WARN("fail to get real data.", K(ret), K(j_path_text));
         } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, 1, true))) {
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
+          LOG_WARN("fail to parse json path", K(ret), K(type2), K(j_path_text));
         } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt(), true, false, hit))) {
+          LOG_WARN("fail to seek json node", K(ret), K(j_path_text));
         } else if (hit.size() == 0) { // not found node by path, display "NULL"
           is_null = true;
         } else if (hit.size() > 1) {
@@ -138,15 +146,17 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObExpr *arg0 = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
 
-  if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, datum0))) {
+  if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, datum0))) { // json doc
+    LOG_WARN("fail to eval json arg", K(ret), K(arg0->datum_meta_));
   } else {
     if (expr.arg_cnt_ > 1) { // json path
       ObExpr *arg1 = expr.args_[1];
       meta1 = arg1->datum_meta_;
       has_lob_header1 = arg1->obj_meta_.has_lob_header();
       if (OB_FAIL(tmp_allocator.eval_arg(arg1, ctx, datum1))) {
+        LOG_WARN("fail to eval path arg", K(ret), K(meta1));
       }
     }
   }
@@ -158,45 +168,10 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
     if (OB_FAIL(calc(ctx, *datum0, arg0->datum_meta_, arg0->obj_meta_.has_lob_header(),
                      datum1, meta1, has_lob_header1, &tmp_allocator, res, path_cache))) {
+      LOG_WARN("fail to calc json length result", K(ret), K(datum0), K(expr.arg_cnt_));
     }
   }
 
-  return ret;
-}
-
-int ObExprJsonLength::eval_json_length_batch(const ObExpr &expr, ObEvalCtx &ctx,
-                                             const ObBitVector &skip, const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  ObExpr *arg0 = expr.args_[0];
-  ObExpr *arg1 = expr.arg_cnt_ > 1 ? expr.args_[1] : nullptr;
-  if (OB_FAIL(arg0->eval_batch(ctx, skip, size))) {
-  } else if (OB_NOT_NULL(arg1) && OB_FAIL(arg1->eval_batch(ctx, skip, size))) {
-  } else {
-    ObDatum *res_datums = expr.locate_batch_datums(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    ObDatum *data0 = arg0->locate_batch_datums(ctx);
-    ObDatum *data1 = OB_NOT_NULL(arg1) ? arg1->locate_batch_datums(ctx) : nullptr;
-    const ObDatumMeta meta1 = OB_NOT_NULL(arg1) ? arg1->datum_meta_ : ObDatumMeta();
-    const bool has_lob_header1 = OB_NOT_NULL(arg1) && arg1->obj_meta_.has_lob_header();
-    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-    ObJsonPathCache ctx_cache(&tmp_allocator);
-    ObJsonPathCache *path_cache =
-        ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
-    path_cache = (OB_NOT_NULL(path_cache) ? path_cache : &ctx_cache);
-    for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
-      if (skip.contain(i) || eval_flags.at(i)) {
-        continue;
-      }
-      if (OB_FAIL(calc(ctx, data0[i], arg0->datum_meta_, arg0->obj_meta_.has_lob_header(),
-                       OB_NOT_NULL(data1) ? &data1[i] : nullptr, meta1, has_lob_header1,
-                       &tmp_allocator, res_datums[i], path_cache))) {
-      } else {
-        eval_flags.set(i);
-      }
-    }
-  }
   return ret;
 }
 
@@ -206,7 +181,6 @@ int ObExprJsonLength::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_json_length;
-  rt_expr.eval_batch_func_ = eval_json_length_batch;
   return OB_SUCCESS;
 }
 

@@ -15,8 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
-#include "config_bridge.h"
 #include "ob_dtl_channel_loop.h"
+#include "sql/engine/px/ob_px_util.h"
 
 using namespace oceanbase::common;
 
@@ -35,7 +35,8 @@ ObDtlChannelLoop::ObDtlChannelLoop()
       ignore_interrupt_(false),
       timeout_(INT64_MAX),
       spin_lock_(common::ObLatchIds::DTL_CHANNEL_LIST_LOCK),
-      sentinel_node_(0),
+      mock_addr_(),
+      sentinel_node_(0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
       n_first_no_data_(0),
       op_monitor_info_(default_op_monitor_info_),
       first_data_get_(false),
@@ -63,7 +64,8 @@ ObDtlChannelLoop::ObDtlChannelLoop(ObMonitorNode &op_monitor_info)
       ignore_interrupt_(false),
       timeout_(INT64_MAX),
       spin_lock_(common::ObLatchIds::DTL_CHANNEL_LIST_LOCK),
-      sentinel_node_(0),
+      mock_addr_(),
+      sentinel_node_(0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
       n_first_no_data_(0),
       op_monitor_info_(op_monitor_info),
       first_data_get_(false),
@@ -101,6 +103,7 @@ int ObDtlChannelLoop::unregister_channel(ObDtlChannel &chan)
     ret = chans_.remove(find_idx);
   } else {
     ret = OB_ENTRY_NOT_EXIST;
+    LOG_WARN("channel not exist, removed already?", K(chan), K(ret));
   }
   return ret;
 }
@@ -132,7 +135,7 @@ int ObDtlChannelLoop::find(ObDtlChannel* ch, int64_t &out_idx)
   }
   if (OB_INVALID_ID == out_idx) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("channel not found", K(ch), KP(ch->get_id()), K(out_idx));
+    LOG_WARN("channel not found", K(ch), KP(ch->get_id()), K(ch->get_peer()), K(out_idx));
   }
   return ret;
 }
@@ -152,10 +155,14 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
       SQL_DTL_LOG(WARN, "channel has received message without processor", K(last_msg_type_));
     } else if (OB_FAIL(proc_map_[last_msg_type_]->process(buffer, transferred))) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("process message in channel fail", K(ret), K(last_msg_type_));
       } else {
+        LOG_TRACE("channel loop receive ob iter end");
       }
     }
   } else if (OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(buffer, header))) {
+    // Here it might be OB_ITER_END, cannot log WARN.
+    LOG_TRACE("failed to deserialize msg", K(ret), K(&buffer), K(lbt()));
   } else {
     last_msg_type_ = header.type_;
     if (proc_map_[header.type_] == nullptr) {
@@ -163,6 +170,8 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
       SQL_DTL_LOG(WARN, "channel has received message without processor",
                   K(header), K(ret));
     } else if (OB_FAIL(proc_map_[header.type_]->process(buffer, transferred))) {
+      LOG_WARN("process message in channel fail",
+              K(header), K(ret));
     }
   }
   return ret;
@@ -173,6 +182,7 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
   int ret = OB_SUCCESS;
   if (chans_.count() == 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("channel hasn't set", K(ret));
   } else {
     // Processing approach:
     // 1. Poll all channels, if data can be received, it is successful
@@ -210,13 +220,15 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
       if (timeout > 0) {
         cond_.wait(wait_key, timeout);
       } else if (OB_UNLIKELY(INT64_MAX == timeout_)) {
-        timeout_ = config::_parallel_server_sleep_time() * 1000;
+        timeout_ = GCONF._parallel_server_sleep_time * 1000;
         cond_.wait(wait_key, timeout_);
+        LOG_DEBUG("channel loop polling time", K(timeout_), K(timeout), K(ret));
       } else {
         cond_.wait(wait_key, timeout_);
       }
       end_wait_time_counting();
     } else {
+      LOG_WARN("fail process channel", K(ret));
     }
 
     ++loop_times_;
@@ -248,18 +260,33 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
           ObDtlBasicChannel *channel = static_cast<ObDtlBasicChannel *> (chans_.at(idx));
           LOG_INFO("dump channel info for query which active for more than 100 seconds",
                    K(idx), K(channel->get_id()),
-                   K(channel->get_peer_id()),
+                   K(channel->get_peer_id()), K(channel->get_peer()),
                    K(channel->get_op_metric()));
         }
       }
     }
-    if (ignore_interrupt_) {
+    if ((loop_times_ & (SERVER_ALIVE_CHECK_TIMES - 1)) == 0) {
+      for (int64_t i = 0; i < chans_.count(); ++i) {
+        if (nullptr != chans_.at(i)) {
+          ObDtlBasicChannel *ch = static_cast<ObDtlBasicChannel *> (chans_.at(i));
+          if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(ch->get_peer(),
+                              get_process_query_time()))) {
+            ret = OB_RPC_CONNECT_ERROR;
+            LOG_WARN("peer no in communication, maybe crashed", K(ret), K(ch->get_peer()),
+                      K(static_cast<int64_t>(GCONF.cluster_id)));
+          }
+        }
+      }
+    }
+    if (OB_UNLIKELY(OB_RPC_CONNECT_ERROR == ret)) {
+    } else if (ignore_interrupt_) {
       // do nothing.
     } else if ((loop_times_ & (INTERRUPT_CHECK_TIMES - 1)) == 0 && OB_UNLIKELY(IS_INTERRUPTED())) {
       // Interrupt error handling
       // overwrite ret
       ObInterruptCode &code = GET_INTERRUPT_CODE();
       ret = code.code_;
+      LOG_WARN("message loop is interrupted", K(code), K(ret));
     }
   }
   return ret;
@@ -308,6 +335,7 @@ int ObDtlChannelLoop::process_channels(ObIDltChannelLoopPred *pred, int64_t &nth
   for (int64_t i = 0; i != chan_cnt && ret == OB_DTL_WAIT_EAGAIN; ++i) {
     if (next_idx_ >= chan_cnt) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpect next idx", K(next_idx_), K(chan_cnt), K(ret));
     } else {
       chan = chans_[next_idx_];
       if (nullptr == pred || pred->pred_process(next_idx_, chan)) {
@@ -326,6 +354,7 @@ int ObDtlChannelLoop::process_channels(ObIDltChannelLoopPred *pred, int64_t &nth
           // return which channel is end
           ret = OB_ERR_UNEXPECTED;
           nth_channel = next_idx_;
+          LOG_WARN("finish get data from channel", K(nth_channel), K(ret), KP(chan->get_id()), K(chan->get_peer()));
         }
       }
       ++next_idx_;
@@ -381,6 +410,13 @@ int ObDtlChannelLoop::process_channel(int64_t &nth_channel)
     } else if ((loop_times_ & (INTERRUPT_CHECK_TIMES - 1)) == 0 && OB_UNLIKELY(IS_INTERRUPTED())) {
       ObInterruptCode &code = GET_INTERRUPT_CODE();
       ret = code.code_;
+      LOG_WARN("message loop is interrupted", K(code), K(ret));
+    } else if ((loop_times_ & (SERVER_ALIVE_CHECK_TIMES - 1)) == 0
+               && OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(ch->get_peer(),
+                              get_process_query_time()))) {
+      ret = OB_RPC_CONNECT_ERROR;
+      LOG_WARN("peer no in communication, maybe crashed", K(ret), K(ch->get_peer()),
+                K(static_cast<int64_t>(GCONF.cluster_id)));
     }
     ch = sentinel_node_.next_link_;
     ++n_times;
@@ -397,13 +433,17 @@ int ObDtlChannelLoop::unblock_channels(int64_t data_channel_idx)
   int ret = OB_SUCCESS;
   if (data_channel_idx >= chans_.count()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: data channel idx is invalid", K(ret),
+      K(data_channel_idx), K(chans_.count()));
   } else {
     ObDfcServer &dfc_server = DTL.get_dfc_server();
     ObDtlChannel *ch = chans_.at(data_channel_idx);
     if (nullptr == ch->get_dfc()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid data channel, dfc is null", K(ret), K(data_channel_idx), K(chans_.count()));
     } else {
       if (OB_FAIL(dfc_server.unblock_channels(ch->get_dfc()))) {
+        LOG_WARN("failed to unblock channels", K(ret));
       }
     }
   }
@@ -421,13 +461,17 @@ int ObDtlChannelLoop::unblock_channel(int64_t start_data_channel_idx, int64_t df
   int ret = OB_SUCCESS;
   if (start_data_channel_idx >= chans_.count()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: data channel idx is invalid", K(ret),
+      K(start_data_channel_idx), K(chans_.count()));
   } else {
     ObDfcServer &dfc_server = DTL.get_dfc_server();
     ObDtlChannel *ch = chans_.at(start_data_channel_idx);
     if (nullptr == ch->get_dfc()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid data channel, dfc is null", K(ret), K(start_data_channel_idx), K(chans_.count()));
     } else {
       if (OB_FAIL(dfc_server.unblock_channel(ch->get_dfc(), dfc_channel_idx))) {
+        LOG_WARN("failed to unblock channels", K(ret));
       }
     }
   }

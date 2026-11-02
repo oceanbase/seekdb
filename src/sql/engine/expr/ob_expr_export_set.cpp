@@ -37,8 +37,11 @@ int ObExprExportSet::calc_result_typeN(ObExprResType& type, ObExprResType* types
   int ret = OB_SUCCESS;
   if (3 != param_num && 4 != param_num && 5 != param_num) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Export_Set() should have three or four or five arguments", K(ret), K(param_num));
   } else if (OB_ISNULL(types_array) || OB_ISNULL(type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error. types_array or session null", K(ret), KP(types_array),
+        KP(type_ctx.get_session()));
   } else {
     // deduce length
     // Maximum occurrences of on and of in result
@@ -110,6 +113,7 @@ int ObExprExportSet::calc_export_set_inner(const int64_t max_result_size, ObStri
       // tot_length equals to 0 indicates that length_to is zero and "to" is empty string
       ret_str.reset();
     } else if (tot_length > max_result_size) {
+      LOG_WARN("Result of export_set_inner was larger than max_allow_packet_size", K(ret), K(tot_length), K(max_result_size));
       LOG_USER_WARN(OB_ERR_FUNC_RESULT_TOO_LARGE, "export_set", static_cast<int>(max_result_size));
     } else {
       char* buf = static_cast<char*>(string_buf.alloc(tot_length));
@@ -164,6 +168,7 @@ int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
   ObDatum* n_bits = NULL;
   int64_t max_size = 0;
   if (OB_FAIL(expr.eval_param_value(ctx, bits, on, off, sep, n_bits))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (bits->is_null() || on->is_null() || off->is_null()) {
     expr_datum.set_null();
   } else if (OB_NOT_NULL(sep) && sep->is_null()) {
@@ -171,6 +176,7 @@ int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
   } else if (OB_NOT_NULL(n_bits) && n_bits->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
+    LOG_WARN("get max length failed", K(ret));
   } else {
     ObExprStrResAlloc expr_res_alloc(expr, ctx);
     ObString output;
@@ -189,6 +195,7 @@ int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
     }
     if (OB_FAIL(calc_export_set_inner(max_size, output, bits->get_uint64(), on->get_string(),
         off->get_string(), sep_parm, n_bits_parm, expr_res_alloc))) {
+      LOG_WARN("do export set failed", K(ret));
     } else {
       expr_datum.set_string(output);
     }

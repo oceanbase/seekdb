@@ -27,10 +27,11 @@
 #include "lib/oblog/ob_log_module.h"
 #include "storage/ob_i_store.h"
 #include "storage/access/ob_table_read_info.h"
-#include "storage/meta_mem/ob_storage_meta_obj_pool.h"
+#include "storage/meta_mem/ob_tenant_meta_obj_pool.h"
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "share/ob_table_range.h"
 #include "share/scn.h"
+#include "storage/blocksstable/ob_table_flag.h"
 
 namespace oceanbase
 {
@@ -68,7 +69,7 @@ class ObTxDataMemtable;
 class ObTxCtxMemtable;
 class ObLSMemberMemtable;
 class ObDDLKV;
-class ObStorageMetaMemMgr;
+class ObTenantMetaMemMgr;
 struct ObTableIterParam;
 struct ObTableAccessParam;
 struct ObTableAccessContext;
@@ -89,23 +90,42 @@ public:
     TX_DATA_MEMTABLE = 1,
     TX_CTX_MEMTABLE = 2,
     LOCK_MEMTABLE = 3,
+    DIRECT_LOAD_MEMTABLE = 4,
     MAX_MEMTABLE_TYPE,
     // < add new memtable here
 
     // < sstable start from here
-    MAJOR_SSTABLE = 10,
+    MAJOR_SSTABLE = 10, //Reuse type, also represents row store column group in column store
     MINOR_SSTABLE = 11,
     MINI_SSTABLE = 12,
     META_MAJOR_SSTABLE = 13,
     DDL_DUMP_SSTABLE = 14,
-    DDL_MEM_SSTABLE = 15,
-    DDL_MEM_MINI_SSTABLE = 16,
-    MDS_MINI_SSTABLE = 17,
-    MDS_MINOR_SSTABLE = 18,
-    MICRO_MINI_SSTABLE = 19,
-    INC_MAJOR_SSTABLE = 20,
-    INC_MAJOR_DDL_DUMP_SSTABLE = 21,
-    INC_MAJOR_DDL_MEM_SSTABLE = 22,
+    REMOTE_LOGICAL_MINOR_SSTABLE = 15,
+    DDL_MEM_SSTABLE = 16,
+    COLUMN_ORIENTED_SSTABLE = 17,
+    NORMAL_COLUMN_GROUP_SSTABLE = 18,
+    ROWKEY_COLUMN_GROUP_SSTABLE = 19,
+    COLUMN_ORIENTED_META_SSTABLE = 20,
+    DDL_MERGE_CO_SSTABLE = 21, // used for column store ddl, for base sstable
+    DDL_MERGE_CG_SSTABLE = 22, // used for column store ddl, for normal cg sstable, rowkey cg not supported
+    DDL_MEM_CO_SSTABLE = 23,
+    DDL_MEM_CG_SSTABLE = 24,
+    DDL_MEM_MINI_SSTABLE = 25,
+    MDS_MINI_SSTABLE = 26,
+    MDS_MINOR_SSTABLE = 27,
+    MICRO_MINI_SSTABLE = 28,
+    INC_MAJOR_SSTABLE = 29,
+    INC_COLUMN_ORIENTED_SSTABLE = 30,
+    INC_NORMAL_COLUMN_GROUP_SSTABLE = 31,
+    INC_ROWKEY_COLUMN_GROUP_SSTABLE = 32,
+    INC_MAJOR_DDL_DUMP_SSTABLE = 33,
+    INC_MAJOR_DDL_MERGE_CO_SSTABLE = 34,
+    INC_MAJOR_DDL_MERGE_CG_SSTABLE = 35,
+    INC_MAJOR_DDL_MEM_CO_SSTABLE = 36,
+    INC_MAJOR_DDL_MEM_CG_SSTABLE = 37,
+    INC_MAJOR_DDL_MEM_SSTABLE = 38,
+    INC_MAJOR_DDL_AGGREGATE_CO_SSTABLE = 39,
+    INC_MAJOR_DDL_AGGREGATE_CG_SSTABLE = 40,
     // < add new sstable before here, See is_sstable()
 
     MAX_TABLE_TYPE
@@ -151,7 +171,9 @@ public:
     OB_INLINE bool is_minor_sstable() const { return ObITable::is_minor_sstable(table_type_); }
     OB_INLINE bool is_mini_sstable() const { return ObITable::is_mini_sstable(table_type_); }
     OB_INLINE bool is_major_sstable() const { return ObITable::is_major_sstable(table_type_) || ObITable::is_meta_major_sstable(table_type_); }
-    OB_INLINE bool is_major_or_ddl_merge_sstable() const { return is_major_sstable(); }
+    OB_INLINE bool is_major_or_ddl_merge_sstable() const { return is_major_sstable() || ObITable::is_ddl_merge_sstable(table_type_); }
+    OB_INLINE bool is_ddl_merge_sstable() const { return ObITable::is_ddl_merge_sstable(table_type_); }
+    OB_INLINE bool is_ddl_mem_co_cg_sstable() const { return ObITable::is_ddl_mem_co_cg_sstable(table_type_); }
     OB_INLINE bool is_meta_major_sstable() const { return ObITable::is_meta_major_sstable(table_type_); }
     OB_INLINE bool is_multi_version_table() const { return ObITable::is_multi_version_table(table_type_); }
     OB_INLINE bool is_mds_sstable() const { return ObITable::is_mds_sstable(table_type_); }
@@ -162,8 +184,15 @@ public:
     OB_INLINE bool is_ddl_dump_sstable() const { return ObITable::is_ddl_dump_sstable(table_type_); }
     OB_INLINE bool is_ddl_mem_sstable() const { return ObITable::is_ddl_mem_sstable(table_type_); }
     OB_INLINE bool is_table_with_scn_range() const { return ObITable::is_table_with_scn_range(table_type_); }
+    OB_INLINE bool is_remote_logical_minor_sstable() const { return ObITable::is_remote_logical_minor_sstable(table_type_); }
+    OB_INLINE bool is_co_sstable() const { return ObITable::is_co_sstable(table_type_); }
+    OB_INLINE bool is_rowkey_cg_sstable() const { return ObITable::is_rowkey_cg_sstable(table_type_); }
+    OB_INLINE bool is_normal_cg_sstable() const { return ObITable::is_normal_cg_sstable(table_type_); }
+    OB_INLINE bool is_cg_sstable() const { return ObITable::is_cg_sstable(table_type_); }
+    OB_INLINE bool is_column_store_sstable() const { return is_co_sstable() || is_cg_sstable(); }
     OB_INLINE bool is_row_store_major_sstable() const { return ObITable::is_row_store_major_sstable(table_type_); }
-    OB_INLINE bool is_true_major_sstable() const { return is_row_store_major_sstable(); }
+    OB_INLINE bool is_column_store_major_sstable() const { return ObITable::is_column_store_major_sstable(table_type_); }
+    OB_INLINE bool is_true_major_sstable() const { return is_row_store_major_sstable() || is_column_store_major_sstable(); }
 
     OB_INLINE const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
     share::SCN get_start_scn() const { return scn_range_.start_scn_.atomic_get(); }
@@ -172,17 +201,19 @@ public:
     {
       return version_range_.snapshot_version_;
     }
+    OB_INLINE uint16_t get_column_group_id() const { return column_group_idx_; }
     OB_INLINE uint16_t get_slice_idx() const { return slice_range_.end_slice_idx_; }
     OB_INLINE TableKey& operator=(const TableKey &key)
     {
       table_type_ = key.table_type_;
+      column_group_idx_ = key.column_group_idx_;
       tablet_id_ = key.tablet_id_;
       scn_range_ = key.scn_range_;
       slice_range_ = key.slice_range_;
       return *this;
     }
 
-    TO_STRING_KV(K_(tablet_id), K_(slice_range), "table_type", get_table_type_name(table_type_),
+    TO_STRING_KV(K_(tablet_id), K_(column_group_idx), K_(slice_range), "table_type", get_table_type_name(table_type_),
         K_(scn_range));
 
   public:
@@ -191,6 +222,7 @@ public:
       common::ObNewVersionRange version_range_;
       share::ObScnRange scn_range_;
     };
+    uint16_t column_group_idx_;
     ObITable::TableType table_type_;
     SliceRange slice_range_;
   };
@@ -239,6 +271,7 @@ public:
   virtual int64_t get_upper_trans_version() const { return get_snapshot_version(); }
   virtual int64_t get_max_merged_trans_version() const { return get_snapshot_version(); }
   virtual int get_frozen_schema_version(int64_t &schema_version) const = 0;
+  OB_INLINE uint16_t get_column_group_id() const { return key_.get_column_group_id(); }
   OB_INLINE uint16_t get_slice_idx() const { return key_.get_slice_idx(); }
   OB_INLINE common::ObNewVersionRange &get_version_range() { return key_.version_range_; }
   virtual void inc_ref();
@@ -248,9 +281,14 @@ public:
   // TODO @hanhui so many table type judgement
   virtual bool is_sstable() const { return is_sstable(key_.table_type_); }
   virtual bool is_row_store_major_sstable() const { return is_row_store_major_sstable(key_.table_type_); }
+  virtual bool is_co_sstable() const { return is_co_sstable(key_.table_type_); }
+  virtual bool is_rowkey_cg_sstable() const { return is_rowkey_cg_sstable(key_.table_type_); }
+  virtual bool is_normal_cg_sstable() const { return is_normal_cg_sstable(key_.table_type_); }
+  virtual bool is_cg_sstable() const { return is_cg_sstable(key_.table_type_); }
+  virtual bool is_column_store_sstable() const { return is_co_sstable() || is_cg_sstable(); }
   virtual bool is_meta_major_sstable() const { return is_meta_major_sstable(key_.table_type_); }
   virtual bool is_major_sstable() const { return is_major_sstable(key_.table_type_) || is_meta_major_sstable(key_.table_type_); }
-  virtual bool is_major_or_ddl_merge_sstable() const { return is_major_sstable(); }
+  virtual bool is_major_or_ddl_merge_sstable() const { return is_major_sstable() || is_ddl_merge_sstable(key_.table_type_); }
   virtual bool is_minor_sstable() const { return is_minor_sstable(key_.table_type_); }
   virtual bool is_mini_sstable() const { return is_mini_sstable(key_.table_type_); }
   virtual bool is_mds_minor_sstable() const { return is_mds_minor_sstable(key_.table_type_); }
@@ -260,6 +298,7 @@ public:
   virtual bool is_memtable() const { return is_memtable(key_.table_type_); }
   virtual bool is_resident_memtable() const { return is_resident_memtable(key_.table_type_); }
   virtual bool is_tablet_memtable() const { return is_tablet_memtable(key_.table_type_); }
+  virtual bool is_direct_load_memtable() const { return is_direct_load_memtable(key_.table_type_); }
   virtual bool is_data_memtable() const { return is_data_memtable(key_.table_type_); }
   virtual bool is_tx_data_memtable() const { return is_tx_data_memtable(key_.table_type_); }
   virtual bool is_tx_ctx_memtable() const { return is_tx_ctx_memtable(key_.table_type_); }
@@ -273,8 +312,12 @@ public:
   virtual bool is_ddl_type_sstable() const { return is_ddl_type_sstable(key_.table_type_); }
   virtual bool is_ddl_dump_sstable() const { return is_ddl_dump_sstable(key_.table_type_); }
   virtual bool is_ddl_mem_sstable() const { return is_ddl_mem_sstable(key_.table_type_); }
+  virtual bool is_ddl_merge_sstable() const { return is_ddl_merge_sstable(key_.table_type_); }
+  virtual bool is_ddl_mem_co_cg_sstable() const { return is_ddl_mem_co_cg_sstable(key_.table_type_); }
+  virtual bool is_remote_logical_minor_sstable() const { return is_remote_logical_minor_sstable(key_.table_type_); }
   virtual bool is_empty() const = 0;
   virtual bool no_data_to_read() const { return is_empty(); }
+  virtual bool is_ddl_merge_empty_sstable() const { return is_empty() && is_ddl_merge_sstable(); }
   DECLARE_VIRTUAL_TO_STRING;
 
   static bool is_sstable(const TableType table_type)
@@ -283,12 +326,16 @@ public:
   }
   static bool is_major_sstable(const TableType table_type)
   {
-    return ObITable::TableType::MAJOR_SSTABLE == table_type;
+    return ObITable::TableType::MAJOR_SSTABLE == table_type
+      || ObITable::TableType::COLUMN_ORIENTED_SSTABLE == table_type
+      || ObITable::TableType::NORMAL_COLUMN_GROUP_SSTABLE == table_type
+      || ObITable::TableType::ROWKEY_COLUMN_GROUP_SSTABLE == table_type;
   }
   static bool is_minor_sstable(const TableType table_type)
   {
     return ObITable::TableType::MINOR_SSTABLE == table_type
-      || ObITable::TableType::MINI_SSTABLE == table_type;
+      || ObITable::TableType::MINI_SSTABLE == table_type
+      || ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE == table_type;
   }
   static bool is_multi_version_minor_sstable(const TableType table_type)
   {
@@ -296,7 +343,8 @@ public:
         || ObITable::TableType::MINI_SSTABLE == table_type
         || ObITable::TableType::DDL_MEM_MINI_SSTABLE == table_type
         || ObITable::TableType::MDS_MINOR_SSTABLE == table_type
-        || ObITable::TableType::MDS_MINI_SSTABLE == table_type;
+        || ObITable::TableType::MDS_MINI_SSTABLE == table_type
+        || ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE == table_type;
   }
 
   static bool is_multi_version_table(const TableType table_type)
@@ -315,6 +363,42 @@ public:
         || ObITable::TableType::MDS_MINI_SSTABLE == table_type;
   }
 
+  /*
+   *column store sstables
+   */
+  static bool is_co_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::COLUMN_ORIENTED_SSTABLE == table_type
+        || ObITable::TableType::COLUMN_ORIENTED_META_SSTABLE == table_type
+      || ObITable::TableType::DDL_MERGE_CO_SSTABLE == table_type;
+  }
+  static bool is_normal_cg_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::NORMAL_COLUMN_GROUP_SSTABLE == table_type
+      || ObITable::TableType::DDL_MERGE_CG_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_CG_SSTABLE == table_type;
+  }
+  static bool is_rowkey_cg_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::ROWKEY_COLUMN_GROUP_SSTABLE == table_type;
+  }
+  static bool is_cg_sstable(const TableType table_type)
+  {
+    return is_normal_cg_sstable(table_type)
+        || is_rowkey_cg_sstable(table_type);
+  }
+  static bool is_column_store_sstable(const TableType table_type)
+  {
+    return is_co_sstable(table_type)
+        || is_cg_sstable(table_type)
+        || ObITable::TableType::DDL_MEM_CO_SSTABLE == table_type;
+  }
+
+  static bool is_remote_logical_minor_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE == table_type;
+  }
+
   static bool is_memtable(const TableType table_type)
   {
     return ObITable::TableType::DATA_MEMTABLE <= table_type &&
@@ -327,7 +411,12 @@ public:
   }
   static bool is_tablet_memtable(const TableType table_type)
   {
-    return ObITable::TableType::DATA_MEMTABLE == table_type;
+    return (ObITable::TableType::DATA_MEMTABLE == table_type ||
+            ObITable::TableType::DIRECT_LOAD_MEMTABLE == table_type);
+  }
+  static bool is_direct_load_memtable(const TableType table_type)
+  {
+    return ObITable::TableType::DIRECT_LOAD_MEMTABLE == table_type;
   }
   static bool is_data_memtable(const TableType table_type)
   {
@@ -351,12 +440,17 @@ public:
 
   static bool is_meta_major_sstable(const TableType table_type)
   {
-    return ObITable::TableType::META_MAJOR_SSTABLE == table_type;
+    return ObITable::TableType::META_MAJOR_SSTABLE == table_type
+        || ObITable::TableType::COLUMN_ORIENTED_META_SSTABLE == table_type;
   }
   static bool is_ddl_sstable(const TableType table_type)
   {
     return ObITable::TableType::DDL_DUMP_SSTABLE == table_type
-      || ObITable::TableType::DDL_MEM_SSTABLE == table_type;
+      || ObITable::TableType::DDL_MERGE_CO_SSTABLE == table_type
+      || ObITable::TableType::DDL_MERGE_CG_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_CO_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_CG_SSTABLE == table_type;
   }
   static bool is_ddl_type_sstable(const TableType table_type)
   {
@@ -364,12 +458,26 @@ public:
   }
   static bool is_ddl_dump_sstable(const TableType table_type)
   {
-    return ObITable::TableType::DDL_DUMP_SSTABLE == table_type;
+    return ObITable::TableType::DDL_DUMP_SSTABLE == table_type
+      || ObITable::TableType::DDL_MERGE_CO_SSTABLE == table_type
+      || ObITable::TableType::DDL_MERGE_CG_SSTABLE == table_type;
   }
   static bool is_ddl_mem_sstable(const TableType table_type)
   {
     return ObITable::TableType::DDL_MEM_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_CO_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_CG_SSTABLE == table_type
       || ObITable::TableType::DDL_MEM_MINI_SSTABLE == table_type;
+  }
+  static bool is_ddl_merge_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::DDL_MERGE_CO_SSTABLE == table_type
+      || ObITable::TableType::DDL_MERGE_CG_SSTABLE == table_type;
+  }
+  static bool is_ddl_mem_co_cg_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::DDL_MEM_CG_SSTABLE == table_type
+      || ObITable::TableType::DDL_MEM_CO_SSTABLE == table_type;
   }
   static bool is_mds_mini_sstable(const TableType table_type)
   {
@@ -387,9 +495,21 @@ public:
   {
     return ObITable::TableType::MAJOR_SSTABLE == table_type;
   }
+  static bool is_column_store_major_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::COLUMN_ORIENTED_SSTABLE == table_type;
+  }
   static bool is_table_with_scn_range(const TableType table_type)
   {
     return is_multi_version_table(table_type) || is_meta_major_sstable(table_type);
+  }
+  // row store sstable and corresponding column store sstable 
+  static bool is_twin_major_sstable(const TableKey &rs_key, const TableKey &cs_key) 
+  {
+    return rs_key.is_true_major_sstable()
+        && cs_key.is_true_major_sstable()
+        && rs_key.tablet_id_ == cs_key.tablet_id_
+        && rs_key.scn_range_ == cs_key.scn_range_;
   }
   OB_INLINE static const char* get_table_type_name(const TableType &table_type)
   {
@@ -430,7 +550,7 @@ public:
 
   OB_INLINE ObITable *get_table() { return table_; }
   OB_INLINE const ObITable *get_table() const { return table_; }
-  OB_INLINE ObStorageMetaMemMgr *get_t3m() { return t3m_; }
+  OB_INLINE ObTenantMetaMemMgr *get_t3m() { return t3m_; }
   OB_INLINE common::ObIAllocator *get_allocator() { return allocator_; }
 
   int get_sstable(blocksstable::ObSSTable *&sstable);
@@ -442,11 +562,12 @@ public:
   int get_tx_data_memtable(ObTxDataMemtable *&memtable);
   int get_tx_ctx_memtable(ObTxCtxMemtable *&memtable);
   int get_lock_memtable(transaction::tablelock::ObLockMemtable *&memtable);
+  int get_direct_load_memtable(ObDDLKV *&memtable);
 
   ObTableHandleV2(const ObTableHandleV2 &other);
   ObTableHandleV2 &operator= (const ObTableHandleV2 &other);
 
-  int set_table(ObITable *const table, ObStorageMetaMemMgr *const t3m, const ObITable::TableType table_type);
+  int set_table(ObITable *const table, ObTenantMetaMemMgr *const t3m, const ObITable::TableType table_type);
   // TODO: simplify set_sstable interfaces
   // only used when create stand alone sstable
   int set_sstable(ObITable *table, common::ObIAllocator *allocator);
@@ -458,7 +579,7 @@ public:
       K_(meta_handle), K_(lifetime_guaranteed_by_tablet));
 private:
   ObITable *table_;
-  ObStorageMetaMemMgr *t3m_;
+  ObTenantMetaMemMgr *t3m_;
   common::ObIAllocator *allocator_;
   ObStorageMetaHandle meta_handle_;
   ObITable::TableType table_type_;
@@ -545,6 +666,7 @@ OB_INLINE share::SCN ObITable::get_end_scn() const
 bool ObITable::TableKey::operator ==(const TableKey &table_key) const
 {
   bool bret = table_type_ == table_key.table_type_
+      && column_group_idx_ == table_key.column_group_idx_
       && tablet_id_ == table_key.tablet_id_
       && scn_range_ == table_key.scn_range_
       && slice_range_ == table_key.slice_range_;

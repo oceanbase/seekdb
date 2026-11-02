@@ -76,6 +76,11 @@ protected:
   int candi_allocate_pdml_insert(OSGShareInfo *osg_info);
   int candi_allocate_optimizer_stats_merge(OSGShareInfo *osg_info);
 
+  int get_osg_type(bool is_multi_part_dml, 
+                   ObShardingInfo *insert_table_sharding, 
+                   int64_t distributed_method, 
+                   OSG_TYPE &type);
+
   virtual int get_best_insert_dist_method(ObLogicalOperator &top,
                                           ObTablePartitionInfo *insert_table_partition,
                                           ObShardingInfo *insert_table_sharding,
@@ -107,6 +112,8 @@ protected:
                                      ObUniqueConstraintInfo &constraint_info);
   int prepare_table_dml_info_for_ddl(const ObInsertTableInfo& table_info,
                                      ObIArray<IndexDMLInfo*> &all_index_dml_infos);
+  int append_fts_doc_word_related_index(const ObTableSchema &fts_index_schema,
+                                        IndexDMLInfo &index_dml_info);
 
   int get_all_rowkey_columns_for_ddl(const ObInsertTableInfo& table_info,
                                      const ObTableSchema* ddl_table_schema,

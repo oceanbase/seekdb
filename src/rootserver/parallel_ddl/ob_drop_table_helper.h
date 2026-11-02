@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DROP_TABLE_HELPER_H_
 
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 
 namespace oceanbase {
 namespace share {
@@ -48,7 +49,7 @@ public:
                K_(dep_objs),
                K_(ddl_stmt_str),
                K_(err_table_list),
-               K_(tablet_autoinc_cache_tablet_ids));
+               K_(tablet_autoinc_cleaner));
 private:
   virtual int init_() override;
   virtual int lock_objects_() override;
@@ -81,9 +82,11 @@ private:
   int collect_aux_table_schemas_(const ObTableSchema &table_schema, ObIArray<const ObTableSchema *> &aux_table_schemas);
   int calc_schema_version_cnt_for_table_(const ObTableSchema &table_schema, bool to_recyclebin);
   int calc_schema_version_cnt_for_dep_objs_();
+  int calc_schema_version_cnt_for_sequence_(const ObTableSchema &table_schema);
   int lock_fk_tables_by_id_(const ObTableSchema &table_schema);
   int lock_aux_tables_by_id_(const ObTableSchema &table_schema);
   int lock_triggers_by_id_(const ObTableSchema &table_schema);
+  int lock_sequences_by_id_(const ObTableSchema &table_schema);
   int lock_rls_by_id_(const ObTableSchema &table_schema);
   int add_table_to_tablet_autoinc_cleaner_(const ObTableSchema &table_schema);
   int construct_drop_table_sql_(const ObTableSchema &table_schema, const obcall::ObTableItem &table_item);
@@ -93,6 +96,8 @@ private:
   int drop_trigger_(const ObTriggerInfo &trigger_info, const ObTableSchema &table_schema);
   int drop_trigger_to_recyclebin_(const ObTriggerInfo &trigger_info);
   int drop_obj_privs_(const uint64_t obj_id, const ObObjectType obj_type);
+  int drop_sequences_(const ObTableSchema &table_schema);
+  int drop_sequence_(const ObColumnSchemaV2 &column_schema);
   int modify_dep_obj_status_(const int64_t idx);
   int deal_with_mock_fk_parent_tables_(const int64_t idx);
   int deal_with_mock_fk_parent_table_(ObMockFKParentTableSchema &mock_fk_parent_table_schema);
@@ -114,7 +119,7 @@ private:
   ObArray<ObArray<std::pair<uint64_t, share::schema::ObObjectType>>> dep_objs_;
   ObSqlString ddl_stmt_str_;
   ObSqlString err_table_list_;
-  ObArray<ObTabletID> tablet_autoinc_cache_tablet_ids_;
+  ObTabletAutoincCacheCleaner tablet_autoinc_cleaner_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropTableHelper);

@@ -23,17 +23,18 @@ namespace oceanbase
 namespace storage
 {
 
-OB_SERIALIZE_MEMBER(ObRemoveTabletArg, tablet_id_);
+OB_SERIALIZE_MEMBER(ObRemoveTabletArg, ls_id_, tablet_id_);
 
 
 // ObTabletDeleteReplayExecutor
 ObTabletDeleteReplayExecutor::ObTabletDeleteReplayExecutor()
-  : ObTabletReplayExecutor(), ctx_(nullptr)
+  :logservice::ObTabletReplayExecutor(), ctx_(nullptr)
 {}
 
 int ObTabletDeleteReplayExecutor::init(
     mds::BufferCtx &ctx,
-    const share::SCN &scn)
+    const share::SCN &scn,
+    const bool for_old_mds)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -41,9 +42,11 @@ int ObTabletDeleteReplayExecutor::init(
     LOG_WARN("tablet delete replay executor init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("get invalid argument", KR(ret), K(scn));
   } else {
     ctx_ = &ctx;
     scn_ = scn;
+    for_old_mds_ = for_old_mds;
     is_inited_ = true;
   }
   return ret;
@@ -60,12 +63,14 @@ int ObTabletDeleteReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
 
   if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tablet is null", K(ret), K(tablet_handle));
   } else if (CLICK_FAIL(tablet->get_latest_committed(data))) {
+    LOG_WARN("failed to get tablet status", K(ret), K(timeout));
   } else {
     data.tablet_status_ = ObTabletStatus::DELETED;
     data.data_type_ = ObTabletMdsUserDataType::REMOVE_TABLET;
-    if (CLICK_FAIL(replay_to_mds_table_(tablet_handle, data, user_ctx, scn_))) {
-      LOG_ERROR("failed to replay to tablet", K(ret));
+    if (CLICK_FAIL(replay_to_mds_table_(tablet_handle, data, user_ctx, scn_, for_old_mds_))) {
+      LOG_WARN("failed to replay to tablet", K(ret));
     }
   }
 

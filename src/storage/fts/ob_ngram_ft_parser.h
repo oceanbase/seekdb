@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
-#include "data_plane/fts/ob_fts_parser.h"
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
 
 namespace oceanbase
@@ -27,13 +27,14 @@ namespace oceanbase
 namespace storage
 {
 
-class ObNgramFTParser final : public ObITokenIterator
+class ObNgramFTParser final : public plugin::ObITokenIterator
 {
 public:
   ObNgramFTParser();
   virtual ~ObNgramFTParser();
 
-  int init(ObFTParserParam *param);
+  int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -50,14 +51,23 @@ private:
   DISABLE_COPY_ASSIGN(ObNgramFTParser);
 };
 
-class ObNgramFTParserDesc final : public ObIFTParserDesc
+class ObNgramFTParserDesc final : public plugin::ObIFTParserDesc
 {
 public:
   ObNgramFTParserDesc();
   virtual ~ObNgramFTParserDesc() = default;
-  virtual int segment(ObFTParserParam *param, ObITokenIterator *&iter) const override;
-  virtual void free_token_iter(ObFTParserParam *param, ObITokenIterator *&iter) const override;
+  virtual int init(plugin::ObPluginParam *param) override;
+  virtual int deinit(plugin::ObPluginParam *param) override;
+  virtual int create_token_iter(plugin::ObFTParserParam *param,
+                                plugin::ObITokenIterator *&iter) const override;
+  virtual int reuse_token_iter(plugin::ObFTParserParam *param,
+                               plugin::ObITokenIterator *iter) const override;
+  virtual void destroy_token_iter(plugin::ObFTParserParam *param,
+                                  plugin::ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
+  OB_INLINE void reset() { is_inited_ = false; }
+private:
+  bool is_inited_;
 };
 
 } // end namespace storage

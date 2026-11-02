@@ -22,8 +22,8 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
-#include "share/rc/ob_server_runtime.h"
-#include "data_plane/scheduler/ob_dag_scheduler.h"
+#include "share/rc/ob_tenant_base.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "lib/utility/ob_template_utils.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/list/ob_dlist.h"
@@ -319,6 +319,7 @@ public:
         STORAGE_LOG(WARN, "failed to ensure space", K(ret), K(value.get_serialize_size()));
       }
     } else if (OB_FAIL(value.serialize(data_, buffer_size_, len_))) {
+      STORAGE_LOG(WARN, "fail to serialize", K(ret), K(buffer_size_), K(len_));
     }
     return ret;
   }

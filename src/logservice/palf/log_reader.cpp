@@ -15,8 +15,10 @@
  */
 
 #include "log_reader.h"
+#include "lib/stat/ob_diagnose_info.h"    // ObStatEventIds
+#include "lib/stat/ob_diagnostic_info_guard.h"    // EVENT_*
 #include "log_io_adapter.h"               // LogIOAdapter
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -85,7 +87,9 @@ int LogReader::pread(const block_id_t block_id,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(block_id), K(offset), K(in_read_size), K(read_buf));
   } else if (OB_FAIL(convert_to_normal_block(log_dir_, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
+    PALF_LOG(ERROR, "convert_to_normal_block failed", K(ret));
   } else if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
+    PALF_LOG(WARN, "LogReader open block failed", K(ret), K(block_path), K(io_fd));
   } else {
     const int64_t start_ts = ObTimeUtility::fast_current_time();
     int64_t remained_read_size = in_read_size;
@@ -98,15 +102,24 @@ int LogReader::pread(const block_id_t block_id,
       const int64_t curr_read_buf_len = remained_read_buf_len - out_read_size;
       int64_t curr_out_read_size = 0;
       if (OB_FAIL(inner_pread_(io_fd, curr_read_offset, curr_in_read_size, curr_read_buf, curr_read_buf_len, curr_out_read_size, io_ctx))) {
+        PALF_LOG(WARN, "LogReader inner_pread_ failed", K(ret), K(io_fd), K(block_id), K(offset),
+            K(in_read_size), K(read_buf), K(curr_in_read_size), K(curr_read_offset), K(curr_out_read_size),
+            K(remained_read_size), K(block_path));
       } else {
         out_read_size += curr_out_read_size;
         remained_read_size -= curr_out_read_size;
+        PALF_LOG(TRACE, "inner_pread_ success", K(ret), K(io_fd), K(block_id), K(offset), K(in_read_size),
+            K(out_read_size), K(read_buf), K(curr_in_read_size), K(curr_read_offset), K(curr_out_read_size),
+            K(remained_read_size), K(block_path));
       }
     }
 
     if (OB_SUCC(ret)) {
       const int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
       io_ctx.inc_read_disk_cost_ts(cost_ts);
+      EVENT_TENANT_INC(ObStatEventIds::PALF_READ_IO_COUNT_FROM_DISK);
+      EVENT_ADD(ObStatEventIds::PALF_READ_SIZE_FROM_DISK, out_read_size);
+      EVENT_ADD(ObStatEventIds::PALF_READ_TIME_FROM_DISK, cost_ts);
       const int64_t accum_read_io_count = ATOMIC_AAF(&accum_read_io_count_, 1);
       const int64_t accum_read_log_size = ATOMIC_AAF(&accum_read_log_size_, out_read_size);
       const int64_t accum_read_cost_ts = ATOMIC_AAF(&accum_read_cost_ts_, cost_ts);
@@ -124,6 +137,7 @@ int LogReader::pread(const block_id_t block_id,
   if (io_fd.is_valid()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(io_adapter_->close(io_fd))) {
+      PALF_LOG(WARN, "close io_fd failed", K(tmp_ret), K(io_fd));
     }
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
   }
@@ -145,6 +159,9 @@ int LogReader::inner_pread_(const ObIOFd &read_io_fd,
   int64_t limited_and_aligned_in_read_size = 0;
   if (OB_FAIL(limit_and_align_in_read_size_by_block_size_(
           aligned_start_offset, aligned_in_read_size,  limited_and_aligned_in_read_size))) {
+    PALF_LOG(WARN, "limited_and_aligned_in_read_size failed, maybe read offset exceed block size",
+        K(ret), K(start_offset), K(in_read_size), K(aligned_start_offset), K(aligned_in_read_size),
+        K(limited_and_aligned_in_read_size));
   } else if (limited_and_aligned_in_read_size > read_buf_len) {
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(WARN, "buffer not enough to hold read result");
@@ -166,6 +183,9 @@ int LogReader::inner_pread_(const ObIOFd &read_io_fd,
       
       out_read_size = MIN(out_read_size - static_cast<int32_t>(backoff), in_read_size);
       MEMMOVE(read_buf, read_buf + backoff, in_read_size);
+      PALF_LOG(TRACE, "inner_read_ success", K(ret), K(read_io_fd), K(aligned_start_offset),
+          K(limited_and_aligned_in_read_size), K(backoff), KP(read_buf),
+          K(in_read_size), K(out_read_size));
     }
   }
   return ret;
@@ -194,6 +214,9 @@ int LogReader::limit_and_align_in_read_size_by_block_size_(
   } else {
     limited_and_aligned_in_read_size = limited_read_end_offset - aligned_start_offset;
   }
+  PALF_LOG(TRACE, "limit_and_align_in_read_size_by_block_size success",
+      K(ret), K(limited_and_aligned_in_read_size), K(limited_read_end_offset),
+      K(aligned_start_offset), K(aligned_in_read_size));
   return ret;
 }
 

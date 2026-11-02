@@ -72,6 +72,13 @@ public:
       task_id_(0)
   {}
   virtual ~ObHashJoinInput() {}
+  virtual int init(ObTaskInfo &task_info)
+  {
+    int ret = OB_SUCCESS;
+    UNUSED(task_info);
+    return ret;
+  }
+
   int sync_wait(ObExecContext &ctx, int64_t &sys_event, EventPred pred, bool ignore_interrupt = false, bool is_open = false);
   int64_t get_sync_val()
   {
@@ -108,6 +115,8 @@ public:
       ATOMIC_AAF(&shared_hj_info->total_memory_row_count_, row_count);
       ATOMIC_AAF(&shared_hj_info->total_memory_size_, input_size);
     }
+    OB_LOG(DEBUG, "set basic info", K(shared_hj_info->total_memory_row_count_),
+      K(shared_hj_info->total_memory_size_));
   }
   void sync_info_for_naaj(int64_t n_times, bool null_in_naal, bool non_preserved_side_naaj)
   {
@@ -123,6 +132,8 @@ public:
         ATOMIC_SET(&shared_hj_info->non_preserved_side_is_not_empty_, non_preserved_side_naaj);
       }
     }
+    OB_LOG(DEBUG, "set basic info", K(shared_hj_info->total_memory_row_count_),
+      K(shared_hj_info->total_memory_size_));
   }
 
   int64_t &get_sqc_thread_count()
@@ -235,6 +246,9 @@ public:
         ATOMIC_SET(&shared_hj_info->sync_val_, shared_hj_info->init_val_);
       }
     }
+    OB_LOG(TRACE, "sync cur part_count", K(n_times),
+      K(shared_hj_info->init_val_),
+      K(shared_hj_info->sync_val_));
   }
 
   void set_task_id(int64_t task_id) { task_id_ = task_id; }
@@ -1273,6 +1287,7 @@ inline int ObHashJoinOp::init_mem_context()
       .set_mem_attr(common::ObModIds::OB_ARENA_HASH_JOIN,
                      common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+      SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "mem entity is null", K(ret));

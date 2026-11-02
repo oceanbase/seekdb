@@ -15,10 +15,10 @@
  */
 #ifndef OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #define OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
-#include "config_bridge.h"
 #include "share/leak_checker/ob_leak_checker.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "common/ob_tablet_id.h"
+#include "share/ob_ls_id.h"
 #include "lib/profile/ob_trace_id.h"
 #include "storage/ob_common_id_utils.h"
 namespace oceanbase
@@ -108,15 +108,18 @@ struct ObReadOnlyTxCheckerValue
 public:
   ObReadOnlyTxCheckerValue()
     : timestamp_(0),
+      ls_id_(),
       tablet_id_(),
       extra_(nullptr)
   {
   }
   ~ObReadOnlyTxCheckerValue() = default;
-  TO_STRING_KV(K_(timestamp), K_(tablet_id), KPC_(extra));
+  TO_STRING_KV(K_(timestamp), K_(ls_id),
+               K_(tablet_id), KPC_(extra));
 public:
   
   int64_t timestamp_;
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   ObReadExInfo *extra_;
 };
@@ -126,76 +129,90 @@ struct ObReadOnlyTxPrinter
   bool operator()(const ObReadOnlyTxCheckerKey &k, const ObReadOnlyTxCheckerValue &v)
   {
     bool ret = true;
-    if (OB_ISNULL(v.extra_)) {
-      COMMON_LOG(INFO, "LEAK_CHECKER ",
+    if (true && v.ls_id_ == ls_id_) {
+      if (OB_ISNULL(v.extra_)) {
+        COMMON_LOG(INFO, "LEAK_CHECKER ",
+                   "key", k,
+                   "value", v);
+      } else if (OB_NOT_NULL(v.extra_)) {
+        if (v.extra_->type_ >= ObReadExInfo::WITH_LBT) {
+          ObReadExInfoBT *extra_info = static_cast<ObReadExInfoBT *>(v.extra_);
+          COMMON_LOG(INFO, "LEAK_CHECKER ",
                  "key", k,
-                 "value", v);
-    } else if (OB_NOT_NULL(v.extra_)) {
-      if (v.extra_->type_ >= ObReadExInfo::WITH_LBT) {
-        ObReadExInfoBT *extra_info = static_cast<ObReadExInfoBT *>(v.extra_);
-        COMMON_LOG(INFO, "LEAK_CHECKER ",
-               "key", k,
-               "value", v,
-               KPC(extra_info));
-      } else if (v.extra_->type_ >= ObReadExInfo::WITH_TRACE) {
-        ObReadExInfoTrace *extra_info = static_cast<ObReadExInfoTrace *>(v.extra_);
-        COMMON_LOG(INFO, "LEAK_CHECKER ",
-               "key", k,
-               "value", v,
-               KPC(extra_info));
-      } else if (v.extra_->type_ >= ObReadExInfo::WITH_PLAN) {
-        ObReadExInfoPlan *extra_info = static_cast<ObReadExInfoPlan *>(v.extra_);
-        COMMON_LOG(INFO, "LEAK_CHECKER ",
-               "key", k,
-               "value", v,
-               KPC(extra_info));
+                 "value", v,
+                 KPC(extra_info));
+        } else if (v.extra_->type_ >= ObReadExInfo::WITH_TRACE) {
+          ObReadExInfoTrace *extra_info = static_cast<ObReadExInfoTrace *>(v.extra_);
+          COMMON_LOG(INFO, "LEAK_CHECKER ",
+                 "key", k,
+                 "value", v,
+                 KPC(extra_info));
+        } else if (v.extra_->type_ >= ObReadExInfo::WITH_PLAN) {
+          ObReadExInfoPlan *extra_info = static_cast<ObReadExInfoPlan *>(v.extra_);
+          COMMON_LOG(INFO, "LEAK_CHECKER ",
+                 "key", k,
+                 "value", v,
+                 KPC(extra_info));
+        }
       }
     }
     return ret;
   }
+public:
+  
+  share::ObLSID ls_id_;
 };
 
-struct ObReadOnlyTxDiagnoseFunctor
+struct DiagnoseFunctor
 {
-  ObReadOnlyTxDiagnoseFunctor(char *buf,
-                              const int64_t pos,
-                              const int64_t len)
-    : buf_(buf), pos_(pos), len_(len)
+  DiagnoseFunctor(const share::ObLSID ls_id,
+                  char *buf,
+                  const int64_t pos,
+                  const int64_t len)
+    : ls_id_(ls_id),
+      buf_(buf), pos_(pos), len_(len)
   {}
-  ~ObReadOnlyTxDiagnoseFunctor() {}
+  ~DiagnoseFunctor() {}
   bool operator()(const ObReadOnlyTxCheckerKey &k, const ObReadOnlyTxCheckerValue &v)
   {
-    UNUSED(k);
     bool bool_ret = true;
     int ret = OB_SUCCESS;
-    if (OB_FAIL(databuff_printf(buf_, len_, pos_, "{tablet_id:%ld",
-                                v.tablet_id_.id()))){
-      bool_ret = false;
-    }
-    if (OB_SUCC(ret) && OB_NOT_NULL(v.extra_)) {
-      if (OB_SUCC(ret) && v.extra_->type_ >= ObReadExInfo::WITH_PLAN) {
-        ObReadExInfoPlan *info = static_cast<ObReadExInfoPlan *>(v.extra_);
-        if (OB_FAIL(databuff_printf(buf_, len_, pos_, ", plan_id:%ld",
-                                    info->plan_id_))){
-          bool_ret = false;
-        }
-      }
-      if (OB_SUCC(ret) && v.extra_->type_ >= ObReadExInfo::WITH_TRACE) {
-        ObReadExInfoTrace *info = static_cast<ObReadExInfoTrace *>(v.extra_);
-        if (OB_FAIL(databuff_print_multi_objs(buf_, len_, pos_, ", trace:",
-                                    info->trace_id_))){
-          bool_ret = false;
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(databuff_printf(buf_, len_, pos_, "}, "))){
+    if (true && v.ls_id_ == ls_id_) {
+      if (OB_FAIL(databuff_printf(buf_, len_, pos_, "{tablet_id:%ld",
+                                  v.tablet_id_.id()))){
+        // break the print
         bool_ret = false;
+      }
+      if (OB_SUCC(ret) && OB_NOT_NULL(v.extra_)) {
+        if (OB_SUCC(ret) && v.extra_->type_ >= ObReadExInfo::WITH_PLAN) {
+          ObReadExInfoPlan *info = static_cast<ObReadExInfoPlan *>(v.extra_);
+          if (OB_FAIL(databuff_printf(buf_, len_, pos_, ", plan_id:%ld",
+                                      info->plan_id_))){
+            // break the print
+            bool_ret = false;
+          }
+        }
+        if (OB_SUCC(ret) && v.extra_->type_ >= ObReadExInfo::WITH_TRACE) {
+          ObReadExInfoTrace *info = static_cast<ObReadExInfoTrace *>(v.extra_);
+          if (OB_FAIL(databuff_print_multi_objs(buf_, len_, pos_, ", trace:",
+                                      info->trace_id_))){
+            // break the print
+            bool_ret = false;
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(databuff_printf(buf_, len_, pos_, "}, "))){
+          // break the print
+          bool_ret = false;
+        }
       }
     }
     return bool_ret;
   }
 public:
+  
+  share::ObLSID ls_id_;
   char *buf_;
   int64_t pos_;
   int64_t len_;
@@ -208,9 +225,11 @@ static int64_t get_tx_debug_level()
   RLOCAL_INIT(int64_t, last_result, 0);
   int64_t current_time = ObClockGenerator::getClock();
   if (current_time - last_check_timestamp < TX_DEBUG_LEVEL_CACHE_REFRESH_INTERVAL) {
-    // Reuse the cached value until the refresh interval expires.
+    // Check once when the last memory burst or tenant does not match or the interval reaches the threshold
   } else {
-    last_result = config::_tx_debug_level();
+    if (OB_LIKELY(true)) {
+      last_result = GCONF._tx_debug_level;
+    }
     last_check_timestamp = current_time;
   }
 
@@ -226,8 +245,9 @@ typedef share::ObBaseLeakChecker<ObReadOnlyTxCheckerKey, ObReadOnlyTxCheckerValu
     } else {                                                                             \
       ObReadOnlyTxCheckerKey key;                                                        \
       ObReadOnlyTxCheckerValue value;                                                    \
-      key.seq_ = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_unique_seq();                                \
+      key.seq_ = share::g_mp->trans_service()->get_unique_seq();                                \
       value.timestamp_ = ObClockGenerator::getClock();                                   \
+      value.ls_id_ = ctx.ls_id_;                                                         \
       value.tablet_id_ = ctx.tablet_id_;                                                 \
       ctx.check_seq_ = key.seq_;                                                         \
       if (OB_UNLIKELY(tx_debug_level >= 4)) {                                            \
@@ -253,32 +273,33 @@ typedef share::ObBaseLeakChecker<ObReadOnlyTxCheckerKey, ObReadOnlyTxCheckerValu
         }                                                                                         \
       } else if (OB_LIKELY(tx_debug_level >= 1)) {                                                \
       }                                                                                           \
-      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().record(key, value, MAX_RECORD_CNT);            \
+      share::g_mp->trans_service()->get_read_tx_checker().record(key, value, MAX_RECORD_CNT);            \
     }                                                                                             \
   } while(0)
 
 #define READ_CHECKER_RELEASE(ctx)                                                                \
   do {                                                                                           \
-    if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().is_empty())) {                 \
+    if (OB_UNLIKELY(!share::g_mp->trans_service()->get_read_tx_checker().is_empty())) {                 \
       ObReadOnlyTxCheckerKey key;                                                                \
       ObReadOnlyTxCheckerValue value;                                                            \
       key.seq_ = ctx.check_seq_;                                                                 \
-      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().release(key, value);                          \
+      share::g_mp->trans_service()->get_read_tx_checker().release(key, value);                          \
       if (OB_NOT_NULL(value.extra_)) {                                                           \
         ob_free(value.extra_);                                                                   \
       }                                                                                          \
     }                                                                                            \
   } while(0)
 
-#define READ_CHECKER_PRINT() \
+#define READ_CHECKER_PRINT(ls_id) \
   do {                            \
     ObReadOnlyTxPrinter fn;       \
-    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().for_each(fn); \
+    fn.ls_id_ = ls_id;            \
+    share::g_mp->trans_service()->get_read_tx_checker().for_each(fn); \
   } while(0)
 
 #define READ_CHECKER_FOR_EACH(fn)                              \
   do {                                                         \
-    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().for_each(fn); \
+    share::g_mp->trans_service()->get_read_tx_checker().for_each(fn); \
   } while(0)
 
 }  // storage

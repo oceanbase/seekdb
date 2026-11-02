@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_PARITION_COMPACTION_PROGRESS_H_
 #define OB_ALL_VIRTUAL_PARITION_COMPACTION_PROGRESS_H_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/compaction/ob_compaction_progress.h"
+#include "storage/compaction/ob_tenant_compaction_progress.h"
 
 namespace oceanbase
 {
@@ -39,7 +39,9 @@ public:
     PROGRESSIVE_MERGE_ROUND,
     CREATE_TIME,
     START_TIME,
-    ESTIMATED_FINISH_TIME
+    ESTIMATED_FINISH_TIME,
+    START_CG_ID,
+    END_CG_ID
   };
   ObAllVirtualTabletCompactionProgress();
   virtual ~ObAllVirtualTabletCompactionProgress();

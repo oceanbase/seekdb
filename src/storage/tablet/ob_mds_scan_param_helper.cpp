@@ -33,6 +33,7 @@ namespace storage
 {
 int ObMdsScanParamHelper::build_scan_param(
     common::ObIAllocator &allocator,
+    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const uint64_t table_id,
     const uint8_t mds_unit_id,
@@ -47,6 +48,7 @@ int ObMdsScanParamHelper::build_scan_param(
   const share::schema::ObTableSchema *table_schema = ObMdsSchemaHelper::get_instance().get_table_schema();
 
   
+  scan_param.ls_id_ = ls_id;
   scan_param.tablet_id_ = tablet_id;
   scan_param.is_get_ = is_get;
   scan_param.is_for_foreign_check_ = false;
@@ -68,8 +70,9 @@ int ObMdsScanParamHelper::build_scan_param(
   } else {
     transaction::ObTxSnapshot tx_snapshot;
     if (OB_FAIL(tx_snapshot.version_.convert_for_tx(read_version_range.snapshot_version_))) {
+      LOG_WARN("failed to convert for tx", KR(ret), K(read_version_range));
     } else {
-      scan_param.snapshot_.init_ls_read(tx_snapshot);
+      scan_param.snapshot_.init_ls_read(ls_id, tx_snapshot);
       scan_param.fb_snapshot_ = tx_snapshot.version_;
     }
   }
@@ -78,6 +81,7 @@ int ObMdsScanParamHelper::build_scan_param(
   } else {
     for (int64_t i = 0; i < ObMdsSchemaHelper::MDS_ROW_COLUMN_CNT; ++i) {
       if (OB_FAIL(scan_param.column_ids_.push_back(common::OB_APP_MIN_COLUMN_ID + i))) {
+        LOG_WARN("fail to push back column id", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
@@ -88,6 +92,7 @@ int ObMdsScanParamHelper::build_scan_param(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), KP(table_schema));
   } else {
     share::schema::ObTableParam *table_param = nullptr;
     if (OB_FAIL(build_table_param(
@@ -96,6 +101,7 @@ int ObMdsScanParamHelper::build_scan_param(
         scan_param.column_ids_,
         scan_param.pd_storage_flag_,
         table_param))) {
+      LOG_WARN("fail to build table param", K(ret));
     } else {
       scan_param.table_param_ = table_param;
     }
@@ -110,12 +116,15 @@ int ObMdsScanParamHelper::build_scan_param(
         mds_unit_id,
         udf_key,
         key_range))) {
+      LOG_WARN("fail to build key range", K(ret));
     } else if (!is_get && OB_FAIL(build_key_range(
         allocator,
         table_id,
         mds_unit_id,
         key_range))) {
+      LOG_WARN("fail to build key range", K(ret));
     } else if (OB_FAIL(scan_param.key_ranges_.push_back(key_range))) {
+      LOG_WARN("fail to push back key range", K(ret));
     }
   }
 
@@ -133,6 +142,7 @@ int ObMdsScanParamHelper::build_key_range(
   void *buf = allocator.alloc(sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     ObObj *obj = new (buf) ObObj[MDS_SSTABLE_ROWKEY_CNT]();
     obj[0].set_tinyint(mds_unit_id);
@@ -140,6 +150,7 @@ int ObMdsScanParamHelper::build_key_range(
 
     const ObRowkey rowkey(obj, MDS_SSTABLE_ROWKEY_CNT);
     if (OB_FAIL(key_range.build_range(table_id, rowkey))) {
+      LOG_WARN("fail to build key range", K(ret), K(table_id), K(rowkey));
     }
 
     if (OB_FAIL(ret)) {
@@ -163,6 +174,7 @@ int ObMdsScanParamHelper::build_key_range(
   char *buf = static_cast<char *>(allocator.alloc(sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT  * 2));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     ObObj *start_obj = new (buf) ObObj[MDS_SSTABLE_ROWKEY_CNT]();
     ObObj *end_obj = new (buf + sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT) ObObj();
@@ -194,9 +206,11 @@ int ObMdsScanParamHelper::build_table_param(
 
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(share::schema::ObTableParam));
   } else {
     table_param = new (buf) ObTableParam(allocator);
     if (OB_FAIL(table_param->convert(table_schema, column_ids, pd_pushdown_flag))) {
+      LOG_WARN("fail to convert", K(ret));
     }
 
     if (OB_FAIL(ret)) {

@@ -24,6 +24,8 @@ namespace oceanbase
 {
 namespace rootserver
 {
+class ObRootService;
+
 // the process of DDL operation, including drop column, ...
 class ObColumnRedefinitionTask final : public ObDDLRedefinitionTask
 {
@@ -37,15 +39,17 @@ public:
       const int64_t dest_table_id,
       const int64_t schema_version,
       const int64_t parallelism,
+      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObAlterTableArg &alter_table_arg,
-      const uint64_t data_format_version,
+      const uint64_t tenant_data_version,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual int update_complete_sstable_job_status(
     const common::ObTabletID &tablet_id,
+    const ObAddr &addr,
     const int64_t snapshot_version,
     const int64_t execution_id,
     const int ret_code,

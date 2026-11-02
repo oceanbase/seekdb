@@ -119,7 +119,6 @@ void ObStorageLogItem::destroy()
   if (nullptr != local_offset_arr_ && local_offset_arr_ != offset_arr_) {
     ob_free(local_offset_arr_);
   }
-  local_offset_arr_ = nullptr;
 }
 
 int ObStorageLogItem::wait_flush_log(const uint64_t max_wait_time)
@@ -139,7 +138,7 @@ int ObStorageLogItem::wait_flush_log(const uint64_t max_wait_time)
           STORAGE_REDO_LOG(ERROR, "Fail to wait log flush (reach time-interval 30s)",
               K(ret), K(max_wait_time), K(*this));
         } else {
-          STORAGE_REDO_LOG(ERROR, "Fail to wait log flush", K(ret), K(max_wait_time), K(*this));
+          STORAGE_REDO_LOG(WARN, "Fail to wait log flush", K(ret), K(max_wait_time), K(*this));
         }
       }
     }
@@ -227,13 +226,16 @@ int ObStorageLogItem::fill_log(
       STORAGE_REDO_LOG(WARN, "Log is too large", K(ret),
           "log_size", (entry_size + data_len), K(left_space));
     } else if (OB_FAIL(data->serialize(buf_, len_ + data_len, len_))) {
+      STORAGE_REDO_LOG(WARN, "Fail to serialize data", K(ret), K(len_));
     } else if (OB_UNLIKELY(len_ - data_start_pos != data_len)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(ERROR, "data actual serialize size is not equal to expected size",
           K(ret), K(data_start_pos), K_(len), K(data_len));
     } else if (OB_FAIL(entry.fill_entry(buf_ + data_start_pos, data_len,
         log_param.cmd_, seq))) {
+      STORAGE_REDO_LOG(WARN, "Fail to fill header", K(ret), K(data_start_pos));
     } else if (OB_FAIL(entry.serialize(buf_, entry_pos + entry_size, entry_pos))) {
+      STORAGE_REDO_LOG(WARN, "Fail to serialize entry", K(ret), K(entry_pos));
     } else if (OB_UNLIKELY(entry_pos - entry_start_pos != entry_size)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(ERROR, "entry actual serialize size is not equal to expected size",
@@ -247,7 +249,7 @@ int ObStorageLogItem::fill_log(
 }
 
 int ObStorageLogItem::fill_batch_header(
-    const int32_t data_len,
+    const int32 data_len,
     const int16_t cnt,
     int64_t pos)
 {
@@ -266,6 +268,7 @@ int ObStorageLogItem::fill_batch_header(
     batch_header.checksum_ =
         batch_header.cal_checksum(buf_ + pos + batch_header.get_serialize_size(), data_len);
     if (OB_FAIL(batch_header.serialize(buf_, pos + batch_header.get_serialize_size(), pos))) {
+      STORAGE_REDO_LOG(WARN, "Fail to serialize batch header", K(ret), K(pos), K(ret));
     }
   }
 

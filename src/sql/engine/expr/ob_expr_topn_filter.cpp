@@ -23,6 +23,52 @@ namespace oceanbase
 {
 namespace sql
 {
+template <typename ResVec>
+static inline int proc_by_pass(ResVec *res_vec, const ObBitVector &skip, const EvalBound &bound,
+                               int64_t &valid_cnt, bool calc_valid_cnt = false);
+
+template <>
+inline int proc_by_pass<IntegerUniVec>(IntegerUniVec *res_vec, const ObBitVector &skip,
+                                       const EvalBound &bound, int64_t &valid_cnt,
+                                       bool calc_valid_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(calc_valid_cnt)) {
+    valid_cnt = 0;
+    if (OB_FAIL(ObBitVector::flip_foreach(
+            skip, bound, [&](int64_t idx) __attribute__((always_inline)) {
+              ++valid_cnt;
+              res_vec->set_int(idx, 1);
+              return OB_SUCCESS;
+            }))) {
+      LOG_WARN("fail to do for each operation", K(ret));
+    }
+  } else {
+    if (OB_FAIL(ObBitVector::flip_foreach(
+            skip, bound, [&](int64_t idx) __attribute__((always_inline)) {
+              res_vec->set_int(idx, 1);
+              return OB_SUCCESS;
+            }))) {
+      LOG_WARN("fail to do for each operation", K(ret));
+    }
+  }
+  return ret;
+}
+
+template <>
+inline int proc_by_pass<IntegerFixedVec>(IntegerFixedVec *res_vec, const ObBitVector &skip,
+                                         const EvalBound &bound, int64_t &valid_cnt,
+                                         bool calc_valid_cnt)
+{
+  int ret = OB_SUCCESS;
+  uint64_t *data = reinterpret_cast<uint64_t *>(res_vec->get_data());
+  MEMSET(data + bound.start(), 1, (bound.range_size() * res_vec->get_length(0)));
+  if (OB_LIKELY(calc_valid_cnt)) {
+    valid_cnt = bound.range_size() - skip.accumulate_bit_cnt(bound);
+  }
+  return ret;
+}
+
 const int64_t ObExprTopNFilterContext::ROW_COUNT_CHECK_INTERVAL = 255;
 const int64_t ObExprTopNFilterContext::EVAL_TIME_CHECK_INTERVAL = 63;
 
@@ -37,6 +83,8 @@ ObExprTopNFilterContext::~ObExprTopNFilterContext()
   cmp_funcs_.reset();
   int ret = OB_SUCCESS;
   double filter_rate = filter_count_ / double(check_count_ + 1);
+  LOG_TRACE("[TopN Filter] print the filter rate", K(total_count_), K(check_count_),
+            K(filter_count_), K(filter_rate));
 }
 
 void ObExprTopNFilterContext::reset_for_rescan()
@@ -55,7 +103,8 @@ void ObExprTopNFilterContext::reset_for_rescan()
   slide_window_.reset_for_rescan();
 }
 
-// Use one state machine for the row and batch evaluation interfaces.
+// with perfect forwarding, we can write one state machine rather than
+// write three state machines for eval/eval_batch/eval_vector interface
 template <typename... Args>
 int ObExprTopNFilterContext::state_machine(const ObExpr &expr, ObEvalCtx &ctx, Args &&... args)
 {
@@ -76,6 +125,7 @@ int ObExprTopNFilterContext::state_machine(const ObExpr &expr, ObEvalCtx &ctx, A
       }
       case FilterState::CHECK_READY: {
         if (OB_FAIL(check_filter_ready())) {
+          LOG_WARN("fail to check filter ready", K(ret));
         }
         // result not filled, so while loop continues
         break;
@@ -137,6 +187,7 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
             ++total_count;
             return OB_SUCCESS;
           }))) {
+    LOG_WARN("failed to flip_foreach");
   } else if (FALSE_IT(total_count_ += total_count)) {
   } else if (!dynamic_disable()) {
     // if msg not ready, add n_times_ and check ready every ROW_COUNT_CHECK_INTERVAL
@@ -149,6 +200,43 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
     (void)collect_sample_info(0, total_count);
     if (!dynamic_disable()) {
       state_ = FilterState::ENABLE;
+    }
+  }
+  return ret;
+}
+
+// bypass interface for eval_vector rows, for storage black filter
+inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
+                                           const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  int64_t valid_cnt = 0;
+  VectorFormat res_format = expr.get_format(ctx);
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  if (VEC_UNIFORM == res_format) {
+    IntegerUniVec *res_vec = static_cast<IntegerUniVec *>(expr.get_vector(ctx));
+    ret = proc_by_pass(res_vec, skip, bound, valid_cnt, true /* calc_valid_cnt */);
+  } else if (VEC_FIXED == res_format) {
+    IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
+    ret = proc_by_pass(res_vec, skip, bound, valid_cnt, true /* calc_valid_cnt */);
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to proc_by_pass", K(res_format), K(ret));
+  } else {
+    total_count_ += valid_cnt;
+    eval_flags.set_all(true);
+    // if msg not ready, add n_times_ and check ready every ROW_COUNT_CHECK_INTERVAL
+    if (!dynamic_disable()) {
+      n_rows_ += valid_cnt;
+      if ((++n_times_ > EVAL_TIME_CHECK_INTERVAL) || (n_rows_ > ROW_COUNT_CHECK_INTERVAL)) {
+        state_ = FilterState::CHECK_READY;
+      }
+    } else {
+      // if msg is ready but dynamic disable, collect_sample_info so it can be enabled later
+      (void)collect_sample_info(0, valid_cnt);
+      if (!dynamic_disable()) {
+        state_ = FilterState::ENABLE;
+      }
     }
   }
   return ret;
@@ -185,6 +273,17 @@ inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ct
   return ret;
 }
 
+// filter interface for eval_vector rows, for storage black filter
+inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ctx,
+                                               const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = topn_filter_msg_->filter_out_data_vector(expr, ctx, skip, bound, *this);
+  if (dynamic_disable()) {
+    state_ = FilterState::DYNAMIC_DISABLE;
+  }
+  return ret;
+}
+
 // get filter date from topn filter msg to enable storage white filter
 inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ctx,
                                                ObDynamicFilterExecutor &dynamic_filter,
@@ -195,6 +294,7 @@ inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ct
   int ret = OB_SUCCESS;
   if (OB_FAIL(topn_filter_msg_->prepare_storage_white_filter_data(dynamic_filter, ctx, params,
                                                                   is_data_prepared))) {
+    LOG_WARN("fail to prepare_storage_white_filter_data", K(ret));
   } else {
     if (topn_filter_msg_->is_null_first(dynamic_filter.get_col_idx())) {
       dynamic_filter.cmp_func_ =
@@ -223,12 +323,15 @@ int ObExprTopNFilterContext::check_filter_ready()
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
+        LOG_WARN("fail to get msg", K(ret));
       }
     } else {
       topn_filter_msg_ = static_cast<ObPushDownTopNFilterMsg *>(basic_msg);
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(basic_msg)) {
+    LOG_TRACE("[TopN Filter] succ get msg from P2PDH", K(topn_filter_key_), K(basic_msg),
+              K(total_count_));
   }
   // try check msg ready
   if (OB_SUCC(ret)) {
@@ -266,6 +369,7 @@ int ObExprTopNFilter::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_topn_filter;
   rt_expr.eval_batch_func_ = eval_topn_filter_batch;
+  rt_expr.eval_vector_func_ = eval_topn_filter_vector;
   return ret;
 }
 
@@ -310,6 +414,35 @@ int ObExprTopNFilter::eval_topn_filter_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
+int ObExprTopNFilter::eval_topn_filter_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                              const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ObExprTopNFilterContext *topn_filter_ctx = nullptr;
+  if (OB_ISNULL(topn_filter_ctx = static_cast<ObExprTopNFilterContext *>(
+                    ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
+    // topn filter ctx may be null in das.
+    int64_t valid_cnt = 0;
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    if (VEC_UNIFORM == res_format) {
+      IntegerUniVec *res_vec = static_cast<IntegerUniVec *>(expr.get_vector(ctx));
+      ret = proc_by_pass(res_vec, skip, bound, valid_cnt, false /* calc_valid_cnt */);
+    } else if (VEC_FIXED == res_format) {
+      IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
+      ret = proc_by_pass(res_vec, skip, bound, valid_cnt, false /* calc_valid_cnt */);
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to proc_by_pass for das", K(res_format), K(ret));
+    } else {
+      eval_flags.set_all(true);
+    }
+  } else {
+    ret = topn_filter_ctx->state_machine(expr, ctx, skip, bound);
+  }
+  return ret;
+}
+
 int ObExprTopNFilter::prepare_storage_white_filter_data(const ObExpr &expr,
                                                         ObDynamicFilterExecutor &dynamic_filter,
                                                         ObEvalCtx &eval_ctx,
@@ -347,8 +480,10 @@ int ObExprTopNFilter::update_storage_white_filter_data(const ObExpr &expr,
   if (OB_ISNULL(topn_filter_ctx)) {
     // in update stage, means prepare succ, topn_filter_ctx must not null
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("topn_filter_ctx must not null during update stage");
   } else if (OB_FAIL(topn_filter_ctx->topn_filter_msg_->update_storage_white_filter_data(
                  dynamic_filter, params, is_update))) {
+    LOG_WARN("Failed to update_storage_white_filter_data");
   }
   return ret;
 }

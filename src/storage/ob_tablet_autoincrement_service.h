@@ -20,19 +20,13 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/allocator/ob_small_allocator.h"
-#include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
+#include "share/ob_rpc_struct.h"
 
 namespace oceanbase
 {
 namespace share
 {
-namespace schema
-{
-class ObSimpleTableSchemaV2;
-}
-
 struct ObTabletCacheNode
 {
 public:
@@ -70,6 +64,8 @@ public:
   int fetch_interval(const ObTabletAutoincParam &param, ObTabletCacheInterval &interval);
   int fetch_interval_without_cache(const ObTabletAutoincParam &param, ObTabletCacheInterval &interval);
   void destroy() {}
+  int clear_cache_if_fallback_for_mlog(
+      const uint64_t current_value);
 
   TO_STRING_KV(K_(tablet_id),
                K_(next_value),
@@ -90,14 +86,14 @@ private:
   }
   bool is_retryable(int ret)
   {
-    return OB_NOT_MASTER == ret || OB_NOT_INIT == ret || OB_TIMEOUT == ret || OB_EAGAIN == ret || OB_LS_NOT_EXIST == ret || OB_SERVER_RUNTIME_NOT_READY == ret || OB_LS_LOCATION_NOT_EXIST == ret;
+    return OB_NOT_MASTER == ret || OB_NOT_INIT == ret || OB_TIMEOUT == ret || OB_EAGAIN == ret || OB_LS_NOT_EXIST == ret || OB_TENANT_NOT_IN_SERVER == ret || OB_LS_LOCATION_NOT_EXIST == ret;
   }
   bool is_block_renew_location(int ret)
   {
     return OB_LOCATION_LEADER_NOT_EXIST == ret || OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NO_READABLE_REPLICA == ret
       || OB_NOT_MASTER == ret || OB_RS_NOT_MASTER == ret || OB_RS_SHUTDOWN == ret || OB_PARTITION_NOT_EXIST == ret || OB_LOCATION_NOT_EXIST == ret
-      || OB_PARTITION_IS_STOPPED == ret || OB_SERVER_IS_INIT == ret || OB_SERVER_IS_STOPPING == ret || OB_SERVER_RUNTIME_NOT_READY == ret
-      || OB_TRANS_RPC_TIMEOUT == ret || OB_TRANS_STMT_NEED_RETRY == ret
+      || OB_PARTITION_IS_STOPPED == ret || OB_SERVER_IS_INIT == ret || OB_SERVER_IS_STOPPING == ret || OB_TENANT_NOT_IN_SERVER == ret
+      || OB_TRANS_RPC_TIMEOUT == ret || OB_USE_DUP_FOLLOW_AFTER_DML == ret || OB_TRANS_STMT_NEED_RETRY == ret
       || OB_LS_NOT_EXIST == ret || OB_TABLET_NOT_EXIST == ret || OB_LS_LOCATION_NOT_EXIST == ret || OB_PARTITION_IS_BLOCKED == ret || OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST == ret
       || OB_GET_LOCATION_TIME_OUT == ret;
   }
@@ -125,9 +121,23 @@ public:
   static void free_node(TabletAutoincNode* node) { op_reclaim_free(node); node = nullptr; }
 };
 
+class ObTabletAutoincCacheCleaner final
+{
+public:
+  static const int64_t DEFAULT_TIMEOUT_US = 1 * 1000 * 1000;
+  ObTabletAutoincCacheCleaner() : tablet_ids_() {}
+  ~ObTabletAutoincCacheCleaner() {}
+  int add_table(schema::ObSchemaGetterGuard &schema_guard, const schema::ObTableSchema &table_schema);
+  int add_single_table(const schema::ObSimpleTableSchemaV2 &table_schema);
+  int add_database(const schema::ObDatabaseSchema &database_schema);
+  int commit(const int64_t timeout_us = DEFAULT_TIMEOUT_US);
+  TO_STRING_KV(K_(tablet_ids));
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObTabletAutoincCacheCleaner);
+  ObArray<ObTabletID> tablet_ids_;
+};
+
 class ObTabletAutoincrementService
-    : public ObITabletAutoincrementService,
-      public ObITabletAutoincrementAdmin
 {
 public:
   static ObTabletAutoincrementService &get_instance();
@@ -137,40 +147,11 @@ public:
   void destroy();
   int get_tablet_cache_interval(ObTabletCacheInterval &interval);
   int get_autoinc_seq(const common::ObTabletID &tablet_id, uint64_t &autoinc_seq, const int64_t cache_size=ObTabletAutoincrementService::DEFAULT_CACHE_SIZE);
-  int next_value(
+  int get_autoinc_seq_for_mlog(const ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
-      uint64_t &value) override
-  {
-    return get_autoinc_seq(tablet_id, value);
-  }
-  int copy_sequences_for_fork(
-      const common::ObIArray<common::ObTabletID> &source_tablet_ids,
-      const common::ObIArray<common::ObTabletID> &destination_tablet_ids,
-      common::ObMySQLTransaction &trans) override;
-  int collect_table_cache_invalidation(
-      schema::ObSchemaGetterGuard &schema_guard,
-      const schema::ObTableSchema &table_schema,
-      common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
-  int collect_table_cache_invalidation(
-      schema::ObSchemaGuardWrapper &schema_guard,
-      const schema::ObTableSchema &table_schema,
-      common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
-  int collect_database_cache_invalidation(
-      const schema::ObDatabaseSchema &database_schema,
-      common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
-  int invalidate_caches(
-      const common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
-  int read_migration_sequences(
-      const common::ObIArray<ObTabletAutoincSeqCopyParam> &request_params,
-      common::ObIArray<ObTabletAutoincSeqCopyParam> &result_params) override;
-  int write_migration_sequences(
-      const common::ObIArray<ObTabletAutoincSeqCopyParam> &request_params,
-      common::ObIArray<ObTabletAutoincSeqCopyParam> &result_params) override;
+      uint64_t &autoinc_seq);
   int clear_tablet_autoinc_seq_cache(const common::ObIArray<common::ObTabletID> &tablet_ids, const int64_t abs_timeout_us);
 private:
-  int collect_single_table_cache_invalidation_(
-      const schema::ObSimpleTableSchemaV2 &table_schema,
-      common::ObIArray<common::ObTabletID> &cache_tablet_ids);
   int acquire_mgr(const common::ObTabletID &tablet_id, const int64_t init_cache_size, ObTabletAutoincMgr *&autoinc_mgr);
   void release_mgr(ObTabletAutoincMgr *autoinc_mgr);
 

@@ -19,8 +19,8 @@
 
 #include "lib/atomic/atomic128.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/log/palf/log_define.h"
-#include "share/log/palf/lsn.h"
+#include "log_define.h"
+#include "lsn.h"
 
 namespace oceanbase
 {
@@ -62,7 +62,8 @@ public:
   int check_log_buf_wrapped(const LSN &lsn, const int64_t log_len, bool &is_buf_wrapped) const;
   int64_t get_available_buffer_size() const;
   int64_t get_reserved_buffer_size() const;
-  int activate();
+  int to_leader();
+  int to_follower();
   // inc update readable_begin_lsn, used by append_disk_log().
   int inc_update_readable_begin_lsn(const LSN &new_lsn);
   // inc update reuse_lsn, used for flush log cb case.

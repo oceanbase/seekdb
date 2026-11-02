@@ -81,6 +81,7 @@ int ObShowDatabaseStatus::add_database_status(const ObAddr &server_addr,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scanner_.add_row(cur_row_))) {
+      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     }
   }
   return ret;
@@ -102,7 +103,8 @@ int ObShowDatabaseStatus::add_all_database_status()
     if (OB_ISNULL(schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "schema manager should not be null", K(ret));
-    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
+    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schema of tenant");
     } else {
       ObServer &server = ObServer::get_instance();
       const ObAddr server_ip = server.get_self();
@@ -115,6 +117,7 @@ int ObShowDatabaseStatus::add_all_database_status()
         } else if (database_schema->is_in_recyclebin() || database_schema->is_hidden()) {
           continue;
         } else if (OB_FAIL(add_database_status(server_ip, *database_schema, cells, col_count))) {
+          SERVER_LOG(WARN, "failed to add table constraint of database schema!", K(ret));
         }
       }
     }
@@ -134,6 +137,7 @@ int ObShowDatabaseStatus::inner_get_next_row(ObNewRow *&row)
   } else {
     if (!start_to_read_) {
       if (OB_FAIL(add_all_database_status())) {
+        SERVER_LOG(WARN, "failed to add all database status!", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;

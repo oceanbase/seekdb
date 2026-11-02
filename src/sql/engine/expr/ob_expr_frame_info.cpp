@@ -30,7 +30,8 @@ OB_SERIALIZE_MEMBER(ObFrameInfo,
                     frame_idx_,
                     frame_size_,
                     zero_init_pos_,
-                    zero_init_size_);
+                    zero_init_size_,
+                    use_rich_format_);
 
 int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
                             common::ObIAllocator &allocator)
@@ -39,17 +40,27 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
   need_ctx_cnt_ = other.need_ctx_cnt_;
 
   if (OB_FAIL(rt_exprs_.assign(other.rt_exprs_))) {
+    LOG_WARN("failed to copy rt exprs", K(ret));
   } else if (OB_FAIL(const_frame_.assign(other.const_frame_))) {
+    LOG_WARN("failed to copy const frame ptrs", K(ret));
   } else if (OB_FAIL(param_frame_.assign(other.param_frame_))) {
+    LOG_WARN("failed to copy param frames", K(ret));
   } else if (OB_FAIL(dynamic_frame_.assign(other.dynamic_frame_))) {
+    LOG_WARN("failed to copy dynamic frames", K(ret));
   } else if (OB_FAIL(datum_frame_.assign(other.datum_frame_))) {
+    LOG_WARN("failed to copy datum frame", K(ret));
   } else if (OB_FAIL(const_frame_ptrs_.prepare_allocate(other.const_frame_ptrs_.count()))) {
+    LOG_WARN("failed to prepare allocate array", K(ret));
   } else {
     char *frame_mem = NULL;
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    if (const_frame_.count() > 0 && const_frame_.at(0).use_rich_format_) {
+      item_size += sizeof(VectorHeader);
+    }
     for (int i = 0; OB_SUCC(ret) && i < other.const_frame_.count(); i++) {
       if (OB_ISNULL(frame_mem = (char *)allocator.alloc(other.const_frame_.at(i).frame_size_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         MEMCPY(frame_mem, other.const_frame_ptrs_.at(i), other.const_frame_.at(i).frame_size_);
         const_frame_ptrs_.at(i) = frame_mem;
@@ -71,8 +82,10 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
             void *extra_buf = NULL;
             if (0 == other_expr_datum->len_) {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("length is null and ptr not null", K(ret), K(*other_expr_datum));
             } else if (OB_ISNULL(extra_buf = allocator.alloc(other_expr_datum->len_))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to allocate memory", K(ret));
             } else {
               MEMCPY(extra_buf, other_expr_datum->ptr_, other_expr_datum->len_);
               expr_datum->ptr_ = static_cast<char *>(extra_buf);
@@ -83,6 +96,21 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
           }
       } // end for
     } // for end
+    // init const vector header
+    if (const_frame_.count() > 0 && const_frame_.at(0).use_rich_format_) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
+        ObExpr &expr = other.rt_exprs_.at(i);
+        if (IS_CONST_LITERAL(expr.type_)) {
+          char *frame = const_frame_ptrs_.at(expr.frame_idx_);
+          VecValueTypeClass vec_tc = expr.get_vec_value_tc();
+          ObDatum *datum = reinterpret_cast<ObDatum*>(frame + expr.datum_off_);
+          ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(frame + expr.eval_info_off_);
+          VectorHeader *vec_header = reinterpret_cast<VectorHeader *>(frame + expr.vector_header_off_);
+          ret = vec_header->init_uniform_const_vector(vec_tc, datum, eval_info);
+        }
+      }
+    }
+
     if (OB_SUCC(ret)) {
       // deep copy extra info & inner function ptrs
       for (int i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
@@ -92,6 +120,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
           } else if (OB_FAIL(other.rt_exprs_.at(i).extra_info_->deep_copy(allocator,
                                                                 other.rt_exprs_.at(i).type_,
                                                                 rt_exprs_.at(i).extra_info_))) {
+            LOG_WARN("failed to deep copy extra info", K(ret));
           }
         }
 
@@ -101,6 +130,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
           void *funcs_buf = NULL;
           if (OB_ISNULL(funcs_buf = allocator.alloc(sizeof(void *) * func_cnt))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("failed to allocate memory", K(ret));
           } else {
             MEMCPY(funcs_buf, other.rt_exprs_.at(i).inner_functions_, func_cnt * sizeof(void *));
             rt_exprs_.at(i).inner_functions_ = (void **)funcs_buf;
@@ -117,6 +147,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
         int64_t buf_size = rt_exprs_.at(i).arg_cnt_ * sizeof(ObExpr *);
         if (OB_ISNULL(arg_buf = (ObExpr **)allocator.alloc(buf_size))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret));
         } else {
           MEMSET(arg_buf, 0, buf_size);
           rt_exprs_.at(i).args_ = arg_buf;
@@ -129,6 +160,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
         int64_t buf_size = rt_exprs_.at(i).parent_cnt_ * sizeof(ObExpr *);
         if (OB_ISNULL(parent_buf = (ObExpr **)allocator.alloc(buf_size))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret));
         } else {
           MEMSET(parent_buf, 0, buf_size);
           rt_exprs_.at(i).parents_ = parent_buf;
@@ -172,6 +204,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
         } else if (OB_FAIL(other.rt_exprs_.at(i).extra_info_->deep_copy(allocator,
                                                               other.rt_exprs_.at(i).type_,
                                                               rt_exprs_.at(i).extra_info_))) {
+          LOG_WARN("failed to deep copy extra info", K(ret));
         }
       }
 
@@ -181,6 +214,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
         void *funcs_buf = NULL;
         if (OB_ISNULL(funcs_buf = allocator.alloc(sizeof(void *) * func_cnt))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret));
         } else {
           MEMCPY(funcs_buf, other.rt_exprs_.at(i).inner_functions_, func_cnt * sizeof(void *));
           rt_exprs_.at(i).inner_functions_ = (void **)funcs_buf;
@@ -200,10 +234,12 @@ int ObExprFrameInfo::pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator
   ObPhysicalPlanCtx *phy_ctx = NULL;
   if (NULL == (phy_ctx = exec_ctx.get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(phy_ctx), K(ret));
   } else if (OB_FAIL(alloc_frame(allocator != NULL ? *allocator : exec_ctx.get_allocator(),
                                  phy_ctx->get_param_frame_ptrs(),
                                  frame_cnt,
                                  frames))) {
+    LOG_WARN("fail to alloc frame", K(ret));
   } else {
     exec_ctx.set_frame_cnt(frame_cnt);
     exec_ctx.set_frames(frames);
@@ -243,6 +279,7 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
   } else if (NULL == (frames = static_cast<char **>(exec_allocator.alloc(
                                          frame_cnt * sizeof(char *))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc memory failed", K(ret), K(frame_cnt));
   } else {
     int64_t frame_idx = 0; //frame idx
     OB_ASSERT(const_frame_ptrs_.count() == const_frame_.count());
@@ -264,7 +301,10 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
     ALLOC_FRAME_MEM(dynamic_frame_);
     //for subquery core 
     // Preemptively set datum in frame to null
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    if (dynamic_frame_.count() > 0 && dynamic_frame_.at(0).use_rich_format_) {
+      item_size += sizeof(VectorHeader);
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_frame_.count(); ++i) {
       char *cur_frame = frames[begin_idx + i];
       for (int64_t j = 0; j < dynamic_frame_.at(i).expr_cnt_; ++j) {
@@ -286,6 +326,7 @@ int ObExprFrameInfo::get_expr_idx_in_frame(ObExpr *expr, int64_t &expr_idx) cons
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("frame info is null or expr is null", K(ret));
   } else {
     const ObIArray<ObExpr> *array = &rt_exprs_;
     int64_t idx = 0;
@@ -303,18 +344,22 @@ int ObExprFrameInfo::get_expr_idx_in_frame(ObExpr *expr, int64_t &expr_idx) cons
 OB_DEF_SERIALIZE(ObExprFrameInfo)
 {
   int ret = OB_SUCCESS;
+  LOG_TRACE("serialize expr frame info", KP(buf), K(buf_len), K(pos), K(*this));
   OB_UNIS_ENCODE(need_ctx_cnt_);
   ObIArray<ObExpr> *seri_arr_bak = ObExpr::get_serialize_array();
   ObExpr::get_serialize_array() = const_cast<ObArray<ObExpr> *>(&rt_exprs_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, rt_exprs_.count()))) {
+    LOG_WARN("fail to encode op type", K(ret));
   } else if (nullptr == ObExpr::get_serialize_array()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("serialize array is null", K(ret), K(pos), K(rt_exprs_.count()));
   } else {
     LOG_TRACE("get serialize array", K(ObExpr::get_serialize_array()), K(rt_exprs_.count()));
     for (int64_t i = 0; i < rt_exprs_.count() && OB_SUCC(ret); ++i) {
       const ObExpr &expr = rt_exprs_.at(i);
       if (OB_FAIL(expr.serialize(buf, buf_len, pos))) {
+        LOG_WARN("failed to serialize expr", K(ret), K(i), K(rt_exprs_.count()));
       }
     }
   }
@@ -339,11 +384,14 @@ OB_DEF_DESERIALIZE(ObExprFrameInfo)
   ObIArray<ObExpr> *seri_arr_bak = ObExpr::get_serialize_array();
   ObExpr::get_serialize_array() = &exprs;
   if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &expr_cnt))) {
+    LOG_WARN("fail to encode op type", K(ret));
   } else if (OB_FAIL(exprs.prepare_allocate(expr_cnt))) {
+    LOG_WARN("failed to prepare allocator expr", K(ret));
   } else {
     for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
       ObExpr &expr = exprs.at(i);
       if (OB_FAIL(expr.deserialize(buf, data_len, pos))) {
+        LOG_WARN("failed to serialize expr", K(ret));
       }
     }
   }
@@ -363,6 +411,20 @@ OB_DEF_DESERIALIZE(ObExprFrameInfo)
   OB_UNIS_DECODE(datum_frame_);
   OB_UNIS_DECODE(dynamic_frame_);
   ObExpr::get_serialize_array() = seri_arr_bak;
+  if (const_frame_.count() > 0 && const_frame_.at(0).use_rich_format_) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < rt_exprs_.count(); i++) {
+      ObExpr &expr = rt_exprs_.at(i);
+      if (IS_CONST_LITERAL(expr.type_)) {
+        char *frame = const_frame_ptrs_.at(expr.frame_idx_);
+        VecValueTypeClass vec_tc = expr.get_vec_value_tc();
+        ObDatum *datum = reinterpret_cast<ObDatum*>(frame + expr.datum_off_);
+        ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(frame + expr.eval_info_off_);
+        VectorHeader *vec_header = reinterpret_cast<VectorHeader *>(frame + expr.vector_header_off_);
+        ret = vec_header->init_uniform_const_vector(vec_tc, datum, eval_info);
+      }
+    }
+  }
+
   return ret;
 }
 
@@ -384,6 +446,7 @@ OB_DEF_SERIALIZE_SIZE(ObExprFrameInfo)
   OB_UNIS_ADD_LEN(const_frame_ptrs_.count());
   len += ObPxTreeSerializer::get_serialize_frame_info_size<true>(
          const_frame_, const_frame_ptrs_.get_data(), const_frame_ptrs_.count());
+  LOG_DEBUG("trace end get ser expr frame info size", K(ret), K(len));
 
   OB_UNIS_ADD_LEN(param_frame_);
   OB_UNIS_ADD_LEN(datum_frame_);
@@ -399,7 +462,9 @@ int ObPreCalcExprFrameInfo::assign(const ObPreCalcExprFrameInfo &other,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObExprFrameInfo::assign(other, allocator))) {
+    LOG_WARN("fail to assign expr frame info", K(ret), K(other));
   } else if (OB_FAIL(pre_calc_rt_exprs_.prepare_allocate(other.pre_calc_rt_exprs_.count()))) {
+    LOG_WARN("failed to prepare allocate rt exprs", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < other.pre_calc_rt_exprs_.count(); i++) {
     int64_t pos = other.pre_calc_rt_exprs_.at(i) - &(other.rt_exprs_.at(0));
@@ -423,8 +488,11 @@ int ObPreCalcExprFrameInfo::eval(ObExecContext &exec_ctx,
   if (pre_calc_rt_exprs_.empty()) {
     /* do nothing */
   } else if (OB_FAIL(pre_alloc_exec_memory(exec_ctx))) {
+    LOG_WARN("failed to pre alloc exec memory", K(ret));
   } else if (OB_FAIL(exec_ctx.init_expr_op(need_ctx_cnt_))) {
+    LOG_WARN("failed to init expr op ctx", K(ret));
   } else if (OB_FAIL(do_normal_eval(exec_ctx, res_datum_params))) {
+    LOG_WARN("do normal eval failed", K(ret));
   }
   // reset expr op anyway
   exec_ctx.reset_expr_op();
@@ -442,7 +510,9 @@ OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
   for (int64_t i = 0; OB_SUCC(ret) && i < pre_calc_rt_exprs_.count(); ++i) {
     if (OB_ISNULL(rt_expr = pre_calc_rt_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null rt exprs", K(ret));
     } else if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
+      LOG_WARN("failed to eval", K(ret));
     } else {
       datum_param.set_datum(*res_datum);
       datum_param.set_meta(rt_expr->datum_meta_);
@@ -450,6 +520,7 @@ OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
         datum_param.set_result_flag(HAS_LOB_HEADER_FLAG);
       }
       if (OB_FAIL(res_datum_params.push_back(datum_param))) {
+        LOG_WARN("failed to push back obj param", K(ret));
       }
     } // else end
   } // for end
@@ -470,8 +541,10 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
     ObExpr *rt_expr = NULL;
     if (OB_ISNULL(rt_expr = pre_calc_rt_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null rt exprs", K(ret));
     } else if (OB_ISNULL(datum_array = ObSqlDatumArray::alloc(exec_ctx.get_allocator(), group_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate array buffer failed", K(ret), K(group_cnt));
     } else {
       datum_array->element_.set_obj_type(rt_expr->datum_meta_.type_);
       datum_array->element_.set_collation_type(rt_expr->datum_meta_.cs_type_);
@@ -489,9 +562,11 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
       if (OB_FAIL(datum_param.alloc_datum_reserved_buff(datum_param.meta_, // is_ext_sql_array
                                                         PRECISION_UNKNOWN_YET, // precision is unknown
                                                         exec_ctx.get_allocator()))) {
+        LOG_WARN("alloc datum reserved buffer failed", K(ret));
       } else if (FALSE_IT(datum_param.set_sql_array_datum(datum_array))) {
         //always false, do nothing
       } else if (OB_FAIL(res_datum_params.push_back(datum_param))) {
+        LOG_WARN("failed to push back obj param", K(ret));
       }
     } // else end
   } // for end
@@ -499,6 +574,7 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
   for (int64_t group_id = 0; OB_SUCC(ret) && group_id < group_cnt; ++group_id) {
     if (OB_FAIL(exec_ctx.get_physical_plan_ctx()->replace_batch_param_datum(group_id, 0,
                               exec_ctx.get_physical_plan_ctx()->get_datum_param_store().count()))) {
+      LOG_WARN("replace batch param frame failed", K(ret));
     }
     //params of each group need to clear the datum evaluted flags before calc the pre_calc_expr
     //otherwise, the result of pre_calc_expr will be the result of the last group param
@@ -507,9 +583,12 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
       ObExpr *rt_expr = pre_calc_rt_exprs_.at(i);
       datum_array = res_datum_params.at(i).get_sql_datum_array();
       if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
+        LOG_WARN("failed to eval", K(ret));
       } else if (OB_FAIL(datum_array->data_[group_id].deep_copy(*res_datum,
                                                                 exec_ctx.get_allocator()))) {
+        LOG_WARN("deep copy datum failed", K(ret));
       } else {
+        LOG_DEBUG("do batch stmt eval", K(datum_array->data_[group_id]), KPC(res_datum), KPC(rt_expr));
       }
     }
   }
@@ -519,7 +598,12 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
 void ObPreCalcExprFrameInfo::clear_datum_evaluted_flags(char **frames)
 {
   int64_t datum_frame_idx = const_frame_ptrs_.count() + param_frame_.count() + dynamic_frame_.count();
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  int64_t item_size = 0;
+  if (datum_frame_.count() > 0 && datum_frame_.at(0).use_rich_format_) {
+    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+  } else {
+    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  }
   for (int64_t i = 0; i < datum_frame_.count(); ++i) {
     char *cur_frame = frames[datum_frame_idx + i];
     for (int64_t j = 0; j < datum_frame_.at(i).expr_cnt_; ++j) {
@@ -538,13 +622,16 @@ int ObPreCalcExprFrameInfo::eval_expect_err(ObExecContext &exec_ctx,
   if (pre_calc_rt_exprs_.empty()) {
     /* do nothing */
   } else if (OB_FAIL(pre_alloc_exec_memory(exec_ctx))) {
+    LOG_WARN("failed to pre alloc exec memory", K(ret));
   } else if (OB_FAIL(exec_ctx.init_expr_op(need_ctx_cnt_))) {
+    LOG_WARN("failed to init expr op ctx", K(ret));
   } else {
     ObEvalCtx eval_ctx(exec_ctx);
     ObDatum *res_datum = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && all_eval_err && i < pre_calc_rt_exprs_.count(); ++i) {
       if (OB_ISNULL(pre_calc_rt_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null rt exprs", K(ret));
       } else if (OB_LIKELY(OB_SUCCESS != pre_calc_rt_exprs_.at(i)->eval(eval_ctx, res_datum))) {
         // eval error is expected
       } else {
@@ -590,6 +677,7 @@ int ObTempExpr::eval(ObExecContext &exec_ctx, const ObNewRow &row, ObObj &result
     if (!exec_ctx.use_temp_expr_ctx_cache()) {
       temp_expr_ctx->~ObTempExprCtx();
     }
+    LOG_DEBUG("temp expr result", K(result), K(row), K(rt_exprs_));
   }
 
   return ret;
@@ -605,11 +693,13 @@ int ObTempExpr::row_to_frame(const ObNewRow &row, ObTempExprCtx &temp_expr_ctx) 
     ObDatum &expr_datum = expr.locate_datum_for_write(temp_expr_ctx);
     if (v.get_type() != expr.datum_meta_.type_ && !v.is_null()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("obj type miss match", K(ret), K(v), K(idx_col), K(row));
     } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
+      LOG_WARN("fail to from obj", K(v), K(idx_col), K(row), K(ret));
     } else if (is_lob_storage(v.get_type()) &&
-               OB_FAIL(ob_adjust_lob_datum(temp_expr_ctx.exec_ctx_, v,
-                                           expr.obj_meta_, expr.obj_datum_map_,
+               OB_FAIL(ob_adjust_lob_datum(v, expr.obj_meta_, expr.obj_datum_map_,
                                            temp_expr_ctx.exec_ctx_.get_allocator(), expr_datum))) {
+      LOG_WARN("adjust lob datum failed", K(ret), K(v.get_meta()), K(expr.obj_meta_));                                   
     }
   }
 
@@ -622,6 +712,7 @@ int ObTempExpr::deep_copy(ObIAllocator &allocator, ObTempExpr *&dst) const
   char *buf = static_cast<char *>(allocator.alloc(sizeof(ObTempExpr)));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc mem in temp expr deep copy", K(ret));
   }
   OX(dst = new(buf)ObTempExpr(allocator));
   OZ(dst->assign(*this, allocator));
@@ -635,3 +726,4 @@ OB_SERIALIZE_MEMBER(RowIdxColumnPair, idx_, expr_pos_);
 OB_SERIALIZE_MEMBER((ObTempExpr, ObExprFrameInfo), expr_idx_, idx_col_arr_);
 }
 }
+

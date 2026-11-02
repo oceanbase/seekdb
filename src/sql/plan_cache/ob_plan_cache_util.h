@@ -19,6 +19,7 @@
 
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
+#include "lib/hash/ob_hashmap.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/allocator/ob_allocator.h"
@@ -28,7 +29,7 @@
 #include "sql/ob_sql_define.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/parser/parse_node.h"
-#include "sql/plan_cache/ob_pre_calc_expr_handler.h"
+#include "sql/plan_cache/ob_pc_ref_handle.h"
 #include "sql/das/ob_das_define.h"
 #include "lib/utility/serialization.h"
 
@@ -57,7 +58,6 @@ struct ObILibCacheKey;
 class ObILibCacheNode;
 class ObPlanCacheKey;
 class ObPlanCacheCtx;
-class DASRelatedTabletMap;
 
 typedef uint64_t ObCacheObjID;
 
@@ -128,6 +128,7 @@ struct ObSysVarInPC
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < system_variables_.count(); i ++) {
       if OB_FAIL(obj.deep_copy(system_variables_.at(i), buf_, buf_size_, pos)) {
+        SQL_PC_LOG(WARN, "fail to deep copy obj", K(buf_size_), K(pos), K(ret));
       } else {
         system_variables_.at(i) = obj;
       }
@@ -146,7 +147,9 @@ struct ObSysVarInPC
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < other.system_variables_.count(); i ++) {
       if (OB_FAIL(obj.deep_copy(other.system_variables_.at(i), buf_, buf_size_, pos))) {
+        SQL_PC_LOG(WARN, "fail to deep copy obj", K(buf_size_), K(pos), K(ret));
       } else if (OB_FAIL(system_variables_.push_back(obj))) {
+        SQL_PC_LOG(WARN, "fail to push sys value", K(ret));
       }
     }
     return ret;
@@ -195,6 +198,7 @@ struct ObSysVarInPC
     for (int32_t i = 0; OB_SUCC(ret) && i < sys_var_cnt; ++i) {
       size = 0;
       if (OB_FAIL(system_variables_.at(i).print_plain_str_literal(buf + pos, buf_len - pos, size))) {
+        SQL_PC_LOG(WARN, "fail to encode obj", K(i), K(buf + pos), K(buf_len), K(pos), K(system_variables_.at(i)), K(ret));
       } else {
         pos += size;
         if (i != sys_var_cnt - 1) { // output separator
@@ -225,7 +229,7 @@ struct ObSysVarInPC
 
 struct ObPCMemPctConf
 {
-  int64_t limit_pct_; // Percentage of runtime memory available to the plan cache.
+  int64_t limit_pct_; // plan cache usable tenant memory percentage
   int64_t high_pct_;  // eviction high water mark percentage of plan cache memory limit
   int64_t low_pct_; // eviction low water level percentage of plan cache memory upper limit
 
@@ -243,6 +247,12 @@ enum ParamProperty
   NOT_PARAM,
   NEG_PARAM,
   TRANS_NEG_PARAM,
+};
+
+enum AsynUpdateBaselineStat {
+  ASYN_NOTHING = 0,
+  ASYN_REPLACE,
+  ASYN_INSERT
 };
 
 struct ObPCParam
@@ -305,6 +315,25 @@ struct ObPCParamEqualInfo
   }
 };
 
+struct ObDupTabConstraint
+{
+  uint64_t first_;
+  uint64_t second_;
+  TO_STRING_KV(K_(first), K_(second));
+  ObDupTabConstraint()
+    : first_(common::OB_INVALID_ID),
+      second_(common::OB_INVALID_ID)
+  {}
+  ObDupTabConstraint(int64_t first, int64_t second)
+    : first_(first),
+      second_(second)
+  {}
+  inline bool operator==(const ObDupTabConstraint &other) const
+  {
+    return first_ == other.first_ && second_ == other.second_;
+  }
+};
+
 struct ObPCPrivInfo
 {
   share::ObRawPriv sys_priv_;
@@ -340,7 +369,7 @@ struct ObOperatorStat
   //int64_t last_input_rows_; //last input rows
   //int64_t last_rescan_times_; //rescan times
   //int64_t last_output_rows_; //output rows in last execution
-  // Temporarily not supporting the following statistics items.
+  // Temporarily not supporting the following statistics items compatible with oracle
   //int64_t last_cr_buffer_gets_; //last logical read execution count
   //int64_t cr_buffer_gets_; //cumulative logical read count
   //int64_t last_disk_reads_; //last physical read count
@@ -462,6 +491,19 @@ struct ObTableRowCount
   OB_UNIS_VERSION(1);
 };
 
+struct AdaptivePCConf
+{
+  AdaptivePCConf() :
+    enable_adaptive_plan_cache_(false), pc_adaptive_min_exec_time_threshold_(0),
+    pc_adaptive_effectiveness_ratio_threshold_(0)
+  {}
+  TO_STRING_KV(K_(enable_adaptive_plan_cache), K_(pc_adaptive_min_exec_time_threshold),
+               K_(pc_adaptive_effectiveness_ratio_threshold));
+  bool enable_adaptive_plan_cache_;
+  int64_t pc_adaptive_min_exec_time_threshold_;
+  int64_t pc_adaptive_effectiveness_ratio_threshold_;
+};
+
 struct ObVecIndexExecCtx {
   ObVecIndexExecCtx()
     : cur_path_(0),
@@ -492,6 +534,31 @@ enum ObPlanExpiredStat  {
 
 struct ObPlanStat
 {
+  enum PlanStatus
+  {
+    ACTIVE = 0,
+    INACTIVE = 1
+  };
+  struct AdaptivePCInfo
+  {
+    AdaptivePCInfo()
+      : positive_feedback_times_(0),
+        negative_feedback_times_(0),
+        status_(PlanStatus::ACTIVE)
+    {}
+    TO_STRING_KV(K_(positive_feedback_times),
+                 K_(negative_feedback_times),
+                 K_(status));
+    uint32_t positive_feedback_times_; // Continuous positive feedback times
+    uint32_t negative_feedback_times_; // Continuous negative feedback times
+    PlanStatus status_;
+  };
+  static const int64_t DEFAULT_ADDR_NODE_NUM = 16;
+  typedef common::hash::ObHashMap<ObAddr, int64_t,
+        common::hash::LatchReadWriteDefendMode, common::hash::hash_func<ObAddr>,
+        common::hash::equal_to<ObAddr>,
+        common::hash::SimpleAllocer<typename common::hash::HashMapTypes<ObAddr, int64_t>::AllocType,
+                                    DEFAULT_ADDR_NODE_NUM>> AddrMap;
   static const int32_t STMT_MAX_LEN = 4096;
   static const int32_t MAX_SCAN_STAT_SIZE = 100;
   static const int64_t CACHE_POLICY_UPDATE_INTERVAL = 60 * 1000 * 1000; // 1 min
@@ -527,6 +594,8 @@ struct ObPlanStat
   int64_t elapsed_time_;          // execution time rt
   int64_t total_process_time_;    // Total process time
   int64_t cpu_time_;              // CPU time, which can currently be obtained by subtracting the total wait time of all wait events from the execution time
+  int64_t large_querys_;     // Number of times judged as large queries
+  int64_t delayed_large_querys_;
   int64_t delayed_px_querys_;    // px query retries after being put back in the queue
   int64_t expected_worker_count_;  // px expected worker count
   int64_t minimal_worker_count_;  // minimal threads required for query
@@ -539,11 +608,13 @@ struct ObPlanStat
   common::ObString config_str_;
   common::ObString raw_sql_; // record the original sql when generating plan
   common::ObCollationType sql_cs_type_;
-  // SQL identity retained with the cached plan for diagnostics and outline matching.
+  //******** for spm ******
+  // Is this plan currently evolving
   uint64_t  db_id_;
   common::ObString constructed_sql_;
   common::ObString sql_id_;
   common::ObString format_sql_id_;
+  //******** for spm end ******
   // ***** for acs
   bool is_bind_sensitive_;
   bool is_bind_aware_;
@@ -592,12 +663,15 @@ struct ObPlanStat
 
   // following fields will be used for plan set memory management
   PreCalcExprHandler* pre_cal_expr_handler_; //the handler that pre-calculable expression holds
+  AddrMap expected_worker_map_; // px global expected number of allocated threads
+  AddrMap minimal_worker_map_;  // global minial threads required for query
   uint64_t plan_hash_value_;
   common::ObString outline_data_;
   common::ObString hints_info_;
   bool hints_all_worked_;
   bool is_inner_;
   bool is_use_auto_dop_;
+  AdaptivePCInfo adaptive_pc_info_;
   ObVecIndexExecCtx vec_index_exec_ctx_;
 
 
@@ -624,6 +698,8 @@ struct ObPlanStat
       elapsed_time_(0),
       total_process_time_(0),
       cpu_time_(0),
+      large_querys_(0),
+      delayed_large_querys_(0),
       delayed_px_querys_(0),
       expected_worker_count_(-1),
       minimal_worker_count_(-1),
@@ -671,6 +747,7 @@ struct ObPlanStat
       hints_all_worked_(true),
       is_inner_(false),
       is_use_auto_dop_(false),
+      adaptive_pc_info_(),
       vec_index_exec_ctx_()
 {
   exact_mode_sql_id_[0] = '\0';
@@ -700,6 +777,8 @@ struct ObPlanStat
       elapsed_time_(rhs.elapsed_time_),
       total_process_time_(rhs.total_process_time_),
       cpu_time_(rhs.cpu_time_),
+      large_querys_(rhs.large_querys_),
+      delayed_large_querys_(rhs.delayed_large_querys_),
       delayed_px_querys_(rhs.delayed_px_querys_),
       expected_worker_count_(rhs.expected_worker_count_),
       minimal_worker_count_(rhs.minimal_worker_count_),
@@ -744,6 +823,7 @@ struct ObPlanStat
       hints_all_worked_(rhs.hints_all_worked_),
       is_inner_(rhs.is_inner_),
       is_use_auto_dop_(rhs.is_use_auto_dop_),
+      adaptive_pc_info_(rhs.adaptive_pc_info_),
       vec_index_exec_ctx_(rhs.vec_index_exec_ctx_)
   {
     exact_mode_sql_id_[0] = '\0';
@@ -797,6 +877,7 @@ struct ObPlanStat
       ATOMIC_AAF(&fuse_row_cache_miss_cnt_, stat.fuse_row_cache_miss_cnt_);
       ATOMIC_AAF(&row_cache_hit_cnt_, stat.row_cache_hit_cnt_);
       ATOMIC_AAF(&row_cache_miss_cnt_, stat.row_cache_miss_cnt_);
+      SQL_PC_LOG(DEBUG, "[ROW_CACHE_ADJUST] update cache stat", K(plan_id_), K(update_times), K(fuse_row_cache_hit_cnt_), K(fuse_row_cache_miss_cnt_), K(row_cache_hit_cnt_), K(row_cache_miss_cnt_));
       if (0 == (update_times & CACHE_POLICY_UDPATE_THRESHOLD)) {
         if (bf_access_cnt_ > CACHE_ACCESS_THRESHOLD) {
           if (static_cast<double>(bf_filter_cnt_) / static_cast<double>(bf_access_cnt_)
@@ -826,6 +907,11 @@ struct ObPlanStat
             enable_fuse_row_cache_ = true;
           }
         }
+        SQL_PC_LOG(DEBUG, "[ROW_CACHE_ADJUST] update cache policy", K(sql_id_), K(exact_mode_sql_id_),
+            K(enable_bf_cache_), K(enable_row_cache_), K(enable_fuse_row_cache_),
+            K(bf_filter_cnt_), K(bf_access_cnt_), K(in_row_cache_threshold_),
+            K(row_cache_hit_cnt_), K(row_cache_access_cnt),
+            K(fuse_row_cache_hit_cnt_), K(fuse_row_cache_access_cnt));
         row_cache_hit_cnt_ = 0;
         row_cache_miss_cnt_ = 0;
         bf_access_cnt_ = 0;
@@ -865,6 +951,8 @@ struct ObPlanStat
                K_(rows_processed),
                K_(elapsed_time),
                K_(cpu_time),
+               K_(large_querys),
+               K_(delayed_large_querys),
                K_(outline_version),
                K_(outline_id),
                K_(is_last_exec_succ),
@@ -922,9 +1010,19 @@ struct ObPhyLocationGetter
 {
 public:
   // used for getting plan
+  // In this interface, we will first verify whether all tables were marked select_leader.
+  // If confirmed, the fast path will be activated to directly select leader replicas for each table
+  // and add them to das ctx, without the need to construct candi table locs. 
+  // Otherwise, fallback to the original path and add candi table locs to das ctx manually.
   static int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
                                const ObPlanCacheCtx &pc_ctx,
                                ObIArray<ObCandiTableLoc> &phy_location_infos);
+  
+  // used for matching plan
+  static int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+                               const ObPlanCacheCtx &pc_ctx,
+                               ObIArray<ObCandiTableLoc> &candi_table_locs,
+                               bool &need_check_on_same_server);
 
   // used for adding plan
   static int get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
@@ -938,6 +1036,9 @@ public:
                                        ObExecContext &exec_ctx,
                                        DASRelatedTabletMap *&related_map);
 
+  // used for replica re-select optimization for duplicate table
+  static int reselect_duplicate_table_best_replica(const ObIArray<ObCandiTableLoc> &phy_locations,
+                                                   bool &on_same_server);
 };
 
 /**
@@ -967,46 +1068,51 @@ public:
 
   ObConfigInfoInPC()
   : pushdown_storage_level_(DEFAULT_PUSHDOWN_STORAGE_LEVEL),
+    rowsets_enabled_(false),
     enable_px_batch_rescan_(true),
     bloom_filter_enabled_(true),
     enable_newsort_(true),
     px_join_skew_handling_(true),
     is_strict_defensive_check_(true),
     px_join_skew_minfreq_(30),
+    min_cluster_version_(0),
     enable_spf_batch_rescan_(false),
     enable_distributed_das_scan_(false),
     enable_das_batch_rescan_flag_(0),
     enable_var_assign_use_das_(false),
     enable_das_keep_order_(false),
+    enable_nlj_spf_use_rich_format_(false),
     enable_index_merge_(false),
     bloom_filter_ratio_(0),
     realistic_runtime_bloom_filter_size_(false),
     enable_parallel_das_dml_(false),
+    direct_load_allow_fallback_(false),
+    default_load_mode_(0),
     hash_rollup_policy_(0),
     ndv_runtime_bloom_filter_size_(false),
     enable_topn_runtime_filter_(false),
     enable_px_task_rebalance_(false),
     min_const_integer_precision_(1),
     cluster_config_version_(-1),
-    runtime_config_version_(-1)
+    tenant_config_version_(-1)
   {
   }
-  // Initialize the runtime-local cache state.
+  // init tenant_
   void init() {}
   // load configs which will influence execution plan
   int load_influence_plan_config();
   // generate config string
   int serialize_configs(char *buf, int buf_len, int64_t &pos);
   // whether configs has been changed
-  bool is_out_of_date(int64_t cluster_config, int64_t runtime_config)
+  bool is_out_of_date(int64_t cluster_config, int64_t tenant_config)
   {
     return !(cluster_config==cluster_config_version_ &&
-              runtime_config==runtime_config_version_);
+              tenant_config==tenant_config_version_);
   }
-  void update_version(int64_t cluster_config, int64_t runtime_config)
+  void update_version(int64_t cluster_config, int64_t tenant_config)
   {
     cluster_config_version_ = cluster_config;
-    runtime_config_version_ = runtime_config;
+    tenant_config_version_ = tenant_config;
   }
 private:
   int get_all_influence_plan_config();
@@ -1017,6 +1123,7 @@ public:
   // here to add config values
   //
   int pushdown_storage_level_;
+  bool rowsets_enabled_;
   bool enable_px_batch_rescan_;
   bool enable_px_ordered_coord_;
   bool bloom_filter_enabled_;
@@ -1024,15 +1131,19 @@ public:
   bool px_join_skew_handling_;
   bool is_strict_defensive_check_;
   int8_t px_join_skew_minfreq_;
+  uint64_t min_cluster_version_;
   bool enable_spf_batch_rescan_;
   bool enable_distributed_das_scan_;
   int64_t enable_das_batch_rescan_flag_;
   bool enable_var_assign_use_das_;
   bool enable_das_keep_order_;
+  bool enable_nlj_spf_use_rich_format_;
   bool enable_index_merge_;
   int bloom_filter_ratio_;
   bool realistic_runtime_bloom_filter_size_;
   bool enable_parallel_das_dml_;
+  bool direct_load_allow_fallback_;
+  int default_load_mode_;
   int hash_rollup_policy_;
   bool ndv_runtime_bloom_filter_size_;
   bool enable_topn_runtime_filter_;
@@ -1042,11 +1153,12 @@ public:
 private:
   // current cluster config version_
   int64_t cluster_config_version_;
-  // Current runtime configuration version.
-  int64_t runtime_config_version_;
-
+  // current tenant config version_
+  int64_t tenant_config_version_;
+  
 };
 
+extern const char* plan_cache_gc_confs[3];
 }
 }
 #endif //_OB_PLAN_CACHE_UTIL_H_

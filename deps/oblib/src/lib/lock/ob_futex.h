@@ -1,0 +1,136 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_FUTEX_H
+#define OB_FUTEX_H
+
+#include <atomic>
+#include "lib/ob_errno.h"
+#include "lib/list/ob_dlist.h"
+#ifdef __linux__
+#include <linux/futex.h>
+#endif
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#include <errno.h>
+#endif
+#include "lib/ob_abort.h"
+
+#ifdef __linux__
+#include <sys/syscall.h>
+inline int futex(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
+{
+  return (int)syscall(SYS_futex, uaddr, futex_op, val, timeout, nullptr, 0u);
+}
+#else
+extern "C" {
+extern int futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout);
+}
+#define futex(...) futex_hook(__VA_ARGS__)
+#endif
+
+#ifdef __linux__
+inline int futex_wake(volatile int *p, int val)
+{
+  return futex((uint32_t *)p, FUTEX_WAKE_PRIVATE, val, NULL);
+}
+
+inline int futex_wait(volatile int *p, int val, const timespec *timeout)
+{
+  int ret = 0;
+  if (0 != futex((uint32_t *)p, FUTEX_WAIT_PRIVATE, val, timeout)) {
+    ret = errno;
+  }
+  return ret;
+}
+#elif defined(__APPLE__)
+// macOS implementation using ulock (Darwin's native futex-like mechanism)
+extern int futex_wake(volatile int *p, int val);
+extern int futex_wait(volatile int *p, int val, const timespec *timeout);
+#elif defined(_WIN32)
+// Windows implementation using WaitOnAddress/WakeByAddressSingle (Windows 8+)
+inline int futex_wake(volatile int *p, int val)
+{
+  if (val == 1) {
+    WakeByAddressSingle((PVOID)p);
+    // WakeByAddressSingle doesn't report whether anyone was actually woken.
+    // Return 1 (optimistic) to match Linux futex(FUTEX_WAKE) semantics where
+    // the return value is the number of waiters woken. ObLatchWaitQueue::wake_up
+    // relies on this to stop its retry loop after successfully signaling a waiter.
+    // Returning 0 causes the loop to wake ALL waiters (thundering herd).
+    return 1;
+  } else {
+    WakeByAddressAll((PVOID)p);
+    return val;
+  }
+}
+
+inline int futex_wait(volatile int *p, int val, const timespec *timeout)
+{
+  DWORD milliseconds = INFINITE;
+  if (timeout) {
+    milliseconds = static_cast<DWORD>(timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000);
+  }
+  
+  int compare_value = val;
+  if (!WaitOnAddress((volatile VOID*)p, &compare_value, sizeof(int), milliseconds)) {
+    DWORD error = GetLastError();
+    if (error == ERROR_TIMEOUT) {
+      return ETIMEDOUT;
+    }
+    return error;
+  }
+  return 0;
+}
+#endif
+
+namespace oceanbase {
+namespace lib {
+class ObFutex
+{
+public:
+  ObFutex()
+      : v_(),
+        sys_waiters_()
+  {}
+
+  int32_t &val() { return v_; }
+  uint32_t &uval() { return reinterpret_cast<uint32_t&>(v_); }
+
+  // This function atomically verifies v_ still equals to argument v,
+  // and sleeps awaiting wake call on this futex. If the timeout
+  // argument is positive, it contains the maximum duration described
+  // in milliseconds of the wait, which is infinite otherwise.
+  int wait(int v, int64_t timeout);
+  // This function wakes at most n, which is in argument list,
+  // routines up waiting on the futex.
+  int wake(int64_t n);
+
+public:
+
+private:
+  int v_;
+  int sys_waiters_;
+} CACHE_ALIGNED;
+
+}  // lib
+}  // oceanbase
+
+
+#endif /* OB_FUTEX_H */

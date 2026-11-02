@@ -53,12 +53,22 @@ public:
 public:
   /* -------------- interfaces without cache ---------------*/
 
+  // 1. won't cache tablegroup_id by name.
+  //
+  // @param[in]:
+  // - tablegroup_name : string comparsion is case sensitive in mysql/oracle tenant.
+  // @param[out]:
+  // - tablegroup_id : OB_INVALID_ID means tablegroup not exist
+  int get_tablegroup_id(const ObString &tablegroup_name,
+                        uint64_t &tablegroup_id);
+
   // 1. won't cache database_id by name.
   //
   // @param[in]:
   // - datasbase_name:
-  // 1) If database name is "oceanbase", string comparison is case insensitive.
-  // 2) Otherwise comparison follows the runtime name-case mode.
+  // 1) If database name is "oceanbase", string comparsion is case insensitive.
+  // 2) string comparsion is case sensitive in oracle tenant.
+  // 3) string comparsion is case insensitive in mysql tenant.
   // @param[out]:
   // - database_id: OB_INVALID_ID means databse not exist
   int get_database_id(
@@ -76,7 +86,7 @@ public:
   // - 3.1. if session_id > 0, match table with specified session_id. (mysql tmp table or ctas table)
   // - 3.2. match table with session_id = 0.
   // - 3.3. if table name is inner table name (comparsion insensitive), match related inner table.
-  // - 3.4. string comparison follows the runtime name-case mode.
+  // - 3.4. string comparsion is case sensitive in oracle tenant and is case insensitive in mysql tenant.
   //
   // 4. mock parent table is not visible in this interface.
   //
@@ -101,7 +111,7 @@ public:
   // check if table is a mock parent table
   // 1. table name comparsion is case sensitive.
   // 2. won't cache mock_fk_parent_table_id by name.
-  // 3. TODO(yanmu.ztl): This may be slow with many mock parent tables.
+  // 3. TODO(yanmu.ztl): May has poor performance when tenant has many mock parent tables
   //                     because related table is lack of index on name.
   // @param[in]:
   // - database_id
@@ -113,7 +123,9 @@ public:
       const ObString &table_name,
       uint64_t &mock_fk_parent_table_id);
 
-  // 1. constraint name comparison is case insensitive.
+  // 1. constraint name comparsion:
+  // - case sensitive: oracle
+  // - case insensitive: mysql
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -125,7 +137,9 @@ public:
                         const ObString &constraint_name,
                         uint64_t &constraint_id);
 
-  // 1. foreign key name comparison is case insensitive.
+  // 1. foreign key name comparsion:
+  // - case sensitive: oracle
+  // - case insensitive: mysql
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -137,21 +151,41 @@ public:
                          const ObString &foreign_key_name,
                          uint64_t &foreign_key_id);
 
-  // 1. package name comparison is case insensitive.
+  // 1. sequence name comparsion: case sensitive
+  // 2. won't cache id by name.
+  //
+  // @param[in]:
+  // - database_id
+  // - sequence_name
+  // @param[out]:
+  // - is_system_generated : true means it's a inner sequence object
+  // - sequence_id : OB_INVALID_ID means constraint not exist
+  int get_sequence_id(const uint64_t database_id,
+                      const ObString &sequence_name,
+                      uint64_t &sequence_id,
+                      bool &is_system_generated);
+
+  // 1. package name comparsion:
+  // - case sensitive: oracle
+  // - case insensitive: mysql
   // 2. won't cache id by name.
   //
   // @param[in]:
   // - database_id
   // - package_name
   // - package_type
+  // - compatible_mode
   // @param[out]:
   // - package_id : OB_INVALID_ID means package not exist
   int get_package_id(const uint64_t database_id,
                      const ObString &package_name,
                      const ObPackageType package_type,
+                     const int64_t compatible_mode,
                      uint64_t &package_id);
 
-  // 1. routine name comparison is case insensitive.
+  // 1. routine name comparsion:
+  // - case sensitive: oracle
+  // - case insensitive: mysql
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -168,7 +202,9 @@ public:
       const ObString &routine_name,
       common::ObIArray<std::pair<uint64_t, share::schema::ObRoutineType>> &routine_pairs);
 
-  // 1. udt name comparison is case insensitive.
+  // 1. udt name comparsion:
+  // - case sensitive: oracle
+  // - case insensitive: mysql
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -181,7 +217,37 @@ public:
 
   // 1. won't cache
   //
+  // https://docs.oracle.com/cd/E18283_01/server.112/e17118/sql_elements008.htm
   // Within a namespace, no two objects can have the same name.
+  // In oracle mode, the following schema objects share one namespace:
+  // Tables(create, rename, flashback)
+  // Views(create, create or replace, rename, flashback)
+  // Sequences(create, rename)
+  // Private synonyms(create, create or replace, rename)
+  // Stand-alone procedures(create, create or replace)
+  // Stand-alone stored functions(create, create or replace)
+  // Packages(create, create or replace)
+  // Materialized views (OB oracle mode is not supported now)
+  // User-defined types(create, create or replace)
+
+  // This function is used to check object name is duplicate in other different schemas in oracle mode.
+  // This function should be as a supplement to the original oracle detection logic of duplicate object name.
+  // @param [in] database_id
+  // @param [in] session_id : for temporary table
+  // @param [in] object_name
+  // @param [in] schema_type : schema type of object to be checked
+  // @param [in] routine_type : If schema_type is ROUTINE_SCHEMA, routine_type is used to
+  //                            distinguish whether object is procedure or function.
+  // @param [in] is_or_replace : distinguish whether create schema with create_or_replace option
+  //
+  // @return : return OB_ERR_EXIST_OBJECT when object name conflicts
+  int check_oracle_object_exist(
+      const uint64_t database_id,
+      const uint64_t session_id,
+      const ObString &object_name,
+      const ObSchemaType &schema_type,
+      const ObRoutineType &routine_type,
+      const bool is_or_replace);
 
   // get index info by index name, database_id, data_table_id in mysql mode
   // index name should be encoded and will be compared with CS_TYPE_UTF8MB4_GENERAL_CI (case insensitive)
@@ -221,6 +287,19 @@ public:
                     const ObObjectType obj_type,
                     common::ObIArray<ObObjPriv> &obj_privs);
 
+int get_table_schemas_in_tablegroup(
+    const uint64_t tablegroup_id,
+    common::ObIArray<const ObTableSchema *> &table_schemas);
+
+int check_database_exists_in_tablegroup(
+    const uint64_t tablegroup_id,
+    bool &exists);
+
+int get_table_id_and_table_name_in_tablegroup(
+    const uint64_t tablegroup_id,
+    common::ObIArray<ObString> &table_names,
+    common::ObIArray<uint64_t> &table_ids);
+
   /* -------------- interfaces without cache end ---------------*/
 
   /* -------------- interfaces with cache ---------------*/
@@ -243,6 +322,15 @@ public:
       const uint64_t mock_fk_parent_table_id,
       const ObMockFKParentTableSchema *&mock_fk_parent_table_schema);
 
+  // 1. will cache tablegroup schema in guard
+  // @param[in]:
+  // - tablegroup_id
+  // @param[out]:
+  // - tablegroup_schema: return NULL if tablegroup not exist
+  int get_tablegroup_schema(
+      const uint64_t tablegroup_id,
+      const ObTablegroupSchema *&tablegroup_schema);
+
   // 1. will cache database schema in guard
   // @param[in]:
   // - database_id
@@ -251,6 +339,14 @@ public:
   int get_database_schema(
       const uint64_t database_id,
       const ObDatabaseSchema *&database_schema);
+
+  // 1. will cache tenant schema in guard
+  // @param[in]:
+  // - tenant
+  // @param[out]:
+  // - tenant_schema: return NULL if tenant not exist
+  int get_tenant_schema(
+      const ObTenantSchema *&tenant_schema);
 
   // 1. will cache udt schema in guard
   // @param[in]:
@@ -264,6 +360,14 @@ public:
   // - trigger_schema: return NULL if trigger not exist
   int get_trigger_info(const uint64_t trigger_id,
                        const ObTriggerInfo *&trigger_info);
+  // 1. will cache sequence schema in guard
+  // @param[in]:
+  // - sequence_id
+  // @param[out]:
+  // - sequence_schema: return NULL if sequence not exist
+  int get_sequence_schema(const uint64_t sequence_id,
+                          const ObSequenceSchema *&sequence_schema);
+
   int get_sys_variable_schema(const ObSysVariableSchema *&sys_variable_schema);
 
   /* -------------- interfaces with cache end ---------------*/
@@ -272,6 +376,13 @@ private:
   int check_and_get_service_(
       ObSchemaService *&schema_service_impl,
       common::ObISQLClient *&sql_client);
+  int get_tablegroup_schema_(
+      common::ObISQLClient &sql_client,
+      const uint64_t tablegroup_id,
+      const ObTablegroupSchema *&tablegroup_schema);
+
+  // For TENANT_SCHEMA, tenant should be sys tenant;
+  // For SYS_VARIABLE_SCHEMA, tenant should be equal with schema_id;
   template<typename T>
   int get_schema_(
       const ObSchemaType schema_type,

@@ -18,7 +18,7 @@
 
 
 #include "ob_i_tablet_memtable.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/tablet/ob_tablet_memtable_mgr.h"
 
@@ -30,10 +30,12 @@ namespace storage {
 int ObITabletMemtable::inc_unsubmitted_cnt()
 {
   int ret = OB_SUCCESS;
+  const share::ObLSID ls_id = get_ls_id();
   int64_t unsubmitted_cnt = inc_unsubmitted_cnt_();
-  TRANS_LOG(DEBUG, "inc_unsubmitted_cnt", KPC(this), K(lbt()));
+  TRANS_LOG(DEBUG, "inc_unsubmitted_cnt", K(ls_id), KPC(this), K(lbt()));
 
   if (OB_FAIL(get_unset_active_memtable_logging_blocked())) {
+    TRANS_LOG(WARN, "cannot inc unsubmitted_cnt", K(unsubmitted_cnt), K(ls_id), KPC(this));
   }
 
   return ret;
@@ -42,6 +44,7 @@ int ObITabletMemtable::inc_unsubmitted_cnt()
 int ObITabletMemtable::dec_unsubmitted_cnt()
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
 
   // fix issue 47021079
   // To avoid the following case where logging_block cannot be unset:
@@ -62,15 +65,15 @@ int ObITabletMemtable::dec_unsubmitted_cnt()
   bool is_frozen = is_frozen_memtable();
   int64_t write_ref_cnt = get_write_ref();
   int64_t new_unsubmitted_cnt = get_unsubmitted_cnt();
-  TRANS_LOG(DEBUG, "dec_unsubmitted_cnt", KPC(this), K(lbt()));
+  TRANS_LOG(DEBUG, "dec_unsubmitted_cnt", K(ls_id), KPC(this), K(lbt()));
 
   if (OB_UNLIKELY(old_unsubmitted_cnt < 0)) {
-    TRANS_LOG(ERROR, "unsubmitted_cnt not match", K(ret), KPC(this));
+    TRANS_LOG(ERROR, "unsubmitted_cnt not match", K(ret), K(ls_id), KPC(this));
   } else if (is_frozen &&
              0 == write_ref_cnt &&
              0 == new_unsubmitted_cnt) {
     (void)unset_logging_blocked_for_active_memtable_();
-    TRANS_LOG(INFO, "memtable log submitted", K(ret), KPC(this));
+    TRANS_LOG(INFO, "memtable log submitted", K(ret), K(ls_id), KPC(this));
   }
 
   return ret;
@@ -85,7 +88,7 @@ void ObITabletMemtable::unset_logging_blocked_for_active_memtable_()
   if (OB_NOT_NULL(memtable_mgr)) {
     do {
       if (OB_FAIL(memtable_mgr->unset_logging_blocked_for_active_memtable(this))) {
-        TRANS_LOG(ERROR, "fail to unset logging blocked for active memtable", K(ret), KPC(this));
+        TRANS_LOG(ERROR, "fail to unset logging blocked for active memtable", K(ret), K(ls_id_), KPC(this));
         ob_usleep(100);
       }
     } while (OB_FAIL(ret));
@@ -99,6 +102,7 @@ int ObITabletMemtable::resolve_left_boundary_for_active_memtable_()
 
   if (OB_NOT_NULL(memtable_mgr)) {
     if (OB_FAIL(memtable_mgr->resolve_left_boundary_for_active_memtable(this, get_end_scn()))) {
+      TRANS_LOG(WARN, "fail to resolve left boundary for active memtable", K(ret), K(ls_id_), KPC(this));
     }
   }
 
@@ -112,6 +116,7 @@ int ObITabletMemtable::get_ls_current_right_boundary_(SCN &current_right_boundar
     ret = OB_ENTRY_NOT_EXIST;
     TRANS_LOG(WARN, "freezer should not be null", K(ret));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(current_right_boundary))) {
+    TRANS_LOG(WARN, "fail to get min_unreplay_scn", K(ret), K(current_right_boundary));
   }
 
   return ret;
@@ -119,7 +124,7 @@ int ObITabletMemtable::get_ls_current_right_boundary_(SCN &current_right_boundar
 
 int ObITabletMemtable::set_memtable_mgr_(storage::ObTabletMemtableMgr *mgr)
 {
-  ObTabletMemtableMgrPool *pool = ::oceanbase::share::server_service<::oceanbase::storage::ObTabletMemtableMgrPool>();
+  ObTabletMemtableMgrPool *pool = share::g_mp->tablet_memtable_mgr_pool();
   return memtable_mgr_handle_.set_memtable_mgr(mgr, pool);
 }
 
@@ -143,6 +148,7 @@ int ObITabletMemtable::set_freezer(ObFreezer *handler)
 int ObITabletMemtable::set_rec_scn(const SCN rec_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
 
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
@@ -152,7 +158,7 @@ int ObITabletMemtable::set_rec_scn(const SCN rec_scn)
     TRANS_LOG(WARN, "invalid args", K(ret), K(rec_scn));
   } else if (rec_scn <= get_start_scn()) {
     ret = OB_SCN_OUT_OF_BOUND;
-    TRANS_LOG(ERROR, "cannot set freeze log ts smaller to start log ts", K(ret), K(rec_scn), KPC(this));
+    TRANS_LOG(ERROR, "cannot set freeze log ts smaller to start log ts", K(ret), K(rec_scn), K(ls_id), KPC(this));
   } else {
     SCN old_rec_scn;
     SCN new_rec_scn = get_rec_scn();
@@ -169,6 +175,7 @@ int ObITabletMemtable::set_rec_scn(const SCN rec_scn)
 int ObITabletMemtable::set_start_scn(const share::SCN start_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
 
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
@@ -191,7 +198,7 @@ int ObITabletMemtable::set_start_scn(const share::SCN start_scn)
       // greater than the real log of its next memtable.
       || start_scn >= rec_scn_) {
     ret = OB_SCN_OUT_OF_BOUND;
-    TRANS_LOG(ERROR, "cannot set start ts now", K(ret), K(start_scn), KPC(this));
+    TRANS_LOG(ERROR, "cannot set start ts now", K(ret), K(start_scn), K(ls_id), KPC(this));
   } else {
     key_.scn_range_.start_scn_ = start_scn;
   }
@@ -202,6 +209,7 @@ int ObITabletMemtable::set_start_scn(const share::SCN start_scn)
 int ObITabletMemtable::set_end_scn(const SCN freeze_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
 
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
@@ -212,7 +220,7 @@ int ObITabletMemtable::set_end_scn(const SCN freeze_scn)
   } else if (freeze_scn < get_start_scn()) {
     ret = OB_SCN_OUT_OF_BOUND;
     TRANS_LOG(ERROR, "cannot set freeze log ts smaller to start log ts",
-              K(ret), K(freeze_scn), KPC(this));
+              K(ret), K(freeze_scn), K(ls_id), KPC(this));
   } else {
     SCN old_end_scn;
     SCN new_end_scn = get_end_scn();
@@ -232,6 +240,7 @@ int ObITabletMemtable::set_end_scn(const SCN freeze_scn)
 int ObITabletMemtable::set_max_end_scn(const SCN scn, bool allow_backoff)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
 
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
@@ -250,7 +259,7 @@ int ObITabletMemtable::set_max_end_scn(const SCN scn, bool allow_backoff)
       || scn > get_end_scn()) {
     ret = OB_SCN_OUT_OF_BOUND;
     TRANS_LOG(WARN, "cannot set max end log ts smaller to start log ts",
-              K(ret), K(scn), KPC(this));
+              K(ret), K(scn), K(ls_id), KPC(this));
   } else if (allow_backoff) {
     set_has_backoffed();
     TRANS_LOG(INFO, "set max_end_scn force", K(scn), K(max_end_scn_.atomic_get()), K(key_), KPC(this));
@@ -288,6 +297,10 @@ int ObITabletMemtable::set_max_end_scn(const SCN scn, bool allow_backoff)
 // max_end_scn of this memtable, finally, the memtable will has a correct right
 // boundary value, keep the safety:
 //   future data's log_scn > max_end_scn of this memtable
+//
+// CASE 2 : For Direct Load Memtable
+// call this function after write_ref_cnt == 0
+//
 int ObITabletMemtable::resolve_right_boundary()
 {
   int ret = OB_SUCCESS;
@@ -302,6 +315,7 @@ int ObITabletMemtable::resolve_right_boundary()
   }
 
   if (OB_FAIL(set_end_scn(end_scn))) {
+    TRANS_LOG(ERROR, "fail to set end_scn", K(ret));
   }
 
   return ret;

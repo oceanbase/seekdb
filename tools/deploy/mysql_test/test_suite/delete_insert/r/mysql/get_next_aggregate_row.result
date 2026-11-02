@@ -1,0 +1,8 @@
+drop table if exists t1;
+create table t1(id int(11) DEFAULT NULL, c1 int(11) DEFAULT NULL) merge_engine = delete_insert;
+alter system major freeze;
+alter system minor freeze;
+select min(id), max(c1) from t1;
+min(id)	max(c1)
+1	19900
+drop table t1;

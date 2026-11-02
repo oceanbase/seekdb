@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-/* Storage-owned RPC value: to_string instantiation requires the complete
- * ObCreateTabletSchema type. The obrpc namespace and wire format are stable. */
+/* definition moved from share/ob_rpc_struct.h: virtual function for member ObSArray<storage::ObCreateTabletSchema*>
+ * to_string is forcibly instantiated in each TU and needs a complete type, share must not depend upward on storage, so the whole type lives in storage/tablet.
+ * ns obrpc is unchanged, serialization compatible. */
 #ifndef OCEANBASE_STORAGE_TABLET_OB_BATCH_CREATE_TABLET_ARG_H_
 #define OCEANBASE_STORAGE_TABLET_OB_BATCH_CREATE_TABLET_ARG_H_
 
 #include "share/ob_rpc_struct.h"
 #include "storage/ob_storage_schema.h"
-#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
 
 namespace oceanbase
 {
@@ -29,7 +29,7 @@ namespace obcall
 {
 struct ObBatchCreateTabletArg
 {
-  OB_UNIS_VERSION(2);
+  OB_UNIS_VERSION(1);
 public:
   ObBatchCreateTabletArg()
   { reset(); }
@@ -38,7 +38,8 @@ public:
   bool is_inited() const;
   void reset();
   int assign(const ObBatchCreateTabletArg &arg);
-  int init_create_tablet(const share::SCN &major_frozen_scn,
+  int init_create_tablet(const share::ObLSID &id_,
+                         const share::SCN &major_frozen_scn,
                          const bool need_check_tablet_cnt);
   int64_t get_tablet_count() const;
   int serialize_for_create_tablet_schemas(char *buf,
@@ -48,14 +49,22 @@ public:
   int deserialize_create_tablet_schemas(const char *buf,
       const int64_t data_len,
       int64_t &pos);
+  static int is_old_mds(const char *buf,
+      int64_t data_len,
+      bool &is_old_mds);
+  static int skip_unis_array_len(const char *buf,
+      int64_t data_len,
+      int64_t &pos);
   bool set_binding_info_outside_create() const;
   DECLARE_TO_STRING;
 
 public:
+  share::ObLSID id_;
   share::SCN major_frozen_scn_;
   common::ObSArray<share::schema::ObTableSchema> table_schemas_;
   common::ObSArray<ObCreateTabletInfo> tablets_;
   bool need_check_tablet_cnt_;
+  bool is_old_mds_;
   common::ObSArray<storage::ObCreateTabletSchema*> create_tablet_schemas_;
   ObArenaAllocator allocator_;
   common::ObSArray<ObCreateTabletExtraInfo> tablet_extra_infos_;

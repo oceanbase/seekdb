@@ -44,6 +44,8 @@ public:
 
 protected:
   virtual int try_idle(const int64_t idle_time_us, const int exe_ret);
+  int obtain_proposal_id_from_ls(const bool is_primary_service, int64_t &proposal_id, common::ObRole &role);
+
 protected:
   common::ObMySQLProxy *sql_proxy_;
 
@@ -51,7 +53,7 @@ private:
   bool is_paused_;
   // @epoch, is used to solve 'multi-freeze_service' may operate inner table concurrently.
   //
-  // Keep the database major-freeze service alive while switching roles; just
+  // For solving switching-role slowly, we keep the tenant major_freeze_service, just
   // mark it as 'paused' state, not destroy it.
   // It is not a perfect way cuz it may occur that 'new freeze_service' start to work
   // while the 'old freeze_service' is still working before changing to 'paused' state.

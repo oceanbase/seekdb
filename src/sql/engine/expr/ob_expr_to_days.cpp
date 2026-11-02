@@ -53,6 +53,7 @@ int calc_todays_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   // If the conversion fails, the result will be set to ZERO_DATE (cast mode default is ZERO_ON_WARN)
   // MySQL's behavior is, when the result is zero date, it returns NULL
   if (OB_FAIL(expr.args_[0]->eval(ctx, day_datum))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (day_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -73,11 +74,13 @@ int ObExprToDays::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(1 != raw_expr.get_param_count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("raw_expr should got one child", K(ret), K(raw_expr));
   } else if (ObDateType != rt_expr.args_[0]->datum_meta_.type_) {
     // Type inference part has a calc type set for enum/set, but the new framework cast currently does not fully support enum/set
     // Here we report an error first, subsequent handling of enum/set will be added
     // enum/set->varchar->date
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param type should be date", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_todays_expr;
   }

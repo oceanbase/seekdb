@@ -27,7 +27,6 @@ using common::ObPsStmtId;
 using namespace share::schema;
 namespace sql
 {
-class ObPsCache;
 class ObCallProcedureStmt;
 
 // prepared statement stmt key
@@ -35,14 +34,25 @@ struct ObPsSqlKey
 {
 public:
   ObPsSqlKey()
-    : db_id_(OB_INVALID_ID),
+    : flag_(0),
+      db_id_(OB_INVALID_ID),
       inc_id_(OB_INVALID_ID),
       ps_sql_()
   {}
   ObPsSqlKey(uint64_t db_id,
              const common::ObString &ps_sql)
-    : db_id_(db_id),
+    : flag_(0),
+      db_id_(db_id),
       inc_id_(OB_INVALID_ID),
+      ps_sql_(ps_sql)
+  {}
+  ObPsSqlKey(uint32_t flag,
+             uint64_t db_id,
+             uint64_t inc_id,
+             const common::ObString &ps_sql)
+    : flag_(flag),
+      db_id_(db_id),
+      inc_id_(inc_id),
       ps_sql_(ps_sql)
   {}
   int deep_copy(const ObPsSqlKey &other, common::ObIAllocator &allocator);
@@ -50,15 +60,40 @@ public:
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
   ObPsSqlKey &operator=(const ObPsSqlKey &other);
   bool operator==(const ObPsSqlKey &other) const;
+  void set_is_client_return_rowid()
+  {
+    is_client_return_hidden_rowid_ = true;
+  }
+  bool get_is_client_return_rowid()
+  {
+    return is_client_return_hidden_rowid_;
+  }
+  void set_flag(uint32_t flag)
+  {
+    flag_ = flag;
+  }
+  uint32_t get_flag() const
+  {
+    return flag_;
+  }
   void reset()
   {
+    flag_ = 0;
     db_id_ = OB_INVALID_ID;
     inc_id_ = OB_INVALID_ID;
     ps_sql_.reset();
   }
-  TO_STRING_KV(K_(db_id), K_(inc_id), K_(ps_sql));
+  TO_STRING_KV(K_(flag), K_(db_id), K_(inc_id), K_(ps_sql));
 
 public:
+  union
+  {
+    uint32_t flag_;
+    struct {
+      uint32_t is_client_return_hidden_rowid_ : 1;
+      uint32_t reserved_ : 31;
+    };
+  };
   uint64_t db_id_;
   // MySQL allows session-level temporary tables with the same name to have different schema definitions. 
   // In order to distinguish this scenario, an incremental id is used to generate different prepared
@@ -94,9 +129,6 @@ public:
   bool *get_is_expired_evicted_ptr() { return &is_expired_evicted_; }
 
   ObIAllocator *get_external_allocator() { return external_allocator_; }
-  void set_memory_account(ObPsCache *owner, const int64_t accounted_size);
-  void release_memory_account();
-  int64_t get_accounted_size() const { return ATOMIC_LOAD(&accounted_size_); }
 
   TO_STRING_KV(K_(ref_count), K_(ps_key), K_(stmt_id), K_(is_expired_evicted));
 
@@ -109,8 +141,6 @@ private:
   common::ObIAllocator *allocator_;
   // Point to inner_allocator_ in ObPsPlancache, used for releasing the memory of the entire ObPsStmtItem
   common::ObIAllocator *external_allocator_;
-  ObPsCache *memory_owner_;
-  int64_t accounted_size_;
 };
 
 struct ObPsSqlMeta
@@ -166,9 +196,15 @@ public:
   inline bool can_direct_use_param() const { return can_direct_use_param_; }
   inline void set_can_direct_use_param(bool v) { can_direct_use_param_ = v; }
 
+  inline bool get_is_prexecute() const { return is_prexecute_; }
+  inline void set_is_prexecute(bool v) { is_prexecute_ = v; }
+
   inline void set_ps_stmt_checksum(uint64_t ps_checksum) { ps_stmt_checksum_ = ps_checksum; }
   inline uint64_t get_ps_stmt_checksum() const { return ps_stmt_checksum_; }
 
+  inline void set_num_of_returning_into(int32_t num_of_returning_into)
+  { num_of_returning_into_ = num_of_returning_into; }
+  inline int32_t get_num_of_returning_into() const { return num_of_returning_into_; }
   inline void set_is_sensitive_sql(const bool is_sensitive_sql) { is_sensitive_sql_ = is_sensitive_sql; }
   inline bool get_is_sensitive_sql() const { return is_sensitive_sql_; }
   inline const common::ObString &get_raw_sql() const { return raw_sql_; }
@@ -201,9 +237,6 @@ public:
     ps_key_ = ps_stmt_item.get_sql_key();
   }
   ObIAllocator *get_external_allocator() { return external_allocator_; }
-  void set_memory_account(ObPsCache *owner, const int64_t accounted_size);
-  void release_memory_account();
-  int64_t get_accounted_size() const { return ATOMIC_LOAD(&accounted_size_); }
   void set_inner_allocator(common::ObIAllocator *allocator)
   {
     allocator_ = allocator;
@@ -219,8 +252,8 @@ public:
   int64_t get_dep_objs_cnt() const { return dep_objs_cnt_; }
   ObPsStmtItem *get_ps_item() const { return ps_item_; }
   void set_ps_item(ObPsStmtItem *ps_item) { ps_item_ = ps_item; }
-  int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
-  void set_runtime_schema_version(int64_t runtime_schema_version) { runtime_schema_version_ = runtime_schema_version; }
+  int64_t get_tenant_version() const { return tenant_version_; }
+  void set_tenant_version(int64_t tenant_version) { tenant_version_ = tenant_version; }
   void set_is_expired() { ATOMIC_STORE(&is_expired_, true); }
   bool is_expired() { return ATOMIC_LOAD(&is_expired_); }
   bool *get_is_expired_evicted_ptr() { return &is_expired_evicted_; }
@@ -239,12 +272,13 @@ private:
 
   // for call procedure
   bool can_direct_use_param_;
+  bool is_prexecute_;
   int64_t item_and_info_size_; // mem_used_;
   int64_t last_closed_timestamp_; // Time when the reference count was last reduced to 1;
   ObSchemaObjVersion *dep_objs_;
   int64_t dep_objs_cnt_;
   ObPsStmtItem *ps_item_;
-  int64_t runtime_schema_version_;
+  int64_t tenant_version_;
   bool is_expired_;
   //check whether has dec ref count for ps info expired
   bool is_expired_evicted_;
@@ -253,6 +287,7 @@ private:
   common::ObIAllocator *allocator_;
   // Point to inner_allocator_ in ObPsPlancache, used for releasing the memory of the entire ObPsStmtItem
   common::ObIAllocator *external_allocator_;
+  int32_t num_of_returning_into_;
   common::ObString no_param_sql_;
   bool is_sensitive_sql_;
   common::ObString raw_sql_;
@@ -264,8 +299,6 @@ private:
   ObFixedArray<ObPCParam *, common::ObIAllocator> raw_params_;
   ObFixedArray<int64_t, common::ObIAllocator> raw_params_idx_;
   stmt::StmtType literal_stmt_type_;
-  ObPsCache *memory_owner_;
-  int64_t accounted_size_;
 };
 
 struct TypeInfo {
@@ -307,7 +340,6 @@ struct TypeInfo {
 };
 
 typedef common::ObSEArray<obmysql::EMySQLFieldType, 48> ParamTypeArray;
-typedef common::ObSEArray<uint8_t, 48> ParamTypeFlagArray;
 typedef common::ObSEArray<TypeInfo, 16> ParamTypeInfoArray;
 typedef common::ObSEArray<bool, 16> ParamCastArray;
 // Each session records only one stmt_id-->ps_session_info mapping for the same statement
@@ -328,13 +360,12 @@ public:
     num_of_params_(num_of_params),
     ps_stmt_checksum_(0),
     ref_cnt_(0),
-    inner_stmt_id_(0)
+    inner_stmt_id_(0),
+    num_of_returning_into_(common::OB_INVALID_STMT_ID) // num_of_returning_into_ init as -1
   {
     param_types_.set_attr(ObMemAttr("ParamTypes"));
-    param_type_flags_.set_attr(ObMemAttr("ParamTypeFlags"));
     param_type_infos_.set_attr(ObMemAttr("ParamTypesInfo"));
     param_types_.reserve(num_of_params_);
-    param_type_flags_.reserve(num_of_params_);
   }
   //{ param_types_.set_label(common::ObModIds::OB_PS_SESSION_INFO_ARRAY); }
   virtual ~ObPsSessionInfo() {}
@@ -345,16 +376,16 @@ public:
 
   const ParamTypeArray &get_param_types() const { return param_types_; }
   ParamTypeArray &get_param_types() { return param_types_; }
-  const ParamTypeFlagArray &get_param_type_flags() const {
-    return param_type_flags_;
-  }
-  ParamTypeFlagArray &get_param_type_flags() { return param_type_flags_; }
 
   const ParamTypeInfoArray &get_param_type_infos() const { return param_type_infos_; }
   ParamTypeInfoArray &get_param_type_infos() { return param_type_infos_; }
 
   int64_t get_param_count() const { return num_of_params_; }
   void set_param_count(const int64_t num_of_params) { num_of_params_ = num_of_params; }
+
+  int32_t get_num_of_returning_into() const { return num_of_returning_into_; }
+  void set_num_of_returning_into(const int32_t num_of_returning_into)
+  { num_of_returning_into_ = num_of_returning_into; }
 
   uint64_t get_ps_stmt_checksum() const { return ps_stmt_checksum_; }
   void set_ps_stmt_checksum(uint64_t ps_checksum) { ps_stmt_checksum_ = ps_checksum; }
@@ -374,7 +405,8 @@ public:
                K_(num_of_params),
                K_(ref_cnt),
                K_(ps_stmt_checksum),
-               K_(inner_stmt_id));
+               K_(inner_stmt_id),
+               K_(num_of_returning_into));
 
 private:
   ObPsStmtId stmt_id_;
@@ -382,10 +414,10 @@ private:
   int64_t num_of_params_;
   uint64_t ps_stmt_checksum_; //actual is crc32
   ParamTypeArray param_types_;
-  ParamTypeFlagArray param_type_flags_;
   ParamTypeInfoArray param_type_infos_;
   int64_t ref_cnt_;
   ObPsStmtId inner_stmt_id_;
+  int32_t num_of_returning_into_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPsSessionInfo);
@@ -417,6 +449,7 @@ struct PsCacheInfoCtx
 {
   PsCacheInfoCtx()
   : param_cnt_(0),
+    num_of_returning_into_(-1),
     is_inner_sql_(false),
     is_sensitive_sql_(false),
     normalized_sql_(),
@@ -428,6 +461,7 @@ struct PsCacheInfoCtx
 
 
   TO_STRING_KV(K_(param_cnt),
+               K_(num_of_returning_into),
                K_(is_inner_sql),
                K_(is_sensitive_sql),
                K_(normalized_sql),
@@ -436,6 +470,7 @@ struct PsCacheInfoCtx
                K_(stmt_type));
 
   int64_t param_cnt_;
+  int32_t num_of_returning_into_;
   bool is_inner_sql_;
   bool is_sensitive_sql_;
   common::ObString normalized_sql_;

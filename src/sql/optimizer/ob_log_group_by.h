@@ -62,6 +62,24 @@ struct ObThreeStageAggrInfo
   int set_third_stage_info(ObRawExpr *aggr_code_expr, ObIArray<ObDistinctAggrBatch> &batch);
 };
 
+struct ObRollupAdaptiveInfo
+{
+  ObRollupAdaptiveInfo()
+  : rollup_id_expr_(NULL),
+    rollup_status_(ObRollupStatus::NONE_ROLLUP),
+    sort_keys_(),
+    ecd_sort_keys_(),
+    enable_encode_sort_(false)
+  {}
+
+  ObRawExpr *rollup_id_expr_;
+  ObRollupStatus rollup_status_;
+  ObArray<OrderItem, common::ModulePageAllocator, true> sort_keys_;
+  ObArray<OrderItem, common::ModulePageAllocator, true> ecd_sort_keys_;
+  bool enable_encode_sort_;
+
+};
+
 struct ObHashRollupInfo
 {
   ObHashRollupInfo()
@@ -90,6 +108,7 @@ public:
         total_ndv_(-1.0),
         origin_child_card_(-1.0),
         three_stage_info_(),
+        rollup_adaptive_info_(),
         force_push_down_(false),
         use_hash_aggr_(false),
         has_push_down_(false),
@@ -148,7 +167,8 @@ public:
   int get_child_est_info(const int64_t parallel, double &child_card, double &child_ndv, double &selectivity);
   int get_gby_output_exprs(ObIArray<ObRawExpr *> &output_exprs);
   virtual bool is_block_op() const override
-  { return MERGE_AGGREGATE != get_algo() && !is_adaptive_aggregate(); }
+  { return (MERGE_AGGREGATE != get_algo() && !is_adaptive_aggregate())
+        || ObRollupStatus::ROLLUP_DISTRIBUTOR == rollup_adaptive_info_.rollup_status_; }
 
   virtual int compute_const_exprs() override;
   virtual int compute_equal_set() override;
@@ -184,6 +204,22 @@ public:
                                                      && (is_first_stage() || (!is_three_stage_aggr() && is_push_down())); }
 
 
+  inline void set_rollup_status(const ObRollupStatus rollup_status)
+  { rollup_adaptive_info_.rollup_status_ = rollup_status; }
+  inline ObRollupStatus get_rollup_status() const
+  { return rollup_adaptive_info_.rollup_status_; }
+  inline ObRawExpr *get_rollup_id_expr()
+  { return rollup_adaptive_info_.rollup_id_expr_; }
+  inline ObIArray<OrderItem> &get_inner_sort_keys()
+  { return rollup_adaptive_info_.sort_keys_; }
+  inline ObIArray<OrderItem> &get_inner_ecd_sort_keys()
+  { return rollup_adaptive_info_.ecd_sort_keys_; }
+  inline bool has_encode_sort()
+  { return rollup_adaptive_info_.enable_encode_sort_; }
+  inline bool is_rollup_distributor() const
+  { return ObRollupStatus::ROLLUP_DISTRIBUTOR == rollup_adaptive_info_.rollup_status_; }
+  inline bool is_rollup_collector() const
+  { return ObRollupStatus::ROLLUP_COLLECTOR == rollup_adaptive_info_.rollup_status_; }
   inline void set_force_push_down(bool force_push_down)
   { force_push_down_ = force_push_down; }
   void set_group_by_outline_info(DistAlgo algo,
@@ -232,7 +268,7 @@ private:
   virtual int print_outline_data(PlanText &plan_text) override;
   virtual int print_used_hint(PlanText &plan_text) override;
   virtual int check_use_child_ordering(bool &used, int64_t &inherit_child_ordering_index)override;
-  virtual int compute_op_parallel_info() override;
+  virtual int compute_op_parallel_and_server_info() override;
 private:
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> group_exprs_;
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> rollup_exprs_;
@@ -244,6 +280,8 @@ private:
   double origin_child_card_;
 
   ObThreeStageAggrInfo three_stage_info_;
+  // for rollup distributor and collector
+  ObRollupAdaptiveInfo rollup_adaptive_info_;
   bool force_push_down_; // control by _aggregation_optimization_settings
   // use print outline
   bool use_hash_aggr_;

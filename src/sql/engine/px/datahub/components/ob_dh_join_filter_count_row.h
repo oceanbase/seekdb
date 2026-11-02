@@ -81,10 +81,12 @@ public:
   TO_STRING_KV(K_(in_filter_active), K_(hllc));
   bool in_filter_active_{false};
   uint64_t in_filter_ndv_{0};   
+  // == 435 BP1 Begin to Use ==
   bool use_hllc_estimate_ndv_{false};
   uint64_t bf_ndv_{0};
   common::ObArenaAllocator allocator_;  //help to init hllc when deserialization, don't need to be serialized
   ObHyperLogLogCalculator hllc_;
+  // == 435 BP1 End to Use ==
 private:
   DISALLOW_COPY_AND_ASSIGN(ObJoinFilterNdv);
 };
@@ -96,7 +98,7 @@ struct JoinFilterSqcRowInfo
   JoinFilterSqcRowInfo() {}
 
   TO_STRING_KV(K(sqc_id_), K(expected_), K(received_), K(total_rows_), K(ndv_info_));
-  int64_t sqc_id_{OB_INVALID_INDEX};
+  int64_t sqc_id_{OB_INVALID};
   int64_t expected_{0};
   int64_t received_{0};
   int64_t total_rows_{0};
@@ -124,11 +126,13 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(target_ndv_info.prepare_allocate(source_ndv_info.count()))) {
+      SQL_LOG(WARN, "failed to prepare_allocate");
     } else {
       for (int64_t i = 0; i < source_ndv_info.count() && OB_SUCC(ret); ++i) {
-        // Start aggregation from the neutral active state; any inactive piece
-        // turns the aggregate inactive in gather_piece_ndv().
         target_ndv_info.at(i).in_filter_active_ = true;
+        // pkt.ndv_info_.at(i).hllc_.get_n_bit() may == 0, when there is a lower version pkt send to
+        // this higher version DataHub
+        // So we set target_ndv_info.at(i).in_filter_active_ = true above explicitly
         int32_t n_bit = source_ndv_info.at(i).hllc_.get_n_bit();
         if (source_ndv_info.at(i).use_hllc_estimate_ndv_ && OB_FAIL(target_ndv_info.at(i).init_ndv_info(n_bit))) {
           SQL_LOG(WARN, "fail to init dh or sqc's hyperloglog in joinFilter senario", K(ret));
@@ -184,7 +188,9 @@ public:
     total_rows_ = other.total_rows_;
     if (OB_FAIL(ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_JOIN_FILTER_COUNT_ROW_PIECE_MSG>::assign(
             other))) {
+      SQL_LOG(WARN, "failed to assign base");
     } else if (OB_FAIL(ndv_info_.assign(other.ndv_info_))) {
+      SQL_LOG(WARN, "failed to assign ndv_info_");
     }
     return ret;
   }
@@ -196,10 +202,12 @@ public:
       static_cast<const ObJoinFilterCountRowPieceMsg &>(piece);
     if (piece_count_ == 0) {
       if (OB_FAIL(assign(detail_other_piece))) {
+        SQL_LOG(WARN, "failed to assign");
       }
     } else {
       for (int64_t i = 0; i < detail_other_piece.ndv_info_.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(ObJoinFilterNdv::gather_piece_ndv(detail_other_piece.ndv_info_.at(i), ndv_info_.at(i)))) {
+          SQL_LOG(WARN, "fail to gather piece ndv", K(ret), K(i));
         }
         SQL_LOG(TRACE, "[NDV_BLOOM_FILTER][SQC_LOCAL_AGGR] aggregate piece to *piece*:", K(i),
                   K(detail_other_piece.ndv_info_.at(i)),
@@ -215,7 +223,7 @@ public:
   INHERIT_TO_STRING_KV("meta", ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_JOIN_FILTER_COUNT_ROW_PIECE_MSG>,
                         K_(op_id), K_(each_sqc_has_full_data), K_(sqc_id), K_(total_rows), K(ndv_info_));
   bool each_sqc_has_full_data_{false}; // True iff in shared hash join
-  int64_t sqc_id_{OB_INVALID_INDEX}; // From which sqc
+  int64_t sqc_id_{OB_INVALID}; // From which sqc
   int64_t total_rows_{0}; // row count of one thread
   ObJoinFilterNdvInfo ndv_info_;
 private:
@@ -255,6 +263,7 @@ public:
       static_cast<const ObJoinFilterCountRowPieceMsg &>(piece);
     if (ndv_info_.empty()) {
       if (OB_FAIL(ndv_info_.assign(detail_other_piece.ndv_info_))) {
+        SQL_LOG(WARN, "failed to assign ndv_info_");
       } else {
         total_rows_ = detail_other_piece.total_rows_;
       }

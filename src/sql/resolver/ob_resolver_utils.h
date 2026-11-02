@@ -17,7 +17,6 @@
 #ifndef _OB_RESOLVER_UTILS_H
 #define _OB_RESOLVER_UTILS_H
 #include "share/ob_rpc_struct.h"
-#include "share/ob_compatibility_control.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "common/object/ob_object.h"
@@ -29,8 +28,8 @@
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/parser/parse_node.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/pl/ob_pl.h"
-#include "sql/pl/ob_pl_stmt.h"
+#include "pl/ob_pl.h"
+#include "pl/ob_pl_stmt.h"
 
 #define LOG_WARN_IGNORE_COL_NOTFOUND(ret, fmt, args...) \
   do {\
@@ -126,12 +125,8 @@ struct ObResolverUtils
   static const int NAMENODE = 1;
   static ObItemType item_type_;
 public:
-  // Validate compatibility selectors such as TENANT = sys after TENANT was
-  // removed as a global keyword in the standalone runtime.
-  static int resolve_local_runtime_selector(const ParseNode *runtime_selector);
   static int get_user_type(common::ObIAllocator *allocator,
                            ObSQLSessionInfo *session_info,
-                           ObPlanCache *plan_cache,
                            common::ObMySQLProxy *sql_proxy,
                            share::schema::ObSchemaGetterGuard *schema_guard,
                            pl::ObPLPackageGuard &package_guard,
@@ -200,6 +195,7 @@ public:
                               const ObString &routine_name,
                               const share::schema::ObRoutineType routine_type,
                               common::ObIArray<const share::schema::ObIRoutineInfo *> &routines,
+                              uint64_t udt_id = OB_INVALID_ID,
                               const pl::ObPLResolveCtx *resolve_ctx = NULL);
   static int check_routine_exists(const ObSQLSessionInfo *session_info,
                                   ObSchemaChecker *schema_checker,
@@ -209,14 +205,16 @@ public:
                                   const ObString &routine_name,
                                   const share::schema::ObRoutineType routine_type,
                                   bool &exists,
-                                  pl::ObProcType &proc_type);
+                                  pl::ObProcType &proc_type,
+                                  uint64_t udt_id = OB_INVALID_ID);
   static int check_routine_exists(ObSchemaChecker &schema_checker,
                                   const ObSQLSessionInfo &session_info,
                                   const ObString &db_name,
                                   const ObString &package_name,
                                   const ObString &routine_name,
                                   const share::schema::ObRoutineType routine_type,
-                                  bool &exists);
+                                  bool &exists,
+                                  uint64_t udt_id = OB_INVALID_ID);
   static int match_best_routine(const common::ObIArray<const share::schema::ObRoutineInfo *> &routines,
                                 const common::ObIArray<ObRawExpr *> &expr_params,
                                 const share::schema::ObRoutineInfo *&routine);
@@ -366,7 +364,7 @@ public:
                            ObExprInfo *parents_expr_info,
                            const ObSQLMode mode,
                            bool enable_decimal_int_type,
-                           const share::ObCompatType compat_type,
+                           const ObCompatType compat_type,
                            const bool enable_mysql_compatible_dates,
                            int8_t min_const_integer_precision,
                            bool is_from_pl = false,
@@ -382,6 +380,7 @@ public:
   static int resolve_data_type(const ParseNode &type_node,
                                const common::ObString &ident_name,
                                common::ObDataType &data_type,
+                               const int is_oracle_mode /*always 0 (MySQL mode)*/,
                                const bool is_for_pl_type,
                                const ObSessionNLSParams &nls_session_param,
                                const bool enable_decimal_int_type,
@@ -418,6 +417,9 @@ public:
                                                   const common::ObIArray<uint64_t> &index_columns,
                                                   const common::ObPartitionKeyInfo &partition_info,
                                                   const bool is_heap_table_primary_key);
+  static int unique_idx_covered_presetting_partition_columns(const share::schema::ObTableSchema &table_schema,
+                                                             const common::ObIArray<uint64_t> &index_columns,
+                                                             const bool is_heap_table_primary_key);
 
   static int get_collation_type_of_names(const ObSQLSessionInfo *session_info,
                                          const ObNameTypeClass type_class,
@@ -436,25 +438,30 @@ public:
                                                const common::ObString &part_name,
                                                const share::schema::ObPartitionFuncType part_type,
                                                const common::ObIArray<ObRawExpr *> &part_func_exprs,
-                                               common::ObIArray<ObRawExpr *> &part_value_expr_array);
+                                               common::ObIArray<ObRawExpr *> &part_value_expr_array,
+                                               const bool &in_tablegroup = false);
   static int resolve_partition_list_value_expr(ObResolverParams &params,
                                                const ParseNode &node,
                                                const common::ObString &part_name,
                                                const share::schema::ObPartitionFuncType part_type,
                                                int64_t &expr_num,
-                                               common::ObIArray<ObRawExpr *> &part_value_expr_array);
+                                               common::ObIArray<ObRawExpr *> &part_value_expr_array,
+                                               const bool &in_tablegroup = false);
   static int resolve_columns_for_partition_range_value_expr(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns);
   static int resolve_partition_range_value_expr(ObResolverParams &params,
                                                 const ParseNode &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
                                                 const ObRawExpr &part_func_expr,
-                                                ObRawExpr *&part_value_expr);
+                                                ObRawExpr *&part_value_expr,
+                                                const bool &in_tablegroup = false);
   static int resolve_partition_range_value_expr(ObResolverParams &params,
                                                 const ParseNode &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
-                                                ObRawExpr *&part_value_expr);
+                                                ObRawExpr *&part_value_expr,
+                                                const bool &in_tablegroup = false,
+                                                const bool interval_check = false);
   static int resolve_columns_for_partition_expr(ObResolverParams &params,
                                                 ObRawExpr *&expr,
                                                 common::ObIArray<ObQualifiedName> &columns,
@@ -512,11 +519,13 @@ public:
   static int resolve_default_expr_v2_column_expr(ObResolverParams &params,
                                                  const common::ObString &expr_str,
                                                  share::schema::ObColumnSchemaV2 &default_expr_v2_column,
-                                                 ObRawExpr *&expr);
+                                                 ObRawExpr *&expr,
+                                                 bool allow_sequence);
   static int resolve_default_expr_v2_column_expr(ObResolverParams &params,
                                                  const ParseNode *node,
                                                  share::schema::ObColumnSchemaV2 &default_expr_v2_column,
-                                                 ObRawExpr *&expr);
+                                                 ObRawExpr *&expr,
+                                                 bool allow_sequence);
   static int resolve_constraint_expr(ObResolverParams &params,
                                      const common::ObString &expr_str,
                                      share::schema::ObTableSchema &tbl_schema,
@@ -544,40 +553,51 @@ public:
   static int check_partition_value_expr_for_range(const common::ObString &part_name,
                                                   const ObRawExpr &part_func_expr,
                                                   ObRawExpr &part_value_expr,
-                                                  const share::schema::ObPartitionFuncType part_type);
+                                                  const share::schema::ObPartitionFuncType part_type,
+                                                  const bool &in_tablegroup = false);
   static int check_partition_value_expr_for_range(const common::ObString &part_name,
                                                   ObRawExpr &part_value_expr,
-                                                  const share::schema::ObPartitionFuncType part_type);
+                                                  const share::schema::ObPartitionFuncType part_type,
+                                                  const bool &in_tablegroup = false,
+                                                  const bool interval_check = false);
   static int check_column_valid_for_partition(const ObRawExpr &part_expr,
                                               const share::schema::ObPartitionFuncType part_func_type,
                                               const share::schema::ObTableSchema &tbl_schema);
   static int check_expr_valid_for_partition(ObRawExpr &part_expr,
                                             ObSQLSessionInfo &session_info,
                                             const share::schema::ObPartitionFuncType part_func_type,
-                                            const share::schema::ObTableSchema &tbl_schema);
+                                            const share::schema::ObTableSchema &tbl_schema,
+                                            const bool &in_tablegroup = false);
   static bool is_valid_partition_column_type(const common::ObObjType type,
                                              const share::schema::ObPartitionFuncType part_type,
                                              const bool is_check_value,
                                              const bool is_string_lob = false);
   static bool is_partition_range_column_type(const common::ObObjType type);
+  static bool is_valid_oracle_interval_data_type(
+      const common::ObObjType type,
+      ObItemType &item_type);
+  // WARNING: is_sync_ddl_user=true means outside program won't wait ddl, which is so misleading
+  static int check_sync_ddl_user(ObSQLSessionInfo *session_info, bool &is_sync_ddl_user);
   static bool is_restore_user(ObSQLSessionInfo &session_info);
   static bool is_drc_user(ObSQLSessionInfo &session_info);
+  static int set_sync_ddl_id_str(ObSQLSessionInfo *session_info, common::ObString &ddl_id_str);
   static int resolve_udf_name_by_parse_node(
     const ParseNode *node, const common::ObNameCaseMode case_mode, ObUDFInfo& udf_info);
-  // Check duplicate foreign keys for CREATE TABLE and ALTER TABLE ADD FOREIGN KEY.
+  // for create table with fk in oracle mode
+  // for alter table add fk in oracle mode
   static int check_dup_foreign_keys_exist(
              const common::ObIArray<share::schema::ObForeignKeyInfo> &fk_infos,
              const common::ObIArray<uint64_t> &child_column_ids,
              const common::ObIArray<uint64_t> &parent_column_ids,
              const uint64_t parent_table_id,
              const uint64_t child_table_id);
-  // Compare named foreign key columns while preserving child-to-parent mapping.
+  // for create table with fk in oracle mode
   static bool is_match_columns_with_order(
               const common::ObIArray<ObString> &child_columns_1,
               const common::ObIArray<ObString> &parent_columns_1,
               const common::ObIArray<ObString> &child_columns_2,
               const common::ObIArray<ObString> &parent_columns_2);
-  // Compare foreign key column ids while preserving child-to-parent mapping.
+  // for alter table add fk in oracle mode
   static bool is_match_columns_with_order(
               const common::ObIArray<uint64_t> &child_column_ids_1,
               const common::ObIArray<uint64_t> &parent_column_ids_1,
@@ -594,7 +614,8 @@ public:
         const obcall::ObCreateForeignKeyArg &arg);
   static int check_foreign_key_set_null_satisfy(
         const obcall::ObCreateForeignKeyArg &arg,
-        const share::schema::ObTableSchema &child_table_schema);
+        const share::schema::ObTableSchema &child_table_schema,
+        const bool is_mysql_compat_mode);
   static int check_match_columns(const common::ObIArray<ObString> &parent_columns,
                                  const common::ObIArray<ObString> &key_columns,
                                  bool &is_match);
@@ -611,6 +632,7 @@ public:
                                          const ObIArray<ObString> &key_columns,
                                          bool &is_match);
   static int check_foreign_key_columns_type(
+      const bool is_mysql_compat_mode,
       const share::schema::ObTableSchema &child_table_schema,
       const share::schema::ObTableSchema &parent_table_schema,
       const common::ObIArray<common::ObString> &child_columns,
@@ -627,12 +649,21 @@ public:
                                        ParseNode *&func_udf);
   static int set_direction_by_mode(const ParseNode &sort_node, OrderItem &order_item, bool opt_nulls = false);
   static int resolve_string(const ParseNode *node, common::ObString &string);
-  // Check non-updatable view shapes which are forbidden for DML statements:
+  static int resolve_xid(const ParseNode *node, common::ObString &gtrid_string, common::ObString &bqual_string, int64_t & format_id);
+  static int resolve_text(const ParseNode *node, common::ObString &string);
+  static int resolve_ulong(const ParseNode *node, int64_t & format_id);
+  static int resolve_opt_join_or_resume(const ParseNode *node, int64_t & flag);
+  static int resolve_opt_suspend(const ParseNode *node, int64_t & flag);
+  static int resolve_opt_one_phase(const ParseNode *node, int64_t & flag);
+  // check some kind of the non-updatable view, which is forbidden for all dml statement:
+  // mysql:
   //    aggregate
   //    distinct
   //    set
   //    limit
-  //    window func
+  // oracle:
+  //   window func
+  //   set
   //
   // return OB_SUCCESS, OB_ERR_NON_INSERTABLE_TABLE, OB_ERR_NON_UPDATABLE_TABLE, OB_ERR_ILLEGAL_VIEW_UPDATE
   static int uv_check_basic(ObSelectStmt &stmt, const bool is_insert);
@@ -668,7 +699,8 @@ public:
 
   static int uv_mysql_insertable_join(const TableItem &table_item, const uint64_t base_tid, bool &insertable);
 
-  // Check whether view is allowed to be WITH CHECK OPTION.
+  // statement has unremovable distinct is not updatable in oracle.
+  // check whether view is allowed to be WITH CHECK OPTION
   static int view_with_check_option_allowed(const ObSelectStmt *stmt, bool &with_check_option);
   static void set_stmt_type(const ObItemType item_type) { ObResolverUtils::item_type_ = item_type; }
 
@@ -718,13 +750,23 @@ public:
   static int resolve_file_size_node(const ParseNode *file_size_node, int64_t &parse_int_value);
   static int resolve_varchar_file_size(const ParseNode *child, int64_t &parse_int_value);
 
+  struct FileFormatContext {
+    bool is_tunnel_set;
+    FileFormatContext(): is_tunnel_set(false) {}
+    void reset() {
+      is_tunnel_set = false;
+    }
+  };
   static int resolve_file_format(const ParseNode *node,
                                  ObExternalFileFormat &format,
-                                 ObResolverParams &params);
+                                 ObResolverParams &params,
+                                 FileFormatContext &ff_ctx);
   static int resolve_file_compression_format(const ParseNode *node,
                                              ObExternalFileFormat &format,
                                              ObResolverParams &params);
   static int resolve_binary_format(const ParseNode *node, ObExternalFileFormat &format);
+  static int resolve_column_index_type(const ParseNode *node, ObExternalFileFormat &format);
+  static int wrap_csv_binary_format_expr(ObResolverParams &params, const ObCSVGeneralFormat& csv_format, ObRawExpr *&real_ref_expr);
   static int resolve_file_format_string_value(const ParseNode *node,
                                               const ObCharsetType &format_charset,
                                               ObResolverParams &params,
@@ -753,6 +795,8 @@ public:
                             ObObjParam &obj_param,
                             bool &is_param,
                             const bool enable_decimal_int);
+  static int check_allowed_alter_operations_for_mlog(const obcall::ObAlterTableArg &arg,
+                                                  const share::schema::ObTableSchema &table_schema);
   static int fast_get_param_type(const ParseNode &parse_node,
                                  const ParamStore *param_store,
                                  const ObCollationType connect_collation,
@@ -771,9 +815,12 @@ public:
                                        ObValuesTableDef *table_def);
 
   static int64_t get_mysql_max_partition_num();
+  static int check_schema_valid_for_mview(const share::schema::ObTableSchema &table_schema);
   static int generate_subschema_id(ObSQLSessionInfo &session_info, 
                                    const common::ObIArray<common::ObString> &extended_type_info,
                                    uint16_t &subschema_id);
+  static bool is_pseudo_partition_column_name(const ObString name);
+
   static int append_escaped_identifier(common::ObSqlString &sql, const common::ObString &name);
   static int append_qualified_identifier(common::ObSqlString &sql,
                                          const common::ObString &db_name,

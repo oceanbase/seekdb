@@ -1349,14 +1349,11 @@
   "default_storage_engine": {
     "id": 93,
     "name": "default_storage_engine",
-    "default_value": "InnoDB",
-    "base_value": "InnoDB",
+    "default_value": "OceanBase",
+    "base_value": "OceanBase",
     "data_type": "varchar",
-    "info": "The fixed storage engine exposed by seekdb",
+    "info": "The default storage engine of OceanBase",
     "flags": "GLOBAL | SESSION | MYSQL_ONLY",
-    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_default_storage_engine",
-    "to_select_obj_func": "ObSysVarToObjFuncs::to_obj_default_storage_engine",
-    "to_show_str_func": "ObSysVarToStrFuncs::to_str_default_storage_engine",
     "publish_version": "400",
     "info_cn": "",
     "background_cn": "",
@@ -1439,7 +1436,6 @@
   },
   "ob_interm_result_mem_limit": {
     "id": 10001,
-    "placeholder": true,
     "name": "ob_interm_result_mem_limit",
     "default_value": "2147483648",
     "base_value": "2147483648",
@@ -1453,7 +1449,6 @@
   },
   "ob_proxy_partition_hit": {
     "id": 10002,
-    "placeholder": true,
     "name": "ob_proxy_partition_hit",
     "default_value": "1",
     "base_value": "1",
@@ -1566,7 +1561,6 @@
   },
   "ob_proxy_set_trx_executed": {
     "id": 10011,
-    "placeholder": true,
     "name": "ob_proxy_set_trx_executed",
     "default_value": "0",
     "base_value": "0",
@@ -1593,7 +1587,6 @@
   },
   "ob_last_schema_version": {
     "id": 10013,
-    "placeholder": true,
     "name": "ob_last_schema_version",
     "default_value": "0",
     "base_value": "0",
@@ -1620,7 +1613,6 @@
   },
   "ob_proxy_global_variables_version": {
     "id": 10015,
-    "placeholder": true,
     "name": "ob_proxy_global_variables_version",
     "default_value": "0",
     "base_value": "0",
@@ -1647,7 +1639,6 @@
   },
   "ob_bnl_join_cache_size": {
     "id": 10019,
-    "placeholder": true,
     "name": "ob_bnl_join_cache_size",
     "default_value": "10485760",
     "base_value": "10485760",
@@ -1663,7 +1654,6 @@
   },
   "ob_proxy_user_privilege": {
     "id": 10020,
-    "placeholder": true,
     "name": "ob_proxy_user_privilege",
     "default_value": "0",
     "base_value": "0",
@@ -1679,7 +1669,6 @@
   },
   "ob_org_cluster_id": {
     "id": 10021,
-    "placeholder": true,
     "name": "ob_org_cluster_id",
     "default_value": "0",
     "base_value": "0",
@@ -1755,7 +1744,6 @@
   },
   "ob_capability_flag": {
     "id": 10026,
-    "placeholder": true,
     "name": "ob_capability_flag",
     "default_value": "0",
     "base_value": "0",
@@ -1795,6 +1783,23 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "ob_compatibility_mode": {
+    "id": 10030,
+    "name": "ob_compatibility_mode",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "enum",
+    "info": "What DBMS is OceanBase compatible with? MYSQL means it behaves like MySQL while ORACLE means it behaves like Oracle.",
+    "flags": "GLOBAL | SESSION | READONLY | WITH_UPGRADE | NEED_SERIALIZE",
+    "enum_names": [
+      "MYSQL",
+      "ORACLE"
+    ],
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "ob_sql_work_area_percentage": {
     "id": 10032,
     "name": "ob_sql_work_area_percentage",
@@ -1812,7 +1817,6 @@
   },
   "ob_safe_weak_read_snapshot": {
     "id": 10033,
-    "placeholder": true,
     "name": "ob_safe_weak_read_snapshot",
     "default_value": "1",
     "base_value": "1",
@@ -1829,7 +1833,6 @@
   },
   "ob_route_policy": {
     "id": 10034,
-    "placeholder": true,
     "name": "ob_route_policy",
     "default_value": "1",
     "base_value": "1",
@@ -1842,6 +1845,7 @@
       "ONLY_READONLY_ZONE",
       "UNMERGE_ZONE_FIRST",
       "UNMERGE_FOLLOWER_FIRST",
+      "COLUMN_STORE_ONLY",
       "FORCE_READONLY_ZONE"
     ],
     "publish_version": "",
@@ -1851,7 +1855,6 @@
   },
   "ob_enable_transmission_checksum": {
     "id": 10035,
-    "placeholder": true,
     "name": "ob_enable_transmission_checksum",
     "default_value": "1",
     "base_value": "1",
@@ -1878,13 +1881,25 @@
   },
   "ob_statement_trace_id": {
     "id": 10037,
-    "placeholder": true,
     "name": "ob_statement_trace_id",
     "default_value": "Y0-0",
     "base_value": "Y0-0",
     "data_type": "varchar",
     "info": "the trace id of current executing statement",
     "flags": "SESSION | READONLY | INVISIBLE",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "ob_enable_truncate_flashback": {
+    "id": 10038,
+    "name": "ob_enable_truncate_flashback",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Enable the flashback of table truncation.",
+    "flags": "GLOBAL | SESSION",
     "publish_version": "",
     "info_cn": "",
     "background_cn": "",
@@ -1905,7 +1920,6 @@
   },
   "sql_throttle_current_priority": {
     "id": 10040,
-    "placeholder": true,
     "name": "sql_throttle_current_priority",
     "default_value": "100",
     "base_value": "100",
@@ -1919,7 +1933,6 @@
   },
   "sql_throttle_priority": {
     "id": 10041,
-    "placeholder": true,
     "name": "sql_throttle_priority",
     "default_value": "-1",
     "base_value": "-1",
@@ -1933,7 +1946,6 @@
   },
   "sql_throttle_rt": {
     "id": 10042,
-    "placeholder": true,
     "name": "sql_throttle_rt",
     "default_value": "-1",
     "base_value": "-1",
@@ -1947,7 +1959,6 @@
   },
   "sql_throttle_cpu": {
     "id": 10043,
-    "placeholder": true,
     "name": "sql_throttle_cpu",
     "default_value": "-1",
     "base_value": "-1",
@@ -1961,7 +1972,6 @@
   },
   "sql_throttle_io": {
     "id": 10044,
-    "placeholder": true,
     "name": "sql_throttle_io",
     "default_value": "-1",
     "base_value": "-1",
@@ -1975,7 +1985,6 @@
   },
   "sql_throttle_network": {
     "id": 10045,
-    "placeholder": true,
     "name": "sql_throttle_network",
     "default_value": "-1",
     "base_value": "-1",
@@ -1990,7 +1999,6 @@
   },
   "sql_throttle_logical_reads": {
     "id": 10046,
-    "placeholder": true,
     "name": "sql_throttle_logical_reads",
     "default_value": "-1",
     "base_value": "-1",
@@ -2019,13 +2027,51 @@
   },
   "ob_temp_tablespace_size_percentage": {
     "id": 10049,
-    "placeholder": true,
     "name": "ob_temp_tablespace_size_percentage",
     "default_value": "0",
     "base_value": "0",
     "data_type": "int",
     "info": "the percentage limitation of some temp tablespace size in tenant disk.",
     "flags": "GLOBAL | SESSION",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "plugin_dir": {
+    "id": 10052,
+    "name": "plugin_dir",
+    "default_value": "./plugin_dir/",
+    "base_value": "./plugin_dir/",
+    "data_type": "varchar",
+    "info": "the dir to place plugin dll",
+    "flags": "GLOBAL | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "optimizer_use_sql_plan_baselines": {
+    "id": 10057,
+    "name": "optimizer_use_sql_plan_baselines",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Enable use sql plan baseline",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "optimizer_capture_sql_plan_baselines": {
+    "id": 10058,
+    "name": "optimizer_capture_sql_plan_baselines",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "optimizer_capture_sql_plan_baselines enables or disables automitic capture plan baseline.",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
     "publish_version": "",
     "info_cn": "",
     "background_cn": "",
@@ -2048,7 +2094,6 @@
   },
   "ob_early_lock_release": {
     "id": 10061,
-    "placeholder": true,
     "name": "ob_early_lock_release",
     "default_value": "0",
     "base_value": "0",
@@ -2068,8 +2113,6 @@
     "data_type": "int",
     "info": "The stmt interval timeout of transaction(us)",
     "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
-    "min_val": "0",
-    "max_val": "9223372036854775807",
     "publish_version": "",
     "info_cn": "",
     "background_cn": "",
@@ -2113,9 +2156,47 @@
     "ref_url": "",
     "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_block_encryption_mode"
   },
+  "nls_date_format": {
+    "id": 10064,
+    "name": "nls_date_format",
+    "default_value": "DD-MON-RR",
+    "base_value": "DD-MON-RR",
+    "data_type": "varchar",
+    "info": "specifies the default date format to use with the TO_CHAR and TO_DATE functions, (YYYY-MM-DD HH24:MI:SS) is Common value",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | INFLUENCE_PLAN | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_timestamp_format": {
+    "id": 10065,
+    "name": "nls_timestamp_format",
+    "default_value": "DD-MON-RR HH.MI.SSXFF AM",
+    "base_value": "DD-MON-RR HH.MI.SSXFF AM",
+    "data_type": "varchar",
+    "info": "specifies the default date format to use with the TO_CHAR and TO_TIMESTAMP functions, (YYYY-MM-DD HH24:MI:SS.FF) is Common value",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | INFLUENCE_PLAN | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_timestamp_tz_format": {
+    "id": 10066,
+    "name": "nls_timestamp_tz_format",
+    "default_value": "DD-MON-RR HH.MI.SSXFF AM TZR",
+    "base_value": "DD-MON-RR HH.MI.SSXFF AM TZR",
+    "data_type": "varchar",
+    "info": "specifies the default timestamp with time zone format to use with the TO_CHAR and TO_TIMESTAMP_TZ functions, (YYYY-MM-DD HH24:MI:SS.FF TZR TZD) is common value",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | INFLUENCE_PLAN | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "ob_reserved_meta_memory_percentage": {
     "id": 10067,
-    "placeholder": true,
     "name": "ob_reserved_meta_memory_percentage",
     "default_value": "10",
     "base_value": "10",
@@ -2131,13 +2212,156 @@
   },
   "ob_check_sys_variable": {
     "id": 10068,
-    "placeholder": true,
     "name": "ob_check_sys_variable",
     "default_value": "1",
     "base_value": "1",
     "data_type": "bool",
     "info": "If set true, sql will update sys variable while schema version changed.",
     "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_language": {
+    "id": 10069,
+    "name": "nls_language",
+    "default_value": "AMERICAN",
+    "base_value": "AMERICAN",
+    "data_type": "varchar",
+    "info": "specifies the default language of the database, used for messages, day and month names, the default sorting mechanism, the default values of NLS_DATE_LANGUAGE and NLS_SORT.",
+    "flags": "SESSION | NEED_SERIALIZE | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_territory": {
+    "id": 10070,
+    "name": "nls_territory",
+    "default_value": "AMERICA",
+    "base_value": "AMERICA",
+    "data_type": "varchar",
+    "info": "specifies the name of the territory whose conventions are to be followed for day and week numbering, establishes the default date format, the default decimal character and group separator, and the default ISO and local currency symbols.",
+    "flags": "SESSION | GLOBAL| NEED_SERIALIZE | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_sort": {
+    "id": 10071,
+    "name": "nls_sort",
+    "default_value": "BINARY",
+    "base_value": "BINARY",
+    "data_type": "varchar",
+    "info": "specifies the collating sequence for character value comparison in various SQL operators and clauses.",
+    "flags": "SESSION | GLOBAL| NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_comp": {
+    "id": 10072,
+    "name": "nls_comp",
+    "default_value": "BINARY",
+    "base_value": "BINARY",
+    "data_type": "varchar",
+    "info": "specifies the collation behavior of the database session. value can be BINARY | LINGUISTIC | ANSI",
+    "flags": "SESSION | GLOBAL| NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_characterset": {
+    "id": 10073,
+    "name": "nls_characterset",
+    "default_value": "AL32UTF8",
+    "base_value": "AL32UTF8",
+    "data_type": "varchar",
+    "info": "specifies the default characterset of the database, This parameter defines the encoding of the data in the CHAR, VARCHAR2, LONG and CLOB columns of a table.",
+    "flags": "GLOBAL | NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN | WITH_CREATE | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_nchar_characterset": {
+    "id": 10074,
+    "name": "nls_nchar_characterset",
+    "default_value": "AL32UTF8",
+    "base_value": "AL32UTF8",
+    "data_type": "varchar",
+    "info": "specifies the default characterset of the database, This parameter defines the encoding of the data in the NCHAR, NVARCHAR2 and NCLOB columns of a table.",
+    "flags": "GLOBAL | NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_date_language": {
+    "id": 10075,
+    "name": "nls_date_language",
+    "default_value": "AMERICAN",
+    "base_value": "AMERICAN",
+    "data_type": "varchar",
+    "info": "specifies the language to use for the spelling of day and month names and date abbreviations (a.m., p.m., AD, BC) returned by the TO_DATE and TO_CHAR functions.",
+    "flags": "SESSION | GLOBAL| NEED_SERIALIZE | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_length_semantics": {
+    "id": 10076,
+    "name": "nls_length_semantics",
+    "default_value": "BYTE",
+    "base_value": "BYTE",
+    "data_type": "varchar",
+    "info": "specifies the default length semantics to use for VARCHAR2 and CHAR table columns, user-defined object attributes, and PL/SQL variables in database objects created in the session. SYS user use BYTE intead of NLS_LENGTH_SEMANTICS.",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_nls_length_semantics_is_valid",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN | INFLUENCE_PL",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_nchar_conv_excp": {
+    "id": 10077,
+    "name": "nls_nchar_conv_excp",
+    "default_value": "FALSE",
+    "base_value": "FALSE",
+    "data_type": "varchar",
+    "info": "determines whether an error is reported when there is data loss during an implicit or explicit character type conversion between NCHAR/NVARCHAR2 and CHAR/VARCHAR2.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_calendar": {
+    "id": 10078,
+    "name": "nls_calendar",
+    "default_value": "GREGORIAN",
+    "base_value": "GREGORIAN",
+    "data_type": "varchar",
+    "info": "specifies which calendar system Oracle uses.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "nls_numeric_characters": {
+    "id": 10079,
+    "name": "nls_numeric_characters",
+    "default_value": ".,",
+    "base_value": ".,",
+    "data_type": "varchar",
+    "info": "specifies the characters to use as the decimal character and group separator, overrides those characters defined implicitly by NLS_TERRITORY.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY",
     "publish_version": "",
     "info_cn": "",
     "background_cn": "",
@@ -2158,7 +2382,6 @@
   },
   "tracefile_identifier": {
     "id": 10081,
-    "placeholder": true,
     "name": "tracefile_identifier",
     "default_value": "",
     "base_value": "",
@@ -2172,7 +2395,6 @@
   },
   "_groupby_nopushdown_cut_ratio": {
     "id": 10082,
-    "placeholder": true,
     "name": "_groupby_nopushdown_cut_ratio",
     "default_value": "3",
     "base_value": "3",
@@ -2186,7 +2408,6 @@
   },
   "_px_broadcast_fudge_factor": {
     "id": 10083,
-    "placeholder": true,
     "name": "_px_broadcast_fudge_factor",
     "default_value": "100",
     "base_value": "100",
@@ -2341,7 +2562,6 @@
   },
   "_ob_ols_policy_session_labels": {
     "id": 10094,
-    "placeholder": true,
     "name": "_ob_ols_policy_session_labels",
     "default_value": "",
     "base_value": "",
@@ -2355,7 +2575,6 @@
   },
   "ob_trace_info": {
     "id": 10095,
-    "placeholder": true,
     "name": "ob_trace_info",
     "default_value": "",
     "base_value": "",
@@ -2369,7 +2588,6 @@
   },
   "_px_partition_scan_threshold": {
     "id": 10097,
-    "placeholder": true,
     "name": "_px_partition_scan_threshold",
     "default_value": "64",
     "base_value": "64",
@@ -2385,7 +2603,6 @@
   },
   "_ob_px_bcast_optimization": {
     "id": 10098,
-    "placeholder": true,
     "name": "_ob_px_bcast_optimization",
     "default_value": "1",
     "base_value": "1",
@@ -2403,7 +2620,6 @@
   },
   "_ob_px_slave_mapping_threshold": {
     "id": 10099,
-    "placeholder": true,
     "name": "_ob_px_slave_mapping_threshold",
     "default_value": "200",
     "base_value": "200",
@@ -2432,7 +2648,6 @@
   },
   "_px_min_granules_per_slave": {
     "id": 10101,
-    "placeholder": true,
     "name": "_px_min_granules_per_slave",
     "default_value": "13",
     "base_value": "13",
@@ -2457,6 +2672,20 @@
     "publish_version": "226",
     "info_cn": "限制导入导出功能访问的路径",
     "background_cn": "导入导出功能未限制文件访问可能存在漏洞",
+    "ref_url": ""
+  },
+  "plsql_warnings": {
+    "id": 10103,
+    "name": "plsql_warnings",
+    "default_value": "ENABLE:ALL",
+    "base_value": "ENABLE:ALL",
+    "data_type": "varchar",
+    "info": "enables or disables the reporting of warning messages by the PL/SQL compiler, and specifies which warning messages to show as errors.",
+    "flags": "SESSION | GLOBAL| NEED_SERIALIZE | ORACLE_ONLY",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_plsql_warnings",
+    "publish_version": "1.0.0.0",
+    "info_cn": "控制pl/sql编译器的报错行为，可以指定某类型或某个warning码的状态为：enable，disable，error",
+    "background_cn": "pl/sql编译器的警告信息分成了几个分类，这个系统参数可以控制这些警告信息的行为",
     "ref_url": ""
   },
   "_enable_parallel_query": {
@@ -2531,6 +2760,20 @@
     "background_cn": "用户可以通过这两个变量访问或者设置事务的访问模式，当transaction_read_only设置为true时，不允许执行dml语句",
     "ref_url": ""
   },
+  "resource_manager_plan": {
+    "id": 10109,
+    "name": "resource_manager_plan",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_update_resource_manager_plan",
+    "info": "specifies tenant resource plan.",
+    "flags": "GLOBAL",
+    "publish_version": "320",
+    "info_cn": "指定租户的资源隔离计划",
+    "background_cn": "租户内的普通线程和并行执行线程会相互抢占CPU资源，通过给租户指定资源隔离计划，可以控制资源抢占策略，隔离资源使用量",
+    "ref_url": ""
+  },
   "performance_schema": {
     "id": 10110,
     "name": "performance_schema",
@@ -2544,9 +2787,64 @@
     "background_cn": "纯兼容性变量。不支持 performance_schema 系统变量，导致 8.0 JDBC 驱动在连接认证后初始化系统变量阶段执行 select @performance_schema 抛出异常",
     "ref_url": ""
   },
+  "nls_currency": {
+    "id": 10111,
+    "name": "nls_currency",
+    "default_value": "$",
+    "base_value": "$",
+    "data_type": "varchar",
+    "info": "specifies the string to use as the local currency symbol for the L number format element. The default value of this parameter is determined by NLS_TERRITORY.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_nls_currency_too_long",
+    "publish_version": "320",
+    "info_cn": "L数字格式元素的本地货币符号",
+    "background_cn": "兼容 oracle number format model L 数字格式元素",
+    "ref_url": ""
+  },
+  "nls_iso_currency": {
+    "id": 10112,
+    "name": "nls_iso_currency",
+    "default_value": "AMERICA",
+    "base_value": "AMERICA",
+    "data_type": "varchar",
+    "info": "specifies the string to use as the international currency symbol for the C number format element. The default value of this parameter is determined by NLS_TERRITORY",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_nls_iso_currency_is_valid",
+    "publish_version": "320",
+    "info_cn": "C数字格式元素的国际货币符号",
+    "background_cn": "兼容 oracle number format model C 数字格式元素",
+    "ref_url": ""
+  },
+  "nls_dual_currency": {
+    "id": 10113,
+    "name": "nls_dual_currency",
+    "default_value": "$",
+    "base_value": "$",
+    "data_type": "varchar",
+    "info": "specifies the dual currency symbol for the territory. The default is the dual currency symbol defined in the territory of your current language environment.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | ORACLE_ONLY",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_nls_currency_too_long",
+    "publish_version": "320",
+    "info_cn": "U数字格式元素的双货币符号",
+    "background_cn": "兼容 oracle number format model U 数字格式元素",
+    "ref_url": ""
+  },
+  "plsql_ccflags": {
+    "id": 10115,
+    "name": "plsql_ccflags",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "Lets you control conditional compilation of each PL/SQL unit independently.",
+    "flags": "NEED_SERIALIZE | GLOBAL | SESSION | ORACLE_ONLY",
+    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_and_convert_plsql_ccflags",
+    "publish_version": "330",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "_ob_proxy_session_temporary_table_used": {
     "id": 10116,
-    "placeholder": true,
     "name": "_ob_proxy_session_temporary_table_used",
     "default_value": "0",
     "base_value": "0",
@@ -2603,7 +2901,6 @@
   },
   "_optimizer_null_aware_antijoin": {
     "id": 10120,
-    "placeholder": true,
     "name": "_optimizer_null_aware_antijoin",
     "default_value": "1",
     "base_value": "1",
@@ -2617,7 +2914,6 @@
   },
   "_px_partial_rollup_pushdown": {
     "id": 10121,
-    "placeholder": true,
     "name": "_px_partial_rollup_pushdown",
     "default_value": "1",
     "base_value": "1",
@@ -2635,7 +2931,6 @@
   },
   "_px_dist_agg_partial_rollup_pushdown": {
     "id": 10122,
-    "placeholder": true,
     "name": "_px_dist_agg_partial_rollup_pushdown",
     "default_value": "1",
     "base_value": "1",
@@ -2653,7 +2948,6 @@
   },
   "_create_audit_purge_job": {
     "id": 10123,
-    "placeholder": true,
     "name": "_create_audit_purge_job",
     "default_value": "",
     "base_value": "",
@@ -2667,7 +2961,6 @@
   },
   "_drop_audit_purge_job": {
     "id": 10124,
-    "placeholder": true,
     "name": "_drop_audit_purge_job",
     "default_value": "",
     "base_value": "",
@@ -2681,7 +2974,6 @@
   },
   "_set_purge_job_interval": {
     "id": 10125,
-    "placeholder": true,
     "name": "_set_purge_job_interval",
     "default_value": "",
     "base_value": "",
@@ -2695,7 +2987,6 @@
   },
   "_set_purge_job_status": {
     "id": 10126,
-    "placeholder": true,
     "name": "_set_purge_job_status",
     "default_value": "",
     "base_value": "",
@@ -2709,7 +3000,6 @@
   },
   "_set_last_archive_timestamp": {
     "id": 10127,
-    "placeholder": true,
     "name": "_set_last_archive_timestamp",
     "default_value": "",
     "base_value": "",
@@ -2723,7 +3013,6 @@
   },
   "_clear_last_archive_timestamp": {
     "id": 10128,
-    "placeholder": true,
     "name": "_clear_last_archive_timestamp",
     "default_value": "",
     "base_value": "",
@@ -2804,7 +3093,6 @@
   },
   "ob_enable_rich_error_msg": {
     "id": 10134,
-    "placeholder": true,
     "name": "ob_enable_rich_error_msg",
     "default_value": "0",
     "base_value": "0",
@@ -2854,6 +3142,19 @@
     "flags": "GLOBAL | SESSION",
     "publish_version": "400",
     "info_cn": "控制在insert into select下是否默认收集统计信息",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "_force_order_preserve_set": {
+    "id": 10140,
+    "name": "_force_order_preserve_set",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "can control the behavior of set query, when true, set query will generate a serial plan, which ensure the output order of result set is ordered ",
+    "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE | ORACLE_ONLY | INVISIBLE",
+    "publish_version": "420",
+    "info_cn": "用于控制set query的改写行为和计划生成逻辑，保证分支串行执行和结果集顺序",
     "background_cn": "",
     "ref_url": ""
   },
@@ -2989,7 +3290,6 @@
   },
   "optimizer_features_enable": {
     "id": 10150,
-    "placeholder": true,
     "name": "optimizer_features_enable",
     "default_value": "1.0.0.0",
     "base_value": "",
@@ -3003,7 +3303,6 @@
   },
   "_ob_proxy_weakread_feedback": {
     "id": 10151,
-    "placeholder": true,
     "name": "_ob_proxy_weakread_feedback",
     "default_value": "0",
     "base_value": "0",
@@ -3017,7 +3316,6 @@
   },
   "ncharacter_set_connection": {
     "id": 10152,
-    "placeholder": true,
     "name": "ncharacter_set_connection",
     "default_value": "0",
     "base_value": "0",
@@ -3049,7 +3347,6 @@
   },
   "privilege_features_enable": {
     "id": 10154,
-    "placeholder": true,
     "name": "privilege_features_enable",
     "default_value": "",
     "base_value": "",
@@ -3063,7 +3360,6 @@
   },
   "_priv_control": {
     "id": 10155,
-    "placeholder": true,
     "name": "_priv_control",
     "default_value": "",
     "base_value": "",
@@ -3077,7 +3373,6 @@
   },
   "_enable_mysql_pl_priv_check": {
     "id": 10156,
-    "placeholder": true,
     "name": "_enable_mysql_pl_priv_check",
     "default_value": "0",
     "base_value": "0",
@@ -3156,6 +3451,19 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "_enable_rich_vector_format": {
+    "id": 10162,
+    "name": "_enable_rich_vector_format",
+    "default_value": "1",
+    "base_value": "1",
+    "data_type": "bool",
+    "info": "whether use rich vector format in vectorized execution engine",
+    "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE | INVISIBLE",
+    "publish_version": "430",
+    "info_cn": "在向量化引擎中, 开启/关闭使用多种列格式描述功能",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "innodb_stats_persistent": {
     "id": 10163,
     "name": "innodb_stats_persistent",
@@ -3196,6 +3504,25 @@
     "flags": "GLOBAL | MYSQL_ONLY",
     "min_val": "0",
     "max_val": "2",
+    "publish_version": "423",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "innodb_compress_debug": {
+    "id": 10166,
+    "name": "innodb_compress_debug",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "enum",
+    "info": "Compresses all tables using a specified compression algorithm without having to define a COMPRESSION attribute for each table.",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "enum_names": [
+      "NONE",
+      "ZLIB",
+      "LZ4",
+      "LZ4HC"
+    ],
     "publish_version": "423",
     "info_cn": "",
     "background_cn": "",
@@ -3319,7 +3646,6 @@
   },
   "ob_compatibility_control": {
     "id": 10175,
-    "placeholder": true,
     "name": "ob_compatibility_control",
     "default_value": "0",
     "base_value": "0",
@@ -3337,7 +3663,6 @@
   },
   "ob_compatibility_version": {
     "id": 10176,
-    "placeholder": true,
     "name": "ob_compatibility_version",
     "default_value": "17180000512",
     "base_value": "17180000512",
@@ -3356,7 +3681,6 @@
   },
   "ob_security_version": {
     "id": 10177,
-    "placeholder": true,
     "name": "ob_security_version",
     "default_value": "17180000512",
     "base_value": "17180000512",
@@ -3387,6 +3711,41 @@
     "info": "Specifies the correlation model when the optimizer estimates cardinality",
     "flags": "GLOBAL | SESSION | INFLUENCE_PLAN",
     "publish_version": "423",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "query_rewrite_enabled": {
+    "id": 10179,
+    "name": "query_rewrite_enabled",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "enum",
+    "info": "Whether to enable the materialized view rewriting",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
+    "enum_names": [
+      "FALSE",
+      "TRUE",
+      "FORCE"
+    ],
+    "publish_version": "431",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "query_rewrite_integrity": {
+    "id": 10180,
+    "name": "query_rewrite_integrity",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "enum",
+    "info": "Control the data integrity of materialized view rewriting",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
+    "enum_names": [
+      "ENFORCED",
+      "STALE_TOLERATED"
+    ],
+    "publish_version": "431",
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
@@ -4301,7 +4660,7 @@
     "default_value": "0",
     "base_value": "0",
     "data_type": "enum",
-    "info": "completion_type affects transactions that begin with START TRANSACTION or BEGIN and end with COMMIT or ROLLBACK. It does not apply when autocommit=1, merely simulates MySQL 5.7",
+    "info": "completion_type affects transactions that begin with START TRANSACTION or BEGIN and end with COMMIT or ROLLBACK. It does not apply for XA COMMIT, XA ROLLBACK, or when autocommit=1, merely simulates MySQL 5.7",
     "flags": "GLOBAL | SESSION | MYSQL_ONLY",
     "enum_names": [
       "NO_CHAIN",
@@ -4425,6 +4784,19 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "innodb_support_xa": {
+    "id": 10245,
+    "name": "innodb_support_xa",
+    "default_value": "1",
+    "base_value": "1",
+    "data_type": "bool",
+    "info": "Enables InnoDB support for two-phase commit in XA transactions, causing an extra disk flush for transaction preparation, merely simulates MySQL 5.7",
+    "flags": "GLOBAL | SESSION | MYSQL_ONLY",
+    "publish_version": "424",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "session_track_gtids": {
     "id": 10246,
     "name": "session_track_gtids",
@@ -4536,6 +4908,21 @@
     "min_val": "0",
     "max_val": "31536000",
     "publish_version": "424"
+  },
+  "_oracle_sql_select_limit": {
+    "id": 10253,
+    "name": "_oracle_sql_select_limit",
+    "default_value": "9223372036854775807",
+    "base_value": "9223372036854775807",
+    "data_type": "int",
+    "info": "used by JDBC setMaxRows() interface to specify limitation of row number in ResultSet",
+    "flags": "SESSION | INVISIBLE | ORACLE_ONLY",
+    "min_val": "0",
+    "max_val": "9223372036854775807",
+    "publish_version": "424",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
   },
   "group_replication_allow_local_disjoint_gtids_join": {
     "id": 10254,
@@ -5568,7 +5955,6 @@
   },
   "_enable_old_charset_aggregation": {
     "id": 10326,
-    "placeholder": true,
     "name": "_enable_old_charset_aggregation",
     "default_value": "0",
     "base_value": "0",
@@ -5577,6 +5963,19 @@
     "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE | MYSQL_ONLY | INVISIBLE | INFLUENCE_PL",
     "publish_version": "424",
     "info_cn": "用于控制是否使用旧版字符集推导规则",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "enable_sql_plan_monitor": {
+    "id": 10327,
+    "name": "enable_sql_plan_monitor",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "To set whether the SQL for the current session is logged into the SQL plan monitor.",
+    "flags": "SESSION | INFLUENCE_PLAN",
+    "publish_version": "",
+    "info_cn": "",
     "background_cn": "",
     "ref_url": ""
   },
@@ -6423,6 +6822,34 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "event_scheduler": {
+    "id": 10392,
+    "name": "event_scheduler",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Whether the MySQL Event Scheduler is enabled.",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "424",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "plsql_optimize_level": {
+    "id": 10393,
+    "name": "plsql_optimize_level",
+    "default_value": "2",
+    "base_value": "2",
+    "data_type": "int",
+    "min_val": "0",
+    "max_val": "3",
+    "info": "PLSQL_OPTIMIZE_LEVEL specifies the optimization level that will be used to compile PL/SQL library units. The higher the setting of this parameter, the more effort the compiler makes to optimize PL/SQL library units.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE",
+    "publish_version": "423",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "low_priority_updates": {
     "id": 10394,
     "name": "low_priority_updates",
@@ -6605,6 +7032,19 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_data_home_dir"
+  },
+  "avoid_temporal_upgrade": {
+    "id": 10407,
+    "name": "avoid_temporal_upgrade",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "mock for mysql5.7",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "425",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_avoid_temporal_upgrade"
   },
   "default_tmp_storage_engine": {
     "id": 10408,
@@ -8955,6 +9395,19 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
   },
+  "innodb_numa_interleave": {
+    "id": 10585,
+    "name": "innodb_numa_interleave",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "mock for mysql5.7",
+    "flags": "SESSION | GLOBAL | READONLY | MYSQL_ONLY",
+    "publish_version": "425",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html"
+  },
   "innodb_open_files": {
     "id": 10586,
     "name": "innodb_open_files",
@@ -9051,6 +9504,32 @@
     "name": "large_files_support",
     "default_value": "1",
     "base_value": "1",
+    "data_type": "int",
+    "info": "mock for mysql5.7",
+    "flags": "SESSION | GLOBAL | READONLY | MYSQL_ONLY",
+    "publish_version": "425",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
+  },
+  "large_pages": {
+    "id": 10594,
+    "name": "large_pages",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "mock for mysql5.7",
+    "flags": "SESSION | GLOBAL | READONLY | MYSQL_ONLY",
+    "publish_version": "425",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-options.html"
+  },
+  "large_page_size": {
+    "id": 10595,
+    "name": "large_page_size",
+    "default_value": "0",
+    "base_value": "0",
     "data_type": "int",
     "info": "mock for mysql5.7",
     "flags": "SESSION | GLOBAL | READONLY | MYSQL_ONLY",
@@ -9691,7 +10170,6 @@
   },
   "__ob_client_capability_flag": {
     "id": 10643,
-    "placeholder": true,
     "name": "__ob_client_capability_flag",
     "default_value": "0",
     "base_value": "0",
@@ -9707,7 +10185,6 @@
   },
   "ob_enable_parameter_anonymous_block": {
     "id": 10644,
-    "placeholder": true,
     "name": "ob_enable_parameter_anonymous_block",
     "default_value": "1",
     "base_value": "1",
@@ -9796,6 +10273,45 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_have_crypt"
+  },
+  "have_dynamic_loading": {
+    "id": 10651,
+    "name": "have_dynamic_loading",
+    "default_value": "YES",
+    "base_value": "YES",
+    "data_type": "varchar",
+    "info": "YES if mysqld supports dynamic loading of plugins, NO if not. If the value is NO, you cannot use options such as --plugin-load to load plugins at server startup, or the INSTALL PLUGIN statement to load plugins at runtime",
+    "flags": "GLOBAL | MYSQL_ONLY | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_have_dynamic_loading"
+  },
+  "keyring_aws_conf_file": {
+    "id": 10652,
+    "name": "keyring_aws_conf_file",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The location of the configuration file for the keyring_aws plugin. This variable is unavailable unless that plugin is installed",
+    "flags": "GLOBAL | MYSQL_ONLY | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_conf_file"
+  },
+  "keyring_aws_data_file": {
+    "id": 10653,
+    "name": "keyring_aws_data_file",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The location of the storage file for the keyring_aws plugin. This variable is unavailable unless that plugin is installed",
+    "flags": "GLOBAL | MYSQL_ONLY | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_data_file"
   },
   "language": {
     "id": 10654,
@@ -10141,6 +10657,32 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_skip_show_database"
   },
+  "plugin_load": {
+    "id": 10680,
+    "name": "plugin_load",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "This option tells the server to load the named plugins at startup",
+    "flags": "SESSION | MYSQL_ONLY | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-options.html#option_mysqld_plugin-load"
+  },
+  "plugin_load_add": {
+    "id": 10681,
+    "name": "plugin_load_add",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "adds a plugin or plugins to the set of plugins to be loaded at startup",
+    "flags": "SESSION | MYSQL_ONLY | READONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-options.html#option_mysqld_plugin-load-add"
+  },
   "big_tables": {
     "id": 10682,
     "name": "big_tables",
@@ -10166,6 +10708,51 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_check_proxy_users"
+  },
+  "connection_control_failed_connections_threshold": {
+    "id": 10684,
+    "name": "connection_control_failed_connections_threshold",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "int",
+    "info": "The number of consecutive failed connection attempts permitted to accounts before the server adds a delay for subsequent connection attempts",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "min_val": "0",
+    "max_val": "2147483647",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/connection-control-variables.html#sysvar_connection_control_failed_connections_threshold"
+  },
+  "connection_control_max_connection_delay": {
+    "id": 10685,
+    "name": "connection_control_max_connection_delay",
+    "default_value": "2147483647",
+    "base_value": "2147483647",
+    "data_type": "int",
+    "info": "The maximum delay in milliseconds for server response to failed connection attempts, if connection_control_failed_connections_threshold is greater than zero",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "min_val": "1000",
+    "max_val": "2147483647",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/connection-control-variables.html#sysvar_connection_control_max_connection_delay"
+  },
+  "connection_control_min_connection_delay": {
+    "id": 10686,
+    "name": "connection_control_min_connection_delay",
+    "default_value": "1000",
+    "base_value": "1000",
+    "data_type": "int",
+    "info": "The minmum delay in milliseconds for server response to failed connection attempts, if connection_control_failed_connections_threshold is greater than zero",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "min_val": "1000",
+    "max_val": "2147483647",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/connection-control-variables.html#sysvar_connection_control_min_connection_delay"
   },
   "default_week_format": {
     "id": 10687,
@@ -10341,6 +10928,126 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_stats_transient_sample_pagess"
+  },
+  "keyring_aws_cmk_id": {
+    "id": 10699,
+    "name": "keyring_aws_cmk_id",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The customer master key (CMK) ID obtained from the AWS KMS server and used by the keyring_aws plugin",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_cmk_id"
+  },
+  "keyring_aws_region": {
+    "id": 10700,
+    "name": "keyring_aws_region",
+    "default_value": "19",
+    "base_value": "19",
+    "data_type": "enum",
+    "info": "The AWS region for the keyring_aws plugin. This variable is unavailable unless that plugin is installed",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "enum_names": [
+      "af-south-1",
+      "ap-east-1",
+      "ap-northeast-1",
+      "ap-northeast-2",
+      "ap-northeast-3",
+      "ap-south-1",
+      "ap-southeast-1",
+      "ap-southeast-2",
+      "ca-central-1",
+      "cn-north-1",
+      "cn-northwest-1",
+      "eu-central-1",
+      "eu-north-1",
+      "eu-south-1",
+      "eu-west-1",
+      "eu-west-2",
+      "eu-west-3",
+      "me-south-1",
+      "sa-east-1",
+      "us-east-1",
+      "us-east-2",
+      "us-gov-east-1",
+      "us-iso-east-1",
+      "us-iso-west-1",
+      "us-isob-east-1",
+      "us-west-1",
+      "us-west-2"
+    ],
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_aws_region"
+  },
+  "keyring_encrypted_file_data": {
+    "id": 10701,
+    "name": "keyring_encrypted_file_data",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The path name of the data file used for secure data storage by the keyring_encrypted_file plugin",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_encrypted_file_data"
+  },
+  "keyring_encrypted_file_password": {
+    "id": 10702,
+    "name": "keyring_encrypted_file_password",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The password used by the keyring_encrypted_file pluginn",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_encrypted_file_password"
+  },
+  "keyring_file_data": {
+    "id": 10703,
+    "name": "keyring_file_data",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The path name of the data file used for secure data storage by the keyring_file plugin",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_file_data"
+  },
+  "keyring_okv_conf_dir": {
+    "id": 10704,
+    "name": "keyring_okv_conf_dir",
+    "default_value": "",
+    "base_value": "",
+    "data_type": "varchar",
+    "info": "The path name of the directory that stores configuration information used by the keyring_okv plugin",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_okv_conf_dir"
+  },
+  "keyring_operations": {
+    "id": 10705,
+    "name": "keyring_operations",
+    "default_value": "1",
+    "base_value": "1",
+    "data_type": "bool",
+    "info": "Whether keyring operations are enabled. This variable is used during key migration operations",
+    "flags": "GLOBAL | MYSQL_ONLY",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/keyring-system-variables.html#sysvar_keyring_operations"
   },
   "optimizer_switch": {
     "id": 10706,
@@ -10847,6 +11554,24 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "ob_table_access_policy": {
+    "id": 10742,
+    "name": "ob_table_access_policy",
+    "default_value": "2",
+    "base_value": "2",
+    "data_type": "enum",
+    "info": "Control the optimizer to generate a table access plan that prefers a specific storage format.",
+    "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE",
+    "enum_names": [
+      "ROW_STORE",
+      "COLUMN_STORE",
+      "AUTO"
+    ],
+    "publish_version": "433",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "pid_file": {
     "id": 10743,
     "name": "pid_file",
@@ -10886,6 +11611,20 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
   },
+  "mview_refresh_dop": {
+    "id": 10746,
+    "name": "mview_refresh_dop",
+    "default_value": "4",
+    "base_value": "4",
+    "data_type": "uint",
+    "info": "The default refresh parallelism of materialized view",
+    "flags": "GLOBAL | SESSION ",
+    "publish_version": "435",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": "",
+    "placeholder": false
+  },
   "enable_optimizer_rowgoal": {
     "id": 10747,
     "name": "enable_optimizer_rowgoal",
@@ -10919,9 +11658,23 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "_current_default_catalog": {
+    "id": 10749,
+    "name": "_current_default_catalog",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "uint",
+    "info": "The default catalog for session.",
+    "flags": "SESSION | NEED_SERIALIZE | INVISIBLE | READONLY",
+    "min_val": "0",
+    "max_val": "18446744073709551615",
+    "publish_version": "435",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "ob_enable_ps_parameter_anonymous_block": {
     "id": 10750,
-    "placeholder": true,
     "name": "ob_enable_ps_parameter_anonymous_block",
     "default_value": "1",
     "base_value": "1",
@@ -10972,32 +11725,6 @@
     "min_val": "0",
     "max_val": "100",
     "publish_version": "1.0.0.0",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "enable_file_sql": {
-    "id": 10754,
-    "name": "enable_file_sql",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "bool",
-    "info": "whether local files can be queried as tables and written by COPY",
-    "flags": "GLOBAL | SESSION | QUERY_SENSITIVE | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "ai_column_strict_read": {
-    "id": 10755,
-    "name": "ai_column_strict_read",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "bool",
-    "info": "whether reading an AI column requires its computed value to be up to date",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
-    "publish_version": "",
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""

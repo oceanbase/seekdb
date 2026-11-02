@@ -54,6 +54,7 @@ public:
   const static uint8_t IS_JSON_CONSTRAINT_RELAX = 1;
   const static uint8_t IS_JSON_CONSTRAINT_STRICT = 4;
   inline bool is_resolve_insert_update() { return is_resolve_insert_update_;}
+  int recursive_search_sequence_expr(const ObRawExpr *default_expr);
 protected:
 
   int resolve_assignments(const ParseNode &parse_node,
@@ -95,7 +96,8 @@ protected:
                             const bool log_error = true);
   // for update view, add all columns to select item.
   int add_all_column_to_updatable_view(ObDMLStmt &stmt,
-                                       const TableItem &table_item);
+                                       const TableItem &table_item,
+                                       const bool &has_need_fired_tg_on_view = false);
 
   virtual int mock_values_column_ref(const ObColumnRefRawExpr *column_ref)
   {
@@ -111,6 +113,12 @@ protected:
     return common::OB_SUCCESS;
   }
 
+  // add for error logging
+  int resolve_err_log_table(const ParseNode *node);
+  int check_err_log_table(ObString &table_name, ObString &database_name);
+  int resolve_err_log_reject(const ParseNode *node);
+  int check_err_log_support_type(ObObjType column_o_type);
+
   virtual int process_values_function(ObRawExpr *&expr);
   virtual int recursive_values_expr(ObRawExpr *&expr);
 
@@ -119,6 +127,8 @@ protected:
 
   int add_all_columns_to_stmt(const TableItem &table_item,
                               common::ObIArray<ObColumnRefRawExpr*> &column_exprs);
+  int add_all_columns_to_stmt_for_trigger(const TableItem &table_item,
+                                          common::ObIArray<ObColumnRefRawExpr*> &column_exprs);
   int add_all_rowkey_columns_to_stmt(const TableItem &table_item,
                                      common::ObIArray<ObColumnRefRawExpr*> &column_exprs);
   int add_index_related_columns_to_stmt(const TableItem &table_item,
@@ -229,7 +239,7 @@ protected:
       const ObTableSchema *table_schema,
       const ObColumnSchemaV2 *column_schema,
       const int64_t auto_increment_cache_size,
-      share::AutoincParam &param);
+      AutoincParam &param);
   int resolve_json_partial_update_flag(ObIArray<ObTableAssignment> &table_assigns, ObStmtScope scope);
   int mark_json_partial_update_flag(const ObColumnRefRawExpr *ref_expr, ObRawExpr *expr, int depth, bool &allow_json_partial_update);
   int add_select_item_func(ObSelectStmt &select_stmt, ColumnItem &col);
@@ -238,6 +248,8 @@ protected:
 private:
   common::hash::ObPlacementHashSet<uint64_t, 4229> insert_column_ids_;
   bool is_column_specify_;
+  bool is_oracle_tmp_table_; // whether to create oracle's temporary table
+  int64_t oracle_tmp_table_type_;
 protected:
   bool is_resolve_insert_update_;
 };

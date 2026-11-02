@@ -21,6 +21,13 @@
 
 namespace oceanbase
 {
+namespace share
+{
+namespace schema
+{
+class ObTenantSchema;
+}
+}
 namespace sql
 {
 class ObSQLSessionInfo;

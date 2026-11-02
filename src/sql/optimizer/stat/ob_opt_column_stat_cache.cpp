@@ -15,6 +15,7 @@
  */
 
 #include "sql/optimizer/stat/ob_opt_column_stat_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -32,8 +33,10 @@ int ObOptColumnStatCache::get_row(const ObOptColumnStat::Key &key, ObOptColumnSt
     if (OB_ENTRY_NOT_EXIST != ret) {
       COMMON_LOG(WARN, "Fail to get key from row cache. ", K(key), K(ret));
     }
+    EVENT_INC(ObStatEventIds::OPT_COLUMN_STAT_CACHE_MISS);
   } else {
     handle.cache_ = this;
+    EVENT_INC(ObStatEventIds::OPT_COLUMN_STAT_CACHE_HIT);
   }
   return ret;
 }
@@ -48,6 +51,7 @@ int ObOptColumnStatCache::put_and_fetch_row(const ObOptColumnStat::Key &key,
      ret = OB_INVALID_ARGUMENT;
      COMMON_LOG(WARN, "invalid column stat cache key.", K(key), K(ret));
   } else if (OB_FAIL(put_and_fetch(key, value, handle.stat_, handle.handle_, true /*overwrite*/))) {
+     COMMON_LOG(WARN, "Fail to put kvpair to cache.", K(ret));
   }
   return ret;
 }

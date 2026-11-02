@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TX_CTX_TABLE
 #define OCEANBASE_STORAGE_OB_TX_CTX_TABLE
 
+#include "share/ob_ls_id.h"
 #include "storage/ob_i_store.h"
 #include "storage/tx_table/ob_tx_table_define.h"
 #include "storage/tx_table/tx_table_local_buffer.h"
@@ -26,7 +27,6 @@ namespace oceanbase
 namespace transaction
 {
   class ObLSTxCtxMgr;
-  class TxCtxCache;
 }
 namespace storage
 {
@@ -34,8 +34,7 @@ namespace storage
 class ObTxCtxTableRecoverHelper
 {
 public:
-  ObTxCtxTableRecoverHelper()
-      : allocator_(), buf_(allocator_), tx_ctx_cache_(nullptr) { reset(); }
+  ObTxCtxTableRecoverHelper() : allocator_(), buf_(allocator_) { reset(); }
   ~ObTxCtxTableRecoverHelper() { destroy(); }
   void reset();
   void destroy();
@@ -62,8 +61,8 @@ private:
   struct ObTxCtxTableMeta prev_meta_;
   ObTxLocalBuffer buf_;
   int64_t prev_end_pos_;
+  share::ObLSID ls_id_;
   ObTxCtxTableInfo ctx_info_;
-  transaction::TxCtxCache *tx_ctx_cache_;
 };
 
 //
@@ -98,7 +97,7 @@ public:
   ObTxCtxTable();
   ~ObTxCtxTable();
 
-  int init();
+  int init(const share::ObLSID& ls_id);
 
   void reset();
 
@@ -109,13 +108,12 @@ public:
 
   // We need the reference count to keep the life cycle of the ls_tx_ctx_mgr.
   // And the ObTxTable is a guard for automatical management of it.
-  int acquire_ref_();
+  int acquire_ref_(const share::ObLSID& ls_id);
 
   int release_ref_();
 
   // We use the method to recover the tx_ctx_table for reboot.
   int recover(const blocksstable::ObDatumRow &row, ObTxDataTable &tx_data_table);
-  void finish_recover() { recover_helper_.reset(); }
 
   int check_with_tx_data(const transaction::ObTransID tx_id, ObITxDataCheckFunctor &fn);
 
@@ -125,6 +123,7 @@ public:
   transaction::ObLSTxCtxMgr *get_ls_tx_ctx_mgr();
 
 private:
+  share::ObLSID ls_id_;
   transaction::ObLSTxCtxMgr *ls_tx_ctx_mgr_;
 
 private:

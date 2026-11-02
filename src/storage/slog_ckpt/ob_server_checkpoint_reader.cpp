@@ -31,50 +31,58 @@ int ObServerCheckpointReader::read_checkpoint(const ObServerSuperBlock &super_bl
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_SYS;
-  } else if (OB_FAIL(read_runtime_meta_checkpoint(super_block.body_.runtime_meta_entry_))) {
+    LOG_WARN("super block is invalid", K(ret), K(super_block));
+  } else if (OB_FAIL(read_tenant_meta_checkpoint(super_block.body_.tenant_meta_entry_))) {
+    LOG_WARN("fail to read tenant meta checkpoint", K(ret), K(super_block));
   }
   return ret;
 }
 
 
-int ObServerCheckpointReader::read_runtime_meta_checkpoint(const MacroBlockId &entry_block)
+int ObServerCheckpointReader::read_tenant_meta_checkpoint(const MacroBlockId &entry_block)
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr(ObModIds::OB_CHECKPOINT);
   if (OB_UNLIKELY(!entry_block.is_valid())) {
-    LOG_INFO("has no runtime config checkpoint");
-  } else if (OB_FAIL(runtime_meta_item_reader_.init(entry_block, mem_attr))) {
+    LOG_INFO("has no tenant config checkpoint");
+  } else if (OB_FAIL(tenant_meta_item_reader_.init(entry_block, mem_attr))) {
+    LOG_WARN("fail to init tenant config item reader", K(ret));
   } else {
     char *item_buf = nullptr;
     int64_t item_buf_len = 0;
     ObMetaDiskAddr addr;
+    int ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
-      if (OB_FAIL(runtime_meta_item_reader_.get_next_item(item_buf, item_buf_len, addr))) {
+      if (OB_FAIL(tenant_meta_item_reader_.get_next_item(item_buf, item_buf_len, addr))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("fail to get next tenant meta item", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
         }
-      } else if (OB_FAIL(deserialize_runtime_meta(item_buf, item_buf_len))) {
+      } else if (OB_FAIL(deserialize_tenant_meta(item_buf, item_buf_len))) {
+        LOG_WARN("failed to replay_tenant_meta_checkpoint", K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObServerCheckpointReader::deserialize_runtime_meta(const char *buf, const int64_t buf_len)
+int ObServerCheckpointReader::deserialize_tenant_meta(const char *buf, const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
 
-  omt::ObServerRuntimeMeta runtime_meta;
+  omt::ObTenantMeta tenant_meta;
   int64_t pos = 0;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(runtime_meta.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("invalid argument", K(ret));
+  } else if (OB_FAIL(tenant_meta.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("fail to deserialize", K(ret));
   } else {
     // Keep cover semantics (last item wins)
-    runtime_meta_ = runtime_meta;
-    runtime_meta_valid_ = true;
+    tenant_meta_ = tenant_meta;
+    tenant_meta_valid_ = true;
   }
 
   return ret;
@@ -82,18 +90,19 @@ int ObServerCheckpointReader::deserialize_runtime_meta(const char *buf, const in
 
 ObIArray<MacroBlockId> &ObServerCheckpointReader::get_meta_block_list()
 {
-  return runtime_meta_item_reader_.get_meta_block_list();
+  return tenant_meta_item_reader_.get_meta_block_list();
 }
 
-int ObServerCheckpointReader::get_runtime_meta(omt::ObServerRuntimeMeta &runtime_meta, bool &is_valid)
+int ObServerCheckpointReader::get_tenant_meta(omt::ObTenantMeta &tenant_meta, bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  // A checkpoint carries at most one server runtime entry.
-  is_valid = runtime_meta_valid_;
+  // Checkpoint carries at most the single sys tenant meta;
+  // take the last one as the cover semantics of the previous map set_refactored(1UL,..,1)
+  is_valid = tenant_meta_valid_;
   if (is_valid) {
-    runtime_meta = runtime_meta_;
+    tenant_meta = tenant_meta_;
   }
-  return OB_SUCCESS;
+  return ret;
 }
 
 }  // end namespace storage

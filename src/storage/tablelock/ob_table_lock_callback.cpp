@@ -18,7 +18,7 @@
 
 #include "ob_table_lock_callback.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 
 namespace oceanbase
 {
@@ -50,6 +50,7 @@ int ObOBJLockCallback::print_callback()
 int ObOBJLockCallback::trans_commit()
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("ObOBJLockCallback::trans_commit", K(*this));
   ObMemtableCtx *mem_ctx = static_cast<ObMemtableCtx*>(ctx_);
   switch (lock_op_->lock_op_.op_type_) {
   case IN_TRANS_DML_LOCK:
@@ -59,6 +60,7 @@ int ObOBJLockCallback::trans_commit()
     // 2. delete the lock in memtable_ctx.
     if (OB_ISNULL(memtable_) || OB_ISNULL(lock_op_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid callback.", K(ret), K_(memtable), K_(lock_op));
     } else {
       memtable_->remove_lock_record(lock_op_->lock_op_);
       // TODO: yanyuan.cxf maybe we need only use mem_ctx toremove.
@@ -88,6 +90,7 @@ int ObOBJLockCallback::rollback_callback()
 int ObOBJLockCallback::lock_abort_()
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("ObOBJLockCallback::lock_abort", K(*this));
   switch (lock_op_->lock_op_.op_type_) {
   case IN_TRANS_DML_LOCK:
   case IN_TRANS_COMMON_LOCK: {
@@ -96,6 +99,7 @@ int ObOBJLockCallback::lock_abort_()
     // 2. delete the lock in memtable_ctx.
     if (OB_ISNULL(memtable_) || OB_ISNULL(lock_op_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid callback.", K(ret), K_(memtable), K_(lock_op));
     } else {
       // TODO: yanyuan.cxf use only mem_ctx.
       memtable_->remove_lock_record(lock_op_->lock_op_);
@@ -137,7 +141,9 @@ int ObOBJLockCallback::get_redo(
                                    lock_op_->lock_op_,
                                    memtable_->get_key().get_tablet_id(),
                                    this))) {
+    LOG_WARN("get redo failed", K(ret), KP(this), KP_(lock_op));
   }
+  LOG_DEBUG("ObOBJLockCallback::get_redo", K(ret), K(*this), K(lock_op_->lock_op_));
   return ret;
 }
 

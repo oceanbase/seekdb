@@ -38,12 +38,6 @@ namespace obcall
 {
 struct ObAlterTableArg;
 }
-namespace query
-{
-class ObILocalCommandService;
-class ObIQueryRuntimeEnvironment;
-class ObIRootCommandService;
-}
 namespace common
 {
 class ObIAllocator;
@@ -111,7 +105,6 @@ public:
   virtual ~ObAlterTableExecutor();
   int execute(ObExecContext &ctx, ObAlterTableStmt &stmt);
 private:
-  int execute_ai_column_retry(ObExecContext &ctx, ObAlterTableStmt &stmt);
   static const int64_t TIME_INTERVAL_PER_PART_US = 50 * 1000; // 50ms
   static const int64_t MAX_WAIT_CHECK_SCHEMA_VERSION_INTERVAL_US = 120LL * 1000000LL; // 120s
   static const int64_t MIN_WAIT_CHECK_SCHEMA_VERSION_INTERVAL_US = 20LL * 1000000LL; // 20s
@@ -129,15 +122,12 @@ private:
       obcall::ObAlterTableRes &res,
       common::ObIAllocator &allocator,
       ObSQLSessionInfo *my_session,
-      query::ObIRootCommandService &root_commands,
-      query::ObIQueryRuntimeEnvironment &runtime_environment,
-      query::ObILocalCommandService &local_commands);
+      const bool is_sync_ddl_user);
 
   int alter_table_exchange_partition_rpc(
       obcall::ObExchangePartitionArg &exchange_partition_arg,
       obcall::ObAlterTableRes &res,
-      ObSQLSessionInfo *my_session,
-      query::ObIRootCommandService &root_commands);
+      ObSQLSessionInfo *my_session);
 
   int need_check_constraint_validity(obcall::ObAlterTableArg &alter_table_arg, bool &need_check);
 
@@ -267,13 +257,23 @@ private:
 
 };
 
-class ObRecyclebinRestoreTableStmt;
-class ObRecyclebinRestoreTableExecutor
+class ObFlashBackTableFromRecyclebinStmt;
+class ObFlashBackTableFromRecyclebinExecutor
 {
 public:
-  ObRecyclebinRestoreTableExecutor() {}
-  virtual ~ObRecyclebinRestoreTableExecutor() {}
-  int execute(ObExecContext &ctx, ObRecyclebinRestoreTableStmt &stmt);
+  ObFlashBackTableFromRecyclebinExecutor() {}
+  virtual ~ObFlashBackTableFromRecyclebinExecutor() {}
+  int execute(ObExecContext &ctx, ObFlashBackTableFromRecyclebinStmt &stmt);
+private:
+};
+
+class ObFlashBackTableToScnStmt;
+class ObFlashBackTableToScnExecutor
+{
+public:
+  ObFlashBackTableToScnExecutor() {}
+  virtual ~ObFlashBackTableToScnExecutor() {}
+  int execute(ObExecContext &ctx, ObFlashBackTableToScnStmt &stmt);
 private:
 };
 
@@ -294,6 +294,26 @@ public:
   ObOptimizeTableExecutor() = default;
   virtual ~ObOptimizeTableExecutor() = default;
   int execute(ObExecContext &ctx, ObOptimizeTableStmt &stmt);
+};
+
+class ObOptimizeTenantStmt;
+class ObOptimizeTenantExecutor
+{
+public:
+  ObOptimizeTenantExecutor() = default;
+  virtual ~ObOptimizeTenantExecutor() = default;
+  int execute(ObExecContext &ctx, ObOptimizeTenantStmt &stmt);
+  static int optimize_tenant(const obcall::ObOptimizeTenantArg &arg,
+      share::schema::ObMultiVersionSchemaService &schema_service);
+};
+
+class ObOptimizeAllStmt;
+class ObOptimizeAllExecutor
+{
+public:
+  ObOptimizeAllExecutor() = default;
+  virtual ~ObOptimizeAllExecutor() = default;
+  int execute(ObExecContext &ctx, ObOptimizeAllStmt &stmt);
 };
 
 } //end namespace sql

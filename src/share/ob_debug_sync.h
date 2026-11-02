@@ -30,8 +30,6 @@ namespace oceanbase
 namespace common
 {
 class ObString;
-class ObIDebugSyncBroadcaster;
-class ObIDebugSyncBroadcaster;
 typedef common::ObFixedLengthString<32> ObSyncEventName;
 
 struct ObDebugSyncAction
@@ -187,10 +185,10 @@ class ObDebugSync
 public:
   static ObDebugSync &instance();
 
+  void set_rpc_proxy(void *rpc_proxy);
 
   int add_debug_sync(const ObString &str, const bool is_global,
-      ObDSSessionActions &session_actions,
-      ObIDebugSyncBroadcaster *broadcaster);
+      ObDSSessionActions &session_actions);
 
   int set_global_action(const bool reset, const bool clear, const ObDebugSyncAction &action);
 

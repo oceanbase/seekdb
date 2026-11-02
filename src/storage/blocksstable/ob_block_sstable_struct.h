@@ -24,8 +24,10 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_pointer_hashmap.h"
+#include "share/ob_encryption_util.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/blocksstable/encoding/ob_encoding_util.h"
+#include "storage/blocksstable/cs_encoding/ob_column_encoding_struct.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/blocksstable/ob_sstable_macro_block_header.h"
@@ -48,11 +50,18 @@ extern const char *BLOCK_SSTBALE_FILE_NAME;
 
 //block sstable header magic number;
 const int64_t MICRO_BLOCK_HEADER_MAGIC = 1005;
+const int64_t BF_MACRO_BLOCK_HEADER_MAGIC = 1014;
+const int64_t BF_MICRO_BLOCK_HEADER_MAGIC = 1015;
 const int64_t SERVER_SUPER_BLOCK_MAGIC = 1018;
 const int64_t LINKED_MACRO_BLOCK_HEADER_MAGIC = 1019;
 
-const int64_t MICRO_BLOCK_HEADER_VERSION = 3;
+const int64_t MICRO_BLOCK_HEADER_VERSION_1 = 1;
+const int64_t MICRO_BLOCK_HEADER_VERSION_2 = 2;
+const int64_t MICRO_BLOCK_HEADER_VERSION_3 = 3;
+const int64_t MICRO_BLOCK_HEADER_VERSION = MICRO_BLOCK_HEADER_VERSION_3;
 const int64_t LINKED_MACRO_BLOCK_HEADER_VERSION = 1;
+const int64_t BF_MACRO_BLOCK_HEADER_VERSION = 1;
+const int64_t BF_MICRO_BLOCK_HEADER_VERSION = 1;
 
 struct ObPosition
 {
@@ -88,6 +97,13 @@ struct ObCommitLogSpec
 
 struct ObStorageEnv
 {
+  enum REDUNDANCY_LEVEL
+  {
+    EXTERNAL_REDUNDANCY = 0,
+    NORMAL_REDUNDANCY = 1,
+    HIGH_REDUNDANCY = 2,
+    MAX_REDUNDANCY
+  };
   // for disk manager
   const char *data_dir_;
   const char *sstable_dir_;
@@ -96,6 +112,7 @@ struct ObStorageEnv
   int64_t data_disk_percentage_;
   int64_t log_disk_size_;
   int64_t log_disk_percentage_;
+  REDUNDANCY_LEVEL redundancy_level_;
 
   // for sstable log writer
   ObCommitLogSpec log_spec_;
@@ -123,6 +140,7 @@ struct ObStorageEnv
                K_(data_disk_percentage),
                K_(log_disk_size),
                K_(log_disk_percentage),
+               K_(redundancy_level),
                K_(log_spec),
                K_(clog_dir),
                K_(bf_cache_miss_count_threshold),
@@ -148,6 +166,28 @@ struct ObMicroBlockId
   MacroBlockId macro_id_;
   int32_t offset_;
   int32_t size_;
+};
+
+struct ObBloomFilterMicroBlockHeader
+{
+  ObBloomFilterMicroBlockHeader() { reset();}
+  void reset() { MEMSET(this, 0, sizeof(ObBloomFilterMicroBlockHeader));}
+  OB_INLINE bool is_valid() const
+  {
+    return header_size_ == sizeof(ObBloomFilterMicroBlockHeader)
+      && version_ >= BF_MICRO_BLOCK_HEADER_VERSION
+      && BF_MICRO_BLOCK_HEADER_MAGIC == magic_
+      && rowkey_column_count_ > 0
+      && row_count_ > 0;
+  }
+  TO_STRING_KV(K_(header_size), K_(version), K_(magic), K_(rowkey_column_count), K_(row_count));
+
+  int16_t header_size_;
+  int16_t version_;
+  int16_t magic_;
+  int16_t rowkey_column_count_;
+  int32_t row_count_;
+  int32_t reserved_;
 };
 
 #ifdef _WIN32
@@ -405,13 +445,16 @@ struct ObMicroBlockEncodingCtx
   int64_t column_cnt_;
   const common::ObIArray<share::schema::ObColDesc> *col_descs_;
   ObMicroBlockEncoderOpt encoder_opt_;
+  ObCSEncodingOpt cs_encoding_opt_;
 
   mutable int64_t estimate_block_size_;
   mutable int64_t real_block_size_;
   mutable int64_t micro_block_cnt_; // build micro block count
   mutable common::ObArray<ObPreviousEncodingArray<MAX_PREV_ENCODING_COUNT> > previous_encodings_;
+  mutable ObPreviousCSEncoding previous_cs_encoding_;
 
   int64_t *column_encodings_;
+  int64_t major_working_cluster_version_;
   common::ObRowStoreType row_store_type_;
   bool need_calc_column_chksum_;
   ObCompressorType compressor_type_;
@@ -421,10 +464,10 @@ struct ObMicroBlockEncodingCtx
 
   ObMicroBlockEncodingCtx() : macro_block_size_(0), micro_block_size_(0),
     rowkey_column_cnt_(0), column_cnt_(0), col_descs_(nullptr),
-    encoder_opt_(), estimate_block_size_(0),
+    encoder_opt_(), cs_encoding_opt_(), estimate_block_size_(0),
     real_block_size_(0), micro_block_cnt_(0),
-    previous_encodings_(),
-    column_encodings_(nullptr),
+    previous_encodings_(), previous_cs_encoding_(),
+    column_encodings_(nullptr), major_working_cluster_version_(0),
     row_store_type_(ENCODING_ROW_STORE), need_calc_column_chksum_(false),
     compressor_type_(INVALID_COMPRESSOR), encoding_granularity_(UINT64_MAX),
     minimum_rows_(1),
@@ -437,7 +480,7 @@ struct ObMicroBlockEncodingCtx
   TO_STRING_KV(K_(macro_block_size), K_(micro_block_size), K_(rowkey_column_cnt),
       K_(column_cnt), KP_(col_descs), K_(estimate_block_size), K_(real_block_size),
       K_(micro_block_cnt), K_(encoder_opt), K_(previous_encodings), KP_(column_encodings),
-      K_(row_store_type), K_(need_calc_column_chksum),
+      K_(major_working_cluster_version), K_(row_store_type), K_(need_calc_column_chksum),
       K_(compressor_type), K_(encoding_granularity), K_(minimum_rows), K_(semistruct_encoding_type));
 };
 
@@ -482,6 +525,57 @@ struct ObColumnEncodingCtx
       K_(is_refed), K_(need_sort));
 };
 
+struct ObBloomFilterMacroBlockHeader
+{
+  ObBloomFilterMacroBlockHeader() { reset(); }
+  void reset() { MEMSET(this, 0, sizeof(ObBloomFilterMacroBlockHeader)); }
+  OB_INLINE bool is_valid() const{
+    return header_size_ > 0
+      && version_ >= BF_MACRO_BLOCK_HEADER_VERSION
+      && BF_MACRO_BLOCK_HEADER_MAGIC == magic_
+      && common::ObTabletID::INVALID_TABLET_ID != tablet_id_
+      && snapshot_version_ >= 0
+      && rowkey_column_count_ > 0
+      && row_count_ > 0
+      && occupy_size_ > 0
+      && micro_block_count_ > 0
+      && micro_block_data_offset_ > 0
+      && micro_block_data_size_ > 0
+      && data_checksum_ >= 0
+      && ObMacroBlockCommonHeader::BloomFilterData == attr_;
+  }
+  TO_STRING_KV(K_(header_size),
+      K_(version),
+      K_(magic),
+      K_(attr),
+      K_(tablet_id),
+      K_(snapshot_version),
+      K_(rowkey_column_count),
+      K_(row_count),
+      K_(occupy_size),
+      K_(micro_block_count),
+      K_(micro_block_data_offset),
+      K_(micro_block_data_size),
+      K_(data_checksum),
+      K_(compressor_type)
+  );
+
+  int32_t header_size_;
+  int32_t version_;
+  int32_t magic_;                    // magic number;
+  int32_t attr_;
+  uint64_t tablet_id_;
+  int64_t snapshot_version_;
+  int32_t rowkey_column_count_;
+  int32_t row_count_;
+  int32_t occupy_size_;              // occupy size of the whole macro block, include common header
+  int32_t micro_block_count_;        // block count
+  int32_t micro_block_data_offset_;
+  int32_t micro_block_data_size_;
+  int64_t data_checksum_;
+  ObCompressorType compressor_type_;
+};
+
 class ObBufferReader;
 class ObBufferWriter;
 
@@ -507,7 +601,9 @@ public:
 
 struct ObSSTableColumnMeta
 {
-  // Field order is the current on-disk serialization contract.
+  //For compatibility, the variables in this struct MUST NOT be deleted or moved.
+  //You should ONLY add variables at the end.
+  //Note that if you use complex structure as variables, the complex structure should also keep compatibility.
   static const int64_t SSTABLE_COLUMN_META_VERSION = 1;
   int64_t column_id_;
   int64_t column_default_checksum_;
@@ -849,12 +945,15 @@ public:
                K_(linked_block_count),
                K_(tmp_file_count),
                K_(data_block_count),
+               K_(shared_data_block_count),
                K_(index_block_count),
                K_(ids_block_count),
                K_(disk_block_count),
+               K_(bloomfiter_count),
                K_(hold_count),
                K_(pending_free_count),
                K_(free_count),
+               K_(shared_meta_block_count),
                K_(mark_cost_time),
                K_(sweep_cost_time),
                KTIME_(start_time),
@@ -867,12 +966,15 @@ public:
   int64_t linked_block_count_;
   int64_t tmp_file_count_;
   int64_t data_block_count_;
+  int64_t shared_data_block_count_;
   int64_t index_block_count_;
   int64_t ids_block_count_;
   int64_t disk_block_count_;
+  int64_t bloomfiter_count_;
   int64_t hold_count_;
   int64_t pending_free_count_;
   int64_t free_count_;
+  int64_t shared_meta_block_count_;
   int64_t mark_cost_time_;
   int64_t sweep_cost_time_;
   int64_t start_time_;
@@ -884,6 +986,7 @@ public:
 /****************************** following codes are inline functions ****************************/
 enum ObRecordHeaderVersion
 {
+  RECORD_HEADER_VERSION_V2 = 2,
   RECORD_HEADER_VERSION_V3 = 3
 };
 
@@ -896,6 +999,10 @@ public:
       const int16_t magic, const char *&payload_ptr, int64_t &payload_size);
   static int deserialize_and_check_record(const char *ptr, const int64_t size, const int16_t magic);
   int check_and_get_record(const char *ptr, const int64_t size, const int16_t magic, const char *&payload_ptr, int64_t &payload_size) const;
+  static int64_t get_serialize_size(const int64_t header_version, const int64_t column_cnt) {
+    return RECORD_HEADER_VERSION_V2 == header_version ? sizeof(ObRecordCommonHeader)
+        : sizeof(ObRecordCommonHeader) + column_cnt * sizeof(column_checksums_[0]);
+  }
   void set_header_checksum();
   int check_header_checksum() const;
   inline bool is_compressed_data() const { return data_length_ != data_zlength_; }
@@ -947,12 +1054,21 @@ struct ObMicroBlockDesMeta
 public:
   ObMicroBlockDesMeta()
     : compressor_type_(common::INVALID_COMPRESSOR),
-      row_store_type_(common::ObRowStoreType::MAX_ROW_STORE) {}
+      row_store_type_(common::ObRowStoreType::MAX_ROW_STORE),
+      encrypt_id_(0),
+      master_key_id_(0), encrypt_key_(nullptr) {}
   ObMicroBlockDesMeta(const common::ObCompressorType compressor_type,
-                      const common::ObRowStoreType row_store_type)
+                      const common::ObRowStoreType row_store_type,
+                      const int64_t encrypt_id,
+                      const int64_t master_key_id,
+                      const char *encrypt_key)
     : compressor_type_(compressor_type),
-      row_store_type_(row_store_type) {}
-  TO_STRING_KV(K_(compressor_type), K_(row_store_type));
+      row_store_type_(row_store_type),
+      encrypt_id_(encrypt_id),
+      master_key_id_(master_key_id),
+      encrypt_key_(encrypt_key) {}
+  TO_STRING_KV(K_(compressor_type), K_(row_store_type), K_(encrypt_id), K_(master_key_id),
+      KPHEX_(encrypt_key, nullptr == encrypt_key_ ? 0 : share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH));
   OB_INLINE bool is_valid() const
   {
     return common::ObCompressorType::INVALID_COMPRESSOR < compressor_type_
@@ -962,6 +1078,9 @@ public:
 public:
   common::ObCompressorType compressor_type_;
   common::ObRowStoreType row_store_type_;
+  int64_t encrypt_id_;
+  int64_t master_key_id_;
+  const char *encrypt_key_;
 };
 }//end namespace blocksstable
 }//end namespace oceanbase

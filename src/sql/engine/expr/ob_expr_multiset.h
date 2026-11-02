@@ -1,0 +1,137 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef DEV_SRC_SQL_ENGINE_EXPR_OB_EXPR_MULTISET_H_
+#define DEV_SRC_SQL_ENGINE_EXPR_OB_EXPR_MULTISET_H_
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "lib/container/ob_fast_array.h"
+#include "sql/resolver/expr/ob_raw_expr.h"
+#include "sql/engine/expr/ob_i_expr_extra_info.h"
+
+namespace oceanbase
+{
+
+namespace pl{
+class ObPLCollectoin;
+}
+namespace sql
+{
+
+struct ObExprMultiSetInfo : public ObIExprExtraInfo
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObExprMultiSetInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
+      : ObIExprExtraInfo(alloc, type),
+        ms_type_(ObMultiSetType::MULTISET_TYPE_INVALID),
+        ms_modifier_(ObMultiSetModifier::MULTISET_MODIFIER_INVALID)
+  {
+  }
+
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        const ObExprOperatorType type,
+                        ObIExprExtraInfo *&copied_info) const override;
+
+  template <typename RE>
+  int from_raw_expr(RE &expr);
+  ObMultiSetType ms_type_;
+  ObMultiSetModifier ms_modifier_;
+};
+
+class ObExprMultiSet : public ObExprOperator
+{
+  OB_UNIS_VERSION(1);
+public:
+  explicit ObExprMultiSet(common::ObIAllocator &alloc);
+  virtual ~ObExprMultiSet();
+
+  virtual void reset();
+  int assign(const ObExprOperator &other);
+  virtual int calc_result_type2(ObExprResType &type,
+                                ObExprResType &type1,
+                                ObExprResType &type2,
+                                common::ObExprTypeCtx &type_ctx) const;
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+
+  static int eval_multiset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+
+  VIRTUAL_TO_STRING_KV(N_EXPR_TYPE, get_type_name(type_),
+                       N_EXPR_NAME, name_,
+                       N_DIM, row_dimension_,
+                       N_REAL_PARAM_NUM, real_param_num_,
+                       K_(ms_type),
+                       K_(ms_modifier));
+
+  inline void set_ms_type(ObMultiSetType ms_type) { ms_type_ = ms_type; }
+  inline ObMultiSetType get_ms_type() const { return ms_type_; }
+  inline void set_ms_modifier(ObMultiSetModifier ms_modifier) { ms_modifier_ = ms_modifier; }
+  inline ObMultiSetModifier get_ms_modifier() const { return ms_modifier_; }
+
+  static int calc_ms_one_distinct(common::ObIAllocator *coll_allocator,
+                                   ObObj *c,
+                                   int64_t count,
+                                   ObObj *&data_arr,
+                                   int64_t &elem_count);
+
+  static int eval_composite_relative_anonymous_block(ObExecContext &exec_ctx,
+                                                     const char *pl,
+                                                     ParamStore &params,
+                                                     ObBitSet<> &out_args);
+
+private:
+
+  static int calc_ms_impl(common::ObIAllocator *coll_allocator,
+                   pl::ObPLCollection *c1,
+                   pl::ObPLCollection *c2,
+                   ObObj *&data_arr,
+                   int64_t &elem_count,
+                   ObMultiSetType ms_type,
+                   ObMultiSetModifier ms_modifier);
+
+  static int calc_ms_all_impl(common::ObIAllocator *coll_allocator,
+                       pl::ObPLCollection *c1,
+                       pl::ObPLCollection *c2,
+                       ObObj *&data_arr,
+                       int64_t &elem_count,
+                       bool allow_dup,
+                       ObMultiSetType ms_type,
+                       ObMultiSetModifier ms_modifier);
+
+  static int calc_ms_distinct_impl(common::ObIAllocator *coll_allocator,
+                                   pl::ObPLCollection *c1,
+                                   pl::ObPLCollection *c2,
+                                   ObObj *&data_arr,
+                                   int64_t &elem_count,
+                                   ObMultiSetType ms_type,
+                                   ObMultiSetModifier ms_modifier);
+  
+
+  static int append_collection(ObObj *buffer, int64_t buffer_size, int64_t &pos,
+                               pl::ObPLCollection *c,
+                               ObIAllocator &coll_alloc,
+                               bool keep_deleted_elem);
+
+  DISALLOW_COPY_AND_ASSIGN(ObExprMultiSet);
+private:
+  ObMultiSetType ms_type_;
+  ObMultiSetModifier ms_modifier_;
+};
+
+}  // namespace sql
+}  // namespace oceanbase
+#endif /* DEV_SRC_SQL_ENGINE_EXPR_OB_EXPR_OBJ_ACCESS_H_ */

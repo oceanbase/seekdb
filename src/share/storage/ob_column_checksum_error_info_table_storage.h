@@ -20,7 +20,7 @@
 #include "common/ob_tablet_id.h"
 #include "lib/container/ob_iarray.h"
 #include "share/scn.h"
-#include "share/inner_table/local_table_schema.h"
+#include "share/storage/ob_sqlite_connection_pool.h"
 
 namespace oceanbase
 {
@@ -34,8 +34,8 @@ public:
   ObColumnChecksumErrorInfoTableStorage();
   virtual ~ObColumnChecksumErrorInfoTableStorage();
 
-  int init(LocalStore *store);
-  bool is_inited() const { return nullptr != store_; }
+  int init(ObSQLiteConnectionPool *pool);
+  bool is_inited() const { return nullptr != pool_; }
 
   // Insert column checksum error info
   int insert(const ObColumnChecksumErrorInfo &error_info);
@@ -56,7 +56,9 @@ public:
   int delete_expired(const SCN &frozen_scn_before, int64_t limit);
 
 private:
-  LocalStore *store_;
+  int create_table_if_not_exists();
+
+  ObSQLiteConnectionPool *pool_;
   DISALLOW_COPY_AND_ASSIGN(ObColumnChecksumErrorInfoTableStorage);
 };
 

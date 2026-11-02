@@ -17,17 +17,17 @@
 #ifndef OCEANBASE_SQL_TRANS_CONTROL_
 #define OCEANBASE_SQL_TRANS_CONTROL_
 #include "share/ob_define.h"
-#include "data_plane/transaction/ob_i_transaction_service.h"
-#include "data_plane/transaction/ob_tx_control.h"
-#include "data_plane/tablelock/ob_table_lock_mode.h"
+#include "storage/tx/ob_trans_define.h"
+#include "storage/tx/ob_trans_deadlock_adapter.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/session/ob_sql_session_mgr.h"
-#include "sql/engine/ob_physical_plan_ctx.h"
+#include "storage/tablelock/ob_table_lock_common.h"
 
 namespace oceanbase
 {
 namespace transaction
 {
+class ObStartTransParam;
 class ObTxDesc;
 }
 
@@ -44,9 +44,11 @@ class ObExecContext;
 class ObPhysicalPlan;
 class ObPhyOperator;
 class ObStmt;
+class ObPhysicalPlanCtx;
 class ObSQLSessionInfo;
 class ObIEndTransCallback;
 class ObEndTransAsyncCallback;
+class ObNullEndTransCallback;
 class ObIDASTaskOp;
 
 class TransState
@@ -57,18 +59,26 @@ private:
   static const uint32_t END_TRANS_EXECUTED_BIT     = (1 << 2);
   static const uint32_t START_STMT_EXECUTED_BIT    = (1 << 4);
   static const uint32_t END_STMT_EXECUTED_BIT      = (1 << 6);
+  static const uint32_t START_PART_EXECUTED_BIT    = (1 << 8);
+  static const uint32_t END_PART_EXECUTED_BIT      = (1 << 10);
   static const uint32_t START_TRANS_SUCC_BIT       = (1 << 1);
   static const uint32_t END_TRANS_SUCC_BIT         = (1 << 3);
   static const uint32_t START_STMT_SUCC_BIT        = (1 << 5);
   static const uint32_t END_STMT_SUCC_BIT          = (1 << 7);
+  static const uint32_t START_PART_SUCC_BIT        = (1 << 9);
+  static const uint32_t END_PART_SUCC_BIT          = (1 << 11);
   static const uint32_t START_TRANS_EXECUTED_SHIFT = 1;
   static const uint32_t END_TRANS_EXECUTED_SHIFT   = 3;
   static const uint32_t START_STMT_EXECUTED_SHIFT  = 5;
   static const uint32_t END_STMT_EXECUTED_SHIFT    = 7;
+  static const uint32_t START_PART_EXECUTED_SHIFT  = 9;
+  static const uint32_t END_PART_EXECUTED_SHIFT    = 11;
   static const uint32_t START_TRANS_EXECUTED_MASK = (0xFFFFFFFF ^ (0x3 << 0));
   static const uint32_t END_TRANS_EXECUTED_MASK   = (0xFFFFFFFF ^ (0x3 << 2));
   static const uint32_t START_STMT_EXECUTED_MASK  = (0xFFFFFFFF ^ (0x3 << 4));
   static const uint32_t END_STMT_EXECUTED_MASK    = (0xFFFFFFFF ^ (0x3 << 6));
+  static const uint32_t START_PART_EXECUTED_MASK  = (0xFFFFFFFF ^ (0x3 << 8));
+  static const uint32_t END_PART_EXECUTED_MASK    = (0xFFFFFFFF ^ (0x3 << 10));
 public:
   TransState() : state_(0) {}
   ~TransState() {}
@@ -80,15 +90,23 @@ public:
   { state_ = ((state_ | START_STMT_EXECUTED_BIT) | (is_succ << START_STMT_EXECUTED_SHIFT)); }
   void set_end_stmt_executed(bool is_succ)
   { state_ = ((state_ | END_STMT_EXECUTED_BIT) | (is_succ << END_STMT_EXECUTED_SHIFT)); }
+  void set_start_participant_executed(bool is_succ)
+  { state_ = ((state_ | START_PART_EXECUTED_BIT) | (is_succ << START_PART_EXECUTED_SHIFT)); }
+  void set_end_participant_executed(bool is_succ)
+  { state_ = ((state_ | END_PART_EXECUTED_BIT) | (is_succ << END_PART_EXECUTED_SHIFT)); }
 
   void clear_start_trans_executed()
   { state_ = (state_ & START_TRANS_EXECUTED_MASK); }
   void clear_start_stmt_executed()
   { state_ = (state_ & START_STMT_EXECUTED_MASK); }
+  void clear_start_participant_executed()
+  { state_ = (state_ & START_PART_EXECUTED_MASK); }
   void clear_end_trans_executed()
   { state_ = (state_ & END_TRANS_EXECUTED_MASK); }
   void clear_end_stmt_executed()
   { state_ = (state_ & END_STMT_EXECUTED_MASK); }
+  void clear_end_participant_executed()
+  { state_ = (state_ & END_PART_EXECUTED_MASK); }
 
   bool is_start_trans_executed() const
   { return state_ & START_TRANS_EXECUTED_BIT; }
@@ -98,6 +116,10 @@ public:
   { return state_ & START_STMT_EXECUTED_BIT; }
   bool is_end_stmt_executed() const
   { return state_ & END_STMT_EXECUTED_BIT; }
+  bool is_start_participant_executed() const
+  { return state_ & START_PART_EXECUTED_BIT; }
+  bool is_end_participant_executed() const
+  { return state_ & END_PART_EXECUTED_BIT; }
   bool is_start_trans_success() const
   { return state_ & START_TRANS_SUCC_BIT; }
   bool is_end_trans_success() const
@@ -106,27 +128,53 @@ public:
   { return state_ & START_STMT_SUCC_BIT; }
   bool is_end_stmt_success() const
   { return state_ & END_STMT_SUCC_BIT; }
+  bool is_start_participant_success() const
+  { return state_ & START_PART_SUCC_BIT; }
+  bool is_end_participant_success() const
+  { return state_ & END_PART_SUCC_BIT; }
 
   void reset()
   { state_ = 0; }
 
 private:
   uint32_t state_;
-  // cached for transaction and statement lifecycle
+  // cached for start_stmt, start_participants, end_participants
+};
+
+/* Inner class, used only within this file. Converts Consistency from the SQL layer to the transaction layer.
+ * The transaction layer only has STRONG/WEAK concepts of Consistency, without the FROZEN concept.
+ **/
+class ObConsistencyLevelAdaptor
+{
+public:
+  explicit ObConsistencyLevelAdaptor(common::ObConsistencyLevel sql_consistency) {
+    switch(sql_consistency) {
+      case common::STRONG:
+        trans_consistency_ = transaction::ObTransConsistencyLevel::STRONG;
+        break;
+      case common::WEAK:
+      case common::FROZEN:
+        trans_consistency_ = transaction::ObTransConsistencyLevel::WEAK;
+        break;
+      default:
+        trans_consistency_ = transaction::ObTransConsistencyLevel::UNKNOWN;
+    }
+  }
+  int64_t get_consistency() {
+    return trans_consistency_;
+  }
+private:
+  int64_t trans_consistency_;
 };
 
 class ObSqlTransControl
 {
 public:
-  // Derive the data-plane transaction options from query session state.  This
-  // keeps session-variable knowledge in query-owned code.
-  static int build_tx_param(ObSQLSessionInfo *session,
-                            transaction::ObTxParam &tx_param,
-                            const bool *readonly = nullptr);
   static int reset_session_tx_state(ObSQLSessionInfo *session, bool reuse_tx_desc = false, bool active_tx_end = true);
   static int reset_session_tx_state(ObBasicSessionInfo *session,
                                     bool reuse_tx_desc = false,
-                                    bool active_tx_end = true);
+                                    bool active_tx_end = true,
+                                    const uint64_t data_version = 0);
   static int create_stash_savepoint(ObExecContext &exec_ctx, const ObString &name);
   static int release_stash_savepoint(ObExecContext &exec_ctx, const ObString &name);
   static int explicit_start_trans(ObExecContext &exec_ctx, const bool read_only, const ObString hint = ObString());
@@ -160,6 +208,10 @@ public:
                            const int64_t expire_ts,
                            ObEndTransAsyncCallback *callback);
   static int start_stmt(ObExecContext &ctx);
+  static int get_ls_read_snapshot(ObSQLSessionInfo *session,
+                                  ObPhysicalPlanCtx *plan_ctx,
+                                  const share::ObLSID &local_ls_id,
+                                  transaction::ObTxReadSnapshot &snapshot);
   static int get_read_snapshot(ObSQLSessionInfo *session,
                                ObPhysicalPlanCtx *plan_ctx,
                                transaction::ObTxReadSnapshot &snapshot);
@@ -170,7 +222,7 @@ public:
                                   ObDASCtx &das_ctx,
                                   const ObPhysicalPlan *plan,
                                   const ObPhysicalPlanCtx *plan_ctx,
-                                  data_plane::ObITransactionService *txs,
+                                  transaction::ObTransService *txs,
                                   ObExecContext &exec_ctx);
   static int can_do_plain_insert(ObSQLSessionInfo *session,
                                  const ObPhysicalPlan *plan,
@@ -181,16 +233,28 @@ public:
   static int stmt_setup_savepoint_(ObSQLSessionInfo *session,
                                    ObDASCtx &das_ctx,
                                    ObPhysicalPlanCtx *plan_ctx,
-                                   data_plane::ObITransactionService* txs,
+                                   transaction::ObTransService* txs,
                                    const int64_t nested_level);
   static int end_stmt(ObExecContext &exec_ctx, const bool is_rollback, const bool will_retry);
   static int alloc_branch_id(ObExecContext &exec_ctx, const int64_t count, int16_t &branch_id);
   static int kill_query_session(ObSQLSessionInfo &session, const ObSQLSessionState &status);
   static int kill_tx(ObSQLSessionInfo *session, int cause);
   static int kill_idle_timeout_tx(ObSQLSessionInfo *session);
-  static int kill_deadlock_tx(ObSQLSessionInfo *session);
-  static int kill_tx_on_session_killed(ObSQLSessionInfo *session);
-  static int kill_tx_on_session_disconnect(ObSQLSessionInfo *session);
+  static int kill_deadlock_tx(ObSQLSessionInfo *session)
+  {
+    using namespace oceanbase::transaction;
+    return kill_tx(session, OB_DEAD_LOCK);
+  }
+  static int kill_tx_on_session_killed(ObSQLSessionInfo *session)
+  {
+    using namespace oceanbase::transaction;
+    return kill_tx(session, OB_SESSION_KILLED);
+  }
+  static int kill_tx_on_session_disconnect(ObSQLSessionInfo *session)
+  {
+    using namespace oceanbase::transaction;
+    return kill_tx(session, static_cast<int>(ObTxAbortCause::SESSION_DISCONNECT));
+  }
   static int create_savepoint(ObExecContext &exec_ctx, const common::ObString &sp_name, const bool user_create = false);
   static int rollback_savepoint(ObExecContext &exec_ctx, const common::ObString &sp_name);
   static int release_savepoint(ObExecContext &exec_ctx, const common::ObString &sp_name);
@@ -205,16 +269,27 @@ public:
                         const ObIArray<ObObjectID> &part_ids,
                         const transaction::tablelock::ObTableLockMode lock_mode,
                         const int64_t wait_lock_seconds);
+  static void clear_xa_branch(const transaction::ObXATransID &xid, transaction::ObTxDesc *&tx_desc);
+  static int check_ls_readable(const share::ObLSID &ls_id,
+                               const common::ObAddr &addr,
+                               const int64_t max_stale_time_us,
+                               bool &can_read);
+  static uint32_t get_real_session_id(ObSQLSessionInfo &session);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlTransControl);
-  static int kill_tx_for_reason_(ObSQLSessionInfo *session,
-                                 data_plane::ObTxAbortReason reason);
   static int get_trans_expire_ts(const ObSQLSessionInfo &session,
                                          int64_t &trans_timeout_ts);
   static int64_t get_stmt_expire_ts(const ObPhysicalPlanCtx *plan_ctx,
                                            const ObSQLSessionInfo &session);
   static int inc_session_ref(const ObSQLSessionInfo *session);
-  static int acquire_tx_if_need_(data_plane::ObITransactionService *txs, ObSQLSessionInfo &session);
+  static int acquire_tx_if_need_(transaction::ObTransService *txs, ObSQLSessionInfo &session);
+  static int start_hook_if_need_(ObSQLSessionInfo &session,
+                                 transaction::ObTransService *txs,
+                                 bool &start_hook);
+  static int get_first_lsid(const ObDASCtx &das_ctx, share::ObLSID &first_lsid, bool &is_single_tablet);
+  static bool has_same_lsid(const ObDASCtx &das_ctx,
+                            const transaction::ObTxReadSnapshot &snapshot,
+                            share::ObLSID &first_lsid);
 public:
   /*
    * create a savepoint without name
@@ -229,11 +304,11 @@ public:
    * rollback to savepoint
    *
    * [convention]:
-   *   transaction layer use trans_result (which maintained by SQL-engine) to decide rollback write state
+   *   transaction layer use trans_result (which maintained by SQL-engine) to decide rollback participants
    *   therefore if trans_result not been collected completed, trans_result.incomplete flag must be set
    *   before do rollback.
-   *   and if trans_result was incomplete, SQL-engine should pass the participant to transaction layer
-   *   (the participant was calculated from table-locations inner this function)
+   *   and if trans_result was incomplete, SQL-engine should pass the participants to transaction layer
+   *   (the participants was calculated from table-locations inner this function)
    *
    * for example: the sql-task executed timeout and its result was unknown, and then do rollback_savepoint;
    *   in this case, the trans_result was incomplete, the flag must been set.
@@ -254,6 +329,7 @@ inline int ObSqlTransControl::get_trans_expire_ts(const ObSQLSessionInfo &my_ses
   int ret = common::OB_SUCCESS;
   int64_t tx_timeout = 0;
   if (OB_FAIL(my_session.get_tx_timeout(tx_timeout))) {
+    SQL_LOG(WARN, "fail to get tx timeout", K(ret));
   } else {
     trans_timeout_ts = my_session.get_query_start_time() + tx_timeout;
   }

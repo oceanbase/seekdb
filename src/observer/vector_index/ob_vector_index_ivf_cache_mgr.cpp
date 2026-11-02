@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "query/vector/ob_vector_index_cache.h"
-#include "query/vector/ob_vector_query_result.h"
-#include "storage/allocator/ob_vector_allocator.h"
+#include "ob_vector_index_ivf_cache_mgr.h"
+#include "observer/vector_index/ob_plugin_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -26,17 +25,6 @@ using namespace sql;
 using namespace common;
 namespace share
 {
-
-int64_t ObIvfICache::get_actual_memory_used()
-{
-  return sub_mem_ctx_->used();
-}
-
-int64_t ObIvfICache::get_memory_hold()
-{
-  return nullptr == sub_mem_ctx_ ? 0 : sub_mem_ctx_->hold();
-}
-
 /////////////////////////////////////
 // implement of ObIvfCacheMgrGuard //
 /////////////////////////////////////
@@ -103,11 +91,15 @@ int ObIvfCacheMgr::init(lib::MemoryContext &parent_mem_ctx,
   ObMemAttr attr("IvfCacheCtx");
   if (!key.is_valid() || dim <= 0 || OB_ISNULL(all_vsag_use_mem)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tablet id or dim", K(ret), K(key), K(dim), KP(all_vsag_use_mem));
   } else if (OB_ISNULL(mem_ctx_ = OB_NEWx(ObIvfMemContext, &get_self_allocator(), all_vsag_use_mem))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to create mem_ctx", K(ret)); 
   } else if (OB_FAIL(mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem))) {
+    LOG_WARN("failed to init memory context", K(ret));
     reset();
   } else if (OB_FAIL(cache_objs_.create(DEFAULT_IVF_CACHE_HASH_SIZE, attr, attr))) {
+    LOG_WARN("fail to create full index adapter map", KR(ret), K(attr));
     reset();
   } else {
     vec_param_ = vec_index_param;
@@ -136,24 +128,28 @@ bool ObIvfCacheMgr::dec_ref_and_check_release()
 int ObIvfCacheMgr::check_memory_limit(int64_t base)
 {
   int ret = OB_SUCCESS;
-  int64_t memory_limit_size = 0;
+  int64_t tenant_mem_size = 0;
   int64_t curr_used = ATOMIC_LOAD(all_vsag_use_mem_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObIvfCacheMgr not init", K(ret));
   } else if (OB_ISNULL(mem_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("mem ctx is null", K(ret));
   } else if (!is_reach_limit_) {
     if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-    } else if (curr_used + base > memory_limit_size) {
+            ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_mem_size))) {
+      LOG_WARN("failed to get vector mem limit size.", K(ret));
+    } else if (curr_used + base > tenant_mem_size) {
       is_reach_limit_ = true;
     }
   } else if (reach_limit_cnt_ >= 10) {
     // check is memory limit changed
     reach_limit_cnt_ = 0;
     if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-    } else if (curr_used + base < memory_limit_size) {
+            ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_mem_size))) {
+      LOG_WARN("failed to get vector mem limit size.", K(ret));
+    } else if (curr_used + base < tenant_mem_size) {
       is_reach_limit_ = false;
     }
   } else {
@@ -161,6 +157,11 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
   }
   if (OB_SUCC(ret) && is_reach_limit_) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Memory usage exceeds user limit.",
+              K(ret),
+              K(tenant_mem_size),
+              K(curr_used),
+              K(base));
   }
   return ret;
 }
@@ -187,6 +188,7 @@ int ObIvfCacheMgr::create_cache_obj(const IvfCacheKey &key, ObIvfICache *&cache_
     void *tmp_buf = nullptr;
     if (OB_ISNULL(tmp_buf = mem_ctx_->Allocate(sizeof(ObIvfCentCache)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc tmp_buf", K(ret)); 
     } else {
       tmp_cent_cache = new(tmp_buf) ObIvfCentCache(get_self_allocator());
       cache_obj = tmp_cent_cache;
@@ -195,13 +197,17 @@ int ObIvfCacheMgr::create_cache_obj(const IvfCacheKey &key, ObIvfICache *&cache_
   }
   default: {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid IvfCacheKey", K(ret), K(key));
   }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_memory_limit(cache_obj->get_expect_memory_used(key, vec_param_)))) {
+    LOG_WARN("fail to check memory limit", K(ret));
   } else if (OB_FAIL(cache_obj->init(mem_ctx_, key, vec_param_, all_vsag_use_mem_))) {
+    LOG_WARN("fail to init cache obj", K(ret));
   } else if (OB_FAIL(check_memory_limit(0))) {
+    LOG_WARN("fail to check memory limit", K(ret));
   }
   
   if (OB_FAIL(ret) && OB_NOT_NULL(cache_obj)) {
@@ -219,27 +225,35 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
   int64_t pos = 0;
   if (OB_FAIL(databuff_printf(
           info.statistics_, sizeof(info.statistics_), pos, "actual_memory_used=%ld;", get_actual_memory_used()))) {
+    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "ref_cnt=%ld;", ref_cnt_))) {
+    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(
                  info.statistics_, sizeof(info.statistics_), pos, "is_reach_limit=%d;", is_reach_limit_))) {
+    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(
                  info.statistics_, sizeof(info.statistics_), pos, "reach_limit_cnt=%d;", reach_limit_cnt_))) {
+    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "is_inited=%d;", is_inited_))) {
+    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else {
     ObCStringHelper helper;
     if (OB_FAIL(databuff_printf(
                    info.statistics_, sizeof(info.statistics_), pos, "index_param=%s;", helper.convert(vec_param_)))) {
+      LOG_WARN("failed to fill statistics", K(ret), K(this));
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
     if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "["))) {
+      LOG_WARN("failed to fill statistics", K(ret), K(this));
     }
     FOREACH_X(iter, cache_objs_, OB_SUCC(ret))
     {
       IvfCacheType cache_type = iter->first.type_;
       if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "{cache_type=%d;", cache_type))) {
+        LOG_WARN("failed to fill statistics", K(ret), K(this));
       }
       switch (cache_type) {
         case IvfCacheType::IVF_CENTROID_CACHE: 
@@ -250,15 +264,19 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
           if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "capacity=%ld;", cache->get_capacity()))) {
+              LOG_WARN("failed to fill statistics", K(ret), K(this));
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "cent_vec_dim=%d;", cache->cent_vec_dim_))) {
+              LOG_WARN("failed to fill statistics", K(ret), K(this));
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "count=%d;", cache->count_))) {
+              LOG_WARN("failed to fill statistics", K(ret), K(this));
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "nlist=%d;} ", cache->nlist_))) {
+              LOG_WARN("failed to fill statistics", K(ret), K(this));
           }
           break;
         }
@@ -270,6 +288,7 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
       }
     }
     if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "]"))) {
+      LOG_WARN("failed to fill statistics", K(ret), K(this));
     }
   }
   return ret;
@@ -332,7 +351,9 @@ int ObIvfICache::inner_init(ObIvfMemContext *parent_mem_ctx, uint64_t* all_vsag_
 
   if (OB_ISNULL(sub_mem_ctx_ = OB_NEWx(ObIvfMemContext, &get_self_allocator(), all_vsag_use_mem))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to create mem_ctx", K(ret)); 
   } else if (OB_FAIL(sub_mem_ctx_->init(parent_mem_ctx->get_mem_context(), all_vsag_use_mem))) {
+    LOG_WARN("failed to init memory context", K(ret));
     reset();
   }
   return ret;
@@ -366,6 +387,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIvfICache::inner_init(parent_mem_ctx, all_vsag_use_mem))) {
+    LOG_WARN("fail to do ObIvfICache inner init", K(ret));
   } else {
     center_prefix_ = 0;
     switch (key.type_) {
@@ -373,6 +395,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * param.nlist_ * param.dim_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to init centroids", K(ret), K(param.nlist_), K(param.dim_), K(key));
         } else {
           MEMSET(centroids_, 0, sizeof(float) * param.nlist_ * param.dim_);
           capacity_ = param.nlist_;
@@ -387,6 +410,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * pqnlist * param.dim_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to init centroids", K(ret), K(pqnlist), K(param.dim_), K(key));
         } else {
           MEMSET(centroids_, 0, sizeof(float) * pqnlist * param.dim_);
           capacity_ = pqnlist * param.m_;
@@ -401,6 +425,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * param.nlist_ * param.m_ * ksub)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to init centroids", K(ret), K(param.nlist_), K(param.m_), K(ksub), K(key));
         } else {
           MEMSET(centroids_, 0, sizeof(float) * param.nlist_ * param.m_ * ksub);
           capacity_ = param.nlist_ * param.m_ * ksub;
@@ -412,6 +437,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
       }
       default: {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid IvfCacheKey", K(ret), K(key));
         break;
       }
     }
@@ -431,8 +457,10 @@ int ObIvfCentCache::write_centroid_with_real_idx(const int64_t real_idx, const f
   int ret = OB_SUCCESS;
   if ((length != cent_vec_dim_ * sizeof(float)) || OB_ISNULL(centroid)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid centroid vec length", K(ret), K(length), K(cent_vec_dim_), KP(centroid));
   } else if (real_idx >= capacity_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("centroid vec is full", K(ret), K(real_idx), K(capacity_));
   } else {
     MEMCPY(centroids_ + real_idx * cent_vec_dim_, centroid, cent_vec_dim_ * sizeof(float));
     count_++;
@@ -460,15 +488,20 @@ int ObIvfCentCache::inner_read_centroid(int64_t centroid_idx, float *&centroid_v
   int ret = OB_SUCCESS;
   if (!is_completed()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("can not read cache that not completed", K(ret), K(capacity_));
   } else if (centroid_idx >= get_capacity()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("centroid idx is out of range", K(ret), K(centroid_idx));
   } else if (OB_ISNULL(centroids_ + centroid_idx)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("invalid null centroid", K(ret), K(centroid_idx));
   } else if (deep_copy) {
     if (OB_ISNULL(allocator)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("invalid null allocator", K(ret));
     } else if (OB_ISNULL(centroid_vec = static_cast<float *>(allocator->alloc(cent_vec_dim_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory", K(ret), K(cent_vec_dim_));
     } else {
       MEMCPY(
           centroid_vec, centroids_ + centroid_idx * cent_vec_dim_, cent_vec_dim_ * sizeof(float));
@@ -560,6 +593,7 @@ int ObIvfAuxTableInfo::copy_ith_tablet(int64_t idx, ObIvfAuxTableInfo &dst) cons
   int ret = OB_SUCCESS;
   if (idx < 0 || idx >= count()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid idx", K(ret), K(idx), K(count()));
   } else {
     dst.centroid_table_id_ = this->centroid_table_id_;
     dst.centroid_tablet_ids_.push_back(this->centroid_tablet_ids_[idx]);

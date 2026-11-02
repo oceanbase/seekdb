@@ -47,6 +47,7 @@ int ObExprAscii::calc_result_type1(ObExprResType &type,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
   } else {
     type.set_int32();
     type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
@@ -81,8 +82,9 @@ int ObExprAscii::calc(common::ObObj &obj,
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(expr_ctx.calc_buf_) || OB_ISNULL(expr_ctx.exec_ctx_)) {
+  if (OB_ISNULL(expr_ctx.calc_buf_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("varchar buffer not init", K(ret));
   } else if (obj1.is_null()) {
     obj.set_null();
   } else if (!ob_is_text_tc(obj1.get_type())) {
@@ -90,8 +92,8 @@ int ObExprAscii::calc(common::ObObj &obj,
     calc_ascii_inner(obj, expr_ctx, str_val);
   } else {
     ObString str_val = obj1.get_string();
-    if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
-            *expr_ctx.exec_ctx_, expr_ctx.calc_buf_, obj1, str_val))) {
+    if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(expr_ctx.calc_buf_, obj1, str_val))) {
+      LOG_WARN("failed to get string data", K(ret), K(obj1.get_meta()));                                                     
     } else {
       calc_ascii_inner(obj, expr_ctx, str_val);
     }
@@ -113,6 +115,7 @@ int ObExprAscii::calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   int ret = OB_SUCCESS;
   ObDatum *s_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (s_datum->is_null()) {
     res_datum.set_null();
   } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
@@ -128,6 +131,7 @@ int ObExprAscii::calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
                                                             expr.args_[0]->obj_meta_.has_lob_header(),
                                                             &temp_allocator,
                                                             str_val))) {
+      LOG_WARN("failed to get lob data", K(ret), K(expr.args_[0]->datum_meta_));   
     } else {
       calc_ascii_expr_inner(res_datum, str_val);
     }
@@ -185,6 +189,8 @@ inline int calc_ord_inner(uint8_t &type, const ObString &str_val,
     uint64_t n = 0, char_len = ob_ismbchar(cs, str_ptr, end);
     if (char_len > str_val.length()){
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ob_ismbchar return wrong value",
+                K(ret), K(char_len), K(str_val.length()));
     } else if (0 == char_len){
       type = 1;
     } else {
@@ -209,6 +215,7 @@ static int calc_ord_expr_inner(const ObCollationType &cs_type,
   const ObCharsetInfo *cs = ObCharset::get_charset(cs_type);
   if (OB_ISNULL(cs)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid cs_type", K(ret), K(cs_type));
   } else if (str_val.empty()) {
     res_int = 0;
   } else if (ObCharset::usemb(cs_type)) {
@@ -218,6 +225,7 @@ static int calc_ord_expr_inner(const ObCollationType &cs_type,
     uint32_t char_len = ob_ismbchar(cs, str_ptr, end);
     if (char_len > str_val.length()){
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ob_ismbchar return wrong value", K(ret), K(char_len), K(str_val.length()));
     } else if (0 == char_len){
       res_int = static_cast<uint8_t>(str_val[0]);
     } else {
@@ -232,12 +240,13 @@ static int calc_ord_expr_inner(const ObCollationType &cs_type,
   return ret;
 }
 
-// ORD evaluation helper shared by ASCII-compatible paths.
+// Oracle mode ascii expression also use this
 int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObDatum *s_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (s_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -257,6 +266,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
                                                               expr.args_[0]->obj_meta_.has_lob_header(),
                                                               &temp_allocator,
                                                               str_val))) {
+        LOG_WARN("failed to get string data", K(ret), K(expr.args_[0]->datum_meta_));   
       } else {
         ret = calc_ord_expr_inner(cs_type, str_val, res_int, res_null);
       }
@@ -271,6 +281,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
         number::ObNumber res_nmb;
         ObNumStackOnceAlloc tmp_alloc;
         if (OB_FAIL(res_nmb.from(res_int, tmp_alloc))) {
+          LOG_WARN("get nmb from int failed", K(ret), K(res_int));
         } else {
           res_datum.set_number(res_nmb);
         }
@@ -278,6 +289,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
         res_datum.set_int(res_int);
       } else {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected res_type", K(ret), K(res_type));
       }
     }
   }

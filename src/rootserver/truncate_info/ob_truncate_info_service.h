@@ -16,9 +16,8 @@
 #ifndef OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #define OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #include <stdint.h>
-#include "storage/truncate_info/ob_truncate_tablet_arg.h"
+#include "rootserver/truncate_info/ob_truncate_tablet_arg.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
-#include "query/session/ob_free_session_ctx.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 namespace oceanbase
 {
@@ -36,10 +35,10 @@ class ObTableSchema;
 namespace common
 {
 class ObMySQLTransaction;
-namespace sqlclient
-{
-class ObISQLConnection;
 }
+namespace observer
+{
+class ObInnerSQLConnection;
 }
 namespace rootserver
 {
@@ -129,28 +128,31 @@ private:
     ObDDLOperator &ddl_operator,
     share::schema::ObTableSchema &index_table_schema);
   int loop_part_to_register_mds_(
-    common::sqlclient::ObISQLConnection &conn,
+    observer::ObInnerSQLConnection &conn,
     const share::schema::ObTableSchema &index_table_schema);
   int loop_subpart_to_register_mds_(
-    common::sqlclient::ObISQLConnection &conn,
+    observer::ObInnerSQLConnection &conn,
     const share::schema::ObTableSchema &index_table_schema);
   int loop_index_tablet_id_to_register_(
-    common::sqlclient::ObISQLConnection &conn,
-    storage::ObTruncateTabletArg &truncate_arg);
+    observer::ObInnerSQLConnection &conn,
+    ObTruncateTabletArg &truncate_arg);
   int register_mds_(
-    common::sqlclient::ObISQLConnection &conn,
-    const storage::ObTruncateTabletArg &arg);
-  int register_mds_(
-      common::sqlclient::ObISQLConnection &conn,
-      const storage::ObTruncateTabletArg &arg,
-      const char *buf,
-      const int64_t buf_len);
+    observer::ObInnerSQLConnection &conn,
+    const ObTruncateTabletArg &arg);
+  int retry_register_mds_(
+    observer::ObInnerSQLConnection &conn,
+    const ObTruncateTabletArg &arg,
+    const char *buf,
+    const int64_t buf_len);
+  static bool need_retry_errno(const int ret);
+  static const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
 private:
   ObArenaAllocator allocator_; // for part_key_info_, only init once
   ObArenaAllocator loop_allocator_; // for loop index tablets
   const obcall::ObAlterTableArg &arg_;
   const share::schema::ObTableSchema &data_table_schema_;
   ObSEArray<ObTabletID, 8> index_tablet_array_;
+  ObSEArray<share::ObLSID, 8> ls_id_array_;
   ObTruncatePartKeyInfo part_key_info_;
   int64_t ddl_task_id_;
   bool is_inited_;

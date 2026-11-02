@@ -18,9 +18,8 @@
 #define OCEANBASE_FTS_PARSER_RESOLVER_
 
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
-#include "data_plane/fts/ob_fts_parser_helper.h"
-#include "data_plane/fts/ob_fts_parser_property.h"
-#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "storage/fts/ob_fts_parser_property.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
 {
@@ -35,10 +34,13 @@ public:
   static int resolve_parser_properties(
       const ParseNode &parse_tree,
       common::ObIAllocator &allocator,
+      const common::ObString &database_name,
       common::ObString &parser_property);
 
 private:
   static int resolve_fts_index_parser_properties(const ParseNode *node,
+                                                 common::ObIAllocator &allocator,
+                                                 const common::ObString &database_name,
                                                  storage::ObFTParserJsonProps &property);
 };
 

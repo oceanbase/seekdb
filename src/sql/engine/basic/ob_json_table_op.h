@@ -48,7 +48,8 @@ enum table_type : int8_t {
   OB_INVALID_TABLE = 0,
   OB_JSON_TABLE = 1,
   OB_XML_TABLE = 2,
-  OB_UNNEST_TABLE = 3,
+  OB_RB_ITERATE_TABLE = 3,
+  OB_UNNEST_TABLE = 4,
 };
 
 typedef enum JtNodeType {
@@ -157,6 +158,10 @@ struct JtScanCtx {
   
   bool is_json_table_func() {
     return spec_ptr_->table_type_ == OB_ORA_JSON_TABLE_TYPE;
+  }
+
+  bool is_rb_iterate_table_func() {
+    return spec_ptr_->table_type_ == OB_RB_ITERATE_TABLE_TYPE;
   }
 
   bool is_unnest_table_func() {
@@ -299,6 +304,19 @@ private:
   const static uint8_t OB_JSON_TRUE_ON_EMPTY  = 1;
   const static uint8_t OB_JSON_ERROR_ON_EMPTY = 2;
   const static uint8_t OB_JSON_DEFAULT_ON_EMPTY = 3;
+};
+
+class RbIterateTableFunc : public MulModeTableFunc {
+public:
+  RbIterateTableFunc()
+  : MulModeTableFunc() {}
+  ~RbIterateTableFunc() {}
+
+  int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+  int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
+  int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
+  int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
+  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
 };
 
 class UnnestTableFunc : public MulModeTableFunc {
@@ -503,6 +521,11 @@ public:
                                 const ObObjType expect_type,
                                 const ObCollationType expect_cs_type,
                                 const bool is_explicit_cast);
+  static int check_default_value_oracle(JtScanCtx* ctx, ObJtColInfo &col_info, ObExpr* expr);
+  static int check_default_value_inner_oracle(JtScanCtx* ctx,
+                                              ObJtColInfo &col_info,
+                                              ObExpr* col_expr,
+                                              ObExpr* default_expr);
   static int check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx);
   static int check_default_value_inner_mysql(JtScanCtx* ctx,
                                              ObRegCol &col_node,

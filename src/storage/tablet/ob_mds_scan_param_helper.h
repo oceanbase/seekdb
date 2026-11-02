@@ -35,6 +35,7 @@ class ObString;
 
 namespace share
 {
+class ObLSID;
 class SCN;
 namespace schema
 {
@@ -57,6 +58,7 @@ class ObMdsScanParamHelper
 public:
   static int build_scan_param(
       common::ObIAllocator &allocator,
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const uint64_t table_id,
       const uint8_t mds_unit_id,
@@ -69,6 +71,7 @@ public:
   template <typename Key, typename Value>
   static int build_customized_scan_param(
       common::ObIAllocator &allocator,
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const common::ObVersionRange &read_version_range,
       ObMdsReadInfoCollector &collector,
@@ -100,6 +103,7 @@ private:
 template <typename Key, typename Value>
 int ObMdsScanParamHelper::build_customized_scan_param(
     common::ObIAllocator &allocator,
+    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const common::ObVersionRange &read_version_range,
     ObMdsReadInfoCollector &collector,
@@ -115,6 +119,7 @@ int ObMdsScanParamHelper::build_customized_scan_param(
 
   if (OB_FAIL(build_scan_param(
       allocator,
+      ls_id,
       tablet_id,
       ObMdsSchemaHelper::MDS_TABLE_ID,
       mds_unit_id,
@@ -124,6 +129,7 @@ int ObMdsScanParamHelper::build_customized_scan_param(
       read_version_range,
       collector,
       scan_param))) {
+    MDS_LOG(WARN, "fail to build scan param", K(ret));
   }
 
   return ret;

@@ -92,6 +92,7 @@ int ObColumnCkmStruct::deep_copy(
   const int64_t deep_copy_size = get_deep_copy_size();
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < deep_copy_size + pos)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(deep_copy_size), K(pos));
   } else {
     dest.count_ = count_;
     if (count_ > 0) {
@@ -114,6 +115,7 @@ int ObColumnCkmStruct::assign(
     // do nothing
   } else if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(other));
   } else {
     reset();
     if (!other.is_empty()) {
@@ -135,12 +137,14 @@ int ObColumnCkmStruct::get_column_checksums(ObIArray<int64_t> &column_checksums)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(column_checksums.count() > 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expect empty output parameter", K(ret), K(column_checksums));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("current checksum struct is invalid", K(ret), KPC(this));
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < count_; ++idx) {
       if (OB_FAIL(column_checksums.push_back(column_checksums_[idx]))) {
+        LOG_WARN("failed to push column checksum", K(ret), K(idx), K(column_checksums_[idx]));
       }
     }
   }
@@ -154,6 +158,7 @@ int ObColumnCkmStruct::reserve(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_empty())) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("have alloc before, can't reserve twice", K(ret), KPC(this));
   } else {
     const int64_t alloc_mem_size = sizeof(int64_t) * column_cnt;
     if (OB_ISNULL(column_checksums_ = static_cast<int64_t *>(allocator.alloc(alloc_mem_size)))) {

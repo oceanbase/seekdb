@@ -27,8 +27,6 @@ namespace oceanbase
 namespace sql
 {
 class ObExecEnv;
-class ObFreeSessionCtx;
-class ObSQLSessionInfo;
 }
 namespace dbms_scheduler
 {
@@ -42,13 +40,15 @@ public:
   virtual ~ObDBMSSchedJobExecutor() {}
   int init(
     common::ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
-  int run_dbms_sched_job(uint64_t job_id, const ObString &job_name);
+  int run_dbms_sched_job(bool is_oracle_tenant, uint64_t job_id, const ObString &job_name);
   int init_env(ObDBMSSchedJobInfo &job_info, sql::ObSQLSessionInfo &session);
 
 private:
+  const static int OLAP_ASYNC_JOB_DEVIATION_SECOND = 60;
   static int init_session(
     sql::ObSQLSessionInfo &session,
     share::schema::ObSchemaGetterGuard &schema_guard,
+    const common::ObString &tenant_name,
     const common::ObString &database_name, uint64_t database_id,
     const share::schema::ObUserInfo* user_info,
     ObDBMSSchedJobInfo &job_info);
@@ -65,3 +65,4 @@ private:
 }
 }
 #endif /* SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_ */
+

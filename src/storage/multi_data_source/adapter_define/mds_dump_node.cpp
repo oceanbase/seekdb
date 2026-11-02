@@ -391,7 +391,9 @@ int MdsDumpKV::assign(const MdsDumpKV &rhs, ObIAllocator &alloc)
     reset();
 
     if (OB_FAIL(k_.assign(rhs.k_, alloc))) {
+      MDS_LOG(WARN, "fail to assign key", KR(ret));
     } else if (OB_FAIL(v_.assign(rhs.v_, alloc))) {
+      MDS_LOG(WARN, "fail to assign value", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (OB_NOT_NULL(k_.key_.ptr())) {
@@ -430,6 +432,7 @@ int MdsDumpKV::deserialize(common::ObIAllocator &allocator, const char *buf, con
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(v_.deserialize(allocator, buf, data_len, pos))) {
+    MDS_LOG(WARN, "failed to deserialize", K(ret));
   }
 
   return ret;
@@ -479,20 +482,26 @@ int MdsDumpNode::deserialize(common::ObIAllocator &allocator, const char *buf, c
               mds_unit_id_,
               writer_id_);
 
+
   if (OB_FAIL(ret)) {
-  } else if (UNIS_VERSION != version) {
-    ret = OB_ERR_UNEXPECTED;
-    MDS_LOG(WARN, "unexpected mds dump node version", K(ret), K(version), K(UNIS_VERSION));
+  } else if (UNIS_VERSION_V1 == version) {
+    int64_t seq_no = 0;
+    LST_DO_CODE(OB_UNIS_DECODE, seq_no);
+    if (OB_SUCC(ret)) {
+      // compat logic, seq_no can be 0 or -1(transfer tablet status committed node) in 431
+      seq_no_ = ((0 == seq_no || -1 == seq_no) ? ObTxSEQ::MIN_VAL() : ObTxSEQ::mk_v0(seq_no));
+    }
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE,
-                seq_no_,
-                redo_scn_,
-                end_scn_,
-                trans_version_,
-                status_,
-                crc_check_number_,
-                user_data);
+    LST_DO_CODE(OB_UNIS_DECODE, seq_no_);
   }
+
+  LST_DO_CODE(OB_UNIS_DECODE,
+              redo_scn_,
+              end_scn_,
+              trans_version_,
+              status_,
+              crc_check_number_,
+              user_data);
 
   if (OB_SUCC(ret)) {
     allocator_ = &allocator;
@@ -505,6 +514,13 @@ int MdsDumpNode::deserialize(common::ObIAllocator &allocator, const char *buf, c
     } else {
       MEMCPY(buffer, user_data.ptr(), len);
       user_data_.assign(buffer, len);
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (UNIS_VERSION_V1 == version) {
+    if (seq_no_.is_min()) {
+      crc_check_number_ = generate_hash();
     }
   }
 

@@ -16,11 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
 #include "observer/ob_server_utils.h"
-#include "share/ob_server_struct.h"
-#include "share/ob_share_util.h"
-#include "share/resource/ob_server_resource.h"
+#include "observer/ob_server_struct.h"
 #include "storage/ob_file_system_router.h"
 #ifndef _WIN32
 #include <sys/utsname.h>
@@ -37,10 +34,22 @@ namespace observer
 int ObServerUtils::get_server_ip(ObIAllocator *allocator, ObString &ipstr)
 {
   int ret = OB_SUCCESS;
+  ObAddr addr = GCTX.self_addr();
+  char ip_buf[OB_IP_STR_BUFF] = {'\0'};
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "invalid alloctor pointer is NULL", K(ret));
-  } else if (OB_FAIL(share::ObShareUtil::get_server_ip(GCTX.self_addr(), *allocator, ipstr))) {
+  } else if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "ip to string failed", K(ret));
+  } else {
+    ObString ipstr_tmp = ObString::make_string(ip_buf);
+    if (OB_FAIL(ob_write_string (*allocator, ipstr_tmp, ipstr))) {
+      SERVER_LOG(WARN, "ob write string failed", K(ret));
+    } else if (ipstr.empty()) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "host ip is empty", K(ret));
+    }
   }
   return ret;
 }
@@ -50,38 +59,31 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                int64_t& total_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  int64_t suggested_clog_disk_size = config::log_disk_size();
-  int64_t suggested_clog_disk_percentage = config::log_disk_percentage();
+  const int64_t DEFAULT_LOG_DISK_SIZE = MAX(2LL << 30, lib::get_memory_limit() / 2);
+  int64_t suggested_clog_disk_size = 0 == GCONF.log_disk_size ? DEFAULT_LOG_DISK_SIZE : GCONF.log_disk_size;
+  int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
   int64_t data_disk_total_size = 0;
   int64_t clog_disk_total_size = 0;
-  bool same_filesystem = false;
+  bool shared_mode = false;
+  const char* data_dir = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
   const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
-  struct statvfs clog_statvfs;
-  if (OB_FAIL(calculate_disk_layout_defaults(data_disk_total_size,
-                                             data_default_disk_percentage,
-                                             clog_disk_total_size,
-                                             clog_default_disk_percentage,
-                                             same_filesystem))) {
-  } else if (OB_UNLIKELY(0 != statvfs(clog_dir, &clog_statvfs))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("failed to get available log disk space", KR(ret), K(clog_dir), K(errno));
-  } else if (OB_FAIL(decide_disk_size(clog_statvfs,
+  if (OB_FAIL(cal_all_part_disk_default_percentage(data_disk_total_size,
+                                                   data_default_disk_percentage,
+                                                   clog_disk_total_size,
+                                                   clog_default_disk_percentage,
+                                                   shared_mode))) {
+    LOG_ERROR("cal all part disk default percentage failed",
+        KR(ret), K(data_dir), K(data_default_disk_percentage), K(shared_mode));
+  } else if (OB_FAIL(decide_disk_size(clog_disk_total_size,
                                       suggested_clog_disk_size,
                                       suggested_clog_disk_percentage,
                                       clog_default_disk_percentage,
-                                      clog_dir,
                                       log_disk_size,
                                       log_disk_percentage))) {
-  } else if (suggested_clog_disk_size <= 0
-             && log_disk_size < share::ObServerResource::SERVER_MIN_LOG_DISK_SIZE) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-    const int64_t available_space = clog_statvfs.f_bavail * clog_statvfs.f_bsize;
-    const int64_t minimum_log_disk_size = share::ObServerResource::SERVER_MIN_LOG_DISK_SIZE;
-    LOG_ERROR("automatic log disk size is below minimum", KR(ret), K(clog_dir),
-              K(available_space), K(log_disk_percentage), K(log_disk_size),
-              K(minimum_log_disk_size));
+    LOG_ERROR("decide disk size failed",
+        KR(ret), K(data_dir), K(data_default_disk_percentage), K(shared_mode));
   } else {
     total_log_disk_size = clog_disk_total_size;
     LOG_INFO("get_log_disk_info_in_config", K(suggested_clog_disk_size),
@@ -95,26 +97,32 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
                                                 int64_t& data_disk_percentage)
 {
   int ret = OB_SUCCESS;
-  int64_t suggested_data_disk_size = config::datafile_size();
-  int64_t suggested_data_disk_percentage = config::datafile_disk_percentage();
+  int64_t suggested_data_disk_size = GCONF.datafile_size;
+  int64_t suggested_data_disk_percentage = GCONF.datafile_disk_percentage;
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
   int64_t data_disk_total_size = 0;
   int64_t clog_disk_total_size = 0;
-  bool same_filesystem = false;
+  bool shared_mode = false;
   const char* data_dir = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
   const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
-  if (OB_FAIL(calculate_disk_layout_defaults(data_disk_total_size,
-                                             data_default_disk_percentage,
-                                             clog_disk_total_size,
-                                             clog_default_disk_percentage,
-                                             same_filesystem))) {
+  if (OB_FAIL(cal_all_part_disk_default_percentage(data_disk_total_size,
+                                                   data_default_disk_percentage,
+                                                   clog_disk_total_size,
+                                                   clog_default_disk_percentage,
+                                                   shared_mode))) {
+    LOG_ERROR("cal all part disk default percentage failed",
+        KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
+        K(data_default_disk_percentage), K(shared_mode));
   } else if (OB_FAIL(decide_disk_size(data_disk_total_size,
                                       suggested_data_disk_size,
                                       suggested_data_disk_percentage,
                                       data_default_disk_percentage,
                                       data_disk_size,
                                       data_disk_percentage))) {
+    LOG_ERROR("decide data disk size failed",
+        KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
+        K(data_default_disk_percentage), K(shared_mode));
   } else {
     LOG_INFO("get_data_disk_info_in_config", K(suggested_data_disk_size),
              K(suggested_data_disk_percentage), K(data_disk_size),
@@ -135,7 +143,9 @@ int ObServerUtils::cal_all_part_disk_size(const int64_t suggested_data_disk_size
   int ret = OB_SUCCESS;
   int64_t total_log_disk_space = 0;
   if (OB_FAIL(get_data_disk_info_in_config(data_disk_size, data_disk_percentage))) {
+    LOG_ERROR("get_data_disk_info_in_config failed", K(data_disk_size), K(data_disk_percentage));
   } else if (OB_FAIL(get_log_disk_info_in_config(log_disk_size, log_disk_percentage, total_log_disk_space))) {
+    LOG_ERROR("get_log_disk_info_in_config failed", K(log_disk_size), K(log_disk_percentage));
   } else {
     LOG_INFO("cal_all_part_disk_size success", K(suggested_data_disk_size), K(suggested_clog_disk_size),
              K(suggested_data_disk_percentage), K(suggested_clog_disk_percentage), K(data_disk_size),
@@ -216,14 +226,16 @@ int ObServerUtils::calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &ac
 {
   int ret = OB_SUCCESS;
 
-  const int64_t datafile_maxsize = config::datafile_maxsize();
-  const int64_t datafile_next = config::datafile_next();
+  const int64_t datafile_maxsize = GCONF.datafile_maxsize;
+  const int64_t datafile_next = GCONF.datafile_next;
   const int64_t datafile_size =
     OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
 
   if (OB_UNLIKELY(datafile_maxsize <= 0) ||
       OB_UNLIKELY(datafile_size) <= 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument",
+      K(ret), K(datafile_maxsize), K(datafile_size));
   } else {
     // attention: max_extend_file maybe equal to zero in the following situations:
     // 1. alter datafile_size as A, alter datafile_maxsize as B, and A < B
@@ -260,17 +272,20 @@ int ObServerUtils::calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &ac
   return ret;
 }
 
-int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
-                                                  int64_t &data_disk_default_percentage,
-                                                  int64_t &clog_disk_total_size,
-                                                  int64_t &clog_disk_default_percentage,
-                                                  bool &same_filesystem)
+int ObServerUtils::cal_all_part_disk_default_percentage(int64_t& data_disk_total_size,
+                                                        int64_t& data_disk_default_percentage,
+                                                        int64_t& clog_disk_total_size,
+                                                        int64_t& clog_disk_default_percentage,
+                                                        bool &shared_mode)
 {
   int ret = OB_SUCCESS;
 
-  const int64_t DEFAULT_DISK_PERCENTAGE_ON_SEPARATE_FILESYSTEM = 90;
-  const int64_t DEFAULT_DATA_DISK_PERCENTAGE_ON_SAME_FILESYSTEM = 60;
-  const int64_t DEFAULT_CLOG_DISK_PERCENTAGE_ON_SAME_FILESYSTEM = 30;
+// background information about default disk percentage:
+// If not in shared mode, disk will be used up to 90%.
+// If in shared mode, data and clog disk usage will be up to 60% and 30%
+  const int64_t DEFAULT_DISK_PERCENTAGE_IN_SEPRATE_MODE = 90;
+  const int64_t DEFAULT_DATA_DISK_PERCENTAGE_IN_SHARED_MODE = 60;
+  const int64_t DEFAULT_CLOG_DISK_PERCENTAGE_IN_SHARED_MODE = 30;
 
   // We use sstable_dir as the data disk directory to identify whether the log and data are located
   // on the same file system, and the storage module will ensure that sstable_dir and slog_dir are
@@ -299,49 +314,27 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
       GetVolumeInformationA(root, NULL, 0, &serial, NULL, NULL, NULL, 0);
       return serial;
     };
-    same_filesystem = (get_volume_serial(data_dir) == get_volume_serial(clog_dir));
+    bool same_fs = (get_volume_serial(data_dir) == get_volume_serial(clog_dir));
 #else
-    same_filesystem = (data_statvfs.f_fsid == clog_statvfs.f_fsid);
+    bool same_fs = (data_statvfs.f_fsid == clog_statvfs.f_fsid);
 #endif
-    if (same_filesystem) {
-      data_disk_default_percentage = DEFAULT_DATA_DISK_PERCENTAGE_ON_SAME_FILESYSTEM;
-      clog_disk_default_percentage = DEFAULT_CLOG_DISK_PERCENTAGE_ON_SAME_FILESYSTEM;
+    if (same_fs) {
+      shared_mode = true;
+      data_disk_default_percentage = DEFAULT_DATA_DISK_PERCENTAGE_IN_SHARED_MODE;
+      clog_disk_default_percentage = DEFAULT_CLOG_DISK_PERCENTAGE_IN_SHARED_MODE;
     } else {
-      data_disk_default_percentage = DEFAULT_DISK_PERCENTAGE_ON_SEPARATE_FILESYSTEM;
-      clog_disk_default_percentage = DEFAULT_DISK_PERCENTAGE_ON_SEPARATE_FILESYSTEM;
+      shared_mode = false;
+      data_disk_default_percentage = DEFAULT_DISK_PERCENTAGE_IN_SEPRATE_MODE;
+      clog_disk_default_percentage = DEFAULT_DISK_PERCENTAGE_IN_SEPRATE_MODE;
     }
     data_disk_total_size = (data_statvfs.f_blocks + data_statvfs.f_bavail - data_statvfs.f_bfree) * data_statvfs.f_bsize;
     clog_disk_total_size = (clog_statvfs.f_blocks + clog_statvfs.f_bavail - clog_statvfs.f_bfree) * clog_statvfs.f_bsize;
-    LOG_INFO("calculate disk layout defaults succeeded",
+    LOG_INFO("cal_all_part_disk_default_percentage succ",
         K(data_dir), K(clog_dir),
-        K(same_filesystem), K(data_disk_total_size), K(data_disk_default_percentage),
+        K(shared_mode), K(data_disk_total_size), K(data_disk_default_percentage),
         K(clog_disk_total_size), K(clog_disk_default_percentage));
   }
 
-  return ret;
-}
-
-int ObServerUtils::decide_disk_size(const struct statvfs& svfs,
-                                    const int64_t suggested_disk_size,
-                                    const int64_t suggested_disk_percentage,
-                                    const int64_t default_disk_percentage,
-                                    const char* dir,
-                                    int64_t& disk_size,
-                                    int64_t& disk_percentage)
-{
-  const int64_t total_space =
-      (svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize;
-  const int64_t available_space = svfs.f_bavail * svfs.f_bsize;
-  const int64_t calculation_space = suggested_disk_size <= 0 ? available_space : total_space;
-  const int ret = decide_disk_size(calculation_space,
-                                   suggested_disk_size,
-                                   suggested_disk_percentage,
-                                   default_disk_percentage,
-                                   disk_size,
-                                   disk_percentage);
-  LOG_INFO("decide disk size from filesystem statistics", KR(ret), K(dir),
-           K(total_space), K(available_space), K(calculation_space),
-           K(disk_size), K(disk_percentage));
   return ret;
 }
 
@@ -355,6 +348,7 @@ int ObServerUtils::decide_disk_size(const int64_t total_space,
   int ret = OB_SUCCESS;
 
   if (suggested_disk_size <= 0) {
+    int64_t disk_percentage = 0;
     if (suggested_disk_percentage <= 0) {
       disk_percentage = default_disk_percentage;
     } else {
@@ -380,3 +374,4 @@ int ObServerUtils::decide_disk_size(const int64_t total_space,
 
 } // namespace observer
 } // namespace oceanbase
+

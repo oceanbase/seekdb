@@ -18,6 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/net/ob_addr.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 namespace oceanbase
 {
@@ -56,9 +57,11 @@ public:
   virtual ~ObAllPxP2PDatahubTable();
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row);
+  inline void set_addr(common::ObAddr &addr) { addr_ = &addr; }
 private:
   int p2p_datahub_map_to_array();
 private:
+  common::ObAddr *addr_;
   bool start_to_read_;
   char trace_id_[128];
   common::ObArray<P2PDatahubNode> node_array_;
@@ -80,3 +83,4 @@ private:
 } // namespace observer
 } // namespace oceanbase
 #endif // OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
+

@@ -21,7 +21,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "common/ob_field.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -32,30 +32,32 @@ struct ObSqlCtx;
 class ObSQLSessionInfo;
 class ObExecContext;
 class ObResultSet;
-class ObQueryRetryCtrl;
 }
 
 
 namespace observer
 {
 
-class ObMPPacketSender;
+class ObIMPPacketSender;
 class ObMySQLResultSet;
+class ObQueryRetryCtrl;
 class ObQueryDriver
 {
 public:
   static const int64_t RESET_CONVERT_CHARSET_ALLOCATOR_EVERY_X_ROWS = 32;
 public:
-  ObQueryDriver(const share::ObGlobalContext &gctx,
+  ObQueryDriver(const ObGlobalContext &gctx,
                 const sql::ObSqlCtx &ctx,
                 sql::ObSQLSessionInfo &session,
-                sql::ObQueryRetryCtrl &retry_ctrl,
-                ObMPPacketSender &sender)
+                ObQueryRetryCtrl &retry_ctrl,
+                ObIMPPacketSender &sender,
+                bool is_prexecute = false)
     : gctx_(gctx),
       ctx_(ctx),
       session_(session),
       retry_ctrl_(retry_ctrl),
-      sender_(sender)
+      sender_(sender),
+      is_prexecute_(is_prexecute)
   {
   }
   virtual ~ObQueryDriver()
@@ -63,25 +65,31 @@ public:
   }
 
   virtual int response_result(ObMySQLResultSet &result) = 0;
-  int response_query_header(sql::ObResultSet &result, bool has_more_result,
-                            bool need_set_ps_out_flag);
+  virtual int response_query_header(sql::ObResultSet &result,
+                            bool has_more_result,
+                            bool need_set_ps_out_flag,
+                            bool need_flush_buffer = false);
   virtual int response_query_result(sql::ObResultSet &result,
                                     bool is_ps_protocol,
                                     bool has_more_result,
                                     bool &can_retry,
                                     int64_t fetch_limit  = common::OB_INVALID_COUNT);
-  ObMPPacketSender& get_packet_sender() { return sender_; }
+  ObIMPPacketSender& get_packet_sender() { return sender_; }
   int response_query_header(const ColumnsFieldIArray &fields,
                                     bool has_more_result = false,
                                     bool need_set_ps_out = false,
+                                    bool ps_cursor_execute = false,
                                     sql::ObResultSet *result = NULL);
-  int convert_string_value_charset(common::ObObj& value, sql::ObResultSet &result,
-                                   ObCharsetType charset_type);
-  int convert_text_value_charset(common::ObObj& value, sql::ObResultSet &result,
-                                 ObCharsetType charset_type);
+  int convert_string_value_charset(common::ObObj& value, sql::ObResultSet &result, ObCharsetType charset_type, ObCharsetType nchar);
+  int convert_text_value_charset(common::ObObj& value, sql::ObResultSet &result, ObCharsetType charset_type, ObCharsetType nchar);
 
   int process_lob_locator_results(common::ObObj& value, sql::ObResultSet &result);
+  static int convert_lob_locator_to_longtext(common::ObObj& value, 
+                                             bool is_use_lob_locator, 
+                                             common::ObIAllocator *allocator);
   static int process_lob_locator_results(common::ObObj& value, 
+                                         bool is_use_lob_locator,
+                                         bool is_support_outrow_locator_v2,
                                          common::ObIAllocator *allocator,
                                          const sql::ObSQLSessionInfo *session_info,
                                          sql::ObExecContext *exec_ctx = nullptr);
@@ -110,11 +118,12 @@ private:
 
 protected:
   /* variables */
-  const share::ObGlobalContext &gctx_;
+  const ObGlobalContext &gctx_;
   const sql::ObSqlCtx &ctx_;
   sql::ObSQLSessionInfo &session_;
-  sql::ObQueryRetryCtrl &retry_ctrl_;
-  ObMPPacketSender &sender_;
+  ObQueryRetryCtrl &retry_ctrl_;
+  ObIMPPacketSender &sender_;
+  bool is_prexecute_;
   /* const */
   /* disallow copy & assign */
   DISALLOW_COPY_AND_ASSIGN(ObQueryDriver);

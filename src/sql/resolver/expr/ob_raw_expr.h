@@ -30,14 +30,15 @@
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/expr/ob_expr_info_flag.h"
 #include "sql/session/ob_system_variable.h"
+#include "share/schema/ob_udf.h"
 #include "lib/worker.h"
 #include "sql/parser/parse_node.h"
 #include "sql/resolver/ob_resolver_define.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
 #include "sql/code_generator/ob_static_engine_expr_cg.h"
-#include "sql/pl/ob_pl_type.h"
-#include "sql/pl/ob_pl_user_type.h"
+#include "pl/ob_pl_type.h"
+#include "pl/ob_pl_user_type.h"
 #include "share/schema/ob_trigger_info.h"
 #include "sql/engine/expr/ob_expr_join_filter.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
@@ -425,6 +426,7 @@ public:
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -508,6 +510,7 @@ public:
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos + 1;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -540,6 +543,7 @@ public:
         } else {
           int64_t new_word_cnt = that_count * 2;
           if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+            SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
           }
         }
       }
@@ -722,6 +726,7 @@ public:
       for (int64_t i = 0; OB_SUCC(ret) && count < num && i < max_bit_count; i++) {
         if (has_member(i)) {
           if (OB_FAIL(arr.push_back(i))) {
+            SQL_RESV_LOG(WARN, "failed to push back element", K(ret));
           } else {
             count++;
           }
@@ -784,6 +789,7 @@ public:
       if (desc_.cap_ < that_count) {
         int64_t new_word_cnt = that_count * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -822,6 +828,7 @@ public:
       if (desc_.cap_ < that_count) {
         int64_t new_word_cnt = that_count * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -864,6 +871,7 @@ public:
         }
         FlagType flag = static_cast<FlagType>(i);
         if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, flag))) {
+          SQL_RESV_LOG(WARN, "databuff print obj failed", K(ret));
         }
         ++count;
       }
@@ -887,6 +895,7 @@ public:
       if (other.bitset_word_count() > desc_.cap_) {
         int64_t new_word_cnt = other.bitset_word_count() * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
 
@@ -914,6 +923,7 @@ private:
       SQL_RESV_LOG(WARN, "not inited", K(ret));
     } else if (desc_.cap_ <= LOCAL_ARRAY_SIZE) {
       if (OB_FAIL(init_alloc_buf(word_cnt))) {
+        SQL_RESV_LOG(WARN, "failed to init array buf", K(ret));
       }
     } else if (OB_ISNULL(allocator = get_block_allocator())) {
       ret = OB_ERR_UNEXPECTED;
@@ -948,9 +958,11 @@ private:
     int ret = OB_SUCCESS;
     if (word_cnt <= LOCAL_ARRAY_SIZE) {
       if (OB_FAIL(init_local_buf())) {
+        SQL_RESV_LOG(WARN, "failed to init local buf", K(ret));
       }
     } else {
       if (OB_FAIL(init_alloc_buf(word_cnt))) {
+        SQL_RESV_LOG(WARN, "failed to init alloc buf", K(ret));
       }
     }
     return ret;
@@ -981,6 +993,7 @@ private:
       MEMCPY(old_data, bit_set_word_array_, desc_.len_ * sizeof(BitSetWord));
     }
     if (OB_FAIL(init_block_allocator())) {
+      SQL_RESV_LOG(WARN, "failed to init block allocator", K(ret));
     } else {
       int64_t words_size = sizeof(BitSetWord) * word_cnt;
       if (OB_ISNULL(bit_set_word_array_ = (BitSetWord *)block_allocator_->alloc(words_size))) {
@@ -1061,7 +1074,46 @@ struct ObUDFInfo
     param_names_(),
     param_exprs_(),
     udf_param_num_(0),
-    ref_expr_(NULL) {}
+    ref_expr_(NULL),
+    is_udt_udf_(false),
+    is_contain_self_param_(false),
+    is_udt_udf_inside_pkg_(false),
+    is_new_keyword_used_(false),
+    flag_(0) {}
+
+  void set_is_udf_udt_static() {
+    flag_ |= UDF_UDT_STATIC;
+  }
+  bool is_udf_udt_member() const {
+    return is_udt_udf_ && !(flag_ & UDF_UDT_STATIC);
+  }
+
+  void set_is_udf_udt_cons() {
+    is_udt_udf_ = true;
+    flag_ |= UDF_UDT_CONS;
+  }
+
+  bool is_udf_udt_cons() const {
+    return is_udt_udf_ && !!(flag_ & UDF_UDT_CONS);
+  }
+
+  void clear_is_udf_udt_cons() {
+    flag_ &= ~UDF_UDT_CONS;
+  }
+
+  void set_is_udt_overload_default_cons() {
+    flag_ |= UDF_UDT_CONS_OVERLOAD_DEFAULT;
+  }
+  bool is_udt_overload_default_cons() {
+    return is_udf_udt_cons() && !!(flag_ & UDF_UDT_CONS_OVERLOAD_DEFAULT);
+  }
+  void clear_udt_overload_default_cons() {
+    flag_ &= ~UDF_UDT_CONS_OVERLOAD_DEFAULT;
+  }
+
+  static constexpr uint64_t UDF_UDT_STATIC = 1;
+  static constexpr uint64_t UDF_UDT_CONS = 2;
+  static constexpr uint64_t UDF_UDT_CONS_OVERLOAD_DEFAULT = 4;
 
   TO_STRING_KV(K_(udf_name),
                K_(udf_package),
@@ -1069,7 +1121,11 @@ struct ObUDFInfo
                K_(param_names),
                K_(param_exprs),
                K_(udf_param_num),
-               KP_(ref_expr));
+               K_(is_udt_udf),
+               K_(is_contain_self_param),
+               K_(is_udt_udf_inside_pkg),
+               K_(is_new_keyword_used),
+               K_(flag));
 
   common::ObString udf_name_;
   common::ObString udf_package_;
@@ -1078,12 +1134,18 @@ struct ObUDFInfo
   common::ObArray<ObRawExpr*> param_exprs_;
 	int64_t	udf_param_num_;
   ObUDFRawExpr *ref_expr_;
+  bool is_udt_udf_; // if this udf is udt object routine
+  bool is_contain_self_param_; // self param is mocked.
+  bool is_udt_udf_inside_pkg_;
+  bool is_new_keyword_used_;  // if in NEW obj(...) form
+  uint64_t flag_;
 };
 
 enum AccessNameType
 {
   UNKNOWN = -1,
   SYS_FUNC,
+  DLL_UDF,
   PL_UDF,
   PL_VAR,
   DB_NS,
@@ -1091,7 +1153,7 @@ enum AccessNameType
   REC_ELEM,
   TYPE_METHOD,
   CURSOR_ATTR,
-  RESERVED_UDT_NS,
+  UDT_NS,
   LOCAL_TYPE,
   PKG_TYPE,
 };
@@ -1139,6 +1201,7 @@ public:
   inline void set_type(AccessNameType type) { type_ = type; }
   inline AccessNameType get_type() { return type_; }
   inline void set_sys_func() { type_ = SYS_FUNC; }
+  inline void set_dll_udf() { type_ = DLL_UDF; }
   inline void set_pl_udf() { type_ = PL_UDF; }
   inline void set_pl_var() { type_ = PL_VAR; }
   inline void set_db_ns() { type_ = DB_NS; }
@@ -1146,8 +1209,10 @@ public:
   inline void set_rec_elem() { type_ = REC_ELEM; }
   inline void set_type_method() { type_ = TYPE_METHOD; }
   inline void set_cursor_attr() { type_ = CURSOR_ATTR; }
+  inline void set_udt_ns() { type_ = UDT_NS; }
   inline bool is_unknown() const { return UNKNOWN == type_; }
   inline bool is_sys_func() const { return SYS_FUNC == type_; }
+  inline bool is_dll_udf() const { return DLL_UDF == type_; }
   inline bool is_pl_udf() const { return PL_UDF == type_; }
   inline bool is_pl_var() const { return PL_VAR == type_; }
   inline bool is_db_ns() const { return DB_NS == type_; }
@@ -1155,9 +1220,11 @@ public:
   inline bool is_rec_elem() const { return REC_ELEM == type_; }
   inline bool is_type_method() const { return TYPE_METHOD == type_; }
   inline bool is_cursor_attr() const { return CURSOR_ATTR == type_; }
+  inline bool is_udt_ns() const { return UDT_NS == type_; }
   inline bool is_local_type() const { return LOCAL_TYPE == type_; }
   inline bool is_pkg_type() const { return PKG_TYPE == type_; }
-  inline bool is_type() const { return is_local_type() || is_pkg_type(); }
+  inline bool is_udt_type() const { return UDT_NS == type_; }
+  inline bool is_type() const { return is_local_type() || is_pkg_type() || is_udt_type(); }
 
   int extract_params(int64_t level, common::ObIArray<ObRawExpr*> &params) const;
   int replace_params(ObRawExpr *from, ObRawExpr *to);
@@ -1181,7 +1248,8 @@ struct ObQualifiedName
 {
 public:
   ObQualifiedName()
-      : database_name_(),
+      : catalog_name_(),
+        database_name_(),
         tbl_name_(),
         col_name_(),
         is_star_(false),
@@ -1197,6 +1265,7 @@ public:
 
   int assign(const ObQualifiedName &other)
   {
+    catalog_name_ = other.catalog_name_;
     database_name_ = other.database_name_;
     tbl_name_ = other.tbl_name_;
     col_name_ = other.col_name_;
@@ -1260,10 +1329,11 @@ public:
     }
     return bret && multi_level;
   }
+  inline bool is_dll_udf() const { return false; }
   inline bool is_pl_var() const
   {
     bool is_true = false;
-    if (!is_sys_func() && !is_pl_udf()) {
+    if (!is_sys_func() && !is_pl_udf() && !is_dll_udf()) {
       for (int64_t i = 0; !is_true && i < access_idents_.count(); ++i) {
         if (access_idents_.at(i).is_pl_var()) {
           is_true = true;
@@ -1292,8 +1362,10 @@ public:
                K_(parent_aggr_level),
                K_(access_idents),
                K_(current_resolve_level),
-               K_(is_access_root));
+               K_(is_access_root),
+               K_(catalog_name));
 public:
+  common::ObString catalog_name_;
   common::ObString database_name_;
   common::ObString tbl_name_; // When used for UDF, indicates package name
   common::ObString col_name_; // When used for UDF, indicates function name
@@ -1301,7 +1373,7 @@ public:
   ObColumnRefRawExpr *ref_expr_;
   ObExprInfo parents_expr_info_;
   int64_t parent_aggr_level_;
-  // Qualified-name components accessed via '.' are stored here, such as a, f, c in a.f(x,y).c
+  // Sequences accessed via '.' are stored here, such as a, f, c in a.f(x,y).c
   common::ObSEArray<ObObjAccessIdent, 4, common::ModulePageAllocator, true> access_idents_;
   // the depth of resolve level
   int64_t current_resolve_level_;
@@ -1626,6 +1698,7 @@ struct ObResolveContext
     secondary_namespace_(NULL),
     query_ctx_(NULL),
     is_for_dynamic_sql_(false),
+    is_for_dbms_sql_(false),
     tg_timing_event_(TG_TIMING_EVENT_INVALID),
     view_ref_id_(OB_INVALID_ID),
     is_variable_allowed_(true),
@@ -1672,10 +1745,11 @@ struct ObResolveContext
   ObAggResolveLink agg_resolve_link_;
   bool is_win_agg_;
   ObSchemaChecker *schema_checker_;// we use checker to get udf function name.
-  const ObSQLSessionInfo *session_info_; // Supplies session-level expression settings.
+  const ObSQLSessionInfo *session_info_;// we use to get tenant id
   pl::ObPLBlockNS *secondary_namespace_;
   ObQueryCtx *query_ctx_;
   bool is_for_dynamic_sql_;
+  bool is_for_dbms_sql_;
   TgTimingEvent tg_timing_event_; // for mysql trigger
   uint64_t view_ref_id_;
   bool is_variable_allowed_;
@@ -1717,6 +1791,9 @@ struct ObRawExprExtraInfo
                          // T_FUN_SYS_ALIGN_DATE4CMP
     uint64_t autoinc_nextval_extra_; // T_FUN_SYS_AUTOINC_NEXTVAL
     uint64_t res_cs_type_; // T_FUN_SYS_SOUNDEX
+    uint64_t column_idx_; // T_PSEUDO_EXTERNAL_FILE_COL
+                          // T_PSEUDO_PARTITION_LIST_COL
+                          // T_PSEUDO_EXTERNAL_FILE_URL
     uint64_t json_partial_update_flag_; // T_FUN_SYS_JSON_REPLACE
                                         // T_FUN_SYS_JSON_SET
                                         // T_FUN_SYS_JSON_REMOVE
@@ -1743,6 +1820,7 @@ struct ObRawExprExtraInfo
     };
     int64_t array_param_group_id_; // T_QUESTIONMARK
     uint64_t operator_id_;
+    uint64_t mview_id_;    // T_FUN_SYS_LAST_REFRESH_SCN
     ObSubQueryKey subquery_key_; // IS_SUBQUERY_COMPARISON_OP(op)
     struct {
       ObExprCalcType calc_meta_;
@@ -1861,6 +1939,9 @@ public:
                                                 || is_query_ref_expr()
                                                 || is_column_ref_expr()
                                                 || is_alias_ref_expr(); }
+  inline bool is_oracle_to_time_expr() const { return T_FUN_SYS_TO_DATE == type_
+                                                      || T_FUN_SYS_TO_TIMESTAMP == type_
+                                                      || T_FUN_SYS_TO_TIMESTAMP_TZ == type_; }
   inline bool is_calc_part_expr() const { return T_FUN_SYS_CALC_PARTITION_ID == type_
                                                  || T_FUN_SYS_CALC_TABLET_ID == type_
                                                  || T_FUN_SYS_CALC_PARTITION_TABLET_ID == type_; }
@@ -1870,7 +1951,8 @@ public:
                                                         || T_FUN_SYS_ICU_VERSION == type_; }
   inline bool is_pl_expr() const { return EXPR_UDF == expr_class_
                                           || T_FUN_PL_COLLECTION_CONSTRUCT == type_
-                                          || T_FUN_PL_OBJECT_CONSTRUCT == type_; }
+                                          || T_FUN_PL_OBJECT_CONSTRUCT == type_
+                                          || T_FUN_SYS_PDB_GET_RUNTIME_INFO == type_; }
   inline void set_expr_type(ObItemType v) { type_ = v; }
   inline ObItemType get_expr_type() const { return type_; }
 
@@ -1938,7 +2020,8 @@ public:
   inline bool is_generalized_column() const
   {
     return is_column_ref_expr() || is_query_ref_expr() || is_aggr_expr() || is_set_op_expr()
-          || is_win_func_expr() || has_flag(IS_PSEUDO_COLUMN) || has_flag(IS_OP_PSEUDO_COLUMN);
+          || is_win_func_expr() || has_flag(IS_PSEUDO_COLUMN)
+          || has_flag(IS_SEQ_EXPR) || has_flag(IS_OP_PSEUDO_COLUMN);
   }
 
   // The expr result is vectorized, the batch result is the same if not vectorized result e.g:
@@ -2085,6 +2168,7 @@ public:
   void set_cast_mode(const uint64_t val) { extra_.cast_mode_ = val; }
   void set_autoinc_nextval_extra(const uint64_t val) { extra_.autoinc_nextval_extra_ = val; }
   void set_res_cs_type(const uint64_t val) { extra_.res_cs_type_ = val; }
+  void set_column_idx(const uint64_t val) { extra_.column_idx_ = val; }
   void set_json_partial_update_flag(const uint64_t val) { extra_.json_partial_update_flag_ = val; }
   void set_from_unixtime_flag(const uint64_t val) { extra_.from_unixtime_flag_ = val; }
   void set_reverse_param_order(const uint64_t val) { extra_.reverse_param_order_ = val; }
@@ -2098,6 +2182,7 @@ public:
   uint64_t get_cast_mode() const { return extra_.cast_mode_; }
   uint64_t get_autoinc_nextval_extra() const { return extra_.autoinc_nextval_extra_; }
   uint64_t get_res_cs_type() const { return extra_.res_cs_type_; }
+  uint64_t get_column_idx() const { return extra_.column_idx_; }
   uint64_t get_json_partial_update_flag() const { return extra_.json_partial_update_flag_; }
   uint64_t get_from_unixtime_flag() const { return extra_.from_unixtime_flag_; }
   uint64_t get_reverse_param_order() const { return extra_.reverse_param_order_; }
@@ -2138,6 +2223,7 @@ public:
   void set_partition_id_calc_type(PartitionIdCalcType calc_type) {
     partition_id_calc_type_ = calc_type; }
   bool is_json_expr() const;
+  bool is_multiset_expr() const;
   bool is_vector_sort_expr() const {
     return get_expr_type() == T_FUN_SYS_L2_DISTANCE ||
            get_expr_type() == T_FUN_SYS_L2_SQUARED ||
@@ -2147,6 +2233,9 @@ public:
            get_expr_type() == T_FUN_SYS_SEMANTIC_DISTANCE ||
            get_expr_type() == T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE; }
   PartitionIdCalcType get_partition_id_calc_type() const { return partition_id_calc_type_; }
+  void set_may_add_interval_part(MayAddIntervalPart flag) {
+    may_add_interval_part_ = flag;
+  }
   bool is_wrappered_json_extract() const {
    return (type_ == T_FUN_SYS_JSON_UNQUOTE &&
            OB_NOT_NULL(get_param_expr(0)) &&
@@ -2160,6 +2249,8 @@ public:
   bool extract_multivalue_json_expr(const ObRawExpr*& json_expr) const;
   bool is_multivalue_define_json_expr() const;
   ObRawExpr* get_wrapper_json_extract() { return get_param_expr(0); }
+  MayAddIntervalPart get_may_add_interval_part() const
+  { return may_add_interval_part_;}
   RuntimeFilterType get_runtime_filter_type() const { return extra_.runtime_filter_type_; }
   void set_runtime_filter_type(RuntimeFilterType type) { extra_.runtime_filter_type_ = type; }
   inline bool with_null_equal_cond() const { return extra_.with_null_equal_cond_; }
@@ -2174,6 +2265,7 @@ public:
                        K_(is_calculated),
                        K_(is_deterministic),
                        K_(partition_id_calc_type),
+                       K_(may_add_interval_part),
                        K_(expr_hash));
   virtual int get_expr_dep_session_vars(const ObBasicSessionInfo *session,
                                         ObLocalSessionVar &dep_vars)
@@ -2242,7 +2334,7 @@ protected:
     int64_t local_session_var_id_;
     struct {
       PartitionIdCalcType partition_id_calc_type_; //for calc_partition_id func to mark calc part type
-      int32_t reserved_calc_part_action_;
+      MayAddIntervalPart may_add_interval_part_; // for calc_partition_id
     };
   };
   uint64_t expr_hash_;
@@ -2797,7 +2889,9 @@ public:
       ref_id_(common::OB_INVALID_ID),
       output_column_(0),
       is_set_(false),
-      has_nl_param_(false)
+      is_cursor_(false),
+      has_nl_param_(false),
+      is_multiset_(false)
   {
     // Anonymous union object initialization can only be placed inside a function body, otherwise it will cause a compilation error of multiple initializations of the same object
     ref_stmt_ = NULL;
@@ -2809,7 +2903,9 @@ public:
       ref_id_(common::OB_INVALID_ID),
       output_column_(0),
       is_set_(false),
-      has_nl_param_(false)
+      is_cursor_(false),
+      has_nl_param_(false),
+      is_multiset_(false)
   {
     // The initialization of an anonymous union object can only be placed inside a function body, otherwise it will cause a compilation error of multiple initializations of the same object
     ref_stmt_ = NULL;
@@ -2820,7 +2916,9 @@ public:
       ref_id_(id),
       output_column_(0),
       is_set_(false),
-      has_nl_param_(false)
+      is_cursor_(false),
+      has_nl_param_(false),
+      is_multiset_(false)
   {
     // Anonymous union object initialization can only be placed inside a function body, otherwise it will cause a compilation error of multiple initializations of the same object
     ref_stmt_ = NULL;
@@ -2860,9 +2958,13 @@ public:
   common::ObIArray<ObRawExprResType> &get_column_types() { return column_types_; }
   void set_is_set(bool is_set) { is_set_ = is_set; }
   bool is_set() const { return is_set_; }
+  void set_cursor(bool is_cursor) { is_cursor_ = is_cursor; }
+  bool is_cursor() const { return is_cursor_; }
   void set_has_nl_param(bool has_nl_param) { has_nl_param_ = has_nl_param; }
   bool has_nl_param() const { return has_nl_param_; }
-  bool is_scalar() const { return !is_set_ && get_output_column() == 1; }
+  void set_is_multiset(bool is_multiset) { is_multiset_ = is_multiset; }
+  bool is_multiset() const {return is_multiset_; }
+  bool is_scalar() const { return !is_set_ && !is_multiset_ && get_output_column() == 1; }
   virtual void reset();
   virtual bool inner_same_as(const ObRawExpr &expr,
                              ObExprEqualCheckContext *check_context) const override;
@@ -2881,6 +2983,8 @@ public:
                                             N_ID, ref_id_,
                                             K_(output_column),
                                             K_(is_set),
+                                            K_(is_cursor),
+                                            K_(is_multiset),
                                             K_(column_types),
                                             N_CHILDREN, exec_params_,
                                             K_(expr_hash));
@@ -2892,10 +2996,12 @@ private:
   ObSelectStmt *ref_stmt_;
   int64_t output_column_;
   bool is_set_;
+  bool is_cursor_;
   // Given a query_ref_expr in a function table,
   // an exec param in the subquery may not belong to the query_ref_expr
   // it may be a nlparam of a nest loop join
   bool has_nl_param_;
+  bool is_multiset_;
   // Subquery output column type
   common::ObSEArray<ObRawExprResType, 64, common::ModulePageAllocator, true> column_types_;
   common::ObSEArray<ObExecParamRawExpr *, 4, common::ModulePageAllocator, true> exec_params_;
@@ -2930,6 +3036,8 @@ public:
       column_id_(common::OB_INVALID_ID),
       database_name_(),
       table_name_(),
+      synonym_name_(),
+      synonym_db_name_(),
       column_name_(),
       column_flags_(0),
       dependant_expr_(NULL),
@@ -2940,6 +3048,7 @@ public:
       is_rowkey_column_(false),
       is_unique_key_column_(false),
       is_mul_key_column_(false),
+      is_pseudo_column_ref_(false),
       is_strict_json_column_(0),
       srs_id_(UINT64_MAX),
       udt_set_id_(0)
@@ -2953,6 +3062,8 @@ public:
       column_id_(common::OB_INVALID_ID),
       database_name_(),
       table_name_(),
+      synonym_name_(),
+      synonym_db_name_(),
       column_name_(),
       column_flags_(0),
       dependant_expr_(NULL),
@@ -2963,6 +3074,7 @@ public:
       is_rowkey_column_(false),
       is_unique_key_column_(false),
       is_mul_key_column_(false),
+      is_pseudo_column_ref_(false),
       is_strict_json_column_(0),
       srs_id_(UINT64_MAX),
       udt_set_id_(0)
@@ -2976,6 +3088,8 @@ public:
       column_id_(second_id),
       database_name_(),
       table_name_(),
+      synonym_name_(),
+      synonym_db_name_(),
       column_name_(),
       column_flags_(0),
       dependant_expr_(NULL),
@@ -2986,6 +3100,7 @@ public:
       is_rowkey_column_(false),
       is_unique_key_column_(false),
       is_mul_key_column_(false),
+      is_pseudo_column_ref_(false),
       is_strict_json_column_(0),
       srs_id_(UINT64_MAX),
       udt_set_id_(0)
@@ -3010,6 +3125,15 @@ public:
   inline void set_table_name(const common::ObString &table_name) { table_name_ = table_name; }
   inline common::ObString &get_table_name() { return table_name_; }
   inline const common::ObString &get_table_name() const { return table_name_; }
+  inline void set_synonym_name(const common::ObString &synonym_name) { synonym_name_ = synonym_name;  }
+  inline common::ObString &get_synonym_name() { return synonym_name_; }
+  inline const common::ObString &get_synonym_name() const { return synonym_name_; }
+  inline void set_synonym_db_name(const common::ObString &synonym_db_name)
+  {
+    synonym_db_name_ = synonym_db_name;
+  }
+  inline common::ObString &get_synonym_db_name() { return synonym_db_name_; }
+  inline const common::ObString &get_synonym_db_name() const { return synonym_db_name_; }
   inline void set_column_name(const common::ObString &column_name) { column_name_ = column_name; }
   inline common::ObString &get_column_name() { return column_name_; }
   inline const common::ObString &get_column_name() const { return column_name_; }
@@ -3026,9 +3150,13 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const;
   inline bool is_generated_column() const { return share::schema::ObSchemaUtils::is_generated_column(column_flags_); }
+  inline bool is_identity_column() const { return share::schema::ObSchemaUtils::is_identity_column(column_flags_); }
   inline bool is_default_expr_v2_column() const { return share::schema::ObSchemaUtils::is_default_expr_v2_column(column_flags_); }
   inline bool is_virtual_generated_column() const { return share::schema::ObSchemaUtils::is_virtual_generated_column(column_flags_); }
   inline bool is_stored_generated_column() const { return share::schema::ObSchemaUtils::is_stored_generated_column(column_flags_); }
+  inline bool is_always_identity_column() const { return share::schema::ObSchemaUtils::is_always_identity_column(column_flags_); }
+  inline bool is_default_identity_column() const { return share::schema::ObSchemaUtils::is_default_identity_column(column_flags_); }
+  inline bool is_default_on_null_identity_column() const { return share::schema::ObSchemaUtils::is_default_on_null_identity_column(column_flags_); }
   inline bool is_fulltext_column() const { return share::schema::ObSchemaUtils::is_fulltext_column(column_flags_); }
   inline bool is_doc_id_column() const { return share::schema::ObSchemaUtils::is_doc_id_column(column_flags_); }
   inline bool is_vec_hnsw_vid_column() const { return share::schema::ObSchemaUtils::is_vec_hnsw_vid_column(column_flags_); }
@@ -3093,7 +3221,12 @@ public:
 
   inline uint64_t get_udt_set_id() const { return udt_set_id_; };
   inline void set_udt_set_id(uint64_t udt_set_id) { udt_set_id_ = udt_set_id; };
+  bool is_xml_column() const { return ob_is_xml_pl_type(get_data_type(), get_udt_id())
+                                      || ob_is_xml_sql_type(get_data_type(), get_subschema_id()); }
   bool is_geo_column() const { return get_data_type() == ObObjType::ObGeometryType; }
+  bool is_pseudo_column_ref() const { return is_pseudo_column_ref_; }
+  void set_is_pseudo_column_ref(bool value) { is_pseudo_column_ref_ = value; }
+
   inline common::ObGeoType get_geo_type() const { return static_cast<common::ObGeoType>(srs_info_.geo_type_); }
 
   VIRTUAL_TO_STRING_KVP(N_ITEM_TYPE, type_,
@@ -3104,6 +3237,8 @@ public:
                        N_CID, column_id_,
                        K_(database_name),
                        K_(table_name),
+                       K_(synonym_name),
+                       K_(synonym_db_name),
                        K_(column_name),
                        K_(column_flags),
                        K_(is_lob_column),
@@ -3123,6 +3258,8 @@ private:
   uint64_t column_id_;
   common::ObString database_name_;
   common::ObString table_name_;
+  common::ObString synonym_name_;
+  common::ObString synonym_db_name_;
   common::ObString column_name_;
   uint64_t column_flags_; //same as flags in ObColumnSchemaV2
   ObRawExpr *dependant_expr_; //TODO: @yuming.wyc @ryan.ly
@@ -3133,6 +3270,7 @@ private:
   bool is_rowkey_column_;
   bool is_unique_key_column_;
   bool is_mul_key_column_;
+  bool is_pseudo_column_ref_;
   int8_t is_strict_json_column_;
   union { // for geometry column
     struct {
@@ -3675,6 +3813,7 @@ public:
     distinct_(false),
     order_items_(),
     separator_param_expr_(NULL),
+    udf_meta_(),
     expr_in_inner_stmt_(false),
     is_need_deserialize_row_(false),
     pl_agg_udf_expr_(NULL)
@@ -3688,6 +3827,7 @@ public:
     distinct_(false),
     order_items_(),
     separator_param_expr_(NULL),
+    udf_meta_(),
     expr_in_inner_stmt_(false),
     is_need_deserialize_row_(false),
     pl_agg_udf_expr_(NULL)
@@ -3702,6 +3842,7 @@ public:
     distinct_(is_distinct),
     order_items_(),
     separator_param_expr_(NULL),
+    udf_meta_(),
     expr_in_inner_stmt_(false),
     is_need_deserialize_row_(false),
     pl_agg_udf_expr_(NULL)
@@ -3766,6 +3907,10 @@ public:
     return seed;
   }
 
+  //set udf meta to this expr
+  int set_udf_meta(const share::schema::ObUDF &udf);
+  const share::schema::ObUDFMeta get_udf_meta() { return udf_meta_; }
+
   int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
@@ -3775,6 +3920,7 @@ public:
                                             N_DISTINCT, distinct_,
                                             N_ORDER_BY, order_items_,
                                             N_SEPARATOR_PARAM_EXPR, separator_param_expr_,
+                                            K_(udf_meta),
                                             K_(expr_in_inner_stmt),
                                             K_(pl_agg_udf_expr),
                                             K_(expr_hash));
@@ -3786,6 +3932,8 @@ private:
   // used for group_concat/rank/percent rank/dense rank/cume dist
   common::ObArray<OrderItem, common::ModulePageAllocator, true> order_items_;
   ObRawExpr *separator_param_expr_;
+  //use for udf function info
+  share::schema::ObUDFMeta udf_meta_;
   bool expr_in_inner_stmt_;
   bool is_need_deserialize_row_;// for topk histogram and hybrid histogram computation
   ObRawExpr *pl_agg_udf_expr_;//for pl agg udf expr
@@ -3905,6 +4053,8 @@ public:
   int get_autoinc_nextval_name(char *buf, int64_t buf_len, int64_t &pos) const;
   void set_op_id(int64_t operator_id) { extra_.operator_id_ = operator_id; }
   int64_t get_op_id() const { return extra_.operator_id_; }
+  void set_mview_id(uint64_t mview_id) { extra_.mview_id_ = mview_id; }
+  uint64_t get_mview_id() const { return extra_.mview_id_; }
   int get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type) const;
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
@@ -3931,6 +4081,55 @@ inline const common::ObString &ObSysFunRawExpr::get_func_name() const
   return func_name_;
 }
 
+class ObSequenceRawExpr : public ObSysFunRawExpr
+{
+public:
+  ObSequenceRawExpr(common::ObIAllocator &alloc)
+      : ObSysFunRawExpr(alloc), database_name_(), name_(), action_(), sequence_id_(0) {}
+  ObSequenceRawExpr()
+      : ObSysFunRawExpr(), database_name_(), name_(), action_(), sequence_id_(0) {}
+  virtual ~ObSequenceRawExpr() = default;
+  int assign(const ObRawExpr &other) override;
+  int inner_deep_copy(ObIRawExprCopier &copier) override;
+  int set_sequence_meta(const common::ObString &database_name,
+                        const common::ObString &name,
+                        const common::ObString &action,
+                        uint64_t sequence_id);
+  const common::ObString &get_database_name() { return database_name_; }
+  const common::ObString &get_name() { return name_; }
+  const common::ObString &get_action() const { return action_; }
+  uint64_t get_sequence_id() const { return sequence_id_; }
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context) const override;
+  virtual void inner_calc_hash() override;
+  virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const override;
+private:
+  common::ObString database_name_; // sequence database name
+  common::ObString name_; // sequence object name
+  common::ObString action_; // NEXTVAL or CURRVAL
+  uint64_t sequence_id_; // this value is also wrapped as expr and put into the param of ObSysFunRawExpr
+};
+
+class ObNormalDllUdfRawExpr : public ObSysFunRawExpr
+{
+public:
+  ObNormalDllUdfRawExpr(common::ObIAllocator &alloc) : ObSysFunRawExpr(alloc), udf_meta_(), udf_attributes_() {}
+  ObNormalDllUdfRawExpr() : ObSysFunRawExpr(), udf_meta_(), udf_attributes_() {}
+  virtual ~ObNormalDllUdfRawExpr() {}
+  int assign(const ObRawExpr &other) override;
+  int inner_deep_copy(ObIRawExprCopier &copier) override;
+  int set_udf_meta(const share::schema::ObUDF &udf);
+  int add_udf_attribute_name(const common::ObString &name);
+  const share::schema::ObUDFMeta &get_udf_meta() const { return udf_meta_; }
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context) const override;
+  virtual void inner_calc_hash() override;
+private:
+  //for udf function info
+  share::schema::ObUDFMeta udf_meta_;
+  common::ObSEArray<common::ObString, 16> udf_attributes_;// name of input expr
+};
+
 class ObCollectionConstructRawExpr : public ObSysFunRawExpr
 {
 public:
@@ -3939,13 +4138,17 @@ public:
       type_(pl::ObPLType::PL_INVALID_TYPE),
       elem_type_(),
       capacity_(OB_INVALID_SIZE),
-      udt_id_(OB_INVALID_ID) {}
+      udt_id_(OB_INVALID_ID),
+      database_id_(OB_INVALID_ID),
+      coll_schema_version_(common::OB_INVALID_VERSION) {}
   ObCollectionConstructRawExpr()
     : ObSysFunRawExpr(),
       type_(pl::ObPLType::PL_INVALID_TYPE),
       elem_type_(),
       capacity_(OB_INVALID_SIZE),
-      udt_id_(OB_INVALID_ID) {}
+      udt_id_(OB_INVALID_ID),
+      database_id_(OB_INVALID_ID),
+      coll_schema_version_(common::OB_INVALID_VERSION) {}
   virtual ~ObCollectionConstructRawExpr() {}
 
   inline void set_type(pl::ObPLType type) { type_ = type; }
@@ -3960,10 +4163,30 @@ public:
   const pl::ObPLDataType& get_elem_type() const { return elem_type_; }
   int64_t get_capacity() const { return capacity_; }
   uint64_t get_udt_id() const { return udt_id_; }
+  int64_t get_udt_version() const { return coll_schema_version_; }
   int assign(const ObRawExpr &other) override;
   int inner_deep_copy(ObIRawExprCopier &copier) override;
 
   virtual ObExprOperator *get_op() override;
+
+  inline void set_database_id(int64_t database_id)
+  {
+    database_id_ = database_id;
+  }
+
+  OB_INLINE uint64_t get_database_id() const { return database_id_; }
+
+  inline void set_coll_schema_version(int64_t schema_version)
+  {
+    coll_schema_version_ = schema_version;
+  }
+
+  inline bool need_add_dependency()
+  {
+    return coll_schema_version_ != common::OB_INVALID_VERSION;
+  }
+
+  int get_schema_object_version(share::schema::ObSchemaObjVersion &obj_version);
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
@@ -3971,6 +4194,7 @@ public:
                                             N_REL_ID, rel_ids_,
                                             N_FUNC, get_func_name(),
                                             N_CHILDREN, exprs_,
+                                            K_(coll_schema_version),
                                             K_(expr_hash));
 private:
   pl::ObPLType type_; // PL_NESTED_TABLE_TYPE|PL_ASSOCIATIVE_ARRAY_TYPE|PL_VARRAY_TYPE
@@ -3979,6 +4203,8 @@ private:
   uint64_t udt_id_; // record the ID of complex type
   // Used to print the name of the constructor
   common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> access_names_;
+  int64_t database_id_;
+  int64_t coll_schema_version_;
 };
 
 class ObObjectConstructRawExpr : public ObSysFunRawExpr
@@ -3989,13 +4215,17 @@ public:
       rowsize_(0),
       udt_id_(OB_INVALID_ID),
       elem_types_(),
-      access_names_() {}
+      access_names_(),
+      database_id_(OB_INVALID_ID),
+      object_schema_version_(common::OB_INVALID_VERSION) {}
   ObObjectConstructRawExpr()
     : ObSysFunRawExpr(),
       rowsize_(0),
       udt_id_(OB_INVALID_ID),
       elem_types_(),
-      access_names_() {}
+      access_names_(),
+      database_id_(OB_INVALID_ID),
+      object_schema_version_(common::OB_INVALID_VERSION) {}
 
   virtual ~ObObjectConstructRawExpr() {}
 
@@ -4004,6 +4234,8 @@ public:
 
   inline void set_udt_id(uint64_t udt_id) { udt_id_ = udt_id; }
   uint64_t get_udt_id() const { return udt_id_; }
+
+  int64_t get_udt_version() { return object_schema_version_; }
 
   inline int add_elem_type(ObRawExprResType &elem_type)
   {
@@ -4025,6 +4257,25 @@ public:
   int assign(const ObRawExpr &other) override;
   int inner_deep_copy(ObIRawExprCopier &copier) override;
 
+  inline void set_database_id(int64_t database_id)
+  {
+    database_id_ = database_id;
+  }
+
+  OB_INLINE uint64_t get_database_id() const { return database_id_; }
+
+  inline void set_coll_schema_version(int64_t schema_version)
+  {
+    object_schema_version_ = schema_version;
+  }
+
+  inline bool need_add_dependency()
+  {
+    return object_schema_version_ != common::OB_INVALID_VERSION;
+  }
+
+  int get_schema_object_version(share::schema::ObSchemaObjVersion &obj_version);
+
   virtual ObExprOperator *get_op() override;
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
@@ -4033,6 +4284,8 @@ public:
                                             N_REL_ID, rel_ids_,
                                             N_FUNC, get_func_name(),
                                             N_CHILDREN, exprs_,
+                                            K_(database_id),
+                                            K_(object_schema_version),
                                             K_(expr_hash));
 private:
   int64_t rowsize_;
@@ -4041,6 +4294,8 @@ private:
   common::ObSEArray<ObRawExprResType, 5, common::ModulePageAllocator, true> elem_types_;
   // Used to print the name of the constructor
   common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> access_names_;
+  int64_t database_id_;
+  int64_t object_schema_version_;
 };
 
 class ObUDFParamDesc
@@ -4100,10 +4355,14 @@ public:
       database_name_(),
       package_name_(),
       is_parallel_enable_(false),
+      is_udt_udf_(false),
       is_pkg_body_udf_(false),
+      is_return_sys_cursor_(false),
       is_aggregate_udf_(false),
       is_aggr_udf_distinct_(false),
+      nocopy_params_(),
       loc_(0),
+      is_udt_cons_(false),
       params_name_(),
       params_desc_v2_() {
     set_expr_class(EXPR_UDF);
@@ -4123,10 +4382,14 @@ public:
       database_name_(),
       package_name_(),
       is_parallel_enable_(false),
+      is_udt_udf_(false),
       is_pkg_body_udf_(false),
+      is_return_sys_cursor_(false),
       is_aggregate_udf_(false),
       is_aggr_udf_distinct_(false),
+      nocopy_params_(),
       loc_(0),
+      is_udt_cons_(false),
       params_name_(),
       params_desc_v2_() {
     set_expr_class(EXPR_UDF);
@@ -4228,6 +4491,11 @@ public:
   inline void set_parallel_enable(bool is_parallel_enable) { is_parallel_enable_ = is_parallel_enable; }
   inline bool is_parallel_enable() const { return is_parallel_enable_; }
 
+  inline void set_is_udt_udf(bool is_udt_udf) { is_udt_udf_ = is_udt_udf; }
+  inline bool get_is_udt_udf() const { return is_udt_udf_; }
+  inline void set_is_return_sys_cursor(bool is_ret_cursor) { is_return_sys_cursor_ = is_ret_cursor; }
+  inline bool get_is_return_sys_cursor() const { return is_return_sys_cursor_; }
+
   inline void set_type_id(uint64_t type_id) { type_id_ = type_id; }
   inline uint64_t get_type_id() const { return type_id_; }
   inline void set_is_aggregate_udf(bool is_aggregate_udf) { is_aggregate_udf_ = is_aggregate_udf; }
@@ -4238,8 +4506,12 @@ public:
 
   inline void set_loc(uint64_t loc) { loc_ = loc; }
   inline uint64_t get_loc() const { return loc_; }
+  inline void set_is_udt_cons(bool flag) { is_udt_cons_ = flag; }
+  inline bool get_is_udt_cons() const { return is_udt_cons_; }
   inline ObIArray<ObUDFParamDesc>& get_params_desc() { return params_desc_v2_; }
   inline const ObIArray<ObUDFParamDesc>& get_params_desc() const { return params_desc_v2_; }
+  ObIArray<int64_t>& get_nocopy_params() { return nocopy_params_; }
+  const ObIArray<int64_t>& get_nocopy_params() const { return nocopy_params_; }
 
   inline bool need_add_dependency()
   {
@@ -4272,14 +4544,18 @@ public:
                                             K_(type_id),
                                             K_(subprogram_path),
                                             K_(is_deterministic),
+                                            K_(is_udt_udf),
+                                            K_(is_return_sys_cursor),
                                             K_(loc),
                                             K_(udf_schema_version),
                                             K_(pkg_schema_version),
                                             K_(is_pkg_body_udf),
+                                            K_(is_return_sys_cursor),
                                             K_(is_aggregate_udf),
                                             K_(is_parallel_enable),
                                             K_(is_aggr_udf_distinct),
                                             K_(loc),
+                                            K_(is_udt_cons),
                                             K_(params_desc_v2),
                                             K_(params_type),
                                             N_CHILDREN, exprs_,
@@ -4296,10 +4572,14 @@ private:
   common::ObString database_name_;
   common::ObString package_name_;
   bool is_parallel_enable_;
+  bool is_udt_udf_;
   bool is_pkg_body_udf_;
+  bool is_return_sys_cursor_;
   bool is_aggregate_udf_;
   bool is_aggr_udf_distinct_;
+  common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> nocopy_params_;
   uint64_t loc_; // line and column combination, mainly for call_stack preparation
+  bool is_udt_cons_;
   common::ObSEArray<common::ObString, 5, common::ModulePageAllocator, true> params_name_;
   common::ObSEArray<ObUDFParamDesc, 5, common::ModulePageAllocator, true> params_desc_v2_;
 private:
@@ -4416,7 +4696,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPLSQLVariableRawExpr);
 private:
   int64_t plsql_line_; // for $$PLSQL_LINE
-  ObString plsql_variable_; // for PL unit pseudo variables.
+  ObString plsql_variable_; // for $$PLSQL_UNIT, $$PLSQL_CCFLAGS etc...
 };
 
 class ObCallParamRawExpr : public ObOpRawExpr
@@ -4496,6 +4776,7 @@ class ObObjAccessRawExpr : public ObOpRawExpr
 public:
   ObObjAccessRawExpr(common::ObIAllocator &alloc)
     : ObOpRawExpr(alloc),
+      get_attr_func_(0),
       func_name_(),
       access_indexs_(),
       var_indexs_(),
@@ -4505,6 +4786,7 @@ public:
       extend_size_() {}
   ObObjAccessRawExpr()
     : ObOpRawExpr(),
+      get_attr_func_(0),
       func_name_(),
       access_indexs_(),
       var_indexs_(),
@@ -4524,6 +4806,8 @@ public:
   const common::ObIArray<pl::ObObjAccessIdx> &get_access_idxs() const { return access_indexs_; }
   const common::ObIArray<int64_t> &get_var_indexs() const { return var_indexs_; }
   int get_final_type(pl::ObPLDataType &type) const;
+  void set_get_attr_func_addr(uint64_t get_attr_func) { get_attr_func_ = get_attr_func; }
+  uint64_t get_get_attr_func_addr() const { return get_attr_func_; }
   void set_func_name(const common::ObString &func_name) { func_name_ = func_name; }
   const common::ObString &get_func_name() const { return func_name_; }
   bool for_write() const { return for_write_; }
@@ -4537,6 +4821,7 @@ public:
   int32_t get_extend_size() const { return extend_size_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObObjAccessRawExpr);
+  uint64_t get_attr_func_; // Get the function pointer for retrieving user-defined type data
   common::ObString func_name_;
   common::ObSEArray<pl::ObObjAccessIdx, 4, common::ModulePageAllocator, true> access_indexs_;
   common::ObSEArray<int64_t, 4, common::ModulePageAllocator, true> var_indexs_;
@@ -4544,6 +4829,69 @@ private:
   pl::ObCollectionType::PropertyType property_type_;
   common::ObSEArray<pl::ObObjAccessIdx, 4, common::ModulePageAllocator, true> orig_access_indexs_;
   int32_t extend_size_;
+};
+
+enum ObMultiSetType {
+  MULTISET_TYPE_INVALID = -1,
+  MULTISET_TYPE_UNION,
+  MULTISET_TYPE_INTERSECT,
+  MULTISET_TYPE_EXCEPT,
+  MULTISET_TYPE_SUBMULTISET,
+  MULTISET_TYPE_MEMBER_OF,
+  MULTISET_TYPE_IS_SET,
+  MULTISET_TYPE_EMPTY,
+};
+
+enum ObMultiSetModifier {
+  MULTISET_MODIFIER_INVALID = -1,
+  MULTISET_MODIFIER_ALL,
+  MULTISET_MODIFIER_DISTINCT,
+  MULTISET_MODIFIER_NOT,
+};
+
+class ObMultiSetRawExpr :
+  public ObOpRawExpr
+{
+public:
+  ObMultiSetRawExpr(common::ObIAllocator &alloc)
+  : ObOpRawExpr(alloc),
+    ms_modifier_(ObMultiSetModifier::MULTISET_MODIFIER_INVALID),
+    ms_type_(ObMultiSetType::MULTISET_TYPE_INVALID) {}
+  ObMultiSetRawExpr()
+  : ObOpRawExpr(),
+    ms_modifier_(ObMultiSetModifier::MULTISET_MODIFIER_INVALID),
+    ms_type_(ObMultiSetType::MULTISET_TYPE_INVALID) {}
+
+  virtual ~ObMultiSetRawExpr(){}
+
+  int assign(const ObRawExpr &other) override;
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context) const override;
+  virtual void inner_calc_hash() override;
+
+  inline ObMultiSetModifier get_multiset_modifier() const { return ms_modifier_; }
+  inline ObMultiSetType get_multiset_type() const { return ms_type_; }
+
+  void set_multiset_modifier(ObMultiSetModifier modifier) { ms_modifier_ = modifier; }
+  void set_multiset_type(ObMultiSetType type) { ms_type_ = type; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObMultiSetRawExpr);
+  ObMultiSetModifier ms_modifier_;
+  ObMultiSetType ms_type_;
+};
+
+class ObCollPredRawExpr : public ObMultiSetRawExpr
+{
+public:
+  ObCollPredRawExpr(common::ObIAllocator &alloc) : ObMultiSetRawExpr(alloc) {}
+  virtual ~ObCollPredRawExpr() {}
+
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context) const override;
+  virtual void inner_calc_hash() override;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCollPredRawExpr);
 };
 
 ////////////////////////////////////////////////////////////////
@@ -4814,6 +5162,8 @@ public:
   uint64_t get_table_id() const { return table_id_; }
   void set_table_name(const common::ObString &table_name) { table_name_ = table_name; }
   const common::ObString & get_table_name() const { return table_name_; }
+  void set_data_access_path(const common::ObString &data_access_path) { data_access_path_ = data_access_path; }
+  const common::ObString & get_data_access_path() const { return data_access_path_; }
 
   VIRTUAL_TO_STRING_KVP(N_ITEM_TYPE, type_,
                        N_RESULT_TYPE, result_type_,
@@ -4821,10 +5171,12 @@ public:
                        N_REL_ID, rel_ids_,
                        N_TABLE_ID, table_id_,
                        N_TABLE_NAME, table_name_,
+                       K_(data_access_path),
                        K_(expr_hash));
 private:
   uint64_t table_id_;
   common::ObString table_name_;
+  common::ObString data_access_path_; //for external table column
   DISALLOW_COPY_AND_ASSIGN(ObPseudoColumnRawExpr);
 };
 
@@ -4834,6 +5186,7 @@ private:
 //   T_PDML_PARTITION_ID: carry partition id of row to above PDML operators.
 //   T_PSEUDO_GROUP_ID: carry the batch group id for DAS batch rescan.
 //   T_INNER_AGGR_CODE: carry aggregate code for 3-stage aggregation.
+//   T_PSEUDO_ROLLUP_ID: carry aggregate code for rollup distributor and collector.
 class ObOpPseudoColumnRawExpr : public ObTerminalRawExpr
 {
 public:
@@ -5042,10 +5395,12 @@ public:
       SQL_RESV_LOG(ERROR, "no more memory to create raw expr");
     } else if (OB_NOT_NULL(proxy_)) {
       if (OB_FAIL(check_stack_overflow(is_overflow))) {
+        SQL_RESV_LOG(WARN, "failed to check stack overflow", K(ret));
       } else if (is_overflow) {
         ret = OB_SIZE_OVERFLOW;
         SQL_RESV_LOG(WARN, "too deep recursive", K(ret));
       } else if (OB_FAIL(proxy_->create_raw_expr(expr_type, raw_expr))) {
+        SQL_RESV_LOG(WARN, "failed to create raw expr by pl factory", K(ret));
       } else {
         raw_expr->set_is_called_in_sql(is_called_sql_);
       }
@@ -5083,7 +5438,9 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(try_check_status())) {
+      SQL_RESV_LOG(WARN, "Exceeded memory usage limit", K(ret));
     } else if (OB_FAIL(create_raw_expr_inner(expr_type, raw_expr))) {
+      SQL_RESV_LOG(WARN, "failed to create raw expr", K(ret));
     }
     return ret;
   }
@@ -5271,6 +5628,82 @@ inline uint64_t ObPlQueryRefRawExpr::hash_internal(uint64_t seed) const
   }
   return hash_value;
 }
+
+class ObUDTConstructorRawExpr : public ObSysFunRawExpr
+{
+public:
+  ObUDTConstructorRawExpr(common::ObIAllocator &alloc)
+    : ObSysFunRawExpr(alloc),
+      udt_id_(OB_INVALID_ID),
+      root_udt_id_(OB_INVALID_ID),
+      attr_pos_(0),
+      access_names_(),
+      database_id_(OB_INVALID_ID),
+      object_schema_version_(common::OB_INVALID_VERSION) {}
+  ObUDTConstructorRawExpr()
+    : ObSysFunRawExpr(),
+      udt_id_(OB_INVALID_ID),
+      root_udt_id_(OB_INVALID_ID),
+      attr_pos_(0),
+      access_names_(),
+      database_id_(OB_INVALID_ID),
+      object_schema_version_(common::OB_INVALID_VERSION) {}
+
+  virtual ~ObUDTConstructorRawExpr() {}
+
+  inline void set_udt_id(uint64_t udt_id) { udt_id_ = udt_id; }
+  uint64_t get_udt_id() { return udt_id_; }
+  inline void set_root_udt_id(uint64_t udt_id) { root_udt_id_ = udt_id; }
+  uint64_t get_root_udt_id() { return root_udt_id_; }
+  inline void set_attribute_pos(uint64_t attr_pos) { attr_pos_ = attr_pos; }
+  uint64_t get_attribute_pos() { return attr_pos_; }
+  int add_access_name(const common::ObString &access_name) { return access_names_.push_back(access_name); }
+  const common::ObIArray<ObString>& get_access_names() const { return access_names_; }
+
+  int assign(const ObRawExpr &other) override;
+  int inner_deep_copy(ObIRawExprCopier &copier) override;
+
+  inline void set_database_id(int64_t database_id)
+  {
+    database_id_ = database_id;
+  }
+
+  OB_INLINE uint64_t get_database_id() const { return database_id_; }
+
+  inline void set_coll_schema_version(int64_t schema_version)
+  {
+    object_schema_version_ = schema_version;
+  }
+
+  inline bool need_add_dependency()
+  {
+    return object_schema_version_ != common::OB_INVALID_VERSION;
+  }
+
+  int get_schema_object_version(share::schema::ObSchemaObjVersion &obj_version);
+
+  virtual ObExprOperator *get_op() override;
+
+  VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
+                                            N_RESULT_TYPE, result_type_,
+                                            N_EXPR_INFO, info_,
+                                            N_REL_ID, rel_ids_,
+                                            N_FUNC, get_func_name(),
+                                            N_CHILDREN, exprs_,
+                                            K_(database_id),
+                                            K_(object_schema_version),
+                                            K_(expr_hash));
+private:
+  uint64_t udt_id_;
+  // Record the type of each element in Object
+  uint64_t root_udt_id_;
+  uint64_t attr_pos_;
+  // Used to print the name of the constructor
+  common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> access_names_;
+  int64_t database_id_;
+  int64_t object_schema_version_;
+};
+
 
 }// end sql
 }// end oceanbase

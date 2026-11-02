@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_FULL_MEMORY_MDS_DATA
 
 #include "lib/utility/ob_print_utils.h"
-#include "storage/tablet/ob_tablet_autoincrement_state.h"
+#include "share/ob_tablet_autoincrement_param.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
 #include "storage/tablet/ob_tablet_complex_addr.h"
 #include "storage/tablet/ob_tablet_full_medium_info.h"
@@ -72,11 +72,11 @@ private:
       ObTabletDumpedMediumInfo &medium_info_list);
   static int read_auto_inc_seq(
       common::ObArenaAllocator &allocator,
-      const ObTabletComplexAddr<ObTabletAutoincSeq> &auto_inc_seq_addr,
-      ObTabletAutoincSeq &auto_inc_seq);
+      const ObTabletComplexAddr<share::ObTabletAutoincSeq> &auto_inc_seq_addr,
+      share::ObTabletAutoincSeq &auto_inc_seq);
   static int mock_convert_auto_inc_seq_to_mds_dump_kv(
       common::ObArenaAllocator &allocator,
-      const ObTabletAutoincSeq &auto_inc_seq,
+      const share::ObTabletAutoincSeq &auto_inc_seq,
       const share::SCN mds_ckpt_scn,
       mds::MdsDumpKV &dump_kv);
   static int mock_convert_medium_info_to_mds_dump_kv(
@@ -84,15 +84,18 @@ private:
       const compaction::ObMediumCompactionInfo& medium_info,
       const share::SCN mds_ckpt_scn,
       mds::MdsDumpKV &dump_kv);
+private:
+  static const int64_t MEDIUM_LIST_VERSION = 1;
+  static const int32_t MEDIUM_LIST_INFO_RESERVED_BITS = 52;
 public:
   bool is_inited_;
-  // Keep scan_all_mds_data_with_op in sync when adding a multi-source data unit.
+  // if add new multi-source data, must adapt the scan_all_mds_data_with_op interface simultaneously, because it is closely related to compatibility.
   mds::MdsDumpKV tablet_status_uncommitted_kv_;
   mds::MdsDumpKV tablet_status_committed_kv_;
   mds::MdsDumpKV aux_tablet_info_uncommitted_kv_;
   mds::MdsDumpKV aux_tablet_info_committed_kv_;
   ObTabletFullMediumInfo medium_info_list_;
-  ObTabletAutoincSeq auto_inc_seq_;
+  share::ObTabletAutoincSeq auto_inc_seq_;
 };
 } // namespace storage
 } // namespace oceanbase

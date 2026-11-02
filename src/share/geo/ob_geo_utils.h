@@ -27,6 +27,7 @@
 #include "common/number/ob_number_v2.h"
 #include "common/object/ob_object.h"
 #include "share/geo/ob_geo_to_tree_visitor.h"
+#include "objit/common/ob_item_type.h"
 
 namespace oceanbase
 {
@@ -176,6 +177,7 @@ public:
                                 ObString &res_wkb);
   static ObGeoType get_geo_type_by_name(ObString &name);
   static const char *get_geo_name_by_type(ObGeoType type);
+  static const char *get_geo_name_by_type_oracle(ObGeoType type);
   static int get_header_info_from_wkb(const ObString &wkb,
                                       ObGeoWkbHeader &header);
   static int get_type_srid_from_wkb(const ObString &wkb,
@@ -255,8 +257,8 @@ public:
   static bool is_point(const ObGeometry& geo) { return geo.type() == ObGeoType::POINT || geo.type() == ObGeoType::MULTIPOINT;}
   static bool is_line(const ObGeometry& geo) { return geo.type() == ObGeoType::LINESTRING || geo.type() == ObGeoType::MULTILINESTRING;}
   static bool is_polygon(const ObGeometry& geo) { return geo.type() == ObGeoType::POLYGON || geo.type() == ObGeoType::MULTIPOLYGON;}
-  static bool use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObGeoPredicate predicate);
-  static int get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObGeoPredicate predicate, bool& result);
+  static bool use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObItemType func_type);
+  static int get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObItemType func_type, bool& result);
   static bool need_get_srs(const uint32_t srid);
   template<typename GcTreeType>
   static int remove_duplicate_multi_geo(ObGeometry *&geo, lib::MemoryContext &mem_ctx, const ObSrsItem *srs);
@@ -466,6 +468,7 @@ int ObGeoBoxUtil::get_geog_line_box(const GeometryType &line, ObGeogBox &box)
   for ( ; iter != line.end() && OB_SUCC(ret); iter++) {
     convert_ll_to_cartesian3d(*iter, p3d2);
     if(OB_FAIL(caculate_line_box(p3d1, p3d2, box_tmp))) {
+      OB_LOG(WARN, "failed to caculate line box", K(ret));
     } else {
       if (!start) {
         start = true;
@@ -644,7 +647,9 @@ int ObGeoTypeUtil::simplify_multi_geo(ObGeometry *&geo, common::ObIAllocator &al
           bool in_res_geo = false;
           ObGeometry *cur_geo = &(*mp)[i];
           if (OB_FAIL(simplify_multi_geo<GcType>(cur_geo, allocator))) {
+            OB_LOG(WARN, "fail to remove dupilicate multi geometry", K(ret));
           } else if (OB_FAIL(mp->set(i, cur_geo))) {
+            OB_LOG(WARN, "fail to set geometry", K(ret), K(i), KP(cur_geo));
           }
         }
         if (mp->size() == 1) {
@@ -692,6 +697,7 @@ int ObGeoTypeUtil::simplify_geo_collection(ObGeometry *&geo, common::ObIAllocato
           for (uint32_t i = 0; OB_SUCC(ret) && i < geo_coll->size(); ++i) {
             typename GcTreeType::sub_pt_type &geo_point = reinterpret_cast<typename GcTreeType::sub_pt_type &>((*geo_coll)[i]);
             if (OB_FAIL(res_geo->push_back(geo_point))) {
+              OB_LOG(WARN, "failed to add point to multipoint", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -707,6 +713,7 @@ int ObGeoTypeUtil::simplify_geo_collection(ObGeometry *&geo, common::ObIAllocato
           }
           for (uint32_t i = 0; OB_SUCC(ret) && i < geo_coll->size(); ++i) {
             if (OB_FAIL(res_geo->push_back((*geo_coll)[i]))) {
+              OB_LOG(WARN, "failed to add linestring to multilinestring", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -722,6 +729,7 @@ int ObGeoTypeUtil::simplify_geo_collection(ObGeometry *&geo, common::ObIAllocato
           }
           for (uint32_t i = 0; OB_SUCC(ret) && i < geo_coll->size(); ++i) {
             if (OB_FAIL(res_geo->push_back((*geo_coll)[i]))) {
+              OB_LOG(WARN, "failed to add polygon to multipolygon", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -769,6 +777,7 @@ int ObGeoTypeUtil::remove_duplicate_multi_geo(ObGeometry *&geo, lib::MemoryConte
         if (OB_SUCC(ret) && !in_res_geo) {
           typename GcTreeType::sub_pt_type pt(sp_geo[i].template get<0>(), sp_geo[i].template get<1>());
           if (OB_FAIL(res_geo->push_back(pt))) {
+            OB_LOG(WARN, "fail to push back geometry", K(ret));
           }
         }
       }
@@ -787,6 +796,7 @@ int ObGeoTypeUtil::remove_duplicate_multi_geo(ObGeometry *&geo, lib::MemoryConte
       for (int32_t i = 0; i < sp_geo.size() && OB_SUCC(ret); i++) {
         bool in_res_geo = false;
         if (OB_FAIL(is_in_geometry(mem_ctx, sp_geo[i], *res_geo, srs, in_res_geo))) {
+          OB_LOG(WARN, "fail to check is in geometry", K(ret));
         } else if (!in_res_geo && OB_FAIL(res_geo->push_back(sp_geo[i]))) {
           OB_LOG(WARN, "fail to push back geometry", K(ret));
         }
@@ -806,6 +816,7 @@ int ObGeoTypeUtil::remove_duplicate_multi_geo(ObGeometry *&geo, lib::MemoryConte
       for (int32_t i = 0; i < sp_geo.size() && OB_SUCC(ret); i++) {
         bool in_res_geo = false;
         if (OB_FAIL(is_in_geometry(mem_ctx, sp_geo[i], *res_geo, srs, in_res_geo))) {
+          OB_LOG(WARN, "fail to check is in geometry", K(ret));
         } else if (!in_res_geo && OB_FAIL(res_geo->push_back(sp_geo[i]))) {
           OB_LOG(WARN, "fail to push back geometry", K(ret));
         }
@@ -826,7 +837,9 @@ int ObGeoTypeUtil::remove_duplicate_multi_geo(ObGeometry *&geo, lib::MemoryConte
         bool in_res_geo = false;
         ObGeometry *cur_geo = &(*sp_geo)[i];
         if (OB_FAIL(remove_duplicate_multi_geo<GcTreeType>(cur_geo, mem_ctx, srs))) {
+          OB_LOG(WARN, "fail to remove dupilicate multi geometry", K(ret));
         } else if (OB_FAIL(is_in_geometry(mem_ctx, *cur_geo, *res_geo, srs, in_res_geo))) {
+          OB_LOG(WARN, "fail to check is in geometry", K(ret));
         } else if (!in_res_geo && OB_FAIL(res_geo->push_back(*cur_geo))) {
           OB_LOG(WARN, "fail to push back geometry", K(ret));
         }
@@ -874,6 +887,7 @@ int ObGeoTypeUtil::check_if_geo_duplicate(ObGeometry *geo, lib::MemoryContext &m
       typename GcTreeType::sub_ml_type &sp_geo = reinterpret_cast<typename GcTreeType::sub_ml_type &>(*geo);
       for (int32_t i = 0; i < sp_geo.size() && OB_SUCC(ret) && !is_duplicate; i++) {
         if (OB_FAIL(is_in_geometry(mem_ctx, sp_geo[i], sp_geo, srs, is_duplicate, i + 1))) {
+          OB_LOG(WARN, "fail to check is in geometry", K(ret));
         }
       }
       break;
@@ -882,6 +896,7 @@ int ObGeoTypeUtil::check_if_geo_duplicate(ObGeometry *geo, lib::MemoryContext &m
       typename GcTreeType::sub_mp_type &sp_geo = reinterpret_cast<typename GcTreeType::sub_mp_type &>(*geo);
       for (int32_t i = 0; i < sp_geo.size() && OB_SUCC(ret) && !is_duplicate; i++) {
         if (OB_FAIL(is_in_geometry(mem_ctx, sp_geo[i], sp_geo, srs, is_duplicate, i + 1))) {
+          OB_LOG(WARN, "fail to check is in geometry", K(ret));
         }
       }
       break;
@@ -891,6 +906,7 @@ int ObGeoTypeUtil::check_if_geo_duplicate(ObGeometry *geo, lib::MemoryContext &m
       for (int32_t i = 0; i < sp_geo->size() && OB_SUCC(ret) && !is_duplicate; i++) {
         ObGeometry *cur_geo = &(*sp_geo)[i];
         if (OB_FAIL(check_if_geo_duplicate<GcTreeType>(cur_geo, mem_ctx, srs, is_duplicate))) {
+          OB_LOG(WARN, "fail to remove dupilicate multi geometry", K(ret));
         } else if (!is_duplicate && OB_FAIL(is_in_geometry(mem_ctx, *cur_geo, *sp_geo, srs, is_duplicate))) {
           OB_LOG(WARN, "fail to check is in geometry", K(ret));
         }
@@ -1072,6 +1088,7 @@ int ObGeoTypeUtil::is_polygon_valid_simple(const ObGeometry *geo, bool &res)
   if (!geo->is_tree()) {
     ObGeoToTreeVisitor tree_visit(&tmp_allocator);
     if (OB_FAIL(const_cast<ObGeometry *>(geo)->do_visit(tree_visit))) {
+      OB_LOG(WARN, "fail to do tree visitor", K(ret));
     } else {
       geo_tree = tree_visit.get_geometry();
     }
@@ -1097,6 +1114,7 @@ int ObGeoTypeUtil::is_polygon_valid_simple(const ObGeometry *geo, bool &res)
     const CollTree &coll = reinterpret_cast<const CollTree &>(*geo_tree);
     for (int32_t i = 0; i < coll.size() && OB_SUCC(ret) && res; i++) {
       if (OB_FAIL((is_polygon_valid_simple<PyTree, MpyTree, CollTree>(&coll[i], res)))) {
+        OB_LOG(WARN, "failed to do tree item visit", K(ret));
       }
     }
   }

@@ -1,0 +1,37 @@
+--echo # ==== custom IK dictionary for full-text search ====
+--disable_warnings
+DROP DATABASE IF EXISTS ai_ik_test;
+--enable_warnings
+CREATE DATABASE ai_ik_test;
+USE ai_ik_test;
+
+--echo # dictionary table (FULLTEXT_DICT='Y') loaded with custom words, then refreshed into memory
+CREATE TABLE my_dict (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci FULLTEXT_DICT='Y';
+INSERT INTO my_dict (word) VALUES ('OceanBase'),('分布式数据库'),('全文索引');
+ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+
+--echo # business table + fulltext index that uses the custom dictionary
+CREATE TABLE articles (
+  id int unsigned NOT NULL AUTO_INCREMENT,
+  title varchar(200) NOT NULL,
+  PRIMARY KEY (id)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+ALTER TABLE articles ADD FULLTEXT INDEX ft_title(title)
+  WITH PARSER ik PARSER_PROPERTIES=(dict_table='ai_ik_test.my_dict');
+INSERT INTO articles (title) VALUES ('OceanBase数据库介绍'),('全文索引使用指南');
+
+--echo # custom-dictionary words match their rows
+SELECT id, title FROM articles WHERE MATCH(title) AGAINST('OceanBase' IN BOOLEAN MODE) ORDER BY id;
+SELECT id, title FROM articles WHERE MATCH(title) AGAINST('全文索引' IN BOOLEAN MODE) ORDER BY id;
+--echo # a custom dict_table REPLACES the built-in main dict: 数据库 is not listed, so it breaks
+--echo # into single characters and matches nothing
+SELECT id, title FROM articles WHERE MATCH(title) AGAINST('数据库' IN BOOLEAN MODE) ORDER BY id;
+
+--echo # dynamic update: add a word -> REFRESH -> index a new row -> it matches
+INSERT INTO my_dict (word) VALUES ('新词汇');
+ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+INSERT INTO articles (title) VALUES ('包含新词汇的标题');
+SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
+
+DROP DATABASE ai_ik_test;

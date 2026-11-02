@@ -133,10 +133,12 @@ int ObGeoLatlongCheckVisitor::visit(ObIWkbGeogPoint *geo)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(srs_)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
   } else if (OB_FAIL(calculate_point_range(geo))){
+    LOG_WARN("failed to calculate point range", K(ret));
   }
   return ret;
 }
@@ -146,10 +148,12 @@ int ObGeoLatlongCheckVisitor::visit(ObGeographPoint *geo)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(srs_)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
   } else if (OB_FAIL(calculate_point_range(geo))) {
+    LOG_WARN("failed to calculate point range", K(ret));
   }
   return ret;
 }

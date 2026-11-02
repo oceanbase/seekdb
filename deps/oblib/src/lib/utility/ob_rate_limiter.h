@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_RATE_LIMITER_H
+#define OB_RATE_LIMITER_H
+
+#include <stdint.h>
+
+namespace oceanbase {
+namespace lib {
+
+class ObRateLimiter
+{
+public:
+  ObRateLimiter(const int64_t rate = 0, const char *name = nullptr);
+  virtual ~ObRateLimiter();
+
+  void set_name(const char *name);
+  const char *name() const;
+
+  void set_rate(int64_t rate);
+  int64_t rate() const;
+
+  virtual bool is_force_allows() const = 0;
+  virtual void reset_force_allows() = 0;
+  // return OB_SUCCESS for acquire success and OB_EAGAIN for not acquired
+  virtual int try_acquire(const int64_t permits = 1,
+                          const int64_t arg0 = 0,
+                          const int64_t arg1 = 0) = 0;
+  virtual int acquire(const int64_t permits = 1,
+                      const int64_t arg0 = 0,
+                      const int64_t arg1 = 0) = 0;
+
+protected:
+  int64_t rate_;
+  const char *name_;
+};
+
+inline ObRateLimiter::ObRateLimiter(const int64_t rate, const char *name)
+    : rate_(rate), name_(name)
+{}
+
+inline ObRateLimiter::~ObRateLimiter()
+{}
+
+inline void ObRateLimiter::set_name(const char *name)
+{
+  name_ = name;
+}
+
+inline const char *ObRateLimiter::name() const
+{
+  return name_;
+}
+
+inline void ObRateLimiter::set_rate(int64_t rate)
+{
+  rate_ = rate;
+}
+
+inline int64_t ObRateLimiter::rate() const
+{
+  return rate_;
+}
+
+}  // lib
+}  // oceanbase
+
+#endif /* OB_RATE_LIMITER_H */

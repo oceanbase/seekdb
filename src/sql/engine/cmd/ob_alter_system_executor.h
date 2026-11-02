@@ -55,16 +55,30 @@ DEF_SIMPLE_EXECUTOR(ObAdminMerge);
 
 
 DEF_SIMPLE_EXECUTOR(ObRefreshMemStat);
+DEF_SIMPLE_EXECUTOR(ObRefreshFulltextDict);
+
+DEF_SIMPLE_EXECUTOR(ObWashMemFragmentation);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshIOCalibraiton);
-
-DEF_SIMPLE_EXECUTOR(ObSwitchRole);
 
 DEF_SIMPLE_EXECUTOR(ObSetConfig);
 
 DEF_SIMPLE_EXECUTOR(ObClearMergeError);
 
+DEF_SIMPLE_EXECUTOR(ObUpgradeVirtualSchema);
+
+
+
+
 DEF_SIMPLE_EXECUTOR(ObSetTP);
+
+DEF_SIMPLE_EXECUTOR(ObEnableSqlThrottle);
+
+DEF_SIMPLE_EXECUTOR(ObDisableSqlThrottle);
+
+DEF_SIMPLE_EXECUTOR(ObAddDisk);
+DEF_SIMPLE_EXECUTOR(ObDropDisk);
+
 
 DEF_SIMPLE_EXECUTOR(ObResetConfig);
 

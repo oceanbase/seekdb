@@ -23,6 +23,7 @@
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "share/ob_thread_mgr.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_checker.h"
 #include "storage/blocksstable/ob_super_block_buffer_holder.h"
@@ -35,7 +36,7 @@ namespace oceanbase
 
 namespace storage
 {
-class ObLocalStorageMetaService;
+class ObTenantStorageMetaService;
 class ObTabletHandle;
 struct ObTabletBlockInfo;
 }
@@ -115,6 +116,7 @@ public:
     }
     return bret;
   }
+  int fill_io_info_for_backup(const blocksstable::MacroBlockId &macro_id, ObIOInfo &io_info) const;
   TO_STRING_KV(KP_(buffer), K_(offset), K_(size), K_(io_timeout_ms), K_(io_desc), KP_(io_callback), KP_(device_handle), K_(has_backup_device_handle));
 public:
   const char *buffer_;
@@ -373,12 +375,12 @@ private:
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_held_block(
+  int mark_held_shared_block(
       const MacroBlockId &macro_id,
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_local_storage_blocks(
+  int mark_tenant_blocks(
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
@@ -407,10 +409,10 @@ private:
       storage::ObTabletHandle &handle,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_local_checkpoint_blocks(
+  int mark_tenant_ckpt_blocks(
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
-      storage::ObLocalStorageMetaService &meta_service,
+      storage::ObTenantStorageMetaService &meta_service,
       ObMacroBlockMarkerStatus &tmp_status);
   int mark_tmp_file_blocks(
       MacroBlkIdMap &mark_info,

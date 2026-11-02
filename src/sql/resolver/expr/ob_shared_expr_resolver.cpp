@@ -45,6 +45,7 @@ bool ObQuestionmarkEqualCtx::compare_const(const ObConstRawExpr &left,
       equal_info.second_param_idx_ = right.get_value().get_unknown();
       if (equal_info.first_param_idx_ != equal_info.second_param_idx_) {
         if (OB_FAIL(equal_pairs_.push_back(equal_info))) {
+          LOG_WARN("failed to push back equal_info", K(ret));
         }
       }
     }
@@ -60,6 +61,8 @@ bool ObRawExprEntry::compare(const ObRawExprEntry &node,
       stmt_scope_ == node.stmt_scope_) {
     bret = (expr_ == node.expr_) ||
            (expr_->same_as(*node.expr_, &cmp_ctx));
+    LOG_TRACE("compare expr entry", 
+              KPNAME(*expr_), KPNAME(*node.expr_), K(bret));
   }
   return bret;
 }
@@ -109,22 +112,28 @@ int ObSharedExprResolver::add_new_instance(ObRawExprEntry &entry)
   int ret = OB_SUCCESS;
   SharedExprs *shared_exprs = NULL;
   void *ptr = NULL;
+  LOG_TRACE("add new shared expr", KPNAME(*entry.expr_), K(entry.hash_code_));
   if (OB_UNLIKELY(!shared_expr_map_.created()) &&
       OB_FAIL(shared_expr_map_.create(128, "MergeSharedExpr"))) {
+    LOG_WARN("failed to create hash map", K(ret));
   } else if (OB_FAIL(shared_expr_map_.get_refactored(entry.hash_code_,
                                                      shared_exprs))) {
     if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
+      LOG_WARN("failed to get entry from map", K(ret));
     } else if (OB_ISNULL(ptr = allocator_.alloc(sizeof(SharedExprs)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       shared_exprs = new (ptr) SharedExprs();
       if (OB_FAIL(shared_expr_map_.set_refactored(entry.hash_code_,
                                                   shared_exprs))) {
+        LOG_WARN("failed to add shared expr into map", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(shared_exprs->push_back(entry))) {
+      LOG_WARN("failed to push back entry", K(ret));
     }
   }
   return ret;
@@ -141,6 +150,7 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
   bool has_new_param = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (is_blacklist_share_const(*expr)) {
     disable_share_const_level_++;
   }
@@ -154,6 +164,7 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
       bool disable_share_child = false;
       if (OB_ISNULL(old_param_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret));
       } else if (old_param_expr->get_expr_type() == T_QUESTIONMARK) {
         if (old_param_expr->has_flag(IS_STATIC_PARAM) && disable_share_const_level_ > 0) {
           disable_share_expr = true;
@@ -169,6 +180,7 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
                                                         new_param_expr,
                                                         is_param_new,
                                                         disable_share_child)))) {
+        LOG_WARN("failed to get shared instance", K(ret));
       } else {
         expr->get_param_expr(i) = new_param_expr;
         has_new_param = has_new_param || is_param_new;
@@ -184,9 +196,11 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
       ObRawExpr *new_expr = NULL;
       if (!has_new_param && 
           OB_FAIL(inner_get_shared_expr(entry, new_expr))) {
+        LOG_WARN("failed to get shared expr entry", K(ret));
       } else if (NULL != new_expr) {
         shared_expr = new_expr;
       } else if (OB_FAIL(add_new_instance(entry))) {
+        LOG_WARN("failed to add new instance", K(ret));
       } else {
         shared_expr = entry.expr_;
         is_new = true;
@@ -211,9 +225,11 @@ int ObSharedExprResolver::inner_get_shared_expr(ObRawExprEntry &entry,
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
+        LOG_WARN("failed to get entry from map", K(ret));
       }
     } else if (OB_ISNULL(shared_exprs)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("shared expr is null", K(ret));
     } else {
       ObQuestionmarkEqualCtx cmp_ctx(/*need_check_deterministic = */true);
       for (int64_t i = 0; OB_SUCC(cmp_ctx.err_code_) && i < shared_exprs->count(); ++i) {
@@ -226,12 +242,15 @@ int ObSharedExprResolver::inner_get_shared_expr(ObRawExprEntry &entry,
       }
       if (OB_SUCCESS != cmp_ctx.err_code_) {
         ret = cmp_ctx.err_code_;
+        LOG_WARN("compare expr failed", K(ret));
       } else if (NULL == new_expr || cmp_ctx.equal_pairs_.empty()) {
         // do nothing
       } else if (OB_ISNULL(query_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("query ctx is not provide", K(ret));
       } else if (OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                                 cmp_ctx.equal_pairs_))) {
+        LOG_WARN("failed to add equal constraint", K(ret));
       }
     }
   }

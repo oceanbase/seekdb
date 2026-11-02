@@ -20,7 +20,7 @@
 #include "lib/literals/ob_literals.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
-#include "storage/blockstore/ob_object_reader_writer.h"
+#include "storage/blockstore/ob_shared_object_reader_writer.h"
 
 namespace oceanbase
 {
@@ -28,6 +28,11 @@ namespace oceanbase
 namespace blocksstable
 {
 class ObSSTable;
+}
+
+namespace share
+{
+class ObTabletAutoincSeq;
 }
 
 namespace storage
@@ -65,8 +70,9 @@ public:
   enum MetaType : uint16_t
   {
     SSTABLE         = 0,
-    TABLE_STORE     = 1,
-    MAX             = 2,
+    CO_SSTABLE      = 1,
+    TABLE_STORE     = 2,
+    MAX             = 3,
   };
 public:
   ObStorageMetaValue();
@@ -87,6 +93,12 @@ public:
     obj_ = nullptr;
   }
   static int process_sstable(
+      ObStorageMetaValueHandle &handle,
+      const ObStorageMetaKey &key,
+      const char *buf,
+      const int64_t size,
+      const ObTablet *tablet);
+  static int process_co_sstable(
       ObStorageMetaValueHandle &handle,
       const ObStorageMetaKey &key,
       const char *buf,
@@ -183,7 +195,7 @@ private:
 private:
   friend class ObStorageMetaCache;
   ObMetaDiskAddr phy_addr_;
-  ObObjectReadHandle io_handle_;
+  ObSharedObjectReadHandle io_handle_;
   ObStorageMetaValueHandle cache_handle_;
 };
 
@@ -213,7 +225,7 @@ public:
       common::ObSafeArenaAllocator &allocator,
       common::ObIArray<ObStorageMetaHandle> &meta_handles);
 private:
-  class ObStorageMetaIOCallback : public ObObjectIOCallback
+  class ObStorageMetaIOCallback : public ObSharedObjectIOCallback
   {
   public:
     ObStorageMetaIOCallback(
@@ -229,7 +241,7 @@ private:
     const char *get_cb_name() const override { return "StorageMetaIOCB"; }
     bool is_valid() const;
 
-    INHERIT_TO_STRING_KV("ObObjectIOCallback", ObObjectIOCallback,
+    INHERIT_TO_STRING_KV("ObSharedObjectIOCallback", ObSharedObjectIOCallback,
         K_(key), KP_(tablet), KP_(arena_allocator));
 
   private:
@@ -280,6 +292,7 @@ int ObStorageMetaValue::bypass_process_storage_meta(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(size), K(handle));
   } else if (OB_FAIL(t.deserialize(tmp_allocator, buf, size, pos))) {
+    STORAGE_LOG(WARN, "fail to deserialize ", K(ret), KP(buf), K(size));
   } else {
     time_guard.click("deserialize");
     ObIStorageMetaObj *tiny_meta = nullptr;
@@ -289,6 +302,7 @@ int ObStorageMetaValue::bypass_process_storage_meta(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate memory", K(ret), K(buffer_size));
     } else if (OB_FAIL(t.deep_copy(buffer + buffer_pos, t.get_deep_copy_size(), tiny_meta))) {
+      STORAGE_LOG(WARN, "fail to deserialize T", K(ret), KP(buf), K(size));
     } else {
       time_guard.click("deep_copy");
       handle.get_cache_value()->value_ = new (buffer) ObStorageMetaValue(type, tiny_meta);
@@ -301,3 +315,4 @@ int ObStorageMetaValue::bypass_process_storage_meta(
 } // end oceanbase
 
 #endif /* OCEANBASE_STORAGE_OB_STORAGE_META_CACHE_H_ */
+

@@ -15,7 +15,6 @@
  */
  
 #define USING_LOG_PREFIX SQL_PC
-#include "config_bridge.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -32,14 +31,16 @@ const char *ObValuesTableCompression::lower_[ObParser::S_MAX] = {
   "", "", "", "", "", "", "", "", "", "", /* 0 ~9 */
   "", "", "", "update", "", "", "", "", "", "", /* 10 ~19 */
   "", "", "", "", "", "", "", "", "", "", /* 20 ~29 */
-  "", "", "", "select", "insert", "delete", "values", "table", "into", "" /* 30 ~39 */
+  "", "", "", "select", "insert", "delete", "values", "table", "into", "", /* 30 ~39 */
+  "", "", "" /* 40 ~42 */
 };
 
 const char *ObValuesTableCompression::upper_[ObParser::S_MAX] = {
   "", "", "", "", "", "", "", "", "", "", /* 0 ~9 */
   "", "", "", "UPDATE", "", "", "", "", "", "", /* 10 ~19 */
   "", "", "", "", "", "", "", "", "", "", /* 20 ~29 */
-  "", "", "", "SELECT", "INSERT", "DELETE", "VALUES", "TABLE", "INTO", "" /* 30 ~39 */
+  "", "", "", "SELECT", "INSERT", "DELETE", "VALUES", "TABLE", "INTO", "", /* 30 ~39 */
+  "", "", "" /* 40 ~42 */
 };
 
 #define ISSPACE(c) ((c) == ' ' || (c) == '\n' || (c) == '\r' || (c) == '\t' || (c) == '\f' || (c) == '\v')
@@ -157,12 +158,15 @@ int ObValuesTableCompression::add_raw_array_params(ObIAllocator &allocator,
   if (begin_param + row_count * param_count > fp_result.raw_params_.count() ||
       row_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected raw_params", K(ret), K(begin_param), K(row_count), K(param_count),
+             K(fp_result.raw_params_.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
       void *buf = nullptr;
       ObArrayPCParam *params_array = nullptr;
       if (OB_ISNULL(buf = allocator.alloc(sizeof(ObArrayPCParam)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc memory", K(ret), K(sizeof(ObArrayPCParam)));
       } else {
         params_array = new(buf) ObArrayPCParam(allocator);
         params_array->set_capacity(row_count);
@@ -170,10 +174,12 @@ int ObValuesTableCompression::add_raw_array_params(ObIAllocator &allocator,
       for (int64_t j = 0; OB_SUCC(ret) && j < row_count; ++j) {
         int64_t param_idx = begin_param + j * param_count + i;
         if (OB_FAIL(params_array->push_back(fp_result.raw_params_.at(param_idx)))) {
+          LOG_WARN("fail to push back", K(ret), K(i), K(j));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(pc_ctx.fp_result_.array_params_.push_back(params_array))) {
+        LOG_WARN("fail to push params array", K(ret));
       }
     }
   }
@@ -198,13 +204,16 @@ int ObValuesTableCompression::rebuild_new_raw_sql(ObPlanCacheCtx &pc_ctx,
   int64_t len = 0;
   if (OB_ISNULL(buff)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("buff is null", K(ret), KP(buff));
   } else if (begin_idx < 0 || raw_params.count() < begin_idx + param_cnt) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param is wrong", K(ret), K(begin_idx), K(param_cnt));
   } else {
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < begin_idx + param_cnt; i++) {
       const ObPCParam *pc_param = raw_params.at(i);
       if (OB_ISNULL(pc_param) || OB_ISNULL(pc_param->node_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected NULL ptr", K(ret), KP(pc_param));
       } else {
         int64_t param_pos = pc_param->node_->pos_ - delta_length; // get pos is in new no param sql
         int64_t param_raw_offset = pc_param->node_->raw_sql_offset_;
@@ -212,6 +221,7 @@ int ObValuesTableCompression::rebuild_new_raw_sql(ObPlanCacheCtx &pc_ctx,
         len = param_pos - no_param_sql_pos;
         if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(new_raw_pos + len + param_len > buff_len)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected params", K(ret), K(len), K(param_len), K(new_raw_pos));
         } else {
           if (len > 0) {
             //copy text
@@ -228,7 +238,9 @@ int ObValuesTableCompression::rebuild_new_raw_sql(ObPlanCacheCtx &pc_ctx,
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(no_param_pos.push_back(param_pos))) {
+            LOG_WARN("failed to push back", K(ret));
           } else if (OB_FAIL(raw_sql_offset.push_back(param_raw_offset))) {
+            LOG_WARN("failed to push back", K(ret));
           }
         }
       }
@@ -264,16 +276,19 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
   ObSEArray<int64_t, 16> no_param_pos;
   ObSEArray<int64_t, 16> raw_sql_offset;
   ObPhysicalPlanCtx *phy_ctx = NULL;
+  uint64_t data_version = 0;
   if (pc_ctx.sql_ctx_.handle_batched_multi_stmt() ||
       session_info.is_inner() ||
       session_info.get_is_in_retry() ||
       fp_result.values_tokens_.empty() ||
-      !config::_enable_values_table_folding()) {
+      !GCONF._enable_values_table_folding) {
     /* do nothing */
+  /* TODO NOTE@sean.yyj: remove following upgrade checking after next barrier version */
   } else if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
     /* do nothing */
   } else if (OB_ISNULL(phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected NULL ptr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < fp_result.values_tokens_.count(); ++i) {
       bool is_valid = false;
@@ -286,19 +301,24 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                                             values_token_pos, new_no_param_sql, old_sql_pos,
                                             new_sql_pos, batch_count, param_count, delta_len,
                                             is_valid))) {
+        LOG_WARN("fail to parser insert string", K(ret), K(fp_result.pc_key_.name_));
       } else if (!is_valid || param_count <= 0 || batch_count <= 1 || delta_len <= 0) {
+        LOG_TRACE("can not do batch opt", K(ret), K(is_valid), K(param_count), K(batch_count), K(delta_len));
       } else if (OB_FAIL(add_raw_array_params(allocator, pc_ctx, fp_result, param_idx, batch_count,
                                               param_count))) {
+        LOG_WARN("fail to rebuild raw_param", K(ret));
       } else {
         if (!can_fold_params) {
           if (OB_ISNULL(buff = (char *)allocator.alloc(buff_len))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("buff is null", K(ret), KP(buff));
           } else {
             new_raw_sql.assign_ptr(buff, buff_len);
           }
         }
         for (int64_t j = last_raw_param_idx; OB_SUCC(ret) && j < param_idx + param_count; j++) {
           if (OB_FAIL(temp_store.push_back(pc_ctx.fp_result_.raw_params_.at(j)))) {
+            LOG_WARN("failed to push back", K(ret));
           }
         }
         if (OB_FAIL(ret)) {
@@ -306,10 +326,12 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                            temp_store.count() - new_raw_idx, total_delta_len, new_no_param_sql,
                            no_param_pos, raw_sql_offset, new_raw_sql, no_param_sql_pos,
                            new_raw_sql_pos))) {
+          LOG_WARN("failed to rebuild new raw sql", K(ret));
         } else {
           int64_t batch_begin_idx = new_raw_idx + param_idx - last_raw_param_idx;
           if (OB_FAIL(phy_ctx->get_array_param_groups().push_back(ObArrayParamGroup(batch_count,
                                                                   param_count, batch_begin_idx)))) {
+            LOG_WARN("failed to push back", K(ret));
           } else {
             total_delta_len += delta_len;
             can_fold_params = true;
@@ -322,6 +344,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
     if (OB_SUCC(ret) && can_fold_params) {
       for (int64_t j = last_raw_param_idx; OB_SUCC(ret) && j < pc_ctx.fp_result_.raw_params_.count(); j++) {
         if (OB_FAIL(temp_store.push_back(pc_ctx.fp_result_.raw_params_.at(j)))) {
+          LOG_WARN("failed to push back", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -329,13 +352,16 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                     temp_store.count() - new_raw_idx, total_delta_len, new_no_param_sql,
                     no_param_pos, raw_sql_offset, new_raw_sql, no_param_sql_pos,
                     new_raw_sql_pos))) {
+          LOG_WARN("failed to rebuild new raw sql", K(ret));
         } else if (OB_UNLIKELY(no_param_pos.count() != temp_store.count()) ||
                    OB_UNLIKELY(raw_sql_offset.count() != temp_store.count())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("params is invalid", K(ret));
         } else {
           int64_t len = new_no_param_sql.length() - no_param_sql_pos;
           if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(new_raw_sql_pos + len > buff_len)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected params", K(ret), K(len), K(new_raw_sql_pos));
           } else if (len > 0) {
             MEMCPY(buff + new_raw_sql_pos, new_no_param_sql.ptr() + no_param_sql_pos, len);
             new_raw_sql_pos += len;
@@ -348,6 +374,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
     // handle error.
     if (ret != OB_SUCCESS) {
       // Here whatever error can be swallowed, just cannot do batch optimization after the error
+      LOG_TRACE("failed to try fold params for values table", K(ret));
       phy_ctx->get_array_param_groups().reset();
       pc_ctx.fp_result_.array_params_.reset();
       pc_ctx.new_raw_sql_.reset();
@@ -362,6 +389,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
         temp_store.at(i)->node_->raw_sql_offset_ = raw_sql_offset.at(i);
       }
       if (OB_FAIL(fp_result.raw_params_.assign(temp_store))) {
+        LOG_WARN("fail to assign raw_param", K(ret));
       }
     }
   }
@@ -396,10 +424,15 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
       OB_ISNULL(phy_ctx) || OB_UNLIKELY(param_charset_type.count() != raw_param_cnt) ||
       OB_ISNULL(ab_params)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql should be mutil stmt", K(ret), KP(session), KP(phy_ctx), K(raw_param_cnt),
+             K(param_charset_type.count()), KP(ab_params));
   } else if (OB_FAIL(ab_params->reserve(raw_param_cnt))) {
+    LOG_WARN("failed to reserve param num", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimal_int))) {
+    LOG_WARN("fail to check enable decimal int", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
+    LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
     ParamStore &phy_param_store = phy_ctx->get_param_store_for_update();
     ObIArray<ObArrayParamGroup> &array_param_groups = phy_ctx->get_array_param_groups();
@@ -409,6 +442,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
       int64_t array_idx = array_param_groups.at(i).start_param_idx_;
       if (OB_UNLIKELY(array_idx + param_num > raw_param_cnt)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("sql should be mutil stmt", K(ret));
       }
       // 1.1 build params before batch group
       for (; OB_SUCC(ret) && raw_idx < array_idx; raw_idx++) {
@@ -416,9 +450,11 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                     param_charset_type.at(raw_idx), neg_param_index, not_param_index,
                     must_be_positive_idx, formalize_prec_idx, pc_ctx.fp_result_.raw_params_.at(raw_idx), raw_idx,
                     enable_mysql_compatible_dates, obj_param, is_param, enable_decimal_int))) {
+          LOG_WARN("failed to resolver param", K(ret), K(raw_idx));
         } else if (!is_param) {
           not_param_cnt++;
         } else if (OB_FAIL(ab_params->push_back(obj_param))) {
+          LOG_WARN("fail to push item to array", K(ret), K(raw_idx));
         }
       }
       if (OB_SUCC(ret)) {
@@ -433,6 +469,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
         ObExprResType new_res_type;
         if (OB_ISNULL(array_param_ptr) || OB_ISNULL(raw_array_param)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret));
         } else {
           for (int64_t k = 0; OB_SUCC(ret) && k < batch_num; k++) {
             if (OB_FAIL(ObResolverUtils::resolver_param(pc_ctx, *session, phy_param_store, stmt_type,
@@ -440,31 +477,35 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                         must_be_positive_idx, formalize_prec_idx, raw_array_param->at(k), raw_idx,
                         enable_mysql_compatible_dates, array_param_ptr->data_[k], is_param,
                         enable_decimal_int))) {
+              LOG_WARN("failed to resolver param", K(ret), K(k), K(raw_idx), K(j));
             } else {
               const ObObjParam &param = array_param_ptr->data_[k];
               ObExprResType res_type;
-              res_type.set_meta(ObSQLUtils::is_empty_string_typed_null(param) ? param.get_param_meta() : param.get_meta());
+              res_type.set_meta(ObSQLUtils::is_oracle_empty_string(param) ? param.get_param_meta() : param.get_meta());
               res_type.set_accuracy(param.get_accuracy());
               res_type.set_result_flag(param.get_result_flag());
               if (res_type.get_length() == -1) {
                 if (res_type.is_varchar()) {
-                  res_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);
+                  res_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
                 } else if (res_type.is_char()) {
-                  res_type.set_length(OB_MAX_EXTENDED_CHAR_LENGTH_BYTE);
+                  res_type.set_length(OB_MAX_ORACLE_CHAR_LENGTH_BYTE);
                 }
               }
               if (k == 0) {
                 new_res_type = res_type;
                 if (OB_FAIL(res_types.push_back(res_type))) {
+                  LOG_WARN("failed to push back", K(ret));
                 }
               } else if (k > 0 && is_same) {
                 is_same = ObSQLUtils::is_same_type(res_type, res_types.at(0));
                 if (!is_same) {
                   if (OB_FAIL(res_types.push_back(res_type))) {
+                    LOG_WARN("failed to push back", K(ret));
                   }
                 }
               } else {
                 if (OB_FAIL(res_types.push_back(res_type))) {
+                  LOG_WARN("failed to push back", K(ret));
                 }
               }
             }
@@ -479,6 +520,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                                                                   &res_types.at(0),
                                                                   res_types.count(),
                                                                   type_ctx))) {
+              LOG_WARN("failed to aggregate result type for merge", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -489,6 +531,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             array_param.set_param_meta();
             array_param.get_param_flag().is_batch_parameter_ = true;
             if (OB_FAIL(ab_params->push_back(array_param))) {
+              LOG_WARN("failed to push back param", K(ret));
             }
           }
         }
@@ -499,9 +542,11 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                   param_charset_type.at(raw_idx), neg_param_index, not_param_index,
                   must_be_positive_idx, formalize_prec_idx, pc_ctx.fp_result_.raw_params_.at(raw_idx), raw_idx,
                   enable_mysql_compatible_dates, obj_param, is_param, enable_decimal_int))) {
+        LOG_WARN("failed to resolver param", K(ret), K(raw_idx));
       } else if (!is_param) {
         not_param_cnt++;
       } else if (OB_FAIL(ab_params->push_back(obj_param))) {
+        LOG_WARN("fail to push item to array", K(ret), K(raw_idx));
       }
     }
   }
@@ -527,9 +572,13 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
   if (OB_UNLIKELY(!pc_ctx.exec_ctx_.has_dynamic_values_table()) || OB_ISNULL(session) ||
       OB_ISNULL(phy_ctx) || OB_UNLIKELY(param_charset_type.count() > raw_param_cnt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql should be mutil stmt", K(ret), KP(session), KP(phy_ctx), K(raw_param_cnt),
+             K(param_charset_type.count()));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimal_int))) {
+    LOG_WARN("fail to check enable decimal int", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
+    LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
     ParamStore &phy_param_store = phy_ctx->get_param_store_for_update();
     ObIArray<ObArrayParamGroup> &array_param_groups = phy_ctx->get_array_param_groups();
@@ -541,6 +590,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
         ObPCParam *pc_param = pc_ctx.fp_result_.raw_params_.at(tmp_raw_idx);
         if (OB_ISNULL(pc_param)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
         } else if (pc_param->flag_ == NOT_PARAM) {
           not_param_offset++;
         }
@@ -549,6 +599,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(not_param_offset > array_idx)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected param", K(ret), K(array_idx), K(not_param_offset));
         } else {
           array_param_groups.at(i).start_param_idx_ -= not_param_offset;
         }
@@ -561,6 +612,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
       if (OB_UNLIKELY(raw_idx + param_num > raw_param_cnt) ||
           OB_UNLIKELY(raw_idx + param_num > phy_param_store.count())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("sql should be mutil stmt", K(ret));
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < param_num; j++, raw_idx++, array_param_idx++) {
         ObArrayPCParam *raw_array_param = pc_ctx.fp_result_.array_params_.at(array_param_idx);
@@ -570,37 +622,42 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
         ObExprResType new_res_type;
         if (OB_ISNULL(array_param_ptr) || OB_ISNULL(raw_array_param)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret));
         } else {
           for (int64_t k = 0; OB_SUCC(ret) && k < batch_num; k++) {
             if (OB_FAIL(ObResolverUtils::resolver_param(pc_ctx, *session, phy_param_store, stmt::T_SELECT,
                         param_charset_type.at(raw_idx), bit_set_dummy, bit_set_dummy,
                         bit_set_dummy, bit_set_dummy, raw_array_param->at(k), raw_idx, enable_mysql_compatible_dates,
                         array_param_ptr->data_[k], is_param, enable_decimal_int))) {
+              LOG_WARN("failed to resolver param", K(ret), K(k), K(raw_idx), K(j));
             } else {
               const ObObjParam &param = array_param_ptr->data_[k];
               ObExprResType res_type;
-              res_type.set_meta(ObSQLUtils::is_empty_string_typed_null(param) ? param.get_param_meta() : param.get_meta());
+              res_type.set_meta(ObSQLUtils::is_oracle_empty_string(param) ? param.get_param_meta() : param.get_meta());
               res_type.set_accuracy(param.get_accuracy());
               res_type.set_result_flag(param.get_result_flag());
               if (res_type.get_length() == -1) {
                 if (res_type.is_varchar()) {
-                  res_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);
+                  res_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
                 } else if (res_type.is_char()) {
-                  res_type.set_length(OB_MAX_EXTENDED_CHAR_LENGTH_BYTE);
+                  res_type.set_length(OB_MAX_ORACLE_CHAR_LENGTH_BYTE);
                 }
               }
               if (k == 0) {
                 new_res_type = res_type;
                 if (OB_FAIL(res_types.push_back(res_type))) {
+                  LOG_WARN("failed to push back", K(ret));
                 }
               } else if (k > 0 && is_same) {
                 is_same = ObSQLUtils::is_same_type(res_type, res_types.at(0));
                 if (!is_same) {
                   if (OB_FAIL(res_types.push_back(res_type))) {
+                    LOG_WARN("failed to push back", K(ret));
                   }
                 }
               } else {
                 if (OB_FAIL(res_types.push_back(res_type))) {
+                  LOG_WARN("failed to push back", K(ret));
                 }
               }
             }
@@ -615,7 +672,9 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                                                                         &res_types.at(0),
                                                                         res_types.count(),
                                                                         type_ctx))) {
+              LOG_WARN("failed to aggregate result type for merge", K(ret));
             } else {
+              LOG_TRACE("get result type", K(new_res_type), K(res_types));
             }
           }
           if (OB_SUCC(ret)) {
@@ -772,6 +831,7 @@ int ObValuesTableCompression::parser_values_row_str(ObIAllocator &allocator,
         first_sql_end_pos = end_pos;
         is_first = false;
       } else if (cur_param_count != param_count) {
+        LOG_WARN("should not be here", K(ret), K(cur_param_count), K(param_count));
       } 
       row_count++;
     }
@@ -780,6 +840,7 @@ int ObValuesTableCompression::parser_values_row_str(ObIAllocator &allocator,
       char *buffer = NULL;
       if (OB_ISNULL(buffer = static_cast<char*>(allocator.alloc(no_param_sql_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc memory", K(ret), K(no_param_sql_len));
       } else {
         // init
         int64_t length = new_pos;

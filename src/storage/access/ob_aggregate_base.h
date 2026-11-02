@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_AGGREGATE_BASE_H_
 
 #include <stdint.h>
+#include "sql/engine/aggregate/agg_ctx.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
 namespace oceanbase
@@ -28,31 +29,15 @@ class ObBitmap;
 }
 namespace blocksstable
 {
-class ObAggRowReader;
 class ObIMicroBlockReader;
 struct ObMicroIndexInfo;
 }
-namespace share
-{
-namespace schema
-{
-class ObColumnParam;
-}
-}
-namespace sql
-{
-struct ObEvalCtx;
-class ObExpr;
-}
 namespace storage
 {
-struct ObTableAccessContext;
-struct ObTableAccessParam;
-struct ObTableIterParam;
 #define USE_GROUP_BY_MAX_DISTINCT_CNT 16384
 #define USE_GROUP_BY_BUF_BLOCK_SIZE 256
 #define USE_GROUP_BY_BUF_MAX_BLOCK_CNT USE_GROUP_BY_MAX_DISTINCT_CNT / USE_GROUP_BY_BUF_BLOCK_SIZE
-static constexpr int64_t INVALID_AGG_ROW_ID = -1;
+static const lib::ObLabel pd_agg_label = "PD_AGGREGATE";
 
 enum ObPDAggType
 {
@@ -63,9 +48,12 @@ enum ObPDAggType
   PD_FIRST_ROW,
   PD_HLL,
   PD_SUM_OP_SIZE,
+  PD_RB_BUILD,
   PD_STR_PREFIX_MIN,
   PD_STR_PREFIX_MAX,
   PD_COUNT_SUM,
+  PD_RB_AND,
+  PD_RB_OR,
   PD_MAX_TYPE
 };
 
@@ -83,7 +71,7 @@ public:
       row_cap_(0),
       begin_(-1),
       end_(-1),
-      bound_row_id_(INVALID_AGG_ROW_ID),
+      bound_row_id_(OB_INVALID_CS_ROW_ID),
       is_reverse_(false)
   {}
   ObPushdownRowIdCtx(const int32_t *row_ids, int64_t row_cap, const bool check_scan_order = true)
@@ -91,7 +79,7 @@ public:
       row_cap_(row_cap),
       begin_(-1),
       end_(-1),
-      bound_row_id_(INVALID_AGG_ROW_ID)
+      bound_row_id_(OB_INVALID_CS_ROW_ID)
   {
     if (check_scan_order) {
       is_reverse_ = row_cap_ > 1 && row_ids_[1] < row_ids_[0];
@@ -103,12 +91,12 @@ public:
     row_cap_ = 0;
     begin_ = -1;
     end_ = -1;
-    bound_row_id_ = INVALID_AGG_ROW_ID;
+    bound_row_id_ = OB_INVALID_CS_ROW_ID;
     is_reverse_ = false;
   }
   OB_INLINE bool is_valid() const
   { 
-    bool is_valid_bound = (INVALID_AGG_ROW_ID == bound_row_id_
+    bool is_valid_bound = (OB_INVALID_CS_ROW_ID == bound_row_id_ 
                            || (is_reverse_ && bound_row_id_ <= begin_) 
                            || (!is_reverse_ && bound_row_id_ >= end_));
     return (nullptr != row_ids_ && row_cap_ > 0)
@@ -180,12 +168,31 @@ protected:
   bool is_inited_;
 };
 
+class ObAggGroupBase
+{
+public:
+  virtual ~ObAggGroupBase() {}
+  virtual bool is_vec() const = 0;
+  virtual bool check_finished() const = 0;
+  virtual int eval(blocksstable::ObStorageDatum &datum, const int64_t row_count) = 0;
+  virtual int eval_batch(
+      const ObTableIterParam *iter_param,
+      const ObTableAccessContext *context,
+      const int32_t col_offset,
+      blocksstable::ObIMicroBlockReader *reader,
+      const ObPushdownRowIdCtx &pd_row_id_ctx,
+      const bool reserve_memory) = 0;
+  virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const int32_t col_index, bool &can_agg) = 0;
+  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) = 0;
+  DECLARE_PURE_VIRTUAL_TO_STRING;
+};
+
 class ObAggStoreBase
 {
 public:
   virtual ~ObAggStoreBase() {}
   virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, bool &can_agg) = 0;
-  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) = 0;
+  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) = 0;
   virtual int collect_aggregated_result() = 0;
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
@@ -287,7 +294,7 @@ public:
     int ret = OB_SUCCESS;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      STORAGE_LOG(WARN, "group by cell is not inited", K(ret), K_(is_inited));
+      STORAGE_LOG(WARN, "ObGroupByCellVec is not inited", K(ret), K_(is_inited));
     } else {
       const bool is_valid_bitmap = nullptr != bitmap && !bitmap->is_all_true();
       use_group_by = row_capacity_ == batch_size_ &&
@@ -300,6 +307,7 @@ public:
         if ((is_valid_bitmap || read_cnt < row_cnt) && OB_FAIL(prepare_tmp_group_by_buf(distinct_cnt + 1))) {
           STORAGE_LOG(WARN, "Failed to init extra info", K(ret));
         } else if (OB_FAIL(reserve_group_by_buf(distinct_cnt + 1))) {
+          STORAGE_LOG(WARN, "Failed to prepare group by datum buf", K(ret));
         }
       }
       STORAGE_LOG(TRACE, "[GROUP BY PUSHDOWN]", K(ret), K(row_cnt), K(read_cnt), K(distinct_cnt), K(is_valid_bitmap), K(use_group_by),
@@ -344,6 +352,51 @@ protected:
   bool need_extract_distinct_;
   bool is_processing_;
   bool is_inited_;
+};
+
+struct ObColOffsetMap
+{
+  ObColOffsetMap() : col_offset_(-1), agg_idx_(-1) {}
+  ObColOffsetMap(const int64_t col_offset, const int64_t agg_idx)
+    : col_offset_(col_offset),
+      agg_idx_(agg_idx)
+  {}
+  bool operator < (const ObColOffsetMap &map)
+  {
+    return col_offset_ < map.col_offset_;
+  }
+  TO_STRING_KV(K_(col_offset), K_(agg_idx));
+  int32_t col_offset_;
+  int64_t agg_idx_;
+};
+
+struct ObPushdownAggContext
+{
+public:
+  ObPushdownAggContext(
+      const int64_t batch_size,
+      sql::ObEvalCtx &eval_ctx,
+      sql::ObBitVector *skip_bit, 
+      common::ObIAllocator &allocator);
+  virtual ~ObPushdownAggContext();
+  void reset();
+  void reuse_batch();
+  int init(const ObTableAccessParam &param, const int64_t row_count);
+  int prepare_aggregate_rows(const int64_t row_count);
+  TO_STRING_KV(K_(agg_infos), K_(cols_offset_map), KP_(rows), K_(row_meta), K_(batch_rows), K_(agg_row_num));
+private:
+  int init_agg_infos(const ObTableAccessParam &param);
+  OB_INLINE void setup_agg_row(share::aggregate::AggrRowPtr row, const int32_t row_size);
+public:
+  common::ObFixedArray<ObAggrInfo, common::ObIAllocator> agg_infos_;
+  common::ObFixedArray<ObColOffsetMap, common::ObIAllocator> cols_offset_map_;
+  share::aggregate::RuntimeContext agg_ctx_;
+  ObCompactRow **rows_;
+  RowMeta row_meta_;
+  ObBatchRows batch_rows_;
+  int64_t agg_row_num_;
+  common::ObIAllocator &allocator_;
+  common::ObArenaAllocator row_allocator_;
 };
 
 class ObAggDatumBuf
@@ -454,6 +507,7 @@ int ObGroupByExtendableBuf<T>::reserve(const int32_t size)
       int32_t required_block_cnt = ceil((double)(size - cur_capacity) / USE_GROUP_BY_BUF_BLOCK_SIZE);
       for (int64_t i = 0; OB_SUCC(ret) && i < required_block_cnt; ++i) {
         if (OB_FAIL(alloc_bufblock(extra_blocks_[extra_block_count_]))) {
+          STORAGE_LOG(WARN, "Failed to allock buf block", K(ret));
         } else {
           extra_block_count_++;
         }
@@ -534,6 +588,7 @@ OB_INLINE int ObGroupByExtendableBuf<ObDatum>::alloc_bufblock(BufBlock *&block)
   } else if(FALSE_IT(block = new (buf) BufBlock())) {
   } else if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(
       USE_GROUP_BY_BUF_BLOCK_SIZE, false, allocator_, block->datum_buf_, item_size_))) {
+    STORAGE_LOG(WARN, "Failed to alloc agg datum buf", K(ret));
   }
   return ret;
 }

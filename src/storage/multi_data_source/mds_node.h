@@ -23,6 +23,7 @@
 #include "lib/queue/ob_link.h"
 #include "lib/time/ob_clock_generator.h"
 #include "ob_tablet_id.h"
+#include "share/ob_ls_id.h"
 #include "share/scn.h"
 #include "runtime_utility/common_define.h"
 #include "runtime_utility/list_helper.h"
@@ -59,9 +60,10 @@ class MdsCtx;
 struct MdsNodeInfoForVirtualTable
 {
   MdsNodeInfoForVirtualTable()
-  : tablet_id_(), unit_id_(UINT8_MAX), user_key_(), version_idx_(-1), writer_(), seq_no_(), redo_scn_(),
+  : ls_id_(), tablet_id_(), unit_id_(UINT8_MAX), user_key_(), version_idx_(-1), writer_(), seq_no_(), redo_scn_(),
   end_scn_(), trans_version_(), node_type_(MdsNodeType::TYPE_END), state_(TwoPhaseCommitState::STATE_END),
   position_(NodePosition::POSITION_END), user_data_() {}
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   int64_t unit_id_;
   common::ObStringHolder user_key_;
@@ -225,7 +227,7 @@ public:
                      const char *function_name = __builtin_FUNCTION()) const;
   virtual int fill_virtual_info(MdsNodeInfoForVirtualTable &mds_node_indo) const override;
   template <int N>
-  int fill_event_(MdsEvent &mds_event, const char (&event)[N], char *buffer, const int64_t len) const;
+  int fill_event_(observer::MdsEvent &mds_event, const char (&event)[N], char *buffer, const int64_t len) const;
   MdsNodeType get_node_type() const;
   int assign(const UserMdsNode<K, V> &rhs);
 public:// do user action if there has define, in transaction phase point

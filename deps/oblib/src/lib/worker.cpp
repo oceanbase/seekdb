@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "worker.h"
+namespace oceanbase { namespace rpc { extern common::ObAddr g_rpc_self_addr; } }  // fwd-decl (reduce deps)
+
+using namespace oceanbase::common;
+using namespace oceanbase::lib;
+
+OB_DEF_SERIALIZE(ObExtraRpcHeader)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, rpc::g_rpc_self_addr);
+  return ret;
+}
+OB_DEF_DESERIALIZE(ObExtraRpcHeader)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE, src_addr_);
+  return ret;
+}
+OB_DEF_SERIALIZE_SIZE(ObExtraRpcHeader)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, rpc::g_rpc_self_addr);
+  return len;
+}
+
+#ifdef ERRSIM
+  OB_SERIALIZE_MEMBER(ObRuntimeContext, compat_mode_, module_type_, log_reduction_mode_, extra_rpc_header_);
+#else
+  OB_SERIALIZE_MEMBER(ObRuntimeContext, compat_mode_, log_reduction_mode_, extra_rpc_header_);
+#endif
+
+
+namespace oceanbase {
+namespace lib {
+
+void * OB_WEAK_SYMBOL alloc_worker()
+{
+  static TLOCAL(Worker, worker);
+  return (&worker);
+}
+
+int OB_WEAK_SYMBOL common_yield()
+{
+  // do nothing;
+  return OB_SUCCESS;
+}
+
+int OB_WEAK_SYMBOL SET_GROUP_ID(bool is_background)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(is_background);
+  return ret;
+}
+
+}  // namespace lib
+}  // namespace oceanbase
+__thread Worker *Worker::self_;
+
+Worker::Worker()
+    : group_(nullptr),
+      allocator_(nullptr),
+      st_current_priority_(0),
+      session_(nullptr),
+      cur_request_(nullptr),
+      worker_level_(INT32_MAX),
+      curr_request_level_(0),
+      is_th_worker_(false),
+      group_id_(0),
+      func_type_(0),
+      timeout_ts_(INT64_MAX),
+      ntp_offset_(0),
+      disable_wait_(false)
+{
+  worker_node_.get_data() = this;
+}
+
+Worker::~Worker()
+{
+  if (self_ == this) {
+    // We only remove this worker not other worker since the reason
+    // described in SET stage.
+    self_ = nullptr;
+  }
+}
+
+Worker::Status Worker::check_wait()
+{
+  Worker::Status ret_status = WS_NOWAIT;
+  int ret = common_yield();
+  if (OB_SUCCESS != ret && OB_CANCELED != ret) {
+    ret_status = WS_INVALID;
+  }
+  return ret_status;
+}
+
+bool Worker::sched_wait()
+{
+  return true;
+}
+
+bool Worker::sched_run(int64_t waittime)
+{
+  UNUSED(waittime);
+  check_status();
+  return true;
+}
+
+
+int64_t Worker::get_timeout_remain() const
+{
+  return timeout_ts_ - ObTimeUtility::current_time();
+}
+
+bool Worker::is_timeout() const
+{
+  return common::ObClockGenerator::getClock() >= timeout_ts_;
+}

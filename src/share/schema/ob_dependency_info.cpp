@@ -16,8 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_dependency_info.h"
-#include "common/mysqlclient/ob_mysql_result.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/utility/ob_smart_call.h"  // SMART_CALL, previously hidden behind the exec_context include chain, make the dependency explicit
 
 namespace oceanbase
@@ -66,8 +64,11 @@ ObDependencyInfo &ObDependencyInfo::operator =(const ObDependencyInfo &src_schem
     property_ = src_schema.property_;
     schema_version_ = src_schema.schema_version_;
     if (OB_FAIL(deep_copy_str(src_schema.dep_attrs_, dep_attrs_))) {
+      LOG_WARN("deep copy attr text failed", K(ret), K(src_schema.dep_attrs_));
     } else if (OB_FAIL(deep_copy_str(src_schema.dep_reason_, dep_reason_))) {
+      LOG_WARN("deep copy reason text failed", K(ret), K(src_schema.dep_reason_));
     } else if (OB_FAIL(deep_copy_str(src_schema.ref_obj_name_, ref_obj_name_))) {
+      LOG_WARN("deep copy ref obj name failed", K(ret), K(src_schema.ref_obj_name_));
     }
     error_ret_ = ret;
   }
@@ -125,6 +126,7 @@ int ObDependencyInfo::gen_dependency_dml(ObDMLSqlSplicer &dml)
     || OB_FAIL(dml.add_column("ref_obj_name", ObHexEscapeSqlStr(dep_info.get_ref_obj_name())))
     || OB_FAIL(dml.add_gmt_create())
     || OB_FAIL(dml.add_gmt_modified())) {
+    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -169,13 +171,19 @@ int ObDependencyInfo::delete_schema_object_dependency(common::ObISQLClient &tran
   if (OB_INVALID_ID == dep_obj_id
     || ObObjectType::MAX_TYPE == dep_obj_type) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("delete error info unexpected.", K(ret),
+                                              K(dep_obj_id), K(dep_obj_type));
   } else if (sql.assign_fmt("delete FROM %s WHERE dep_obj_id = %ld \
                                                   AND dep_obj_type = %ld",
             OB_ALL_DEPENDENCY_TNAME,
             extract_obj_id(dep_obj_id),
             static_cast<uint64_t>(dep_obj_type))) {
+    LOG_WARN("delete from __all_dependency table failed.", K(ret),
+                                                                  K(dep_obj_id),
+                                                                  K(dep_obj_type));
   } else {
     if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+      LOG_WARN("execute query failed", K(ret), K(sql));
     } else {
       // do nothing
     }
@@ -190,7 +198,7 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
   ObDependencyInfo& dep_info = *this;
   
   ObDMLSqlSplicer dml;
-  // This block remains disabled until the __all_package virtual table is implemented.
+  //This block is temporarily commented out because the virtual table __all_package under the system tenant has not been implemented.
   //int64_t ref_obj_create_time = -1;
   //ObString ref_obj_name;
   // OZ (get_object_create_time(trans, dep_info.get_ref_obj_type(),
@@ -198,9 +206,14 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
   // OX (dep_info.set_ref_timestamp(ref_obj_create_time));
   // OZ (dep_info.set_ref_obj_name(ref_obj_name));
   if (OB_FAIL(ret)) {
+    LOG_WARN("get ref object time failed", K(ret),
+                                          K(dep_info.get_ref_obj_type()),
+                                          K(dep_info.get_ref_obj_id()));
   } else if (get_dep_obj_id() == get_ref_obj_id() && get_dep_obj_type() == get_ref_obj_type()) {
-    // rule out self reference
+    // rule out self reference scenario,
+    // except that type body share the same type id with its type spec
   } else if (OB_FAIL(gen_dependency_dml(dml))) {
+    LOG_WARN("gen table dml failed", K(ret));
   } else {
     ObDMLExecHelper exec(trans);
     int64_t affected_rows = 0;
@@ -208,13 +221,16 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
       ObDMLExecHelper exec(trans);
       if (is_replace) {
         if (OB_FAIL(exec.exec_insert_update(OB_ALL_DEPENDENCY_TNAME, dml, affected_rows))) {
+          LOG_WARN("execute update failed", K(ret));
         }
       } else {
         if (OB_FAIL(exec.exec_insert(OB_ALL_DEPENDENCY_TNAME, dml, affected_rows))) {
+          LOG_WARN("execute insert failed", K(ret));
         }
       }
       if (OB_SUCC(ret) && !is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("affected_rows unexpected to be one", K(affected_rows), K(ret));
       }
     }
   }
@@ -273,8 +289,9 @@ int ObDependencyInfo::collect_dep_infos(const ObIArray<ObSchemaObjVersion> &sche
     const ObSchemaObjVersion &s_objs = schema_objs.at(i);
     const ObObjectType ref_obj_type = ObSchemaObjVersion::get_schema_object_type(
         s_objs.object_type_);
-    if (0 == i && ObObjectType::TRIGGER == dep_obj_type) {
-      // For a trigger, schema_objs.at(0) is itself;
+    if (0 == i &&
+        (ObObjectType::TRIGGER == dep_obj_type || ObObjectType::TYPE_BODY == dep_obj_type)) {
+      // if dep_obj_type is TRIGGER or TYPE_BODY, schema_objs.at(0) is itself,
       // need to skip to avoid self reference.
       continue;
     } else if (!s_objs.is_valid()) {
@@ -308,9 +325,11 @@ int ObDependencyInfo::collect_dep_infos(const ObIArray<ObSchemaObjVersion> &sche
     dep.set_dep_timestamp(-1);
     dep.set_ref_timestamp(s_objs.get_version());
     dep.set_property(property);
-    if (dep_attrs.length() >= OB_MAX_RAW_SQL_COL_LENGTH
-        || dep_reason.length() >= OB_MAX_RAW_SQL_COL_LENGTH) {
+    if (dep_attrs.length() >= OB_MAX_ORACLE_RAW_SQL_COL_LENGTH
+        || dep_reason.length() >= OB_MAX_ORACLE_RAW_SQL_COL_LENGTH) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("dep attrs or dep reason is too long", K(ret),
+               K(dep_attrs.length()), K(dep_reason.length()));
     } else {
       if (!dep_attrs.empty())
         OZ(dep.set_dep_attrs(dep_attrs));
@@ -375,6 +394,7 @@ int ObDependencyInfo::collect_dep_infos(
     const ObBasedSchemaObjectInfo &base_info = based_schema_object_infos.at(i);
     if (OB_UNLIKELY(TABLE_SCHEMA != base_info.schema_type_)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid based schema object", KR(ret), K(base_info));
     } else {
       ObDependencyInfo dep;
       
@@ -389,8 +409,11 @@ int ObDependencyInfo::collect_dep_infos(
       dep.set_dep_obj_owner_id(dep_obj_owner_id);
       dep.set_property(property);
       if (!dep_attrs.empty() && OB_FAIL(dep.set_dep_attrs(dep_attrs))) {
+        LOG_WARN("fail to set dep attrs", KR(ret), K(dep_attrs));
       } else if (!dep_reason.empty() && OB_FAIL(dep.set_dep_reason(dep_reason))) {
+        LOG_WARN("fail to set dep reason", KR(ret), K(dep_attrs));
       } else if (OB_FAIL(deps.push_back(dep))) {
+        LOG_WARN("fail to push back dep", KR(ret), K(dep));
       }
     }
   }
@@ -411,13 +434,17 @@ int ObDependencyInfo::collect_ref_infos(uint64_t dep_obj_id,
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE dep_obj_id = %lu ORDER BY dep_order",
                                OB_ALL_DEPENDENCY_TNAME,
                                dep_obj_id))) {
+      LOG_WARN("failed to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+      LOG_WARN("execute sql failed", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("result is null", K(ret));
     } else {
       while (OB_SUCC(ret)) {
         if (OB_FAIL(result->next())) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
+            LOG_WARN("fail to get next", KR(ret));
           } else {
             ret = OB_SUCCESS;
             break;
@@ -425,7 +452,9 @@ int ObDependencyInfo::collect_ref_infos(uint64_t dep_obj_id,
         } else {
           ObDependencyInfo dep;
           if (OB_FAIL(dep.parse_from(*result))) {
+            LOG_WARN("fail to parse dependency", K(ret));
           } else if (OB_FAIL(deps.push_back(dep))) {
+            LOG_WARN("failed to push back obj", K(ret));
           }
         }
       }
@@ -448,13 +477,17 @@ int ObDependencyInfo::collect_dep_infos(uint64_t ref_obj_id,
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE ref_obj_id = %lu",
                                OB_ALL_DEPENDENCY_TNAME,
                                ref_obj_id))) {
+      LOG_WARN("failed to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+      LOG_WARN("execute sql failed", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("result is null", K(ret));
     } else {
       while (OB_SUCC(ret)) {
         if (OB_FAIL(result->next())) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
+            LOG_WARN("fail to get next", KR(ret));
           } else {
             ret = OB_SUCCESS;
             break;
@@ -462,7 +495,9 @@ int ObDependencyInfo::collect_dep_infos(uint64_t ref_obj_id,
         } else {
           ObDependencyInfo dep;
           if (OB_FAIL(dep.parse_from(*result))) {
+            LOG_WARN("fail to parse dependency", K(ret));
           } else if (OB_FAIL(deps.push_back(dep))) {
+            LOG_WARN("failed to push back obj", K(ret));
           }
         }
       }
@@ -493,9 +528,12 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
       if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %lu",
                                         OB_ALL_DEPENDENCY_TNAME,
                                         ref_obj_id))) {
+        LOG_WARN("failed to assign sql", K(ret));
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("result is null", K(ret));
       } else {
         while (OB_SUCC(result->next())) {       
           int64_t tmp_obj_id = OB_INVALID_ID;
@@ -506,17 +544,20 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
           } else if (tmp_type <= static_cast<int64_t> (share::schema::ObObjectType::INVALID)
                       || tmp_type >= static_cast<int64_t> (share::schema::ObObjectType::MAX_TYPE)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get wrong obj type", K(ret));
           } else if (ref_obj_id == tmp_obj_id || root_obj_id == tmp_obj_id) {
             // skip
           } else if (has_exist_in_array(objs, {static_cast<uint64_t> (tmp_obj_id), static_cast<share::schema::ObObjectType> (tmp_type)})) {
             // dedpulicate
           } else if (OB_FAIL(objs.push_back({static_cast<uint64_t> (tmp_obj_id), static_cast<share::schema::ObObjectType> (tmp_type)}))) {
+            LOG_WARN("failed to push back obj", K(ret));
           }
         }
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         } else {
           ret = OB_SUCC(ret) ? OB_ERR_UNEXPECTED : ret;
+          LOG_WARN("read dependency info failed", K(ret));
         }
       }
     }
@@ -524,11 +565,14 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
   bool is_overflow = false;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_stack_overflow(is_overflow))) {
+    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_overflow) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recusive", K(ret));
   } else {
     for (int64_t i = init_count; OB_SUCC(ret) && i < objs.count(); ++i) {
       if (OB_FAIL(collect_all_dep_objs_inner(root_obj_id, objs.at(i).first, sql_proxy, objs))) {
+        LOG_WARN("failed to collect all dep objs", K(ret), K(objs.count()), K(init_count), K(i));
       }
     }
   }
@@ -563,19 +607,24 @@ int ObDependencyInfo::collect_all_dep_objs(
           "SELECT dep_obj_id, dep_obj_type, schema_version FROM %s "
           "WHERE (ref_obj_id, ref_obj_type) IN (",
           OB_ALL_DEPENDENCY_TNAME))) {
+        LOG_WARN("failed to assign sql", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < ref_obj_infos.count(); i++) {
         uint64_t ref_obj_id = ref_obj_infos.at(i).first;
         int64_t ref_obj_type = ref_obj_infos.at(i).second;
         if (OB_FAIL(sql.append_fmt("(%lu, %ld)", ref_obj_id, ref_obj_type))) {
+          LOG_WARN("failed to assign sql", K(ret));
         } else if (OB_FAIL(sql.append_fmt(i < ref_obj_infos.count() - 1 ? ", " : ")"))) {
+          LOG_WARN("failed to assign sql", K(ret));
         }
       }
       common::sqlclient::ObMySQLResult *result = nullptr;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("result is null", K(ret));
       } else {
         while (OB_SUCC(result->next())) {
           int64_t tmp_obj_id = OB_INVALID_ID;
@@ -590,15 +639,18 @@ int ObDependencyInfo::collect_all_dep_objs(
           } else if (tmp_type <= static_cast<int64_t>(share::schema::ObObjectType::INVALID)
                      || tmp_type >= static_cast<int64_t>(share::schema::ObObjectType::MAX_TYPE)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get wrong obj type", K(ret));
           } else if (has_exist_in_array(objs, tmp_tuple)) {
             // dedpulicate
           } else if (OB_FAIL(objs.push_back(tmp_tuple))) {
+            LOG_WARN("failed to push back obj", K(ret));
           }
         }
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         } else {
           ret = OB_SUCC(ret) ? OB_ERR_UNEXPECTED : ret;
+          LOG_WARN("read dependency info failed", K(ret));
         }
       }
     }
@@ -634,6 +686,8 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
           && ObObjectType::PACKAGE_BODY != obj_type
           && ObObjectType::FUNCTION != obj_type
           && ObObjectType::PROCEDURE != obj_type
+          && ObObjectType::TYPE != obj_type
+          && ObObjectType::TYPE_BODY != obj_type
           && ObObjectType::TRIGGER != obj_type) {
         // types other than the above have different strategies for implementing INVALID status
         LOG_DEBUG("omitted object", K(i), K(objs.at(i)));
@@ -650,6 +704,7 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
           || OB_FAIL(dml.add_gmt_create())
           || OB_FAIL(dml.add_gmt_modified())
           || OB_FAIL(dml.finish_row())) {
+        LOG_WARN("add column failed", K(ret));
       }
     }
 
@@ -657,7 +712,9 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
     ObSqlString sql;
     if (OB_FAIL(ret) || dml.get_row_count() <= 0) {
     } else if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_ERROR_TNAME, sql))) {
+      LOG_WARN("splice batch insert update sql for __all_error failed", K(ret), K(objs));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+      LOG_WARN("insert or update __all_error failed", K(ret), K(objs));
     } else {
       // insert or update __all_error succeed!
     }
@@ -666,6 +723,8 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
 }
 
 // modify_dep_obj_status / cascading_modify_obj_status / modify_all_obj_status
+// moved definition to the upper-layer owner cpp rootserver::ObDependencyDDLHelper(real upper-layer symbol user, declaration remains in the header, transitional state)
+// insert_dependency_infos defined at the end of this file(stayed member, master tenant-elim'd)
 
 void ObDependencyInfo::reset()
 {
@@ -810,6 +869,7 @@ ObReferenceObjTable::ObDependencyObjItem& ObReferenceObjTable::ObDependencyObjIt
     max_ref_obj_schema_version_ = other.max_ref_obj_schema_version_;
     dep_obj_schema_version_ = other.dep_obj_schema_version_;
     if (OB_FAIL(ref_obj_versions_.assign(other.ref_obj_versions_))) {
+      LOG_WARN("fail to assign array", K(ret));
     }
     error_ret_ = ret;
   }
@@ -885,7 +945,9 @@ int ObReferenceObjTable::DependencyObjKeyItemPair::assign(
   if (this != &other) {
     reset();
     if (OB_FAIL(dep_obj_key_.assign(other.dep_obj_key_))) {
+      LOG_WARN("failed to assign dep obj key", K(ret));
     } else if (OB_FAIL(dep_obj_item_.assign(other.dep_obj_item_))) {
+      LOG_WARN("failed to assign dep obj item", K(ret));
     }
   }
   return ret;
@@ -901,8 +963,10 @@ int ObReferenceObjTable::ObGetDependencyObjOp::operator()(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(insert_dep_objs_) || OB_ISNULL(update_dep_objs_) || OB_ISNULL(delete_dep_objs_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret));
   } else if (OB_ISNULL(entry.second)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dependency object item is null", KP(entry.second), K(ret));
   } else if (is_sys_view(entry.first.dep_obj_id_) || is_sys_table(entry.first.dep_obj_id_)) {
     // do nothing
   } else if (OB_INVALID_ID == entry.first.dep_obj_id_) {
@@ -913,14 +977,17 @@ int ObReferenceObjTable::ObGetDependencyObjOp::operator()(
     switch (op) {
     case INSERT_OP:
       if (OB_FAIL(insert_dep_objs_->push_back(key_item))) {
+        LOG_WARN("failed to push back key", K(ret));
       }
       break;
     case DELETE_OP:
       if (OB_FAIL(delete_dep_objs_->push_back(key_item))) {
+        LOG_WARN("failed to push back key", K(ret));
       }
       break;
     case UPDATE_OP:
       if (OB_FAIL(update_dep_objs_->push_back(key_item))) {
+        LOG_WARN("failed to push back key", K(ret));
       }
       break;
     default:
@@ -947,10 +1014,13 @@ void ObReferenceObjTable::reset()
   if (!ref_obj_version_table_.created()) {
     // do nothing
   } else if (OB_FAIL(ref_obj_version_table_.foreach_refactored(free_func))) {
+    OB_LOG(WARN, "traversal ref obj version map failed", K(ret));
   }
   inited_ = false;
   ref_obj_version_table_.destroy();
 }
+
+// batch_fill_kv_pairs relocated to rootserver::ObDependencyDDLHelper
 
 int ObReferenceObjTable::fill_rowkey_pairs(
     const ObDependencyObjKey &dep_obj_key,
@@ -962,10 +1032,14 @@ int ObReferenceObjTable::fill_rowkey_pairs(
                  dep_obj_key.dep_obj_id_)))
       || OB_FAIL(dml.add_pk_column("dep_obj_type", static_cast<uint64_t>(
                  dep_obj_key.dep_obj_type_)))) {
+    LOG_WARN("add column failed", K(ret));
   } else if (OB_FAIL(dml.finish_row())) {
+    LOG_WARN("failed to finish row", K(ret));
   }
   return ret;
 }
+
+// batch_execute_insert_or_update_obj_dependency relocated to rootserver::ObDependencyDDLHelper
 
 int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceObjTable::DependencyObjKeyItemPairs &dep_objs,
     ObMySQLTransaction &trans)
@@ -981,17 +1055,24 @@ int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceOb
       const ObDependencyObjKey &dep_obj_key = dep_objs.at(i).dep_obj_key_;
       if (!dep_obj_key.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("illegal schema version or dependency obj key", K(ret), K(dep_obj_key));
       } else if (OB_FAIL(fill_rowkey_pairs(dep_obj_key, dml))) {
+        LOG_WARN("failed to fill rowkey pairs", K(ret), K(dep_obj_key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dml.splice_batch_delete_sql(OB_ALL_DEPENDENCY_TNAME, sql))) {
+      LOG_WARN("splice sql failed", K(ret));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else {
+      LOG_DEBUG("execute sql dml succ", K(sql));
     }
   }
   return ret;
 }
+
+// update_max_dependency_version relocated to rootserver::ObDependencyDDLHelper
 
 int ObReferenceObjTable::get_or_add_def_obj_item(const uint64_t dep_obj_id,
                                                  const uint64_t dep_db_id,
@@ -1003,6 +1084,7 @@ int ObReferenceObjTable::get_or_add_def_obj_item(const uint64_t dep_obj_id,
   dep_obj_item = nullptr;
   if (!inited_) {
     if (OB_FAIL(ref_obj_version_table_.create(32, "HashBucRefObj"))) {
+      LOG_WARN("failed to add create ref obj tbl", K(ret));
     } else {
       inited_ = true;
     }
@@ -1019,6 +1101,7 @@ int ObReferenceObjTable::get_or_add_def_obj_item(const uint64_t dep_obj_id,
         OX (dep_obj_item = new(buf) ObDependencyObjItem);
         OZ (ref_obj_version_table_.set_refactored(ref_obj_key, dep_obj_item));
       } else {
+        LOG_WARN("failed to get dep obj item", K(ret));
       }
     }
   }
@@ -1048,7 +1131,9 @@ int ObReferenceObjTable::get_dep_obj_item(const uint64_t dep_obj_id,
   ObDependencyObjKey dep_obj_key(dep_obj_id, dep_db_id, dep_obj_type);
   if (!is_inited()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ref_obj_version_table_ not inited", K(ret));
   } else if (OB_FAIL(ref_obj_version_table_.get_refactored(dep_obj_key, dep_obj_item))) {
+    LOG_WARN("failed to get ref obj item", K(ret));
   }
   return ret;
 }
@@ -1094,6 +1179,8 @@ int ObDependencyInfo::insert_dependency_infos(common::ObMySQLTransaction &trans,
    || OB_INVALID_ID == dep_obj_id
    || OB_INVALID_SCHEMA_VERSION == schema_version) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("illegal schema version or owner id", K(ret), K(schema_version),
+                                                   K(owner_id), K(dep_obj_id));
   } else {
     for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos.count(); ++i) {
       ObDependencyInfo & dep = dep_infos.at(i);

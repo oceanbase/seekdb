@@ -18,7 +18,7 @@
 #define OB_AI_FUNC_UTILS_H_
 
 #include "ob_ai_func.h"
-#include "share/json/ob_json_helper.h"
+#include "observer/vector_index/ob_json_helper.h"
 #include "lib/encode/ob_base64_encode.h"
 
 namespace oceanbase 
@@ -245,6 +245,73 @@ public:
   static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
   static int compact_json_object(ObIAllocator &allocator, ObJsonObject *obj_node, ObJsonObject *compact_obj);
+  static int copy_raw_str_to_res(ObString &raw_str, char *res_buf, int64_t res_buf_len)
+  {
+    int ret = OB_SUCCESS;
+    if (res_buf_len < raw_str.length()) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_ENG_LOG(WARN, "get invalid res buf len", K(ret), K(res_buf_len), K(raw_str.length()));
+    } else {
+      MEMCPY(res_buf, raw_str.ptr(), raw_str.length());
+    }
+    return ret;
+  }
+  template <typename ResVec>
+  static int set_raw_str_res(ObString &raw_str, const ObExpr &expr, ObEvalCtx &ctx,
+                           ResVec *res_vec, int64_t batch_idx)
+  {
+    int ret = OB_SUCCESS;
+    int32_t res_size = raw_str.length();
+    char *res_buf = nullptr;
+    int64_t res_buf_len = 0;
+    ObTextStringVectorResult<ResVec> str_result(expr.datum_meta_.type_, &expr, &ctx, res_vec, batch_idx);
+    if (OB_FAIL(str_result.init_with_batch_idx(res_size, batch_idx))) {
+      SQL_ENG_LOG(WARN, "fail to init result", K(ret), K(res_size));
+    } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
+      SQL_ENG_LOG(WARN, "fail to get reserver buffer", K(ret));
+    } else if (res_buf_len < res_size) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_ENG_LOG(WARN, "get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::copy_raw_str_to_res(raw_str, res_buf, res_buf_len))) {
+      SQL_ENG_LOG(WARN, "get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
+    } else if (OB_FAIL(str_result.lseek(res_size, 0))) {
+      SQL_ENG_LOG(WARN, "failed to lseek res.", K(ret), K(str_result), K(res_size));
+    } else {
+      str_result.set_result();
+    }
+    return ret;
+  }
+  static int inner_pack_raw_str_to_res(ObString &raw_str, const ObExpr &expr, ObEvalCtx &ctx,
+                              ObIVector *res_vec, int64_t batch_idx) 
+  {
+    int ret = OB_SUCCESS;
+    VectorFormat res_format = expr.get_format(ctx);
+    switch (res_format) {
+      case VEC_DISCRETE: {
+        ret = set_raw_str_res<ObDiscreteFormat>(raw_str, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), batch_idx);
+        break;
+      }
+      case VEC_CONTINUOUS: {
+        ret = set_raw_str_res<ObContinuousFormat>(raw_str, expr, ctx, static_cast<ObContinuousFormat *>(res_vec), batch_idx);
+        break;
+      }
+      case VEC_UNIFORM: {
+        ret = set_raw_str_res<ObUniformFormat<false>>(raw_str, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), batch_idx);
+        break;
+      }
+      case VEC_UNIFORM_CONST: {
+        ret = set_raw_str_res<ObUniformFormat<true>>(raw_str, expr, ctx, static_cast<ObUniformFormat<true> *>(res_vec), batch_idx);
+        break;
+      }
+      default: {
+        ret = set_raw_str_res<ObVectorBase>(raw_str, expr, ctx, static_cast<ObVectorBase *>(res_vec), batch_idx);
+      }
+    }
+    if (OB_FAIL(ret)) {
+      SQL_ENG_LOG(WARN, "fail to set json res", K(ret));
+    }
+    return ret;
+  }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
 };
@@ -293,11 +360,11 @@ public:
   static int get_rerank_provider(ObIAllocator &allocator, const ObString &provider, ObAIFuncIRerank *&rerank_provider);
   static int get_header(ObIAllocator &allocator,
                         const ObAIFuncExprInfo &info,
-                        const share::ObAiModelEndpointInfo &endpoint_info,
+                        const ObAiModelEndpointInfo &endpoint_info,
                         ObArray<ObString> &headers);
   static int get_complete_body(ObIAllocator &allocator, 
                                const ObAIFuncExprInfo &info,
-                               const share::ObAiModelEndpointInfo &endpoint_info,
+                               const ObAiModelEndpointInfo &endpoint_info,
                                ObString &prompt,
                                ObString &content, 
                                ObJsonObject *config,
@@ -305,27 +372,27 @@ public:
   static int set_json_format_config(ObIAllocator &allocator, const ObString &provider, ObJsonObject *config);
   static int get_embed_body(ObIAllocator &allocator, 
                             const ObAIFuncExprInfo &info,
-                            const share::ObAiModelEndpointInfo &endpoint_info,
+                            const ObAiModelEndpointInfo &endpoint_info,
                             ObArray<ObString> &contents,
                             ObJsonObject *config,
                             ObJsonObject *&body);
   static int get_rerank_body(ObIAllocator &allocator, 
                              const ObAIFuncExprInfo &info,
-                             const share::ObAiModelEndpointInfo &endpoint_info,
+                             const ObAiModelEndpointInfo &endpoint_info,
                              ObString &query,
                              ObJsonArray *document_array,
                              ObJsonObject *config,
                              ObJsonObject *&body);
   static int parse_complete_output(ObIAllocator &allocator, 
-                                   const share::ObAiModelEndpointInfo &endpoint_info,
+                                   const ObAiModelEndpointInfo &endpoint_info,
                                    ObJsonObject *http_response,
                                    ObIJsonBase *&result);
   static int parse_embed_output(ObIAllocator &allocator, 
-                                const share::ObAiModelEndpointInfo &endpoint_info,
+                                const ObAiModelEndpointInfo &endpoint_info,
                                 ObJsonObject *http_response,
                                 ObIJsonBase *&result);
   static int parse_rerank_output(ObIAllocator &allocator, 
-                                 const share::ObAiModelEndpointInfo &endpoint_info,
+                                 const ObAiModelEndpointInfo &endpoint_info,
                                  ObJsonObject *http_response,
                                  ObIJsonBase *&result);
   static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str);
@@ -333,7 +400,7 @@ public:
   static int decode_base64_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
                                            const int64_t dimension, float *&vector);
   static int decode_float_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
-                                          share::ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
+                                          ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
                               share::schema::ObSchemaGetterGuard &guard, ObAIFuncExprInfo *&info);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info);
@@ -345,7 +412,7 @@ private:
 class ObAIFuncModel
 {
 public:
-  ObAIFuncModel(ObIAllocator &allocator, const ObAIFuncExprInfo &info, const share::ObAiModelEndpointInfo &endpoint_info)
+  ObAIFuncModel(ObIAllocator &allocator, const ObAIFuncExprInfo &info, const ObAiModelEndpointInfo &endpoint_info)
   : allocator_(&allocator),
     info_(info),
     endpoint_info_(endpoint_info)
@@ -367,7 +434,7 @@ public:
    const ObString get_request_model_name();
    ObIAllocator *allocator_;
    const ObAIFuncExprInfo &info_;
-   const share::ObAiModelEndpointInfo &endpoint_info_;
+   const ObAiModelEndpointInfo &endpoint_info_;
    DISALLOW_COPY_AND_ASSIGN(ObAIFuncModel);
 };
 
@@ -378,12 +445,6 @@ public:
   virtual ~ObAIFuncPromptObjectUtils() {}
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
   static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
-  // Parses "{<digits>}" starting at template_ptr[start]. Returns OB_SUCCESS and
-  // fills end_pos (index of '}') and index only when the group is a valid
-  // placeholder; any other brace group is reported as an error so the caller
-  // copies it through verbatim.
-  static int parse_prompt_placeholder(const char *template_ptr, const int64_t template_len,
-                                      const int64_t start, int64_t &end_pos, int64_t &index);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";

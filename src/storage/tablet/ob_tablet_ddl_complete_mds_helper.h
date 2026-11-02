@@ -28,6 +28,7 @@ namespace oceanbase
 {
 namespace share
 {
+class ObLSID;
 class SCN;
 }
 
@@ -44,7 +45,6 @@ namespace mds
 struct BufferCtx;
 }
 
-class ObLS;
 class ObTabletDDLCompleteMdsUserData;
 
 class ObTabletDDLCompleteArg
@@ -65,9 +65,10 @@ public:
   int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_serialize_size() const;
   int from_mds_user_data(const ObTabletDDLCompleteMdsUserData &user_data);
-  TO_STRING_KV(K_(has_complete), K_(tablet_id), K_(direct_load_type), K_(rec_scn), K_(start_scn), K_(data_format_version), K_(snapshot_version), K_(table_key), KPC_(storage_schema), K_(write_stat), K_(trans_id));
+  TO_STRING_KV(K_(has_complete), K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(rec_scn), K_(start_scn), K_(data_format_version), K_(snapshot_version), K_(table_key), KPC_(storage_schema), K_(write_stat), K_(trans_id));
 public:
   bool has_complete_;
+  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   /* ddl table merge param */
   ObDirectLoadType direct_load_type_;
@@ -93,7 +94,7 @@ public:
   static int record_ddl_complete_arg_to_mds(const ObTabletDDLCompleteArg &complete_arg,
                                             common::ObIAllocator &allocator);
   static int process_ddl(mds::BufferCtx &ctx,
-                         ObLS *tenant_ls,
+                         ObLSHandle &ls_handle,
                          const ObTabletID &tablet_id,
                          const ObTabletDDLCompleteMdsUserData &data,
                          const share::SCN &scn,

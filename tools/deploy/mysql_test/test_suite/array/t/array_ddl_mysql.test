@@ -289,6 +289,7 @@ drop table arr_t1;
 
 --disable_warnings
 DROP TABLE if exists t1, t2;
+drop materialized view if exists mv1, mv2;
 --enable_warnings
 
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
@@ -297,8 +298,12 @@ insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
 insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
 insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create materialized view mv1  parallel 2 refresh complete on demand  as select * from t1;
 
+#select c1, c2 from mv1 union select c1,c2 from t1 order by c1;
+#select /*+parallel(2)*/c1, c2 from mv1 union select c1,c2 from t1 order by c1;
 drop table t1;
+drop materialized view mv1;
 
 CREATE TABLE t2 (c1 int primary key, c2 array(int),c3 array(int) ,c4 array(int));
 insert into t2 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
@@ -306,9 +311,12 @@ insert into t2 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
 insert into t2 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 insert into t2 values(4,'[-1,-2,-2]','[-4,2,3]',null);
 insert into t2 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create materialized view mv2  parallel 2 refresh complete on demand  as select * from t2;
 
+#select c1, c2 from mv2 union select c1, c2 from t2 order by c1;
 #select /*+parallel(2)*/ c1, c2 from t2 union select c1, c2 from t2 order by c1;
 drop table t2;
+drop materialized view mv2;
 
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
@@ -329,7 +337,7 @@ CREATE TABLE t1(c1 TINYINT[], c2 SMALLINT[], c3 INT[]);
 INSERT INTO t1 VALUES([-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72]);
 
 CREATE TABLE t2(c1 INT[], c2 TINYINT[], c3 SMALLINT[]);
-INSERT /*+ enable_parallel_dml parallel(2) */ INTO t2  SELECT * from t1;
+INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
 SELECT * from t2;
 
 drop table t1;
@@ -551,7 +559,7 @@ insert into test(c3) values ('[[[[]]]]');
 drop table test;
 
 # bugfix: 2025072500110139170
-create table test(arr ARRAY(FLOAT), c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 json);
+create table test(arr ARRAY(FLOAT), c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 roaringbitmap, c7 json);
 --error 5083
 select * from test where arr = c1;
 --error 5083
@@ -564,6 +572,8 @@ select * from test where arr = c4;
 select * from test where arr = c5;
 --error 5083
 select * from test where arr = c6;
+--error 5083
+select * from test where arr = c7;
 drop table test;
 
 --disable_warnings

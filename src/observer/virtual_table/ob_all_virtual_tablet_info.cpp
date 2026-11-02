@@ -15,8 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_info.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/ls/ob_ls.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -29,8 +28,9 @@ namespace observer
 
 ObAllVirtualTabletInfo::ObAllVirtualTabletInfo()
     : ObVirtualTableScannerIterator(),
-      ls_(nullptr),
-      tablet_iter_(ObMDSGetTabletMode::READ_WITHOUT_CHECK)
+      addr_(),
+      ls_iter_guard_(),
+      ls_tablet_iter_(ObMDSGetTabletMode::READ_WITHOUT_CHECK)
 {
 }
 
@@ -41,28 +41,64 @@ ObAllVirtualTabletInfo::~ObAllVirtualTabletInfo()
 
 void ObAllVirtualTabletInfo::reset()
 {
-  tablet_iter_.reset();
-  ls_ = nullptr;
+  addr_.reset();
+  ls_tablet_iter_.reset();
+  ls_iter_guard_.reset();
   ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualTabletInfo::get_next_ls(ObLS *&ls)
+{
+  int ret = OB_SUCCESS;
+
+  while (OB_SUCC(ret)) {
+    if (!ls_iter_guard_.get_ptr()
+        || OB_FAIL(ls_iter_guard_->get_next(ls))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to switch tenant", K(ret));
+      }
+      // switch to next tenant
+      ret = OB_ITER_END;
+    } else if (OB_ISNULL(ls)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "ls is null", K(ret));
+    } else {
+      break;
+    }
+  }
+
+  return ret;
 }
 
 int ObAllVirtualTabletInfo::get_next_tablet(ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  if (!tablet_iter_.is_valid()) {
-    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
-    if (OB_ISNULL(ls_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls service is null", K(ret));
-    } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    } else if (OB_FAIL(ls_->build_tablet_iter(tablet_iter_))) {
+
+  while (OB_SUCC(ret)) {
+    if (!ls_tablet_iter_.is_valid()) {
+      ObLS *ls = nullptr;
+      if (OB_FAIL(get_next_ls(ls))) {
+        if (OB_ITER_END != ret) {
+          SERVER_LOG(WARN, "fail to get next ls", K(ret));
+        }
+      } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_))) {
+        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ls_tablet_iter_.get_next_tablet(tablet_handle))) {
+      if (OB_ITER_END == ret) {
+        ls_tablet_iter_.reset();
+        ret = OB_SUCCESS;
+      } else {
+        SERVER_LOG(WARN, "fail to get next tablet", K(ret));
+      }
+    } else {
+      break;
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_tablet(tablet_handle))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "fail to get next tablet", K(ret));
-    }
-  }
+
   return ret;
 }
 
@@ -80,6 +116,8 @@ int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(get_next_tablet(tablet_handle))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "get_next_tablet failed", K(ret));
@@ -133,16 +171,29 @@ int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
           // multi_version_start
           cur_row_.cells_[i].set_uint64(tablet_meta.multi_version_start_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 6: {
+        case OB_APP_MIN_COLUMN_ID + 6:
+          // transfer_start_scn
+          cur_row_.cells_[i].set_uint64(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 7:
+          // transfer_seq
+          cur_row_.cells_[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 8:
+          // has_transfer_table
+          cur_row_.cells_[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 9: {
           // restore_status
           ObTabletRestoreStatus::STATUS restore_status;
-          if (OB_FAIL(tablet_meta.local_status_.get_restore_status(restore_status))) {
+          if (OB_FAIL(tablet_meta.ha_status_.get_restore_status(restore_status))) {
+            SERVER_LOG(WARN, "failed to get restore status", K(ret), K(tablet_meta));
           } else {
             cur_row_.cells_[i].set_int(restore_status);
           }
         }
           break;
-        case OB_APP_MIN_COLUMN_ID + 7: {
+        case OB_APP_MIN_COLUMN_ID + 10: {
           // tablet_status
           if (is_empty_result) {
             cur_row_.cells_[i].set_int(static_cast<int64_t>(ObTabletStatus::MAX));
@@ -151,11 +202,11 @@ int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
           }
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 8:
+        case OB_APP_MIN_COLUMN_ID + 11:
           // is_committed
           cur_row_.cells_[i].set_int(trans_stat == mds::TwoPhaseCommitState::ON_COMMIT ? 1 : 0);
           break;
-        case OB_APP_MIN_COLUMN_ID + 9:
+        case OB_APP_MIN_COLUMN_ID + 12:
           // is_empty_shell
           cur_row_.cells_[i].set_int(tablet->is_empty_shell() ? 1 : 0);
           break;

@@ -15,7 +15,6 @@
  */
 
 #include "log_loop_thread.h"
-#include "share/rc/ob_server_runtime.h"
 #include "palf_env_impl.h"
 
 namespace oceanbase
@@ -47,7 +46,7 @@ int LogLoopThread::init(IPalfEnvImpl *palf_env_impl)
     PALF_LOG(WARN, "invalid argument", K(ret), KP(palf_env_impl));
   } else {
     palf_env_impl_ = palf_env_impl;
-    share::ObThreadPool::set_run_wrapper(share::server_runtime());
+    share::ObThreadPool::set_run_wrapper(MTL_CTX());
     run_interval_ = DEFAULT_LOG_LOOP_INTERVAL_US;
     is_inited_ = true;
   }
@@ -85,7 +84,7 @@ void LogLoopThread::log_loop_()
     const int64_t start_ts = ObTimeUtility::current_time();
 
     IPalfHandleImpl *handle = nullptr;
-    if (OB_SUCCESS != palf_env_impl_->get_palf_handle_impl(handle)) {
+    if (OB_SUCCESS != palf_env_impl_->get_palf_handle_impl(SYS_PALF_ID, handle)) {
       ob_usleep(run_interval_, true/*is_idle_sleep*/);
       continue;
     }

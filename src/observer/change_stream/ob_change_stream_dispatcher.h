@@ -22,7 +22,7 @@
 #define OB_CS_DISPATCHER_H_
 
 #include "lib/ob_define.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_ext_ring_buffer.h"
@@ -50,7 +50,7 @@ class ObCSExecCtx;
 // ob_change_stream_plugin.h.  Defined here as a plain constant so that
 // dispatcher.h does NOT include plugin.h (which depends on types defined here,
 // creating a circular include).
-static const int64_t CS_MAX_PLUGIN_COUNT = 1;
+static const int64_t CS_MAX_PLUGIN_COUNT = 2;
 
 // ---------------------------------------------------------------------------
 // Dispatcher: one parsed redo row, execution context, subtask
@@ -156,7 +156,7 @@ inline bool is_row_visible(
 
 // ---------------------------------------------------------------------------
 // ObCSDispatcher: single-threaded consumer of committed tx, slices and pushes to Workers.
-// All sibling module access (Worker, Plugins) goes through ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>().
+// All sibling module access (Worker, Plugins) goes through share::g_mp->change_stream_mgr().
 // ---------------------------------------------------------------------------
 
 class ObCSDispatcher : public share::ObThreadPool

@@ -18,6 +18,7 @@
 #include "lib/utility/ob_unify_serialize.h"
 #include "share/ob_errno.h"
 #include "storage/tx/ob_trans_define.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 
@@ -45,8 +46,11 @@ bool ObTabletDDLCompleteMdsUserData::is_valid() const
 {
   return (!has_complete_) ||
          (has_complete_  && table_key_.is_valid() 
-                         && is_valid_direct_load(direct_load_type_)
-                         && storage_schema_.is_valid() && write_stat_.is_valid());
+                         && (direct_load_type_ > ObDirectLoadType::DIRECT_LOAD_INVALID &&
+                             direct_load_type_ < ObDirectLoadType::DIRECT_LOAD_MAX)
+                         && storage_schema_.is_valid() && write_stat_.is_valid())
+          || (is_incremental_major_direct_load(direct_load_type_)
+              && storage_schema_.is_valid());
 }
 
 int ObTabletDDLCompleteMdsUserData::set_storage_schema(const ObStorageSchema &other, common::ObIAllocator &allocator)
@@ -54,7 +58,9 @@ int ObTabletDDLCompleteMdsUserData::set_storage_schema(const ObStorageSchema &ot
   int ret = OB_SUCCESS;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(other));
   } else if (OB_FAIL(storage_schema_.assign(allocator, other))) {
+    LOG_WARN("failed to assign storage schema", K(ret));
   } else{
     for (int64_t i = 0; OB_SUCC(ret) && i < storage_schema_.column_array_.count(); ++i) {
       ObStorageColumnSchema &cs = storage_schema_.column_array_.at(i);
@@ -69,8 +75,11 @@ int ObTabletDDLCompleteMdsUserData::assign(common::ObIAllocator &allocator, cons
   int ret = OB_SUCCESS;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(other));
   } else if (other.has_complete_ && OB_FAIL(set_storage_schema(other.storage_schema_, allocator))) {
+    LOG_WARN("failed to set storage schema", K(ret));
   } else if (other.has_complete_ && OB_FAIL(write_stat_.assign(other.write_stat_))) {
+    LOG_WARN("failed to set storage schema", K(ret));  
   } else {
     has_complete_         = other.has_complete_;
     direct_load_type_     = other.direct_load_type_;
@@ -97,10 +106,14 @@ int ObTabletDDLCompleteMdsUserData::set_with_merge_arg(const ObTabletDDLComplete
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
   } else if (arg.has_complete_ && nullptr == arg.get_storage_schema()) {
     ret= OB_ERR_UNEXPECTED;
+    LOG_WARN("schema should not be null", K(ret));
   } else if (arg.has_complete_ && OB_FAIL(set_storage_schema(*arg.get_storage_schema(), allocator))) {
+    LOG_WARN("failed to set storage schema", K(ret), K(arg.get_storage_schema()));
   } else if (arg.has_complete_ && OB_FAIL(write_stat_.assign(arg.write_stat_))) {
+    LOG_WARN("failed to set write stat", K(ret));
   } else {
     has_complete_ = arg.has_complete_;
     direct_load_type_ = arg.direct_load_type_;
@@ -132,6 +145,7 @@ int ObTabletDDLCompleteMdsUserData::serialize(char *buf, const int64_t buf_len, 
               write_stat_);
   if (OB_FAIL(ret)) {
   } else if (has_complete_ && OB_FAIL(storage_schema_.serialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to serialize storage_schema", K(ret));
   }
   return ret;
 }
@@ -144,6 +158,7 @@ int ObTabletDDLCompleteMdsUserData::deserialize(common::ObIAllocator &allocator,
               write_stat_);
   if (OB_FAIL(ret)) {
   } else if (has_complete_ && OB_FAIL(storage_schema_.deserialize(allocator, buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize stroage_schema", K(ret), KPC(this));
   }
   return ret;
 }

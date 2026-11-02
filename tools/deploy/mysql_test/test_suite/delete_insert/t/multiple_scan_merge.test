@@ -1,0 +1,84 @@
+# owner: liquanhong.lqh
+# owner group: storage
+# description: test delete_insert multiple scan merge
+
+--disable_query_log
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (syscon, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection syscon;
+set @@session.explicit_defaults_for_timestamp=off;
+set session ob_trx_timeout=100000000000;
+set @@recyclebin = off;
+--enable_query_log
+
+
+connection conn1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(id int(11) DEFAULT NULL, c1 int(11) DEFAULT NULL) merge_engine = delete_insert;
+
+--disable_query_log
+
+let $cnt = 1;
+while($cnt <= 10)
+{
+    eval insert into t1 values ($cnt, $cnt * 10);
+    inc $cnt;
+}
+
+--enable_query_log
+
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+
+select * from t1 order by c1;
+
+--disable_query_log
+
+update t1 set c1 = 11 where id = 1;
+
+update t1 set c1 = 21 where id = 2;
+update t1 set c1 = 22 where id = 2;
+
+delete from t1 where id = 3;
+
+delete from t1 where id = 4;
+insert t1 values(4, 41);
+
+delete from t1 where id = 5;
+insert t1 values(5, 51);
+update t1 set c1 = 52 where id = 5;
+
+delete from t1 where id = 6;
+insert t1 values(6, 61);
+update t1 set c1 = 62 where id = 6;
+update t1 set c1 = 63 where id = 6;
+
+update t1 set c1 = 71 where id = 7;
+delete from t1 where id = 7;
+
+update t1 set c1 = 81 where id = 8;
+delete from t1 where id = 8;
+insert into t1 values(8, 82);
+
+update t1 set c1 = 91 where id = 9;
+delete from t1 where id = 9;
+insert into t1 values(9, 92);
+update t1 set c1 = 93 where id = 9;
+
+update t1 set c1 = 101 where id = 10;
+delete from t1 where id = 10;
+insert into t1 values(10, 102);
+update t1 set c1 = 103 where id = 10;
+update t1 set c1 = 104 where id = 10;
+
+--enable_query_log
+
+select * from t1 order by c1;
+
+drop table t1;
+--disable_query_log
+connection syscon;
+set @@recyclebin = on;
+--enable_query_log

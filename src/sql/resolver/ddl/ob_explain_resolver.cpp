@@ -26,10 +26,6 @@ const static int64_t EXPLAIN_DISPLAY_OPTION = 1;
 const static int64_t EXPLAIN_INTO_TABLE = 2;
 const static int64_t EXPLAIN_STMT_ID = 3;
 const static int64_t EXPLAIN_CHILD_STMT = 4;
-namespace oceanbase
-{
-namespace sql
-{
 int ObExplainResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -63,6 +59,7 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
       if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
                                    *child_node,
                                    child_stmt))) {
+        LOG_WARN("failed to resolve child stmt", K(ret));
       } else if (OB_ISNULL(child_stmt)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to generate stmt for child stmt");
@@ -130,6 +127,7 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected display option", K(ret), K(opt_node->type_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -149,6 +147,3 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
 
   return ret;
 }
-
-} // namespace sql
-} // namespace oceanbase

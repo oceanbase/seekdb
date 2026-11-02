@@ -18,7 +18,7 @@
 #define OB_MIN_MAX_ESTIMATOR_H
 
 #include "sql/optimizer/stat/ob_stat_define.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "sql/optimizer/stat/ob_basic_stats_estimator.h"
 
 namespace oceanbase
@@ -44,9 +44,7 @@ public:
   {}
   virtual ~ObStatMinMaxSubquery() {}
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj,
-                     ObIAllocator &allocator,
-                     const ObDatumAccessContext *datum_access_ctx) override;
+  virtual int decode(ObObj &obj, ObIAllocator &allocator) override;
   virtual bool is_needed() const override { return col_param_ != NULL && col_param_->need_refine_min_max(); }
 private:
   ObString db_name_;

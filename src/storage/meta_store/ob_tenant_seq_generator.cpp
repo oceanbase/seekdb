@@ -1,0 +1,209 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX STORAGE
+
+#include "ob_tenant_seq_generator.h"
+#include "storage/meta_store/ob_tenant_storage_meta_persister.h"
+#include "observer/omt/ob_tenant.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#define sleep(sec) Sleep((sec) * 1000)
+#define usleep(us) Sleep((DWORD)((us) / 1000))
+#endif
+
+namespace oceanbase
+{
+namespace storage
+{
+
+OB_SERIALIZE_MEMBER(ObTenantMonotonicIncSeqs, object_seq_, tmp_file_seq_, write_seq_);
+
+
+int ObTenantSeqGenerator::init(ObTenantStorageMetaPersister &persister)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("has inited", K(ret));
+  } else {
+    persister_ = &persister;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObTenantSeqGenerator::start()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    // do nothing
+  }
+  return ret;
+}
+
+void ObTenantSeqGenerator::stop()
+{
+  if (tg_id_ != -1) {
+    TG_STOP(tg_id_);
+  }
+}
+
+
+void ObTenantSeqGenerator::destroy()
+{
+  if (tg_id_ != -1) {
+    TG_DESTROY(tg_id_);
+    tg_id_ = -1;
+  }
+  persister_ = nullptr;
+  curr_seqs_.reset();
+  preallocated_seqs_.reset();
+  is_inited_ = false;
+}
+
+int ObTenantSeqGenerator::get_private_object_seq(uint64_t &seq)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not support for shared-nothing", K(ret));
+  }
+  int retry_times = 0;
+  while (OB_SUCC(ret) &&
+      (seq = ATOMIC_AAF(&curr_seqs_.object_seq_, 1)) > ATOMIC_LOAD(&preallocated_seqs_.object_seq_)) {
+    if (retry_times < MAX_RETRY_TIME) {
+      sleep(1);
+      retry_times++;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("fail to get private object seq", K(ret), K_(curr_seqs), K_(preallocated_seqs), K(retry_times));
+    }
+  }
+  return ret;
+}
+
+int ObTenantSeqGenerator::get_tmp_file_seq(uint64_t &seq)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not support for shared-nothing", K(ret));
+  }
+  int retry_times = 0;
+  while (OB_SUCC(ret) &&
+      (seq = ATOMIC_AAF(&curr_seqs_.tmp_file_seq_, 1)) > ATOMIC_LOAD(&preallocated_seqs_.tmp_file_seq_)) {
+    if (retry_times < MAX_RETRY_TIME) {
+      usleep(TRY_PREALLOACTE_INTERVAL);
+      retry_times++;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("fail to get tmp file seq", K(ret), K_(curr_seqs), K_(preallocated_seqs), K(retry_times));
+    }
+  }
+  return ret;
+}
+
+int ObTenantSeqGenerator::get_write_seq(uint64_t &seq)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not support for shared-nothing", K(ret));
+  }
+  int retry_times = 0;
+  while (OB_SUCC(ret) &&
+      (seq = ATOMIC_AAF(&curr_seqs_.write_seq_, 1)) > ATOMIC_LOAD(&preallocated_seqs_.write_seq_)) {
+    if (retry_times < MAX_RETRY_TIME) {
+      sleep(1);
+      retry_times++;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("fail to get write seq", K(ret), K_(curr_seqs), K_(preallocated_seqs), K(retry_times));
+    }
+  }
+  return ret;
+}
+
+void ObTenantSeqGenerator::runTimerTask()
+{
+  int ret = OB_SUCCESS;
+  ObCurTraceId::init(GCONF.self_addr_);
+  if (OB_FAIL(try_preallocate_())) {
+    LOG_WARN("fail to try preallocate", K(ret));
+  }
+}
+
+int ObTenantSeqGenerator::try_preallocate_()
+{
+  int ret = OB_SUCCESS;
+  bool need_update = false;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ObTenantMonotonicIncSeqs seqs;
+    if (ATOMIC_LOAD(&curr_seqs_.object_seq_) >
+        (ATOMIC_LOAD(&preallocated_seqs_.object_seq_) - PREALLOCATION_TRIGGER_MARGIN)) {
+      need_update = true;
+      seqs.object_seq_ = ATOMIC_LOAD(&preallocated_seqs_.object_seq_) + BATCH_PREALLOCATE_NUM;
+    } else {
+      seqs.object_seq_ = ATOMIC_LOAD(&preallocated_seqs_.object_seq_);
+    }
+    if (ATOMIC_LOAD(&curr_seqs_.tmp_file_seq_) >
+        (ATOMIC_LOAD(&preallocated_seqs_.tmp_file_seq_) - PREALLOCATION_TRIGGER_MARGIN)) {
+      need_update = true;
+      seqs.tmp_file_seq_ = ATOMIC_LOAD(&preallocated_seqs_.tmp_file_seq_) + BATCH_PREALLOCATE_NUM;
+    } else {
+      seqs.tmp_file_seq_ = ATOMIC_LOAD(&preallocated_seqs_.tmp_file_seq_);
+    }
+    if (ATOMIC_LOAD(&curr_seqs_.write_seq_) >
+        (ATOMIC_LOAD(&preallocated_seqs_.write_seq_) - PREALLOCATION_TRIGGER_MARGIN)) {
+      need_update = true;
+      seqs.write_seq_ = ATOMIC_LOAD(&preallocated_seqs_.write_seq_) + BATCH_PREALLOCATE_NUM;
+    } else {
+      seqs.write_seq_ = ATOMIC_LOAD(&preallocated_seqs_.write_seq_);
+    }
+
+    if (need_update) {
+      if (OB_FAIL(persister_->update_tenant_preallocated_seqs(seqs))) {
+        LOG_WARN("fail to update_tenant_preallocated_seqs", K(ret), K(seqs));
+      } else {
+        ATOMIC_STORE(&preallocated_seqs_.object_seq_, seqs.object_seq_);
+        ATOMIC_STORE(&preallocated_seqs_.tmp_file_seq_, seqs.tmp_file_seq_);
+        ATOMIC_STORE(&preallocated_seqs_.write_seq_, seqs.write_seq_);
+        LOG_INFO("succeed to update tenant preallocated seqs", K(preallocated_seqs_), K(seqs));
+      }
+    }
+  }
+  return ret;
+}
+
+
+} // namespace storage
+} // namespace oceanbase

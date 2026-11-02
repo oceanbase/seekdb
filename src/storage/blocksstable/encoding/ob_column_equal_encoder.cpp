@@ -44,7 +44,9 @@ int ObColumnEqualEncoder::init(
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_idx, rows))) {
+    LOG_WARN("ObIColumnEncoder init failed", K(ret), K(ctx), K(column_idx));
   } else {
     column_header_.type_ = type_;
     store_class_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
@@ -60,8 +62,10 @@ int ObColumnEqualEncoder::set_ref_col_idx(const int64_t ref_col_idx,
   UNUSED(ref_ctx);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(ref_col_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid ref_col_idx", K(ref_col_idx), K(ret));
   } else {
     ref_col_idx_ = ref_col_idx;
     ref_ctx_ = &ref_ctx;
@@ -89,6 +93,7 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_type_ != ctx_->encoding_ctx_->col_descs_->at(ref_col_idx_).col_type_)) {
     suitable = false;
   } else {
@@ -110,7 +115,9 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
       const ObDatum &ref_datum = ref_ctx_->col_datums_->at(row_id);
       bool equal = false;
       if (OB_FAIL(is_datum_equal(datum, ref_datum, equal))) {
+        LOG_WARN("cmp datum failed", K(ret), K(row_id));
       } else if (!equal && OB_FAIL(exc_row_ids_.push_back(row_id))) {
+        LOG_WARN("push_back failed", K(ret), K(row_id));
       }
     }
 
@@ -125,7 +132,9 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
             ObIntBitMapMetaWriter *meta_writer =
                 static_cast<ObIntBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->init(&exc_row_ids_, ctx_->col_datums_, column_type_))) {
+              LOG_WARN("init meta writer failed", K(ret));
             } else if (OB_FAIL(meta_writer->traverse_exc(suitable))) {
+              LOG_WARN("meta writer traverse failed", K(ret));
             }
             break;
           }
@@ -133,7 +142,9 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
             ObNumberBitMapMetaWriter *meta_writer =
                 static_cast<ObNumberBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->init(&exc_row_ids_, ctx_->col_datums_, column_type_))) {
+              LOG_WARN("init meta writer failed", K(ret));
             } else if (OB_FAIL(meta_writer->traverse_exc(suitable))) {
+              LOG_WARN("meta writer traverse failed", K(ret));
             }
             break;
           }
@@ -141,11 +152,14 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
           case ObStringSC:
           case ObTextSC:
           case ObJsonSC:
-          case ObGeometrySC: {
+          case ObGeometrySC:
+          case ObRoaringBitmapSC: {
             ObStringBitMapMetaWriter *meta_writer =
                 static_cast<ObStringBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->init(&exc_row_ids_, ctx_->col_datums_, column_type_))) {
+              LOG_WARN("init meta writer failed", K(ret));
             } else if (OB_FAIL(meta_writer->traverse_exc(suitable))) {
+              LOG_WARN("meta writer traverse failed", K(ret));
             }
             break;
           }
@@ -153,12 +167,15 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
             ObOTimestampBitMapMetaWriter *meta_writer =
                 static_cast<ObOTimestampBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->init(&exc_row_ids_, ctx_->col_datums_, column_type_))) {
+              LOG_WARN("init meta writer failed", K(ret));
             } else if (OB_FAIL(meta_writer->traverse_exc(suitable))) {
+              LOG_WARN("meta writer traverse failed", K(ret));
             }
             break;
           }
           default:
             ret = OB_INNER_STAT_ERROR;
+            LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type));
         }
       }
       if (OB_SUCC(ret)) {
@@ -182,6 +199,7 @@ int64_t ObColumnEqualEncoder::calc_size() const
   if (0 < exc_row_ids_.count()) {
     size += base_meta_writer_.size();
   }
+  LOG_DEBUG("column equal size", K(size), K(column_index_));
   return size;
 }
 
@@ -197,10 +215,12 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     char *buf = writer.current();
     const int64_t size = calc_size();
     if (OB_FAIL(writer.advance_zero(size))) {
+      LOG_WARN("advance failed", K(ret), K(size));
     } else {
       ObColumnEqualMetaHeader *header = reinterpret_cast<ObColumnEqualMetaHeader *>(buf);
       header->version_ = ObColumnEqualMetaHeader::OB_COLUMN_EQUAL_META_HEADER_V1;
@@ -211,6 +231,7 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
       buf += sizeof(ObColumnEqualMetaHeader);
       // advance extra 8 bytes for safety bit packing
       if (OB_FAIL(writer.advance_zero(sizeof(uint64_t)))) {
+        LOG_WARN("advance failed", K(ret));
       } else {
         switch (store_class_) {
           case ObIntSC:
@@ -218,6 +239,7 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
             ObIntBitMapMetaWriter *meta_writer =
                 static_cast<ObIntBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->write(buf))) {
+              LOG_WARN("write meta failed", K(ret), KP(buf));
             }
             break;
           }
@@ -225,6 +247,7 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
             ObNumberBitMapMetaWriter *meta_writer =
                 static_cast<ObNumberBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->write(buf))) {
+              LOG_WARN("write meta failed", K(ret), KP(buf));
             }
             break;
           }
@@ -232,10 +255,12 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
           case ObStringSC:
           case ObTextSC:
           case ObJsonSC:
-          case ObGeometrySC: {
+          case ObGeometrySC:
+          case ObRoaringBitmapSC: {
             ObStringBitMapMetaWriter *meta_writer =
                 static_cast<ObStringBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->write(buf))) {
+              LOG_WARN("write meta failed", K(ret), KP(buf));
             }
             break;
           }
@@ -243,16 +268,19 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
             ObOTimestampBitMapMetaWriter *meta_writer =
                 static_cast<ObOTimestampBitMapMetaWriter *>(&base_meta_writer_);
             if (OB_FAIL(meta_writer->write(buf))) {
+              LOG_WARN("write meta failed", K(ret), KP(buf));
             }
             break;
           }
           default:
             ret = OB_INNER_STAT_ERROR;
+            LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type));
         }
       }
       if (OB_SUCC(ret)) {
         // revert extra bytes
         if (OB_FAIL(writer.backward(sizeof(uint64_t)))) {
+          LOG_ERROR("backword failed", K(ret));
         }
       }
     }
@@ -262,3 +290,4 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
 
 }//end namespace blocksstable
 }//end namespace oceanbase
+

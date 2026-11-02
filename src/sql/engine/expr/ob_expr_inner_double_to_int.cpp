@@ -39,7 +39,7 @@ const int MAX_DOUBLE_PRINT_SIZE = 512;
 ObExprInnerDoubleToInt::ObExprInnerDoubleToInt(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_INNER_DOUBLE_TO_INT, N_INNER_DOUBLE_TO_INT, 1, 
                          NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE)
+                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 /**
@@ -227,7 +227,9 @@ int ObExprInnerDoubleToInt::double_to_number(double in_val,
       }
       if (OB_ISNULL(bound_num)) {
         tmp_ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("bound_num is NULL", K(tmp_ret), K(ret), K(is_neg));
       } else if (OB_SUCCESS != (tmp_ret = number.from(*bound_num, alloc))) {
+        LOG_WARN("copy min number failed", K(ret), K(tmp_ret), KPC(bound_num));
       } else {
         ret = OB_SUCCESS;
       }
@@ -247,6 +249,7 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
   bool is_unsigned = (expr.extra_ & 4) == 4;
   bool is_decimal = (expr.extra_ & 8) == 8;
   if (OB_FAIL(expr.args_[0]->eval(ctx, val_datum))) {
+    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (val_datum->is_null()) {
     expr_datum.set_null();
   } else if (OB_FALSE_IT(val = val_datum->get_double())) {
@@ -260,18 +263,21 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
     } else if ((val > 0. && !is_start) ||
         (val < 0. && is_start)) {
       if (OB_FAIL(add_double_bit_1(val, tmp_d))) {
+        LOG_WARN("failed to add double bit 1", K(ret));
       } else {
         val = tmp_d;
       }
     } else if ((val > 0. && is_start) ||
                (val < 0. && !is_start)) {
       if (OB_FAIL(sub_double_bit_1(val, tmp_d))) {
+        LOG_WARN("failed to sub double bit 1", K(ret));
       } else {
         val = tmp_d;
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(double_to_number(val, tmp_alloc, number))) {
+      LOG_WARN("failed to trans double to number", K(ret));
     } else {
       expr_datum.set_number(number);
     }
@@ -303,6 +309,7 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
       }
     } else {
       if (OB_FAIL(convert_double_to_int64_range(val, start, end))) {
+        LOG_WARN("failed to convert double to int64 range", K(ret));
       } else if (is_start) {
         expr_datum.set_int(start);
       } else {
@@ -337,6 +344,7 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
       }
     } else {
       if (OB_FAIL(convert_double_to_uint64_range(val, start, end))) {
+        LOG_WARN("failed to convert double to int64 range", K(ret));
       } else if (is_start) {
         expr_datum.set_uint(start);
       } else {
@@ -357,6 +365,7 @@ int ObExprInnerDoubleToInt::calc_result_type1(ObExprResType &type,
   UNUSED(type_ctx);
   if (OB_ISNULL(raw_expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("op raw expr is null or param_count error", K(ret), K(raw_expr));
   } else {
     bool is_unsigned = (raw_expr->get_range_flag() & 4) == 4;
     bool is_decimal = (raw_expr->get_range_flag() & 8) == 8;
@@ -381,8 +390,11 @@ int ObExprInnerDoubleToInt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
+  } else if (OB_ISNULL(rt_expr.args_[0])) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the arg of inner double to int is null.", K(ret), K(rt_expr));
   } else {
-    OB_ASSERT(rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInnerDoubleToInt::eval_inner_double_to_int;
     rt_expr.extra_ = raw_expr.get_range_flag();
   }

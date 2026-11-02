@@ -1,0 +1,39 @@
+drop user mlog_tester;
+drop database if exists mlog_db;
+create user mlog_tester;
+create database mlog_db;
+use mlog_db;
+create table t1 (id int primary key, age int, name varchar(20));
+grant create on mlog_db.* to mlog_tester;
+create materialized view log on t1;
+ERROR 42000: SELECT command denied to user 'mlog_tester'@'%' for table 't1'
+grant select on mlog_db.t1 to mlog_tester;
+create materialized view log on t1;
+drop materialized view log on t1;
+ERROR 42000: DROP command denied to user 'mlog_tester'@'%' for table 'mlog$_t1'
+grant drop on mlog_db.t1 to mlog_tester;
+drop materialized view log on t1;
+ERROR 42000: DROP command denied to user 'mlog_tester'@'%' for table 'mlog$_t1'
+revoke drop on mlog_db.t1 from mlog_tester;
+grant drop on mlog_db.mlog$_t1 to mlog_tester;
+drop materialized view log on t1;
+revoke create on mlog_db.* from mlog_tester;
+create materialized view log on t1;
+ERROR 42000: CREATE command denied to user 'mlog_tester'@'%' for table 'mlog$_t1'
+grant create on mlog_db.* to mlog_tester;
+create materialized view log on t1;
+revoke drop on mlog_db.mlog$_t1 from mlog_tester;
+drop materialized view log on t1;
+ERROR 42000: DROP command denied to user 'mlog_tester'@'%' for table 'mlog$_t1'
+grant drop on mlog_db.mlog$_t1 to mlog_tester;
+drop materialized view log on t1;
+revoke select on mlog_db.t1 from mlog_tester;
+create materialized view log on t1;
+ERROR 42000: SELECT command denied to user 'mlog_tester'@'%' for table 't1'
+grant select on mlog_db.t1 to mlog_tester;
+create materialized view log on t1;
+drop materialized view log on t1;
+use mlog_db;
+drop materialized view log on t1;
+drop table t1;
+drop database mlog_db;

@@ -19,7 +19,6 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_domain_index_builder_util.h"
-#include "rootserver/ddl_task/ob_ddl_task.h"
 
 namespace oceanbase
 {
@@ -37,9 +36,10 @@ public:
       const ObTableSchema *index_schema,
       const int64_t schema_version,
       const int64_t parallelism,
+      const int64_t consumer_group_id,
       const share::ObDDLType task_type,
       const obcall::ObCreateIndexArg &create_index_arg,
-      const uint64_t data_format_version,
+      const uint64_t tenant_data_version,
       const int64_t parent_task_id = 0,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0);
@@ -70,7 +70,8 @@ public:
       K(sq_meta_table_task_id_), K(pq_centroid_table_task_id_), K(pq_code_table_task_id_), 
       K(pq_rowkey_cid_table_task_id_),
       K(drop_index_task_id_), K(is_rebuild_index_),
-      K(drop_index_task_submitted_), K(schema_version_), K(execution_id_));
+      K(drop_index_task_submitted_), K(schema_version_), K(execution_id_),
+      K(consumer_group_id_), K(trace_id_), K(parallelism_), K(create_index_arg_));
 
 public:
   void set_centroid_table_id(const uint64_t id) { centroid_table_id_ = id; }
@@ -142,24 +143,24 @@ private:
   struct ChangeTaskStatusFn final
   {
   public:
-    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map, ObLocalManagementService *local_management_service, int64_t &not_finished_cnt) :
+    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, ObRootService *root_service, int64_t &not_finished_cnt) :
       dependent_task_result_map_(dependent_task_result_map),
-      local_management_service_(local_management_service),
+      rt_service_(root_service),
       not_finished_cnt_(not_finished_cnt)
     {}
   public:
     ~ChangeTaskStatusFn() = default;
-    int operator() (common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry);
+    int operator() (common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry);
   public:
-    common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
-    ObLocalManagementService *local_management_service_;
+    common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map_;
+    ObRootService *rt_service_;
     
     int64_t &not_finished_cnt_;
   };
   struct CheckTaskStatusFn final
   {
   public:
-    CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map,
+    CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, 
                       int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished) :
       dependent_task_result_map_(dependent_task_result_map),
       finished_task_cnt_(finished_task_cnt),
@@ -168,9 +169,9 @@ private:
     {}
   public:
     ~CheckTaskStatusFn() = default;
-    int operator() (common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry);
+    int operator() (common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry);
   public:
-    common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
+    common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map_;
     int64_t &finished_task_cnt_;
     bool &child_task_failed_;
     bool &state_finished_;
@@ -182,6 +183,7 @@ private:
   using ObDDLTask::task_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::parallelism_;
+  using ObDDLTask::consumer_group_id_;
   using ObDDLTask::parent_task_id_;
   using ObDDLTask::task_status_;
   using ObDDLTask::snapshot_version_;
@@ -217,10 +219,10 @@ private:
   bool drop_index_task_submitted_;
   int64_t drop_index_task_id_;
   bool is_rebuild_index_;
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   obcall::ObCreateIndexArg create_index_arg_;
-  common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> dependent_task_result_map_;
+  common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
 };
 
 } // end namespace rootserver

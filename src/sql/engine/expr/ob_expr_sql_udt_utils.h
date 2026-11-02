@@ -23,17 +23,8 @@
 
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
-{
-class ObSchemaGetterGuard;
-}
-}
 namespace sql
 {
-
-class ObResultSet;
 
 class ObSqlUdtNullBitMap final
 {
@@ -79,15 +70,6 @@ private:
 class ObSqlUdtUtils final
 {
 public:
-  static int convert_result_for_client(common::ObObj &value, ObResultSet &result);
-  static int convert_result_for_client(common::ObObj &value,
-                                       common::ObIAllocator *allocator,
-                                       ObSQLSessionInfo *session_info,
-                                       ObExecContext *exec_context,
-                                       bool is_ps_protocol,
-                                       const ColumnsFieldIArray *fields = NULL,
-                                       share::schema::ObSchemaGetterGuard *schema_guard = NULL);
-
   // functions to flattern nested udt to a single object array
   static int ob_udt_flattern_pl_extend(const ObObj **flattern_objs,
                                        const int32_t &flattern_object_count,
@@ -136,11 +118,8 @@ public:
                                        sql::ObExecContext *exec_context,
                                        ObSqlUDT &sql_udt,
                                        ObString &res_str);
-  static int convert_collection_to_string(ObExecContext &exec_ctx,
-                                          ObObj &coll_obj,
-                                          const ObSqlCollectionInfo &coll_meta,
-                                          common::ObIAllocator *allocator,
-                                          ObString &res_str);
+  static int convert_collection_to_string(ObObj &coll_obj, const ObSqlCollectionInfo &coll_meta,
+                                          common::ObIAllocator *allocator, ObString &res_str);
 
   static bool ob_udt_util_check_same_type(ObObjType type1, ObObjType type2)
   {
@@ -172,7 +151,7 @@ class ObSqlUdtMetaUtils final
   
 public:
 
-  // Get UDT type information by object id and recursively resolve child types.
+  // get udttypeinfo from schema by tenant id and udt id, get child udt defines recursively
   static int generate_udt_meta_from_schema(ObSchemaGetterGuard *schema_guard,
                                            ObSubSchemaCtx *subschema_ctx,
                                            common::ObIAllocator &allocator,

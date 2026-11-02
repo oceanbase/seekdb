@@ -17,7 +17,7 @@
 #ifndef OCEABASE_LIB_OB_RB_MEMORY_MGR_
 #define OCEABASE_LIB_OB_RB_MEMORY_MGR_
 
-#include "roaring/roaring.h"
+#include "ob_roaringbitmap.h"
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "lib/allocator/ob_block_alloc_mgr.h"
 
@@ -27,18 +27,8 @@ namespace common
 {
 static roaring_memory_t roaring_memory_mgr;
 
-#define CROARING_TRY_CATCH(statement)                              \
-  try {                                                           \
-    if (OB_SUCC(ret)) {                                           \
-      statement;                                                  \
-    }                                                             \
-  } catch (const std::bad_alloc &) {                              \
-    ret = OB_ALLOCATE_MEMORY_FAILED;                              \
-    LOG_WARN("failed to allocate memory in CRoaring", K(ret));   \
-  }
-
 class ObRbMemMgr;
-// Lib-bridge to ObServer-owned ObRbMemMgr (defined in share/rc/ob_server_runtime.cpp).
+// Lib-bridge to ObServer-owned ObRbMemMgr (defined in share/rc/ob_tenant_base.cpp).
 extern ObRbMemMgr *get_rb_mem_mgr();
 
 class ObRbMemMgr
@@ -52,7 +42,7 @@ private:
 public:
   ObRbMemMgr() : is_inited_(false), vec_idx_used_(0), block_alloc_(), allocator_() {}
   ~ObRbMemMgr() {}
-  static int server_module_init(ObRbMemMgr *&rb_allocator) { return rb_allocator->init(); };
+  static int mtl_init(ObRbMemMgr *&rb_allocator) { return rb_allocator->init(); };
 
   int init();
   int start() { return OB_SUCCESS; }

@@ -143,6 +143,7 @@ int ObVirtualTableIterator::set_output_column_ids(const common::ObIArray<uint64_
 {
   int ret = common::OB_SUCCESS;
   if (OB_SUCCESS != (ret = output_column_ids_.assign(column_ids))) {
+    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   }
   return ret;
 }

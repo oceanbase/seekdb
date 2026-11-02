@@ -24,13 +24,12 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/utility.h"
 #include "ob_memtable_key.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_request.h"
 #include "storage/deadlock/ob_deadlock_detector_common_define.h"
 #include "share/ob_thread_pool.h"
-#include "query/session/ob_deadlock_session.h"
-#include "data_plane/memtable/ob_lock_wait_service.h"
+#include "sql/session/ob_sql_session_mgr.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_deadlock_adapter.h"
@@ -38,6 +37,10 @@
 
 namespace oceanbase
 {
+namespace observer
+{
+class ObAllVirtualLockWaitStat;
+}
 namespace memtable
 {
 using namespace transaction;
@@ -77,12 +80,19 @@ public:
     int ret = OB_SUCCESS;
     UserBinaryKey user_key;
     ObTransID trans_id;
+    ObAddr trans_scheduler;
     ObDependencyResource resource;
-    #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id)
+    #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id), K(trans_scheduler)
     if (OB_FAIL(mapper_.get_hash_holder(hash_, trans_id))) {
+      DETECT_LOG(WARN, "get hash holder failed", PRINT_WRAPPER);
     } else if (OB_FAIL(user_key.set_user_key(trans_id))) {
-    } else if (OB_FAIL(resource.set_args(user_key))) {
+      DETECT_LOG(WARN, "set user key failed", PRINT_WRAPPER);
+    } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_conflict_trans_scheduler(trans_id, trans_scheduler))) {
+      DETECT_LOG(WARN, "get trans scheduler failed", PRINT_WRAPPER);
+    } else if (OB_FAIL(resource.set_args(trans_scheduler, user_key))) {
+      DETECT_LOG(WARN, "resource set args failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource_array.push_back(resource))) {
+      DETECT_LOG(WARN, "fail to push resource to array", PRINT_WRAPPER);
     }
     #undef PRINT_WRAPPER
     need_remove = false;
@@ -97,11 +107,9 @@ class LocalDeadLockCollectCallBack {
 public:
   LocalDeadLockCollectCallBack(const ObTransID &self_trans_id,
                                const char *node_key_buffer,
-                               const uint32_t sess_id,
-                               query::ObIDeadlockSessionService &session_service) :
+                               const uint32_t sess_id) :
   self_trans_id_(self_trans_id),
-  sess_id_(sess_id),
-  session_service_(&session_service) {
+  sess_id_(sess_id) {
     int64_t str_len = strlen(node_key_buffer);// not contain '\0'
     int64_t min_len = str_len > 127 ? 127 : str_len;
     memcpy(node_key_buffer_, node_key_buffer, min_len);
@@ -115,11 +123,11 @@ public:
     char * buffer_trans_id = nullptr;
     char * buffer_row_key = nullptr;
     char * buffer_current_sql = nullptr;
-    query::ObDeadlockSessionGuard sess_guard(*session_service_);
-    query::ObDeadlockSessionFacts session_facts;
+    SessionGuard sess_guard;
     int step = 0;
-    if (++step && OB_FAIL(sess_guard.acquire(sess_id_))) {
-    } else if (++step && OB_FAIL(sess_guard.get_deadlock_facts(session_facts))) {
+    if (++step && OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id_, sess_guard))) {
+    } else if (++step && !sess_guard.is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
     } else if (OB_UNLIKELY(nullptr == (buffer_trans_id = (char*)ob_malloc(trans_id_str_len, "deadlockCB")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_UNLIKELY(nullptr == (buffer_row_key = (char*)ob_malloc(row_key_str_len, "deadlockCB")))) {
@@ -136,7 +144,7 @@ public:
                                                                         strlen(node_key_buffer_),
                                                                         buffer_row_key,
                                                                         row_key_str_len);
-      const ObString &cur_query_str = session_facts.current_query_;
+      const ObString &cur_query_str = sess_guard->get_current_query_string();
       ObTransDeadlockDetectorAdapter::copy_str_and_translate_apostrophe(cur_query_str.ptr(),
                                                                         cur_query_str.length(),
                                                                         buffer_current_sql,
@@ -172,7 +180,6 @@ private:
   ObTransID self_trans_id_;
   char node_key_buffer_[128];
   const uint32_t sess_id_;
-  query::ObIDeadlockSessionService *session_service_;
 };
 /*******************************************/
 
@@ -180,6 +187,8 @@ class ObLockWaitMgr: public share::ObThreadPool
 {
 public:
   friend class ObDeadLockChecker;
+  friend class observer::ObAllVirtualLockWaitStat;
+
 public:
   enum { LOCK_BUCKET_COUNT = 16384};
   static const int64_t OB_SESSPAIR_COUNT = 16;
@@ -196,13 +205,8 @@ public:
   ObLockWaitMgr();
   ~ObLockWaitMgr();
 
-  static int server_module_init(
-      ObLockWaitMgr *&lock_wait_mgr,
-      query::ObIDeadlockSessionService &session_service,
-      data_plane::ObILockWaitService &repost_service);
-  int init(
-      query::ObIDeadlockSessionService &session_service,
-      data_plane::ObILockWaitService &repost_service);
+  static int mtl_init(ObLockWaitMgr *&lock_wait_mgr);
+  int init();
   bool is_inited() { return is_inited_; };
   int start();
   void stop();
@@ -227,33 +231,39 @@ public:
   // needed. And if so, it will push the request into the lock_wait_mgr based on
   // whether request encounters a conflict and needs to retry
   bool post_process(bool need_retry, bool& need_wait);
+  void delay_header_node_run_ts(const uint64_t hash);
   // setup the retry parameter on the request
   int post_lock(const int tmp_ret,
                 const ObTabletID &tablet_id,
                 const ObStoreRowkey &key,
                 const int64_t timeout,
+                const bool is_remote_sql,
                 const int64_t last_compact_cnt,
                 const int64_t total_trans_node_cnt,
                 const uint32_t sess_id,
                 const transaction::ObTransID &tx_id,
                 const transaction::ObTransID &holder_tx_id,
+                const ObLSID &ls_id,
                 ObFunction<int(bool &, bool &)> &rechecker);
   int post_lock(const int tmp_ret,
                 const ObTabletID &tablet_id,
                 const transaction::tablelock::ObLockID &lock_id,
                 const int64_t timeout,
+                const bool is_remote_sql,
                 const int64_t last_compact_cnt,
                 const int64_t total_trans_node_cnt,
                 const uint32_t sess_id,
                 const transaction::ObTransID &tx_id,
                 const transaction::ObTransID &holder_tx_id,
                 const transaction::tablelock::ObTableLockMode &lock_mode,
+                const ObLSID &ls_id,
                 ObFunction<int(bool &need_wait)> &check_need_wait);
-  // when removing the callbacks of uncommitted transaction, we need move
+  // when removing the callbacks of uncommitted transaction, we need transfer
   // the conflict dependency from rows to transactions
   int transform_row_lock_to_tx_lock(const ObTabletID &tablet_id,
                                     const Key &key,
-                                    const transaction::ObTransID &tx_id);
+                                    const transaction::ObTransID &tx_id,
+                                    const ObAddr &tx_scheduler);
   // wakeup the request waiting on the row
   void wakeup(const ObTabletID &tablet_id, const Key& key);
   // wakeup the request waiting on the transaction
@@ -326,8 +336,6 @@ private:
 
 private:
   bool is_inited_;
-  query::ObIDeadlockSessionService *session_service_;
-  data_plane::ObILockWaitService *repost_service_;
   Hash hash_;
   int64_t sequence_[LOCK_BUCKET_COUNT];
   char hash_buf_[sizeof(SpHashNode) * LOCK_BUCKET_COUNT];

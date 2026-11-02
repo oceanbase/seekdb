@@ -30,7 +30,7 @@ namespace observer
 typedef std::pair<uint64_t, uint64_t> StatKey;
 typedef common::hash::ObHashMap<StatKey, ObOptDmlStat> DmlStatMap;
 
-class ObOptDmlStatMapGetter : public common::ObIOptDmlStatConsumer
+class ObOptDmlStatMapGetter
 {
 public:
   explicit ObOptDmlStatMapGetter(common::ObScanner &scanner,
@@ -45,7 +45,7 @@ public:
       cur_row_(cur_row)
   {}
   virtual ~ObOptDmlStatMapGetter() {};
-  int consume(ObOptDmlStat &dml_stat) override;
+  int operator() (common::hash::HashMapPair<StatKey, ObOptDmlStat> &entry);
   DISALLOW_COPY_AND_ASSIGN(ObOptDmlStatMapGetter);
 private:
   common::ObScanner &scanner_;
@@ -64,6 +64,7 @@ public:
   virtual ~ObAllVirtualDMmlStats();
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
+  virtual int inner_open() override;
 private:
   enum COLUMNS
   {

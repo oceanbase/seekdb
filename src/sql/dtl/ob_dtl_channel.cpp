@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
-#include "config_bridge.h"
 #include "ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
 
@@ -25,13 +24,14 @@ namespace oceanbase {
 namespace sql {
 namespace dtl {
 
-ObDtlChannel::ObDtlChannel(uint64_t id)
+ObDtlChannel::ObDtlChannel(uint64_t id, const common::ObAddr &peer, DtlChannelType type)
     : cond_(),
       pins_(0),
       id_(id),
       done_(false),
-      send_buffer_size_(config::dtl_buffer_size()),
+      send_buffer_size_(GCONF.dtl_buffer_size),
       msg_watcher_(),
+      peer_(peer),
       channel_loop_(nullptr),
       dfc_(nullptr),
       first_recv_msg_(true),
@@ -44,9 +44,12 @@ ObDtlChannel::ObDtlChannel(uint64_t id)
       is_px_channel_(false),
       ignore_error_(false),
       loop_idx_(OB_INVALID_INDEX_INT64),
+      compressor_type_(common::ObCompressorType::NONE_COMPRESSOR),
       owner_mod_(DTLChannelOwner::INVALID_OWNER),
       thread_id_(0),
       enable_channel_sync_(false),
+      channel_type_(type),
+      send_by_tenant_(false),
       prev_link_(nullptr),
       next_link_(nullptr)
 {

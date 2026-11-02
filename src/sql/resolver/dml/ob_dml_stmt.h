@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_SQL_STMT_H_
 #define OCEANBASE_SQL_STMT_H_
-#include "data_plane/access/ob_tablet_scan.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_mod_define.h"
@@ -30,8 +29,7 @@
 #include "sql/resolver/dml/ob_raw_expr_sets.h"
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
-#include "data_plane/access/ob_tablet_scan.h"
-#include "query/vector/ob_vector_index_param.h"
+#include "observer/vector_index/ob_vector_index_param.h"
 
 namespace oceanbase
 {
@@ -46,7 +44,8 @@ enum MulModeTableType {
   INVALID_TABLE_TYPE = 0,
   OB_ORA_JSON_TABLE_TYPE, // 1
   OB_ORA_XML_TABLE_TYPE = 2,
-  OB_UNNEST_TABLE_TYPE = 3,
+  OB_RB_ITERATE_TABLE_TYPE = 3,
+  OB_UNNEST_TABLE_TYPE = 4,
 };
 
 typedef struct ObJtColBaseInfo
@@ -145,10 +144,13 @@ struct TableItem
     for_update_ = false;
     for_update_wait_us_ = -1;
     skip_locked_ = false;
+    need_expand_rt_mv_ = false;
+    mview_id_ = common::OB_INVALID_ID;
+    mr_mv_flags_ = 0;
     node_ = NULL;
     view_base_item_ = NULL;
-    snapshot_query_expr_ = nullptr;
-    snapshot_query_type_ = SnapshotQueryType::NOT_USING;
+    flashback_query_expr_ = nullptr;
+    flashback_query_type_ = FlashBackQueryType::NOT_USING;
     function_table_expr_ = nullptr;
     ddl_schema_version_ = 0;
     ddl_table_id_ = common::OB_INVALID_ID;
@@ -156,11 +158,15 @@ struct TableItem
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
     sample_info_ = nullptr;
+    // assign default value for compatibility
+    catalog_name_ = OB_INTERNAL_CATALOG_NAME;
   }
 
   virtual TO_STRING_KV(N_TID, table_id_,
                N_TABLE_NAME, table_name_,
                N_ALIAS_NAME, alias_name_,
+               N_SYNONYM_NAME, synonym_name_,
+               "synonym_db_name", synonym_db_name_,
                N_QB_NAME, qb_name_,
                N_TABLE_TYPE, static_cast<int32_t>(type_),
                //"recursive union fake table", is_recursive_union_fake_table_,
@@ -174,8 +180,9 @@ struct TableItem
                K_(ddl_schema_version), K_(ddl_table_id),
                K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type),
                KPC_(function_table_expr),
-               K_(snapshot_query_type), KPC_(snapshot_query_expr), K_(table_type),
-               K_(exec_params), KPC_(sample_info));
+               K_(flashback_query_type), KPC_(flashback_query_expr), K_(table_type),
+               K_(exec_params), KPC_(sample_info), K_(mview_id), K_(need_expand_rt_mv),
+               K_(catalog_name));
 
   enum TableType
   {
@@ -209,9 +216,10 @@ struct TableItem
     FAKE_CTE
   };
 
-  enum SnapshotQueryType
+  enum FlashBackQueryType
   {
     NOT_USING,
+    USING_TIMESTAMP,
     USING_SCN
   };
   //this table resolved from schema, is base table or alias from base table
@@ -226,17 +234,18 @@ struct TableItem
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
-  bool is_extended_all_or_user_sys_view() const
+  bool is_synonym() const { return !synonym_name_.empty(); }
+  bool is_oracle_all_or_user_sys_view() const
   {
-    return (is_extended_sys_view_table(ref_id_) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
+    return (is_ora_sys_view_table(ref_id_) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
   }
-  bool is_extended_dba_sys_view() const
+  bool is_oracle_dba_sys_view() const
   {
-    return (is_extended_sys_view_table(ref_id_) && table_name_.prefix_match("DBA_"));
+    return (is_ora_sys_view_table(ref_id_) && table_name_.prefix_match("DBA_"));
   }
-  bool is_extended_all_or_user_sys_view_for_alias() const
+  bool is_oracle_all_or_user_sys_view_for_alias() const
   {
-    return ((database_name_ == OB_EXTENDED_SYS_SCHEMA_NAME) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
+    return ((database_name_ == OB_ORA_SYS_SCHEMA_NAME) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
   }
   bool access_all_part() const { return part_ids_.empty(); }
   int deep_copy(ObIRawExprCopier &expr_copier,
@@ -245,11 +254,11 @@ struct TableItem
   const common::ObString &get_table_name() const { return alias_name_.empty() ? table_name_ : alias_name_; }
   const common::ObString &get_object_name() const
   {
-    return alias_name_.empty() ? table_name_ : alias_name_;
+    return alias_name_.empty() ? (synonym_name_.empty() ? table_name_ : synonym_name_) : alias_name_;
   }
   const common::ObString &get_object_db_name() const
   {
-    return database_name_;
+    return synonym_name_.empty() ? database_name_ : synonym_db_name_;
   }
   // only can be used in resolve phase
   const TableItem &get_base_table_item() const
@@ -269,6 +278,8 @@ struct TableItem
   uint64_t    table_id_;
   common::ObString    table_name_;
   common::ObString    alias_name_;
+  common::ObString    synonym_name_;
+  common::ObString    synonym_db_name_;
   common::ObString    qb_name_; // used for hint
   TableType   type_;
   // type == BASE_TABLE? ref_id_ is the real Id of the schema
@@ -287,11 +298,14 @@ struct TableItem
   bool for_update_;
   int64_t for_update_wait_us_;//0 means nowait, -1 means infinite
   bool skip_locked_;
+  bool need_expand_rt_mv_; // for real-time materialized view
+  uint64_t mview_id_; // for materialized view, ref_id_ is mv container table id, mview_id_ is the view id
+  uint64_t mr_mv_flags_; // for major refresh mview
   const ParseNode* node_;
   // base table item for updatable view, can not access after the resolve phase
   const TableItem *view_base_item_;
-  ObRawExpr *snapshot_query_expr_;
-  SnapshotQueryType snapshot_query_type_;
+  ObRawExpr *flashback_query_expr_;
+  FlashBackQueryType flashback_query_type_;
   ObRawExpr *function_table_expr_;
   int64_t ddl_schema_version_;
   int64_t ddl_table_id_;
@@ -303,6 +317,7 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
+  common::ObString catalog_name_;
   // sample scan infos
   SampleInfo *sample_info_;
 };
@@ -885,6 +900,20 @@ public:
   int get_table_items(common::ObIArray<int64_t> &table_ids) const;
   int get_CTE_table_items(ObIArray<TableItem *> &cte_table_items) const;
   int get_all_CTE_table_items_recursive(ObIArray<TableItem *> &cte_table_items) const;
+  const common::ObIArray<uint64_t> &get_nextval_sequence_ids() const { return nextval_sequence_ids_; }
+  common::ObIArray<uint64_t> &get_nextval_sequence_ids() { return nextval_sequence_ids_; }
+  const common::ObIArray<uint64_t> &get_currval_sequence_ids() const { return currval_sequence_ids_; }
+  common::ObIArray<uint64_t> &get_currval_sequence_ids() { return currval_sequence_ids_; }
+  int add_nextval_sequence_id(uint64_t id) { return nextval_sequence_ids_.push_back(id); }
+  int add_currval_sequence_id(uint64_t id) { return currval_sequence_ids_.push_back(id); }
+  bool has_sequence() const { return nextval_sequence_ids_.count() > 0 || currval_sequence_ids_.count() > 0; }
+  void clear_sequence()
+  {
+    nextval_sequence_ids_.reset();
+    currval_sequence_ids_.reset();
+  }
+  bool has_part_key_sequence() const { return has_part_key_sequence_; }
+  void set_has_part_key_sequence(const bool v) { has_part_key_sequence_ = v; }
   int add_condition_expr(ObRawExpr *expr) { return condition_exprs_.push_back(expr); }
   int add_condition_exprs(const common::ObIArray<ObRawExpr*> &exprs) { return append(condition_exprs_, exprs); }
   //move from ObStmt
@@ -980,6 +1009,8 @@ public:
                N_TABLE, table_items_,
                N_PARTITION_EXPR, part_expr_items_,
                N_COLUMN, column_items_,
+               N_COLUMN, nextval_sequence_ids_,
+               N_COLUMN, currval_sequence_ids_,
                N_WHERE, condition_exprs_,
                N_ORDER_BY, order_items_,
                N_LIMIT, limit_count_expr_,
@@ -996,6 +1027,11 @@ public:
   bool has_for_update() const;
   bool has_ora_rowscn() const;
   int has_special_expr(const ObExprInfoFlag flag, bool &has) const;
+  int get_sequence_expr(ObRawExpr *&expr,
+                        const common::ObString seq_name, // sequence object name
+                        const common::ObString seq_action, // NEXTVAL or CURRVAL
+                        const uint64_t seq_id) const;
+  int get_sequence_exprs(common::ObIArray<ObRawExpr *> &exprs) const;
   int remove_subquery_expr(const ObRawExpr *expr);
   // rebuild query ref exprs
   int adjust_subquery_list();
@@ -1011,6 +1047,8 @@ public:
   static int extract_equal_condition_from_joined_table(const TableItem *table,
                                                        ObIArray<ObRawExpr *> &equal_set_conditions,
                                                        const bool is_strict);
+  virtual bool is_returning() const { return false; }
+  virtual bool has_instead_of_trigger() const { return false; }
   int has_lob_column(int64_t table_id, bool &has_lob)const;
   int has_virtual_generated_column(int64_t table_id, 
                                    bool &has_virtual_col, 
@@ -1042,11 +1080,13 @@ public:
 
   int check_has_subquery_in_function_table(bool &has_subquery_in_function_table) const;
 
+  int disable_writing_materialized_view() const;
   int formalize_query_ref_exprs();
 
   int formalize_query_ref_exec_params(ObStmtExecParamFormatter &formatter,
                                       bool need_replace);
 
+  int check_has_cursor_expression(bool &has_cursor_expr) const;
   bool is_values_table_query() const;
   bool is_const_values_table_query() const;
 
@@ -1133,14 +1173,21 @@ protected:
   bool has_top_limit_; // no longer used, should be removed
   //if the stmt  contains user variable assignment
   //such as @a:=123
-  //the assignment map is serialized with the statement when needed
+  //we may need to serialize the map to remote server
   bool is_contains_assignment_;
   bool affected_last_insert_id_;
+  // insert into values (s1.nextval, ...) s1.nextval corresponds to a partition column exactly at that position
+  // Just set this flag to true, hinting to generate multi-dml plan
+  bool has_part_key_sequence_;
+  // sequence object count, used for ObSequence to calculate nextval, duplicates removed
+  common::ObSEArray<uint64_t, 2> nextval_sequence_ids_;
+  // sequence object count, used to record the sequence id of currval, duplicates removed
+  common::ObSEArray<uint64_t, 2> currval_sequence_ids_;
   // `table_items` are generated during resolve_from_clause, in order from left to right of the SQL statement using push_back.
   common::ObSEArray<TableItem *, 4, common::ModulePageAllocator, true> table_items_;
   common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> column_items_;
   common::ObSEArray<ObRawExpr *, 16, common::ModulePageAllocator, true> condition_exprs_;
-  // Store pseudo-column expressions shared by statement processing.
+  // Store shared class pseudo list expressions, we consider that besides the general pseudo list expression ObPseudoColumnRawExpr, sequence also belongs to pseudo column
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> pseudo_column_like_exprs_;
   ObDMLStmtTableHash tables_hash_;
   common::ObSEArray<ObQueryRefRawExpr*, 4, common::ModulePageAllocator, true> subquery_exprs_;
@@ -1200,6 +1247,7 @@ int deep_copy_stmt_objects(ObIAllocator &allocator,
       } else {
         new_obj = new (ptr) T();
         if (OB_FAIL(new_obj->deep_copy(expr_copier, *obj))) {
+          SQL_RESV_LOG(WARN, "failed to deep copy obj", K(ret));
         }
       }
     }
@@ -1220,7 +1268,9 @@ int deep_copy_stmt_objects(ObIRawExprCopier &expr_copier,
     const T &obj = objs.at(i);
     T new_obj;
     if (OB_FAIL(new_obj.deep_copy(expr_copier, obj))) {
+      SQL_RESV_LOG(WARN, "failed to deep copy object", K(ret));
     } else if (OB_FAIL(new_objs.push_back(new_obj))) {
+      SQL_RESV_LOG(WARN, "failed to push back new obj", K(ret));
     }
   }
   return ret;
@@ -1233,6 +1283,7 @@ ObDMLStmt::get_column_exprs(ObIArray<T*> &column_exprs) const
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < column_items_.count(); ++i) {
     if (OB_FAIL(column_exprs.push_back(column_items_.at(i).expr_))) {
+      SQL_RESV_LOG(WARN, "failed to push back column exprs", K(ret));
     }
   }
   return ret;
@@ -1246,6 +1297,7 @@ ObDMLStmt::get_column_exprs(uint64_t table_id, ObIArray<T*> &table_cols) const
   for (int64_t i = 0; OB_SUCC(ret) && i < column_items_.count(); ++i) {
     if (column_items_.at(i).table_id_ == table_id) {
       if (OB_FAIL(table_cols.push_back(column_items_.at(i).expr_))) {
+        SQL_RESV_LOG(WARN, "failed to push back column exprs", K(ret));
       }
     }
   }

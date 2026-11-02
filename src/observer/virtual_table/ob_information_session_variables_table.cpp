@@ -53,7 +53,7 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "allocator or session_ is NULL", K(ret));
   } else if (OB_ISNULL(sys_variable_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "system variable schema should not be NULL", K(ret));
+    SERVER_LOG(WARN, "tenant schema should not be NULL", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -93,6 +93,7 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
               case VARIABLE_VALUE: {
                   //deal with read_only
                   if (SYS_VAR_READ_ONLY == sys_var->get_type()) {
+                    //replace with tenant schema
                     if (sys_variable_schema_->is_read_only()) {
                       cells[cell_idx].set_varchar("ON");
                     } else {
@@ -101,6 +102,7 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
                   } else {
                     sys_var_show_str.reset();
                     if (OB_FAIL(sys_var->to_show_str(*allocator_, *session_, sys_var_show_str))) {
+                      SERVER_LOG(WARN, "fail to convert to show string", K(ret), K(*sys_var));
                     } else {
                       cells[cell_idx].set_varchar(sys_var_show_str);
                     }

@@ -34,6 +34,7 @@
 #include "ob_log_window_function.h"
 #include "ob_log_select_into.h"
 #include "ob_log_topk.h"
+#include "ob_log_sequence.h"
 #include "ob_log_insert.h"
 #include "ob_log_granule_iterator.h"
 #include "ob_log_monitoring_dump.h"
@@ -41,6 +42,7 @@
 #include "ob_log_temp_table_insert.h"
 #include "ob_log_temp_table_access.h"
 #include "ob_log_temp_table_transformation.h"
+#include "ob_log_err_log.h"
 #include "ob_log_stat_collector.h"
 #include "ob_del_upd_log_plan.h"
 #include "ob_log_values_table_access.h"
@@ -230,6 +232,13 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     } else { /* do nothing */ }
     break;
   }
+  case LOG_SEQUENCE: {
+    ptr = allocator_.alloc(sizeof(ObLogSequence));
+    if (NULL != ptr) {
+      ret_op = new (ptr) ObLogSequence(plan);
+    } else { /* do nothing */ }
+    break;
+  }
   case LOG_MONITORING_DUMP: {
     ptr = allocator_.alloc(sizeof(ObLogMonitoringDump));
     if (NULL != ptr) {
@@ -279,6 +288,13 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     }
     break;
   }
+  case LOG_ERR_LOG: {
+    ptr = allocator_.alloc(sizeof(ObLogErrLog));
+    if (NULL != ptr) {
+      ret_op = new (ptr) ObLogErrLog(plan);
+    }
+    break;
+  }
   case LOG_STAT_COLLECTOR: {
     ptr = allocator_.alloc(sizeof(ObLogStatCollector));
     if (NULL != ptr) {
@@ -316,6 +332,7 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     ret_op->set_type(type);
     int ret = OB_SUCCESS;
     if (OB_FAIL(op_store_.store_obj(ret_op))) {
+      LOG_WARN("store operator failed", K(ret));
       ret_op->~ObLogicalOperator();
       ret_op = NULL;
     }

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_collection_construct.h"
-#include "sql/pl/ob_pl_package.h"
+#include "pl/ob_pl_package.h"
 
 namespace oceanbase
 {
@@ -48,7 +48,7 @@ int ObExprCollectionConstruct::ExtraInfo::deep_copy(common::ObIAllocator &alloca
 ObExprCollectionConstruct::ObExprCollectionConstruct(common::ObIAllocator &alloc)
     : ObFuncExprOperator(
         alloc, T_FUN_PL_COLLECTION_CONSTRUCT, N_PL_COLLECTION_CONSTRUCT,
-        PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
+        PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false, INTERNAL_IN_ORACLE_MODE),
       type_(pl::ObPLType::PL_INVALID_TYPE),
       not_null_(false),
       elem_type_(),
@@ -77,6 +77,7 @@ int ObExprCollectionConstruct::cg_expr(ObExprCGCtx &op_cg_ctx,
     ExtraInfo *info = OB_NEWx(ExtraInfo, (&alloc), alloc, T_FUN_PL_COLLECTION_CONSTRUCT);
     if (NULL == info) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret));
     } else {
       const ObCollectionConstructRawExpr &pl_expr
           = static_cast<const ObCollectionConstructRawExpr&>(raw_expr);
@@ -108,6 +109,7 @@ int ObExprCollectionConstruct::eval_collection_construct(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not support", K(ret));
   return ret;
 }
 

@@ -34,6 +34,8 @@ OB_DEF_DESERIALIZE(ObJoinFilterNdv)
 {
   int ret = OB_SUCCESS;
   hllc_.set_deserialize_allocator(&allocator_);
+  // ObJoinFilterNdv may send from a lower version(QC), which don't have hllc, make sure you will
+  // not deserialize it
   LST_DO_CODE(OB_UNIS_DECODE, in_filter_active_, in_filter_ndv_, use_hllc_estimate_ndv_,
               bf_ndv_, hllc_);
   return ret;
@@ -66,6 +68,7 @@ int ObJoinFilterNdv::gather_piece_ndv(const ObJoinFilterNdv &piece_ndv, ObJoinFi
 
   // 2.gather infomation which used to estimate ndv of *bloom filter*
   if (total_ndv.use_hllc_estimate_ndv_ && OB_FAIL(total_ndv.hllc_.merge(piece_ndv.hllc_))) {
+    LOG_WARN("fail to merge hyperloglog", K(ret));
   }
   return ret;
 }
@@ -75,8 +78,10 @@ int ObJoinFilterCountRowPieceMsgListener::on_message(ObJoinFilterCountRowPieceMs
                                                      const ObJoinFilterCountRowPieceMsg &pkt)
 {
   int ret = OB_SUCCESS;
+  LOG_TRACE("receive a piece msg", K(pkt));
   if (pkt.op_id_ != piece_ctx.op_id_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected piece msg", K(ret), K(pkt), K(piece_ctx));
   } else if (piece_ctx.received_ >= piece_ctx.task_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("receive too much piece msg", K(pkt), K(piece_ctx.received_), K(piece_ctx.task_cnt_));
@@ -84,21 +89,25 @@ int ObJoinFilterCountRowPieceMsgListener::on_message(ObJoinFilterCountRowPieceMs
   } else if (!pkt.each_sqc_has_full_data_) {
     // if each sqc only has partial data of left, gather all k(k=dop) thread's result
     piece_ctx.total_rows_ += pkt.total_rows_;
-    if (OB_UNLIKELY(piece_ctx.ndv_info_.count() != pkt.ndv_info_.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("join filter ndv info count mismatch", K(ret), K(piece_ctx.ndv_info_.count()),
-               K(pkt.ndv_info_.count()));
+    if (piece_ctx.ndv_info_.count() == 0
+        && OB_FAIL(ObJoinFilterCountRowPieceMsgCtx::init_target_ndv_info(pkt.ndv_info_,
+                                                                         piece_ctx.ndv_info_))) {
+      LOG_WARN("failed to init ndv_info", K(ret));
     }
     for (int64_t i = 0; i < pkt.ndv_info_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(
             ObJoinFilterNdv::gather_piece_ndv(pkt.ndv_info_.at(i), piece_ctx.ndv_info_.at(i)))) {
+        LOG_WARN("fail to gather piece ndv", K(ret), K(i), K(pkt.ndv_info_),
+                 K(piece_ctx.ndv_info_));
       }
       LOG_TRACE("[NDV_BLOOM_FILTER][DataHub] after merge hllc:", K(i), K(piece_ctx.received_),
                 K(piece_ctx.ndv_info_.at(i)), K(pkt.ndv_info_.at(i).hllc_.estimate()),
                 K(piece_ctx.ndv_info_.at(i).hllc_.estimate()));
     }
     if (OB_SUCC(ret) && piece_ctx.task_cnt_ == piece_ctx.received_) {
+      LOG_TRACE("send whole msg", K(pkt), K(piece_ctx.total_rows_));
       if (OB_FAIL(piece_ctx.send_whole_msg(sqcs))) {
+        LOG_WARN("send whole msg failed", K(ret));
       }
       IGNORE_RETURN piece_ctx.reset_resource();
     }
@@ -111,19 +120,18 @@ int ObJoinFilterCountRowPieceMsgListener::on_message(ObJoinFilterCountRowPieceMs
         if (sqc_row_info.received_ >= sqc_row_info.expected_) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("receive too much piece msg for one sqc", K(pkt), K(sqc_row_info));
-        } else if (OB_UNLIKELY(sqc_row_info.ndv_info_.count() != pkt.ndv_info_.count())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("join filter ndv info count mismatch", K(ret), K(sqc_row_info.ndv_info_.count()),
-                   K(pkt.ndv_info_.count()));
         } else {
           sqc_row_info.received_ += pkt.piece_count_;
           sqc_row_info.total_rows_ += pkt.total_rows_;
           for (int64_t i = 0; i < pkt.ndv_info_.count() && OB_SUCC(ret); ++i) {
             if(OB_FAIL(ObJoinFilterNdv::gather_piece_ndv(pkt.ndv_info_.at(i), sqc_row_info.ndv_info_.at(i)))) {
+              LOG_WARN("fail to gather piece ndv", K(ret), K(i), K(pkt.ndv_info_), K(piece_ctx.ndv_info_));
             }
           }
           if (OB_SUCC(ret) && sqc_row_info.expected_ == sqc_row_info.received_) {
+            LOG_TRACE("send whole msg to one sqc", K(pkt), K(sqc_row_info));
             if (OB_FAIL(piece_ctx.send_whole_msg_to_one_sqc(&sqcs.at(i), sqc_row_info))) {
+              LOG_WARN("send whole msg failed", K(ret));
             }
           }
           break;
@@ -150,6 +158,7 @@ int ObJoinFilterCountRowPieceMsgCtx::alloc_piece_msg_ctx(const ObJoinFilterCount
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate for piece msg ctx");
   } else if (OB_FAIL(coord_info.dfo_mgr_.find_dfo_edge(pkt.target_dfo_id_, target_dfo))) {
+    LOG_WARN("fail find dfo", K(pkt), K(ret));
   } else {
     ObIArray<ObPxSqcMeta> &sqcs = target_dfo->get_sqcs();
     msg_ctx = new (buf) ObJoinFilterCountRowPieceMsgCtx(
@@ -159,19 +168,23 @@ int ObJoinFilterCountRowPieceMsgCtx::alloc_piece_msg_ctx(const ObJoinFilterCount
       // for shared hash join(bc2host none shuffle way), each sqc has full data, piece msg is only
       // gathered each sqc inner
       if (OB_FAIL(join_filter_count_row_ctx->sqc_row_infos_.prepare_allocate(sqcs.count()))) {
+        LOG_WARN("failed to prepare_allocate sqc_row_infos_");
       } else {
         for (int64_t i = 0; i < sqcs.count() && OB_SUCC(ret); ++i) {
           JoinFilterSqcRowInfo &sqc_row_info = join_filter_count_row_ctx->sqc_row_infos_.at(i);
           sqc_row_info.sqc_id_ = sqcs.at(i).get_sqc_id();
           sqc_row_info.expected_ = sqcs.at(i).get_task_count();
           if (OB_FAIL(init_target_ndv_info(pkt.ndv_info_, sqc_row_info.ndv_info_))) {
+            LOG_WARN("failed to init ndv_info", K(ret));
           }
         }
       }
     } else {
       if (OB_FAIL(init_target_ndv_info(pkt.ndv_info_, join_filter_count_row_ctx->ndv_info_))) {
+        LOG_WARN("failed to init ndv_info", K(ret));
       }
     }
+    LOG_TRACE("allocate piece msg ctx", K(pkt));
   }
   return ret;
 }
@@ -184,6 +197,7 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg(ObIArray<ObPxSqcMeta> &sqcs)
   whole_msg.op_id_ = op_id_;
   for (int64_t i = 0; i < ndv_info_.count() && OB_SUCC(ret); i++) {
     if (OB_FAIL(whole_msg.ndv_info_.push_back(ndv_info_.at(i)))) {
+      LOG_WARN("failed to push_back ObJoinNdvInfo", K(ret));
     } else if (whole_msg.ndv_info_.at(i).use_hllc_estimate_ndv_) {
       whole_msg.ndv_info_.at(i).bf_ndv_ = whole_msg.ndv_info_.at(i).hllc_.estimate();
       //we need is the ndv that already computed by hllc
@@ -195,12 +209,17 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg(ObIArray<ObPxSqcMeta> &sqcs)
     dtl::ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg, timeout_ts_))) {
+      LOG_WARN("fail push data to channel", K(ret));
     } else if (OB_FAIL(ch->flush(true, false))) {
+      LOG_WARN("fail flush dtl data", K(ret));
     } else {
+      LOG_DEBUG("dispatched barrier whole msg", K(idx), K(cnt), K(whole_msg), K(*ch));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
+    LOG_WARN("failed to wait response", K(ret));
   }
   return ret;
 }
@@ -214,6 +233,7 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg_to_one_sqc(ObPxSqcMeta *sqc,
   whole_msg.op_id_ = op_id_;
   for (int64_t i = 0; i < sqc_row_info.ndv_info_.count() && OB_SUCC(ret); i++) {
     if (OB_FAIL(whole_msg.ndv_info_.push_back(sqc_row_info.ndv_info_.at(i)))) {
+      LOG_WARN("failed to push_back ObJoinNdvInfo", K(ret));
     } else if (whole_msg.ndv_info_.at(i).use_hllc_estimate_ndv_) {
       whole_msg.ndv_info_.at(i).bf_ndv_ = whole_msg.ndv_info_.at(i).hllc_.estimate();
       //we need is the ndv that already computed by hllc
@@ -225,12 +245,17 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg_to_one_sqc(ObPxSqcMeta *sqc,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null expected", K(ret));
   } else if (OB_FAIL(ch->send(whole_msg, timeout_ts_))) {
+    LOG_WARN("fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush(true, false))) {
+    LOG_WARN("fail flush dtl data", K(ret));
   } else {
+    LOG_DEBUG("dispatched jf count row whole msg", K(whole_msg), K(*ch));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ch->flush())) {
+    LOG_WARN("failed to wait for channel", K(ret), "peer", ch->get_peer());
   }
   return ret;
 }

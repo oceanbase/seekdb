@@ -22,21 +22,18 @@
 #include "storage/ob_storage_rpc_arg.h"
 #include "observer/ob_server_schema_updater.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_share_util.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "observer/ob_uniq_task_queue.h"
-#include "observer/ob_tablet_runtime_meta_updater.h"
-#include "query/change_stream/ob_change_stream_service.h"
-#include "query/command/ob_local_command_service.h"
-#include "rootserver/ob_rootserver_local_runtime.h"
+#include "observer/report/ob_tablet_table_updater.h"
+#include "observer/ob_standby_schema_refresh_trigger.h"
 
 namespace oceanbase
 {
 namespace share
 {
-struct ObTabletLocalChecksumItem;
-class ObDagScheduler;
+struct ObTabletReplicaChecksumItem;
+class ObTenantDagScheduler;
 class ObIDag;
 }
 namespace storage
@@ -48,71 +45,92 @@ namespace observer
 {
 class ObServer;
 class ObServerInstance;
+class ObRemoteLocationGetter;
 
 class ObSchemaReleaseTimeTask: public common::ObTimerTask
 {
 public:
   ObSchemaReleaseTimeTask();
   virtual ~ObSchemaReleaseTimeTask() {}
-  int init(ObServerSchemaUpdater &schema_updater);
-  void stop();
-  void wait();
-  void destroy();
+  int init(ObServerSchemaUpdater &schema_updater, int tg_id);
   virtual void runTimerTask() override;
 private:
   int schedule_();
 private:
   ObServerSchemaUpdater *schema_updater_;
-  common::ObTimer timer_;
   bool is_inited_;
 };
 
-class TelemetryTask {
+class TelemetryTask : public common::ObTimerTask {
 public:
-  TelemetryTask() = default;
-  int report();
+  TelemetryTask(bool embed_mode);
+  virtual void runTimerTask() override;
+  bool embed_mode_;
 };
 
-class ObService : public rootserver::ObIRootserverLocalRuntime,
-                  public query::ObILocalCommandService
+class ObService
 {
 public:
-  ObService(
-      const share::ObGlobalContext &gctx,
-      query::ObIChangeStreamService &change_stream_service);
+  explicit ObService(const ObGlobalContext &gctx);
   virtual ~ObService();
 
-  int init(common::ObMySQLProxy &sql_proxy);
-  int bootstrap();
-  int report_bootstrap_telemetry();
-  int start();
+  int init(common::ObMySQLProxy &sql_proxy,
+           bool need_bootstrap);
+  int start(bool embed_mode);
   void set_stop();
   void stop();
   void wait();
   int destroy();
 
-  // Build tablet report information locally.
+  //fill_tablet_replica: to build a tablet replica locally
+  // @params[in] tenant: tablet belongs to which tenant
+  // @params[in] ls_id: tablet belongs to which log stream
   // @params[in] tablet_id: the tablet to build
-  // @params[out] runtime_info: local runtime metadata for this tablet
-  // @params[out] tablet_checksum: local tablet data/column checksum
+  // @params[out] tablet_replica: infos about this tablet replica
+  // @params[out] tablet_checksum: infos about this tablet data/column checksum
+  // @params[in] need_checksum: whether to fill tablet_checksum
   // ATTENTION: If ls not exist, then OB_LS_NOT_EXIST
   //            If tablet not exist on that ls, then OB_TABLET_NOT_EXIST
-  int fill_tablet_runtime_info(const ObTabletID &tablet_id,
-      share::ObTabletRuntimeInfo &runtime_info,
-      share::ObTabletLocalChecksumItem &tablet_checksum);
+  int fill_tablet_report_info(const share::ObLSID &ls_id,
+      const ObTabletID &tablet_id,
+      share::ObTabletReplica &tablet_replica,
+      share::ObTabletReplicaChecksumItem &tablet_checksum,
+      const bool need_checksum = true);
 
   int update_baseline_schema_version(const int64_t schema_version);
   virtual const common::ObAddr &get_self_addr();
 
   ////////////////////////////////////////////////////////////////
   int check_frozen_scn(const obcall::ObCheckFrozenScnArg &arg);
+  int get_min_sstable_schema_version(
+      const obcall::ObGetMinSSTableSchemaVersionArg &arg,
+      obcall::ObGetMinSSTableSchemaVersionRes &result);
+  // ObCallSwitchSchemaP @RS DDL
+  int switch_schema(const obcall::ObSwitchSchemaArg &arg, obcall::ObSwitchSchemaResult &result);
   int calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res);
-  int build_ddl_local(const obcall::ObDDLLocalBuildArg &arg, obcall::ObDDLLocalBuildResult &res);
-  int check_and_cancel_ddl_complement_data_dag(const obcall::ObDDLLocalBuildArg &arg, bool &is_dag_exist);
-  int check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocalBuildArg &arg, bool &is_dag_exist);
+  int build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg, obcall::ObTabletSplitStartResult &res);
+  int build_split_tablet_data_finish_request(const obcall::ObTabletSplitFinishArg &arg, obcall::ObTabletSplitFinishResult &res);
+  int freeze_split_src_tablet(const obcall::ObFreezeSplitSrcTabletArg &arg, obcall::ObFreezeSplitSrcTabletRes &res, const int64_t abs_timeout_us);
+  int fetch_split_tablet_info(const obcall::ObFetchSplitTabletInfoArg &arg, obcall::ObFetchSplitTabletInfoRes &res, const int64_t abs_timeout_us);
+  int build_ddl_single_replica_request(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
+  int build_ddl_single_replica_request(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, obcall::ObDDLBuildSingleReplicaRequestResult &res);
+  int check_and_cancel_ddl_complement_data_dag(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, bool &is_dag_exist);
+  int check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, bool &is_dag_exist);
   int stop_partition_write(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result);
   int check_partition_log(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result);
   int get_wrs_info(const obcall::ObGetWRSArg &arg, obcall::ObGetWRSResult &result);
+  int broadcast_consensus_version(
+      const obcall::ObBroadcastConsensusVersionArg &arg,
+      obcall::ObBroadcastConsensusVersionRes &result);
+  ////////////////////////////////////////////////////////////////
+  int force_set_ls_as_single_replica(const obcall::ObForceSetLSAsSingleReplicaArg &arg);
+  int force_set_server_list(const obcall::ObForceSetServerListArg &arg, obcall::ObForceSetServerListResult &result);
+  int estimate_partition_rows(const obcall::ObEstPartArg &arg,
+                              obcall::ObEstPartRes &res) const;
+  int estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
+                                  obcall::ObEstBlockRes &res) const;
+  int estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
+                         obcall::ObEstSkipRateRes &res) const;
   ////////////////////////////////////////////////////////////////
   // ObCallMinorFreezeP @RS minor freeze
   int minor_freeze(const obcall::ObMinorFreezeArg &arg,
@@ -126,6 +144,18 @@ public:
       obcall::ObCheckSchemaVersionElapsedResult &result);
   // ObCallGetChecksumCalSnapshotP
 
+  // ObCallCheckMemtableCntP
+  int check_memtable_cnt(
+      const obcall::ObCheckMemtableCntArg &arg,
+      obcall::ObCheckMemtableCntResult &result);
+  // ObCallCheckMediumCompactionInfoListP
+  int check_medium_compaction_info_list_cnt(
+      const obcall::ObCheckMediumCompactionInfoListArg &arg,
+      obcall::ObCheckMediumCompactionInfoListResult &result);
+  int prepare_tablet_split_task_ranges(
+      const obcall::ObPrepareSplitRangesArg &arg,
+      obcall::ObPrepareSplitRangesRes &result);
+
   int check_modify_time_elapsed(
       const obcall::ObCheckModifyTimeElapsedArg &arg,
       obcall::ObCheckModifyTimeElapsedResult &result);
@@ -133,39 +163,63 @@ public:
   int check_ddl_tablet_merge_status(
     const obcall::ObDDLCheckTabletMergeStatusArg &arg,
     obcall::ObDDLCheckTabletMergeStatusResult &result);
+  ////////////////////////////////////////////////////////////////
+  // ObCallBatchSwitchRsLeaderP @RS leader coordinator & admin
+  int batch_switch_rs_leader(const ObAddr &arg);
+  // ObCallGetPartitionCountP @RS leader coordinator
+  int get_partition_count(obcall::ObGetPartitionCountResult &result);
+
+  ////////////////////////////////////////////////////////////////
+
+  // ObCallGetServerStatusP @RS
+  int get_server_resource_info(const obcall::ObGetServerResourceInfoArg &arg, obcall::ObGetServerResourceInfoResult &result);
   int get_server_resource_info(share::ObServerResourceInfo &resource_info);
   static int get_build_version(share::ObBuildVersion &build_version);
-  int get_build_version(char *buf, int64_t buf_len) override;
-  int load_all_special_system_packages() override;
-  int wait_system_package_ready(const common::ObTimeoutCtx &ctx) override;
+  int check_server_empty(const obcall::ObCheckServerEmptyArg &arg, obcall::Bool &is_empty);
+  int check_server_empty_with_result(const obcall::ObCheckServerEmptyArg &arg, obcall::ObCheckServerEmptyResult &result);
+  // ObCallIsEmptyServerP @RS bootstrap
+
+  ////////////////////////////////////////////////////////////////
   int load_leader_cluster_login_info();
-  // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
-  int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override;
-  int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg) override;
-  int update_opt_stat_monitoring_info(
-      const obcall::ObFlushOptStatArg &arg) override;
-  int set_tracepoint(const obcall::ObSetTracepointParam &param) override;
-  int cancel_sys_task(const share::ObTaskId &task_id) override;
-  int refresh_memory_stat() override;
-  int clear_expired_deadlock_events() override;
+  // ObDropReplicaP @RS::admin to drop replica
+  int set_ds_action(const obcall::ObDebugSyncActionArg &arg);
+  int report_replica(const obcall::ObReportSingleReplicaArg &arg);
+  // ObSyncPartitionTableP @RS empty_server_checker
+  int sync_partition_table(const obcall::Int64 &arg);
+  // ObCallSetTPP @RS::admin to set tracepoint
+  int set_tracepoint(const obcall::ObAdminSetTPArg &arg);
+  int cancel_sys_task(const share::ObTaskId &task_id);
+  int refresh_memory_stat();
+  int wash_memory_fragmentation();
   ////////////////////////////////////////////////////////////////
   // misc functions
 
+  int get_tenant_refreshed_schema_version(
+      const obcall::ObGetTenantSchemaVersionArg &arg,
+      obcall::ObGetTenantSchemaVersionResult &result);
   int submit_async_refresh_schema_task(const int64_t schema_version);
-  int check_server_empty(bool &server_empty) override;
-  int wait_until_change_stream_refreshed(
-      common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) override;
+  int init_tenant_config(
+      const obcall::ObInitTenantConfigArg &arg,
+      obcall::ObInitTenantConfigRes &result);
+  int check_server_empty(bool &server_empty);
+  int change_external_storage_dest(obcall::ObAdminSetConfigArg &arg);
 
 private:
+  int bootstrap();
+  int create_sys_ls();
+  int init_tenant_merge_info_();
   int inner_fill_tablet_info_(
       const ObTabletID &tablet_id,
       storage::ObLS *ls,
-      share::ObTabletRuntimeInfo &runtime_info,
-      share::ObTabletLocalChecksumItem &tablet_checksum);
-  int handle_server_freeze_req_(const obcall::ObMinorFreezeArg &arg);
-  int handle_tablet_freeze_req_(const common::ObTabletID &tablet_id);
-  int server_freeze_();
+      share::ObTabletReplica &tablet_replica,
+      share::ObTabletReplicaChecksumItem &tablet_checksum,
+      const bool need_checksum);
+  int set_server_id_(const int64_t server_id);
+
+  int handle_tenant_freeze_req_(const obcall::ObMinorFreezeArg &arg);
+  int handle_ls_freeze_req_(const obcall::ObMinorFreezeArg &arg);
+  int tenant_freeze_();
+  int handle_ls_freeze_req_(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
 private:
   bool inited_;
   volatile bool stopped_;
@@ -173,10 +227,11 @@ private:
   ObServerSchemaUpdater schema_updater_;
 
   //lease
-  const share::ObGlobalContext &gctx_;
-  query::ObIChangeStreamService &change_stream_service_;
+  const ObGlobalContext &gctx_;
   ObSchemaReleaseTimeTask schema_release_task_;
   TelemetryTask telemetry_task_;
+  share::schema::ObStandbySchemaRefreshTrigger standby_schema_refresh_trigger_;
+  bool need_bootstrap_;
 };
 
 }//end namespace observer

@@ -1,0 +1,10 @@
+1	aasdfasdf	-1
+2	aasd'fasdf'	-2
+3	'aasd'fasdf'	-3
+4	'aasd	fasdf'	-4
+5	\'a\	a\nsd''''fasdf'	-5
+6	'asdf	qqqq
+asdf'	-6
+7'	\'asdf\'	'-7'
+8	'	-8
+9	asdfa\	-9

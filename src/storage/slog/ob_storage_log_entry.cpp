@@ -111,7 +111,7 @@ int ObStorageLogEntry::check_entry_integrity(bool dump_content) const
     STORAGE_REDO_LOG(WARN, "Magic doesn't match", K(ret), K_(magic));
   } else if (entry_checksum_ != calc_entry_checksum()) {
     ret = OB_CHECKSUM_ERROR;
-    STORAGE_REDO_LOG(ERROR, "Checksum error", K(ret), K_(entry_checksum));
+    STORAGE_REDO_LOG(WARN, "Checksum error", K(ret), K_(entry_checksum));
   }
   if (OB_FAIL(ret) && dump_content) {
     STORAGE_REDO_LOG(WARN, "check_entry_integrity error: ", K(*this));
@@ -153,15 +153,25 @@ DEFINE_SERIALIZE(ObStorageLogEntry)
   }else {
     int64_t new_pos = pos;
     if (OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, magic_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize magic_", K_(magic), K(ret));
     } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, version_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize version_", K_(version), K(ret));
     } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, entry_len_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize entry_len_", K_(entry_len), K(ret));
     } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, rez_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize rez_", K_(rez), K(ret));
     } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, cmd_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize cmd_", K_(cmd), K(ret));
     } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, data_len_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize data_len_", K_(data_len), K(ret));
     } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, seq_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize seq_", K_(seq), K(ret));
     } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, timestamp_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize timestamp_", K_(timestamp), K(ret));
     } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, data_checksum_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize data_checksum_", K_(data_checksum), K(ret));
     } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, entry_checksum_))) {
+      STORAGE_REDO_LOG(WARN, "fail to serialize entry_checksum_", K_(entry_checksum), K(ret));
     } else {
       pos = new_pos;
     }
@@ -181,15 +191,25 @@ DEFINE_DESERIALIZE(ObStorageLogEntry)
   } else {
     int64_t new_pos = pos;
     if (OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, (int16_t *)&magic_))) {
+      STORAGE_REDO_LOG(WARN, "fail to decode magic_", K_(magic), K(ret));
     } else if (OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, (int16_t *)&version_))) {
+      STORAGE_REDO_LOG(WARN, "fail to decode version_", K_(version), K(ret));
     } else if (OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, (int16_t *)&entry_len_))) {
+      STORAGE_REDO_LOG(WARN, "fail to decode entry_len_", K_(entry_len), K(ret));
     } else if (OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, (int16_t *)&rez_))) {
+      STORAGE_REDO_LOG(WARN, "fail to deserialize rez_", K_(rez), K(ret));
     } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, (int32_t *)&cmd_))) {
+      STORAGE_REDO_LOG(WARN, "fail to decode cmd_", K_(cmd), K(ret));
     } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, (int32_t *)&data_len_))) {
+      STORAGE_REDO_LOG(WARN, "fail to deserialize data_len_", K_(data_len), K(ret));
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, (int64_t *)&seq_))) {
+      STORAGE_REDO_LOG(WARN, "fail to deserialize seq_", K_(seq), K(ret));
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, (int64_t *)&timestamp_))) {
+      STORAGE_REDO_LOG(WARN, "fail to deserialize timestamp_", K_(timestamp), K(ret));
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, (int64_t *)&data_checksum_))) {
+      STORAGE_REDO_LOG(WARN, "fail to deserialize data_checksum_", K_(data_checksum), K(ret));
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, (int64_t *)&entry_checksum_))) {
+      STORAGE_REDO_LOG(WARN, "fail to deserialize entry_checksum_", K_(entry_checksum), K(ret));
     } else {
       pos = new_pos;
     }

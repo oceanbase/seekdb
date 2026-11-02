@@ -39,6 +39,7 @@ int ObExprInnerRowCmpVal::calc_result_type3(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (!ob_is_decimal_int(type1.get_type())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the 1th param type is unexpected", K(ret), K(type1));
   } else {
     type2.set_calc_meta(type1.get_obj_meta());
     type2.set_calc_accuracy(type1.get_accuracy());
@@ -49,6 +50,7 @@ int ObExprInnerRowCmpVal::calc_result_type3(ObExprResType &type,
       type2.add_decimal_int_cast_mode(CM_CONST_TO_DECIMAL_INT_UP);
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected cast mode", K(ret), K(cast_mode));
     }
   }
   if (OB_SUCC(ret)) {
@@ -63,19 +65,25 @@ int ObExprInnerRowCmpVal::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
 {
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 3);
-    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
-    if (!ob_is_decimal_int_tc(rt_expr.args_[0]->datum_meta_.type_) ||
-        !ob_is_decimal_int_tc(rt_expr.args_[1]->datum_meta_.type_)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (rt_expr.args_[0]->datum_meta_.precision_ != rt_expr.args_[1]->datum_meta_.precision_ ||
-               rt_expr.args_[0]->datum_meta_.scale_ != rt_expr.args_[1]->datum_meta_.scale_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      rt_expr.eval_func_ = eval_inner_row_cmp_val;
-      rt_expr.extra_ = raw_expr.get_ret_code();
-    }
+  if (rt_expr.arg_cnt_ != 3) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the arg_cnt of eval_inner_row_cmp_val error.", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1]) ||
+             OB_ISNULL(rt_expr.args_[2])) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the arg of eval_inner_row_cmp_val is null.", K(ret), K(rt_expr));
+  } else if (!ob_is_decimal_int_tc(rt_expr.args_[0]->datum_meta_.type_) ||
+             !ob_is_decimal_int_tc(rt_expr.args_[1]->datum_meta_.type_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the 1th arg of eval_inner_row_cmp_val is invalid.", K(ret));
+  } else if (rt_expr.args_[0]->datum_meta_.precision_ != rt_expr.args_[1]->datum_meta_.precision_
+             || rt_expr.args_[0]->datum_meta_.scale_ != rt_expr.args_[1]->datum_meta_.scale_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("datum meta mismatch", K(ret), K(rt_expr.args_[0]->datum_meta_),
+                                            K(rt_expr.args_[1]->datum_meta_));
+  } else {
+    rt_expr.eval_func_ = eval_inner_row_cmp_val;
+    rt_expr.extra_ = raw_expr.get_ret_code();
   }
   return ret;
 }
@@ -87,14 +95,18 @@ int ObExprInnerRowCmpVal::eval_inner_row_cmp_val(const ObExpr &expr, ObEvalCtx &
   ObDatum* right_datum = NULL;
   ObDatum* real_val_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, left_datum))) {
+    LOG_WARN("fail to eval eq expr", K(ret), K(expr));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, right_datum))) {
+    LOG_WARN("fail to eval eq expr", K(ret), K(expr));
   } else if ((left_datum->is_null() != right_datum->is_null()) ||
       left_datum->len_ != right_datum->len_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("datum result mismatch", K(ret), K(*left_datum), K(*right_datum));
   } else if (!left_datum->is_null() &&
       (0 != MEMCMP(left_datum->ptr_, right_datum->ptr_, left_datum->len_))) {
     ret = -static_cast<int>(expr.extra_);
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, real_val_datum))) {
+    LOG_WARN("fail to eval real res datum fail.", K(ret), K(expr));
   } else {
     res.set_datum(*real_val_datum);
   }

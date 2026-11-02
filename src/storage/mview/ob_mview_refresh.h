@@ -1,0 +1,101 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "storage/mview/ob_mview_refresh_ctx.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExecContext;
+} // namespace sql
+namespace storage
+{
+class ObMViewRefreshStatsCollection;
+
+struct ObMViewRefreshParam
+{
+public:
+  ObMViewRefreshParam()
+    : mview_id_(OB_INVALID_ID),
+      refresh_method_(share::schema::ObMVRefreshMethod::MAX),
+      parallelism_(0)
+  {
+  }
+  bool is_valid() const
+  {
+    return true && mview_id_ != OB_INVALID_ID &&
+           refresh_method_ != share::schema::ObMVRefreshMethod::NEVER && parallelism_ >= 0;
+  }
+  TO_STRING_KV(K_(mview_id), K_(refresh_method), K_(parallelism));
+
+public:
+  uint64_t mview_id_;
+  share::schema::ObMVRefreshMethod refresh_method_; // MAX means use default refresh method
+  uint64_t parallelism_;
+};
+
+class ObMViewRefresher
+{
+public:
+  ObMViewRefresher();
+  ~ObMViewRefresher();
+  DISABLE_COPY_ASSIGN(ObMViewRefresher);
+
+  int init(sql::ObExecContext &ctx, ObMViewRefreshCtx &refresh_ctx,
+           const ObMViewRefreshParam &refresh_param,
+           ObMViewRefreshStatsCollection *refresh_stats_collection);
+  int refresh();
+
+  static int calc_mv_refresh_parallelism(int64_t explict_parallelism,
+                                         sql::ObSQLSessionInfo *session_info, int64_t &final_parallelism);
+
+  TO_STRING_KV(KP_(ctx), KP_(refresh_ctx), K_(refresh_param), KP_(refresh_stats_collection));
+
+private:
+  int lock_mview_for_refresh();
+  int prepare_for_refresh();
+  int fetch_based_infos(share::schema::ObSchemaGetterGuard &schema_guard);
+  int check_fast_refreshable_(const ObIArray<share::schema::ObDependencyInfo> &previous_dependency_infos,
+                              share::schema::ObSchemaGetterGuard &schema_guard);
+  int complete_refresh(); 
+  int fast_refresh();
+  int set_session_dml_dop_(const uint64_t data_version,
+                          sql::ObSQLSessionInfo *exec_session_info, ObMViewTransaction &trans,
+                          const int64_t parallelism, bool &has_updated_dml_dop,
+                          uint64_t &orig_dml_dop);
+  int restore_session_dml_dop_(const uint64_t data_version,
+                              const bool has_updated_dml_dop, const uint64_t orig_dml_dop,
+                              ObMViewTransaction &trans);
+  int calc_scn_range(const share::schema::ObMViewInfo &mview_info,
+                     const share::SCN &target_data_sync_scn,
+                     const share::SCN &current_scn,
+                     share::ObScnRange &mview_refresh_scn_range,
+                     share::ObScnRange &base_table_scn_range);
+  int gen_complete_refresh_sql_string_(ObString &select_string,
+                                       ObIAllocator &str_alloc);
+private:
+  sql::ObExecContext *ctx_;
+  ObMViewRefreshCtx *refresh_ctx_;
+  ObMViewRefreshParam refresh_param_;
+  ObMViewRefreshStatsCollection *refresh_stats_collection_;
+  bool is_inited_;
+};
+
+} // namespace storage
+} // namespace oceanbase

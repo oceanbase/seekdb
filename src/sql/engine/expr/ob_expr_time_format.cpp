@@ -57,10 +57,13 @@ int ObExprTimeFormat::time_to_str_format(const int64_t &time_value, const ObStri
   int ret = OB_SUCCESS;
   ObTime ob_time;
   if (OB_FAIL(ObTimeConverter::time_to_ob_time(time_value, ob_time))) {
+    LOG_WARN("time to ob time failed", K(ret), K(time_value));
   } else if (OB_ISNULL(format.ptr()) || OB_ISNULL(buf)
             || OB_UNLIKELY(format.length() <= 0 || buf_len <= 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("format or output string is invalid", K(ret), K(format), K(buf), K(buf_len));
   } else if (IS_NEG_TIME(ob_time.mode_) && OB_FAIL(databuff_printf(buf, buf_len, pos, "-"))) {
+    LOG_WARN("print - failed", K(ret));
   } else {
     const char *format_ptr = format.ptr();
     const char *end_ptr = format.ptr() + format.length();
@@ -187,6 +190,7 @@ int ObExprTimeFormat::time_to_str_format(const int64_t &time_value, const ObStri
         if (OB_SUCC(ret)) {
           format_ptr++;
         } else {
+          LOG_WARN("print failed", K(ret), K(*format_ptr), K(time_value), K(ob_time));
         }
       } else if (pos >= buf_len) {
         ret = OB_SIZE_OVERFLOW;
@@ -206,9 +210,14 @@ int ObExprTimeFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 2);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+  if (rt_expr.arg_cnt_ != 2) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("date_format expr should have two params", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
+             || OB_ISNULL(rt_expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of date_format expr is null", K(ret), K(rt_expr.args_));
+  } else {
     rt_expr.eval_func_ = ObExprTimeFormat::calc_time_format;
   }
   return ret;
@@ -224,6 +233,7 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObDatum *format = NULL;
   bool res_null = false;
   if (OB_FAIL(expr.eval_param_value(ctx, time, format))) {
+    LOG_WARN("calc param failed", K(ret));
   } else if (time->is_null() || format->is_null()) {
     expr_datum.set_null();
   } else if (OB_UNLIKELY(format->get_string().empty())) {
@@ -239,6 +249,7 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                           buf_len,
                                           pos,
                                           res_null))) {
+      LOG_WARN("failed to convert ob time to str with format");
     } else if (res_null) {
       expr_datum.set_null();
     } else {
@@ -247,7 +258,9 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else { // text tc
     ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
     if (OB_FAIL(output_result.init(buf_len))) {
+      LOG_WARN("init lob result failed", K(ret), K(buf_len));
     } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_len))) {
+      LOG_WARN("get reserved buffer for blob failed", K(ret), K(buf_len));
     } else if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("no more memory to alloc for buf", K(ret), K(buf_len));
@@ -257,9 +270,11 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                           buf_len,
                                           pos,
                                           res_null))) {
+      LOG_WARN("failed to convert ob time to lob str with format");
     } else if (res_null) {
       expr_datum.set_null();
     } else if (OB_FAIL(output_result.lseek(pos, 0))){
+      LOG_WARN("lseek text or string result failed", K(ret), K(pos));
     } else {
       output_result.set_result();
     }

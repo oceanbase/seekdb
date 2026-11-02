@@ -33,6 +33,7 @@ namespace share {
           "Max Alloc Duration",                                                 \
           MAX_DURATION
 
+// moved definition to storage ob_tenant_freezer.cpp
 
 }  // namespace share
 }  // namespace oceanbase

@@ -15,6 +15,7 @@
  */
 
 #include "ob_deadlock_inner_table_service.h"
+#include "rootserver/ob_root_service.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -30,10 +31,11 @@ share::ObDeadlockEventHistoryTableStorage ObDeadLockInnerTableService::storage_;
 int ObDeadLockInnerTableService::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.local_store_)) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
-    DETECT_LOG(WARN, "local_store_ is not initialized", K(ret));
-  } else if (OB_FAIL(storage_.init(GCTX.local_store_))) {
+    DETECT_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
+  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    DETECT_LOG(WARN, "failed to init deadlock event history storage", K(ret));
   }
   return ret;
 }
@@ -70,6 +72,7 @@ int ObDeadLockInnerTableService::insert(const ObDetectorInnerReportInfo &inner_i
     ObDeadlockEventHistoryEntry entry;
     
     entry.event_id_ = inner_info.get_event_id();
+    entry.svr_addr_ = inner_info.get_addr();
     entry.detector_id_ = inner_info.get_detector_id();
     entry.report_time_ = current_ts;
     entry.cycle_idx_ = idx;
@@ -102,7 +105,7 @@ int ObDeadLockInnerTableService::insert(const ObDetectorInnerReportInfo &inner_i
     }
 
     if (CLICK() && OB_FAIL(storage_.insert(entry))) {
-      DETECT_LOG(ERROR, "failed to insert deadlock event", KR(ret));
+      DETECT_LOG(WARN, "failed to insert deadlock event", KR(ret));
     } else {
       DETECT_LOG(INFO, "insert deadlock event success", KR(ret));
     }
@@ -133,6 +136,7 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
       ObDeadlockEventHistoryEntry entry;
       
       entry.event_id_ = info.get_event_id();
+      entry.svr_addr_ = info.get_addr();
       entry.detector_id_ = info.get_detector_id();
       entry.report_time_ = current_ts;
       entry.cycle_idx_ = i + 1;
@@ -171,7 +175,7 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
 
     if (OB_SUCC(ret) && !entries.empty()) {
       if (CLICK() && OB_FAIL(storage_.insert_all(entries))) {
-        DETECT_LOG(ERROR, "failed to insert all deadlock events", KR(ret));
+        DETECT_LOG(WARN, "failed to insert all deadlock events", KR(ret));
       } else {
         DETECT_LOG(INFO, "insert all deadlock events success", KR(ret), K(entries.count()));
       }

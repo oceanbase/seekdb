@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_LOAD_INNER_TABLE_SCHEMA_EXECUTOR_H_
 #define OCEANBASE_ROOTSERVER_OB_LOAD_INNER_TABLE_SCHEMA_EXECUTOR_H_
 
-#include "lib/literals/ob_literals.h"
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase
@@ -25,10 +24,6 @@ namespace oceanbase
 namespace share
 {
 class ObLoadInnerTableSchemaInfo;
-namespace schema
-{
-class ObTableSchema;
-}
 }
 namespace rootserver
 {
@@ -36,20 +31,20 @@ namespace rootserver
 class ObLoadInnerTableSchemaExecutor
 {
 public:
-  static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg);
+  static int load_inner_table_schema(const obcall::ObLoadTenantTableSchemaArg &arg);
   static int load_schema_version(common::ObISQLClient &client, const int64_t core_schema_version, const int64_t sys_schema_version);
 private:
-  static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg,
+  static int load_inner_table_schema(const obcall::ObLoadTenantTableSchemaArg &arg,
       const share::ObLoadInnerTableSchemaInfo &info);
 
 public:
   ObLoadInnerTableSchemaExecutor() : inited_(false),
     args_(), next_arg_index_(0), load_rpc_timeout_(0), parallel_count_(0) {}
-  int init(ObIArray<share::schema::ObTableSchema> &table_schemas,
+  int init(ObIArray<ObTableSchema> &table_schemas,
       const int64_t max_cpu);
   int execute();
 private:
-  int init_args_(ObIArray<share::schema::ObTableSchema> &table_schemas);
+  int init_args_(ObIArray<ObTableSchema> &table_schemas);
   int append_arg(const ObIArray<int64_t> &insert_idx, const share::ObLoadInnerTableSchemaInfo &info);
 
 private:
@@ -61,7 +56,7 @@ private:
   
 private:
   bool inited_;
-  ObArray<obcall::ObLoadRuntimeTableSchemaArg> args_;
+  ObArray<obcall::ObLoadTenantTableSchemaArg> args_;
   int64_t next_arg_index_;
   int64_t load_rpc_timeout_;
   int64_t parallel_count_;

@@ -17,15 +17,12 @@
 #ifndef OB_DAS_IR_DEFINE_H_
 #define OB_DAS_IR_DEFINE_H_
 
-#include "data_plane/blocksstable/ob_index_block_util.h"
-#include "query/das/ob_das_id_protocol.h"
 #include "ob_das_attach_define.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-using blocksstable::ObSkipIndexColType;
 
 struct ObTextBlockMaxSpec
 {
@@ -79,20 +76,20 @@ public:
       topk_limit_expr_(nullptr),
       topk_offset_expr_(nullptr),
       token_col_(nullptr),
+      count_agg_expr_(nullptr),
       block_max_spec_(alloc),
       avg_doc_len_est_spec_(alloc),
       mode_flag_(NATURAL_LANGUAGE_MODE),
       flags_(0),
-      field_boost_expr_(nullptr),
-      count_only_(false) {}
+      field_boost_expr_(nullptr) {}
   bool need_calc_relevance() const { return nullptr != relevance_expr_; }
-  // rows-only scan: the consumer of this scan only uses the number of produced rows.
-  bool count_only() const { return count_only_; }
   bool need_proj_relevance_score() const { return nullptr != relevance_proj_col_; }
+  bool need_fwd_idx_agg() const { return has_fwd_agg_ && need_calc_relevance(); }
   bool need_inv_idx_agg() const { return has_inv_agg_ && need_calc_relevance(); }
   bool need_block_max_scan() const { return has_block_max_scan_; }
   bool need_avg_doc_len_est() const { return has_avg_doc_len_est_ && nullptr != avg_doc_token_cnt_expr_; }
   bool has_pushdown_topk() const { return nullptr != topk_limit_expr_; }
+  bool is_count_agg() const { return nullptr != count_agg_expr_; }
   bool is_block_scan_valid() const
   {
     return has_block_max_scan_
@@ -132,6 +129,18 @@ public:
     }
     return doc_agg_ctdef;
   }
+  const ObDASScanCtDef *get_fwd_idx_agg_ctdef() const
+  {
+    const ObDASScanCtDef *fwd_idx_agg_ctdef = nullptr;
+    const int64_t ctdef_idx = get_fwd_agg_idx();
+    if (children_cnt_ > ctdef_idx && ctdef_idx > 0 && children_ != nullptr) {
+      const ObDASScanCtDef *child = static_cast<const ObDASScanCtDef *>(children_[ctdef_idx]);
+      if (child->ir_scan_type_ == ObTSCIRScanType::OB_IR_FWD_IDX_AGG) {
+        fwd_idx_agg_ctdef = child;
+      }
+    }
+    return fwd_idx_agg_ctdef;
+  }
   const ObDASScanCtDef *get_block_max_scan_ctdef() const
   {
     const ObDASScanCtDef *block_max_scan_ctdef = nullptr;
@@ -147,9 +156,10 @@ public:
   int64_t get_inv_scan_idx() const { return 0; }
   int64_t get_inv_agg_idx() const { return has_inv_agg_ ? 1 : -1; }
   int64_t get_doc_agg_idx() const { return has_doc_id_agg_ ? (1 + has_inv_agg_) : -1; }
+  int64_t get_fwd_agg_idx() const { return has_fwd_agg_ ? (1 + has_inv_agg_ + has_doc_id_agg_) : -1; }
   int64_t get_block_max_scan_idx() const
   {
-    return has_block_max_scan_ ? (1 + has_inv_agg_ + has_doc_id_agg_) : -1;
+    return has_block_max_scan_ ? (1 + has_inv_agg_ + has_doc_id_agg_ + has_fwd_agg_) : -1;
   }
   bool need_estimate_total_doc_cnt() const { return 0 != estimated_total_doc_cnt_; }
 
@@ -166,10 +176,10 @@ public:
                        KPC_(topk_limit_expr),
                        KPC_(topk_offset_expr),
                        K_(token_col),
+                       KPC_(count_agg_expr),
                        K_(block_max_spec),
                        K_(mode_flag),
-                       KPC_(field_boost_expr),
-                       K_(count_only));
+                       KPC_(field_boost_expr));
 
   ObExpr *search_text_;
   ObExpr *inv_scan_domain_id_col_;
@@ -182,6 +192,7 @@ public:
   ObExpr *topk_limit_expr_;
   ObExpr *topk_offset_expr_;
   ObExpr *token_col_;
+  ObExpr *count_agg_expr_;
   ObTextBlockMaxSpec block_max_spec_;
   ObTextAvgDocLenEstSpec avg_doc_len_est_spec_;
   ObMatchAgainstMode mode_flag_; // for MySQL search mode flag
@@ -192,14 +203,13 @@ public:
     {
       uint8_t has_inv_agg_:1;
       uint8_t has_doc_id_agg_:1;
-      uint8_t reserved_ir_scan_flag_:1;
+      uint8_t has_fwd_agg_:1;
       uint8_t has_block_max_scan_:1;
       uint8_t has_avg_doc_len_est_:1;
       uint8_t reserved_:3;
     };
   };
   ObExpr *field_boost_expr_;
-  bool count_only_; // rows-only scan flag
 };
 
 struct ObDASIRScanRtDef : ObDASAttachRtDef
@@ -242,6 +252,16 @@ public:
       doc_id_idx_agg_rtdef = static_cast<ObDASScanRtDef*>(children_[rtdef_idx]);
     }
     return doc_id_idx_agg_rtdef;
+  }
+  ObDASScanRtDef *get_fwd_idx_agg_rtdef() const
+  {
+    const ObDASIRScanCtDef *ctdef = static_cast<const ObDASIRScanCtDef *>(ctdef_);
+    const int64_t rtdef_idx = ctdef->get_fwd_agg_idx();
+    ObDASScanRtDef *fwd_idx_agg_rtdef = nullptr;
+    if (children_cnt_ > rtdef_idx && rtdef_idx > 0 && children_ != nullptr) {
+      fwd_idx_agg_rtdef = static_cast<ObDASScanRtDef*>(children_[rtdef_idx]);
+    }
+    return fwd_idx_agg_rtdef;
   }
   ObDASScanRtDef *get_block_max_scan_rtdef() const
   {
@@ -481,6 +501,30 @@ public:
     : ObDASAttachRtDef(DAS_OP_IR_ES_SCORE) {}
 
   virtual ~ObDASIREsScoreRtDef() {}
+};
+
+class ObDocIdExt final
+{
+public:
+  ObDocIdExt();
+  ObDocIdExt(const ObDocIdExt &other);
+  ~ObDocIdExt() = default;
+  void reset();
+
+  int hash(uint64_t &hash_val) const;
+  const ObDatum &get_datum() const;
+  int from_datum(const ObDatum &datum);
+  int from_obj(const ObObj &obj);
+
+  ObDocIdExt &operator=(const ObDocIdExt &other);
+  bool operator==(const ObDocIdExt &other) const;
+  bool operator!=(const ObDocIdExt &other) const;
+
+  TO_STRING_KV(KP_(buf), K_(datum));
+private:
+  static const int64_t OB_DOC_ID_EXT_SIZE = 40;
+  char buf_[OB_DOC_ID_EXT_SIZE];
+  ObDatum datum_;
 };
 
 } // namespace sql

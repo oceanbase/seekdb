@@ -18,7 +18,7 @@
 #define OB_I_SPARSE_RETRIEVAL_MERGE_ITER_H_
 
 #include "share/ob_define.h"
-#include "query/das/ob_das_id_protocol.h"
+#include "sql/das/ob_das_ir_define.h"
 
 namespace oceanbase
 {
@@ -32,14 +32,10 @@ namespace sql
 {
   class ObEvalCtx;
   class ObExpr;
-  struct ObDatumMeta;
+  class ObDocIDExt;
 }
 namespace storage
 {
-using sql::ObDocIdExt;
-using sql::ObDatumMeta;
-using sql::ObEvalCtx;
-using sql::ObExpr;
 class ObMaxScoreTuple;
 
 class ObISparseRetrievalDimIter
@@ -112,19 +108,19 @@ struct ObSparseRetrievalMergeParam
       filter_expr_(nullptr),
       topk_limit_(0),
       field_boost_(1.0),
-      max_batch_size_(1),
-      count_only_(false)
+      max_batch_size_(1)
   {}
   ~ObSparseRetrievalMergeParam() {}
-  bool need_project_relevance() const { return relevance_proj_expr_ != nullptr; }
+  bool need_project_relevance() const
+  {
+    return relevance_expr_ != nullptr && relevance_proj_expr_ != nullptr;
+  }
+  bool need_fill_relevance_output() const { return relevance_proj_expr_ != nullptr; }
   bool need_filter() const { return filter_expr_ != nullptr; }
   bool need_pushdown_topk() const { return topk_limit_ > 0; }
-  // rows-only mode: the consumer only observes how many rows are produced, therefore the
-  // pushdown match filter, the projected document id and the relevance score are not needed.
-  bool need_count_only() const { return count_only_; }
   TO_STRING_KV(KPC_(dim_weights), KPC(limit_param_), KP_(eval_ctx),
       KP_(id_proj_expr), KP_(relevance_expr), KP_(relevance_proj_expr), KP_(filter_expr),
-      K_(topk_limit), K_(max_batch_size), K_(count_only));
+      K_(topk_limit), K_(max_batch_size));
   const ObIArray<double> *dim_weights_; // score weight for each dimension
   const common::ObLimitParam *limit_param_;
   sql::ObEvalCtx *eval_ctx_;
@@ -135,7 +131,6 @@ struct ObSparseRetrievalMergeParam
   int64_t topk_limit_;
   double field_boost_;
   int64_t max_batch_size_;
-  bool count_only_;
 };
 
 class ObISparseRetrievalMergeIter
@@ -148,16 +143,21 @@ public:
   virtual void reset() = 0;
   virtual int get_next_row() = 0;
   virtual int get_next_rows(const int64_t capacity, int64_t &count) = 0;
+  virtual int get_total_count(int64_t &count)
+  {
+    count = 0;
+    return OB_NOT_SUPPORTED;
+  }
   virtual int get_query_max_score(double &score) {
     return OB_NOT_SUPPORTED;
   }
   VIRTUAL_TO_STRING_KV(K_(input_row_cnt), K_(output_row_cnt));
 public:
-  inline static void set_datum_int(ObDatum &datum, const ObDocIdExt &id)
+  inline static void set_datum_int(ObDatum &datum, const sql::ObDocIdExt &id)
   {
     datum.set_int(id.get_datum().get_int());
   }
-  inline static void set_datum_shallow(ObDatum &datum, const ObDocIdExt &id)
+  inline static void set_datum_shallow(ObDatum &datum, const sql::ObDocIdExt &id)
   {
     datum.set_datum(id.get_datum());
   }

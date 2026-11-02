@@ -26,13 +26,16 @@ namespace schema
 {
 using namespace oceanbase::common;
 DEFINE_ENUM_FUNC(ObSchemaOperationType, op_type, OP_TYPE_DEF);
+//only liboblog will set it to true
+//use to ignore column retrieve error of new added column in inner table
+bool ObSchemaService::g_ignore_column_retrieve_error_ = false;
 
 ObSchemaOperation::ObSchemaOperation()
     : schema_version_(OB_INVALID_VERSION),
       user_id_(0),
       database_id_(0),
       database_name_(""),
-      column_id_(0),
+      tablegroup_id_(0),
       table_id_(0),
       table_name_(""),
       op_type_(OB_INVALID_DDL_OP),
@@ -52,7 +55,7 @@ void ObSchemaOperation::reset()
   user_id_ = 0;
   database_id_ = 0;
   database_name_.reset();
-  column_id_ = 0;
+  tablegroup_id_ = 0;
   table_id_ = 0;
   table_name_.reset();
   op_type_ = OB_INVALID_DDL_OP;
@@ -67,7 +70,7 @@ ObSchemaOperation& ObSchemaOperation::operator=(const ObSchemaOperation &other)
     user_id_ = other.user_id_;
     database_id_ = other.database_id_;
     database_name_ = other.database_name_;
-    column_id_ = other.column_id_;
+    tablegroup_id_ = other.tablegroup_id_;
     table_id_ = other.table_id_;
     table_name_ = other.table_name_;
     op_type_ = other.op_type_;
@@ -81,11 +84,13 @@ OB_SERIALIZE_MEMBER(ObSchemaOperation,
                     user_id_,
                     table_id_,
                     database_id_,
-                    column_id_,
+                    tablegroup_id_,
                     op_type_,
-                    outline_id_,
-                    grantee_id_,
-                    grantor_id_);
+                    outline_id_,                // for compat
+                    sequence_id_,               // for compat
+                    grantee_id_,                // for compat
+                    grantor_id_,                // for compat
+                    directory_id_);             // for compat
 
 bool ObSchemaOperation::is_valid() const
 {
@@ -102,10 +107,10 @@ int64_t ObSchemaOperation::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_KV(K_(schema_version), K_(database_id), K_(user_id), K_(database_name),
-       K_(column_id), K_(table_id), "operation_type", type_str(op_type_),
-       K_(outline_id),
+       K_(tablegroup_id), K_(table_id), "operation_type", type_str(op_type_),
+       K_(outline_id), K_(udf_name), K_(sequence_id),
        K_(grantee_id), K_(grantor_id),
-       K_(ddl_stmt_str));
+       K_(ddl_stmt_str), K_(directory_id), K_(catalog_id), K_(catalog_name));
   return pos;
 }
 
@@ -120,12 +125,16 @@ int AlterTableSchema::deserialize_columns(const char *buf, const int64_t data_le
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+    SHARE_SCHEMA_LOG(WARN, "Fail to decode column count, ", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       column.reset();
       if (OB_FAIL(column.deserialize(buf, data_len, pos))) {
+        SHARE_SCHEMA_LOG(WARN, "fail to deserialize", K(ret), K(column));
       } else if (OB_FAIL(add_alter_column(column, true))) {
+        SHARE_SCHEMA_LOG(WARN, "Fail to add column, ", K(ret));
       } else {
+        SHARE_SCHEMA_LOG(DEBUG, "add alter column", K(column));
       }
     }
   }
@@ -149,6 +158,7 @@ void AlterColumnSchema::reset()
   next_column_name_.reset();
   prev_column_name_.reset();
   is_first_ = false;
+  column_group_name_.reset();
   is_set_comment_ = false;
 }
 
@@ -167,19 +177,32 @@ OB_SERIALIZE_MEMBER((AlterColumnSchema, ObColumnSchemaV2),
                     next_column_name_,
                     prev_column_name_,
                     is_first_,
+                    column_group_name_,
                     is_set_comment_);
 
 DEFINE_SERIALIZE(AlterTableSchema)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableSchema::serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize ObTableSchema, ", K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, alter_type_))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize alter_type_, ", K(ret));
   } else if (OB_FAIL(origin_table_name_.serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_table_name_, ", K(ret));
   } else if (OB_FAIL(new_database_name_.serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize new_datbase_name, ", K(ret));
   } else if (OB_FAIL(origin_database_name_.serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_database_name, ", K(ret));
+  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, origin_tablegroup_id_))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_tablegroup_id_", K(ret));
   } else if (OB_FAIL(alter_option_bitset_.serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialized bitset", K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, sql_mode_))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize sql_mode_", K(ret));
+  } else if (OB_FAIL(split_partition_name_.serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize partition_name", K(ret));
   } else if (OB_FAIL(new_part_name_.serialize(buf, buf_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize new_part_name", K(ret));
   }
   return ret;
 }
@@ -188,13 +211,27 @@ DEFINE_DESERIALIZE(AlterTableSchema)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableSchema::deserialize(buf, data_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize ObTableSchema", K(ret));
   } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, ((int32_t *)(&alter_type_))))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize alter_type_, ", K(ret));
   } else if (OB_FAIL(origin_table_name_.deserialize(buf, data_len, pos))) {
+    //do not deep copy becasue AlterTableSchema are not used after this
+    //alter table request
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_table_name, ", K(ret));
   } else if (OB_FAIL(new_database_name_.deserialize(buf, data_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize new_database_name, ", K(ret));
   } else if (OB_FAIL(origin_database_name_.deserialize(buf, data_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_database_name, ", K(ret));
+  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&origin_tablegroup_id_))))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_tablegroup_id");
   } else if (OB_FAIL(alter_option_bitset_.deserialize(buf, data_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize bitset", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&sql_mode_))))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize sql mode", K(ret));
+  } else if (OB_FAIL(split_partition_name_.deserialize(buf, data_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to deserialize split_partition_name", K(ret));
   } else if (OB_FAIL(new_part_name_.deserialize(buf, data_len, pos))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to serialize new_part_name", K(ret));
   }
   return ret;
 }
@@ -206,8 +243,12 @@ void AlterTableSchema::reset()
   origin_table_name_.reset();
   new_database_name_.reset();
   origin_database_name_.reset();
+  origin_tablegroup_id_ = common::OB_INVALID_ID;
   alter_option_bitset_.reset();
   sql_mode_ = SMO_DEFAULT;
+  split_partition_name_.reset();
+  split_high_bound_val_.reset();
+  split_list_row_values_.reset();
   new_part_name_.reset();
 }
 
@@ -219,6 +260,9 @@ int64_t AlterTableSchema::to_string(char *buf, const int64_t buf_len) const
        K_(origin_table_name),
        K_(new_database_name),
        K_(origin_database_name),
+       K_(split_partition_name),
+       K_(split_high_bound_val),
+       K_(split_list_row_values),
        K_(new_part_name));
   J_COMMA();
   J_NAME(N_ALTER_TABLE_SCHEMA);
@@ -242,6 +286,7 @@ int64_t AlterColumnSchema::to_string(char* buf, const int64_t buf_len) const
        K_(next_column_name),
        K_(prev_column_name),
        K_(is_unique_key),
+       K_(column_group_name),
        K_(is_set_comment));
   J_COMMA();
   J_NAME(N_ALTER_COLUMN_SCHEMA);
@@ -255,6 +300,7 @@ int AlterColumnSchema::assign(const ObColumnSchemaV2 &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObColumnSchemaV2::assign(other))) {
+    LOG_WARN("fail to assign column", KR(ret), K(other));
   }
   return ret;
 }
@@ -274,9 +320,15 @@ AlterColumnSchema &AlterColumnSchema::operator=(const AlterColumnSchema &src_sch
     check_timestamp_column_order_ = src_schema.check_timestamp_column_order_;
     is_no_zero_date_ = src_schema.is_no_zero_date_;
     if (OB_FAIL(ObColumnSchemaV2::assign(src_schema))) {
+      LOG_WARN("fail to assign column", KR(ret), K(src_schema));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_origin_column_name(), origin_column_name_))) {
+      SHARE_LOG(WARN, "failed to deep copy origin_column_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_next_column_name(), next_column_name_))) {
+      SHARE_LOG(WARN, "failed to deep copy next_column_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_prev_column_name(), prev_column_name_))) {
+      SHARE_LOG(WARN, "failed to deep copy prev_column_name", K(ret));
+    } else if (OB_FAIL(deep_copy_str(src_schema.get_column_group_name(), column_group_name_))) {
+      SHARE_LOG(WARN, "failed to deep copy column_group_name", K(ret));
     } else {
       is_first_ = src_schema.is_first_;
       is_set_comment_ = src_schema.is_set_comment_;
@@ -299,6 +351,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
     int64_t column_cnt = 0;
 
     if (OB_FAIL(ObSimpleTableSchemaV2::assign(src_schema))) {
+      LOG_WARN("fail to assign schema", K(ret));
     } else {
       error_ret_ = src_schema.error_ret_;
       max_used_column_id_ = src_schema.max_used_column_id_;
@@ -308,6 +361,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       part_key_column_num_ = src_schema.part_key_column_num_;
       subpart_key_column_num_ = src_schema.subpart_key_column_num_;
       block_size_ = src_schema.block_size_;
+      is_use_bloomfilter_ = src_schema.is_use_bloomfilter_;
       progressive_merge_num_ = src_schema.progressive_merge_num_;
       tablet_size_ = src_schema.tablet_size_;
       pctfree_ = src_schema.pctfree_;
@@ -319,21 +373,47 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       def_type_ = src_schema.def_type_;
       charset_type_ = src_schema.charset_type_;
       collation_type_ = src_schema.collation_type_;
+      code_version_ = src_schema.code_version_;
       index_attributes_set_ = src_schema.index_attributes_set_;
       session_id_ = src_schema.session_id_;
       compressor_type_ = src_schema.compressor_type_;
       lob_inrow_threshold_ = src_schema.lob_inrow_threshold_;
+      is_column_store_supported_ = src_schema.is_column_store_supported_;
+      max_used_column_group_id_ = src_schema.max_used_column_group_id_;
       micro_index_clustered_ = src_schema.micro_index_clustered_;
-      if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
+      enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
+      merge_engine_type_ = src_schema.merge_engine_type_;
+      external_location_id_ = src_schema.external_location_id_;
+      if (OB_FAIL(deep_copy_str(src_schema.tablegroup_name_, tablegroup_name_))) {
+        LOG_WARN("Fail to deep copy tablegroup_name", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
+        LOG_WARN("Fail to deep copy comment", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.expire_info_, expire_info_))) {
+        LOG_WARN("Fail to deep copy expire info string", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_name_, parser_name_))) {
+        LOG_WARN("deep copy parser name failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_properties_, parser_properties_))) {
+        LOG_WARN("fail to deep copy parser properties", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_, external_file_location_))) {
+        LOG_WARN("deep copy external_file_location failed", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_access_info_, external_file_location_access_info_))) {
+        LOG_WARN("deep copy external_file_location_access_info failed", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_format_, external_file_format_))) {
+        LOG_WARN("deep copy external_file_format failed", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_file_pattern_, external_file_pattern_))) {
+        LOG_WARN("deep copy external_file_pattern failed", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_properties_, external_properties_))) {
+        LOG_WARN("deep copy external_properties failed", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_sub_path_, external_sub_path_))) {
+        LOG_WARN("deep copy external_sub_path failed", K(ret));
       }
 
       //view schema
       view_schema_ = src_schema.view_schema_;
 
-      reserved_table_ids_ = src_schema.reserved_table_ids_;
+      aux_vp_tid_array_ = src_schema.aux_vp_tid_array_;
 
+      base_table_ids_ = src_schema.base_table_ids_;
       depend_table_ids_ = src_schema.depend_table_ids_;
       depend_mock_fk_parent_table_ids_ = src_schema.depend_mock_fk_parent_table_ids_;
 
@@ -342,40 +422,48 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
 
       aux_lob_meta_tid_ = src_schema.aux_lob_meta_tid_;
       aux_lob_piece_tid_ = src_schema.aux_lob_piece_tid_;
+      mlog_tid_ = src_schema.mlog_tid_;
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(set_simple_index_infos(src_schema.get_simple_index_infos()))) {
+        LOG_WARN("fail to set simple index infos", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(assign_constraint(src_schema))) {
+        LOG_WARN("failed to assign constraint", K(ret), K(src_schema), K(*this));
       }
     }
 
     //prepare memory
     if (OB_SUCC(ret)) {
       if (OB_FAIL(rowkey_info_.reserve(src_schema.rowkey_info_.get_size()))) {
+        LOG_WARN("Fail to reserve rowkey_info", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(shadow_rowkey_info_.reserve(src_schema.shadow_rowkey_info_.get_size()))) {
+        LOG_WARN("Fail to reserve shadow_rowkey_info", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(index_info_.reserve(src_schema.index_info_.get_size()))) {
+        LOG_WARN("Fail to reserve index_info", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(partition_key_info_.reserve(src_schema.partition_key_info_.get_size()))) {
+        LOG_WARN("Fail to reserve partition_key_info", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(subpartition_key_info_.reserve(src_schema.subpartition_key_info_.get_size()))) {
+        LOG_WARN("Fail to reserve partition_key_info", K(ret));
       }
     }
 
@@ -386,6 +474,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
         LOG_ERROR("Fail to allocate memory for id_hash_array, ", K(id_hash_array_size), K(ret));
       } else if (NULL == (id_hash_array_ = new (buf) IdHashArray(id_hash_array_size))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Fail to new IdHashArray", K(ret));
       }
     }
 
@@ -395,6 +484,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (NULL == (name_hash_array_ = new (buf) NameHashArray(name_hash_array_size))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Fail to new NameHashArray", K(ret));
       }
     }
 
@@ -413,18 +503,40 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
       AlterColumnSchema column;
       if (OB_FAIL(column.assign(*src_schema.column_array_[i]))) {
+        LOG_WARN("fail to assign", K(ret));
       } else if (OB_FAIL(add_column<AlterColumnSchema>(column))) {
+        LOG_WARN("Fail to add column", K(ret));
       } else {
+        LOG_DEBUG("add column success", K(column));
       }
     }
 
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(assign_column_group(src_schema))) {
+        LOG_WARN("fail to assign column_group", KR(ret), K(src_schema));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.ttl_definition_, ttl_definition_))) {
+    LOG_WARN("Fail to deep copy ttl definition string", K(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.storage_cache_policy_, storage_cache_policy_))) {
+    LOG_WARN("Fail to deep copy storage_cache_policy string", K(ret));
+  }
+  if (FAILEDx(mv_mode_.assign(src_schema.mv_mode_))) {
+    LOG_WARN("fail to assign mv_mode", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
+    LOG_WARN("Fail to deep copy vector index param string", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     semistruct_encoding_type_ = src_schema.semistruct_encoding_type_;
   }
+  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.dynamic_partition_policy_, dynamic_partition_policy_))) {
+    LOG_WARN("fail to deep copy dynamic partition policy string", KR(ret));
+  }
+
   return ret;
 }
 
@@ -452,12 +564,15 @@ int AlterTableSchema::add_alter_column(const AlterColumnSchema &alter_column_sch
           ret = OB_ERR_UNEXPECTED;
           SHARE_LOG(WARN, "The local column is not valid, ", K(ret));
         } else if (OB_FAIL(add_col_to_column_array(local_column))) {
+          SHARE_LOG(WARN, "Fail to push column to array, ", K(ret));
         } else {
+          SHARE_SCHEMA_LOG(DEBUG, "add column", K(local_column));
         }
       }
     }
   } else {
     if (OB_FAIL(add_col_to_column_array(const_cast<AlterColumnSchema *>(&alter_column_schema)))) {
+      SHARE_LOG(WARN, "Fail to push column to array, ", K(ret));
     }
   }
   return ret;
@@ -468,11 +583,13 @@ int AlterTableSchema::assign_subpartition_key_info(const common::ObPartitionKeyI
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(subpartition_key_info_.reserve(src_info.get_size()))) {
+    SHARE_SCHEMA_LOG(WARN, "reserve subpartition key info", K(ret));
   } else {
     const ObRowkeyColumn *ObRowkeyInfo = NULL;
     for (int i = 0; OB_SUCC(ret) && i < src_info.get_size(); i++) {
       ObRowkeyInfo = src_info.get_column(i);
       if (OB_FAIL(subpartition_key_info_.set_column(i, *ObRowkeyInfo))) {
+        SHARE_SCHEMA_LOG(WARN, "set column fail", K(ret));
       }
     }
   }
@@ -487,8 +604,10 @@ DEFINE_GET_SERIALIZE_SIZE(AlterTableSchema)
   size += origin_table_name_.get_serialize_size();
   size += new_database_name_.get_serialize_size();
   size += origin_database_name_.get_serialize_size();
+  size += serialization::encoded_length_vi64(origin_tablegroup_id_);
   size += alter_option_bitset_.get_serialize_size();
   size += serialization::encoded_length_vi64(sql_mode_);
+  size += split_partition_name_.get_serialize_size();
   size += new_part_name_.get_serialize_size();
   return size;
 }
@@ -539,8 +658,40 @@ int ObSchemaService::alloc_table_schema(const ObTableSchema &table,
     ret = OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "placement new failed", K(ret));
   } else if (OB_FAIL((*allocated_table_schema).assign(table))){
+    LOG_WARN("fail to assign schema", K(ret));
   }
   return ret;
+}
+
+
+// ===== ObSchemaService factory injection(implementationlives in the observer layer) =====
+ObSchemaServiceCreator ObSchemaServiceFactory::creator_ = NULL;
+ObSchemaServiceDestroyer ObSchemaServiceFactory::destroyer_ = NULL;
+
+void ObSchemaServiceFactory::register_creator(ObSchemaServiceCreator creator,
+                                              ObSchemaServiceDestroyer destroyer)
+{
+  creator_ = creator;
+  destroyer_ = destroyer;
+}
+
+ObSchemaService *ObSchemaServiceFactory::create()
+{
+  ObSchemaService *ret = NULL;
+  if (NULL != creator_) {
+    ret = creator_();
+  } else {
+    SHARE_SCHEMA_LOG_RET(ERROR, common::OB_NOT_INIT,
+        "ObSchemaService creator not registered (observer must register it before schema init)");
+  }
+  return ret;
+}
+
+void ObSchemaServiceFactory::destroy(ObSchemaService *schema_service)
+{
+  if (NULL != schema_service && NULL != destroyer_) {
+    destroyer_(schema_service);
+  }
 }
 
 } //end of namespace schema

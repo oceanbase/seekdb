@@ -18,7 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_TRANS_TIMER_
 
 #include <stdint.h>
-#include "share/ob_time_wheel.h"
+#include "ob_time_wheel.h"
 
 namespace oceanbase
 {
@@ -145,6 +145,16 @@ protected:
   bool is_inited_;
   bool is_running_;
   common::ObTimeWheel tw_;
+};
+
+class ObDupTableLeaseTimer : public ObTransTimer
+{
+public:
+  ObDupTableLeaseTimer() {}
+  virtual ~ObDupTableLeaseTimer() {}
+private:
+  static const int64_t DUP_TABLE_TIMEOUT_TASK_PRECISION_US = 3 * 1000 * 1000L;
+  DISALLOW_COPY_AND_ASSIGN(ObDupTableLeaseTimer);
 };
 
 } // transaction

@@ -1,0 +1,96 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_RESOLVER_MV_OB_MV_DEP_UTILS_H_
+#define OCEANBASE_SQL_RESOLVER_MV_OB_MV_DEP_UTILS_H_
+
+#include "lib/ob_define.h"
+#include "lib/container/ob_array.h"
+#include "lib/utility/ob_print_utils.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObDependencyInfo;
+class ObMViewInfo;
+}
+}
+namespace sql
+{
+class ObMVDepInfo
+{
+public:
+  ObMVDepInfo() : mview_id_(OB_INVALID_ID),
+                  p_order_(0),
+                  p_obj_(OB_INVALID_ID),
+                  p_type_(0),
+                  qbcid_(0),
+                  flags_(0) {}
+  virtual ~ObMVDepInfo() {}
+  bool is_valid() const;
+
+  TO_STRING_KV(K_(mview_id), K_(p_order), K_(p_obj), K_(p_type), K_(qbcid), K_(flags));
+
+public:
+  uint64_t mview_id_;
+  int64_t p_order_;
+  uint64_t p_obj_;
+  int64_t p_type_;
+  int64_t qbcid_;
+  int64_t flags_;
+};
+
+class ObMVDepUtils
+{
+public:
+  // demoted from share::schema::ObMViewInfo(truly sql-bound: ObMVDepUtils/ObMVDepInfo; detached from ObMViewInfo through public getters)
+  static int update_mview_data_attr(common::ObISQLClient &sql_client,
+                                    const uint64_t refresh_scn,
+                                    const uint64_t target_data_sync_scn,
+                                    share::schema::ObMViewInfo &mview_info);
+  static int get_mview_dep_infos(common::ObISQLClient &sql_client,
+                                 const uint64_t mview_table_id,
+                                 common::ObIArray<ObMVDepInfo> &dep_infos);
+  static int insert_mview_dep_infos(common::ObISQLClient &sql_client,
+                                    const uint64_t mview_table_id,
+                                    const common::ObIArray<ObMVDepInfo> &dep_infos);
+  static int delete_mview_dep_infos(common::ObISQLClient &sql_client,
+                                    const uint64_t mview_table_id);
+  static int convert_to_mview_dep_infos(
+      const common::ObIArray<share::schema::ObDependencyInfo> &deps,
+      common::ObIArray<ObMVDepInfo> &mv_deps);
+  static int get_table_ids_only_referenced_by_given_mv(
+      common::ObISQLClient &sql_client,
+      const uint64_t mview_table_id,
+      common::ObIArray<uint64_t> &ref_table_ids);
+  static int get_table_ids_only_referenced_by_given_fast_lsm_mv(
+      common::ObISQLClient &sql_client,
+      const uint64_t mview_table_id,
+      common::ObIArray<uint64_t> &ref_table_ids);
+  static int get_referring_mv_of_base_table(ObISQLClient &sql_client,
+                                            const uint64_t base_table_id,
+                                            ObIArray<uint64_t> &mview_ids);
+  static int get_all_mview_dep_infos(common::ObMySQLProxy *sql_proxy,
+                                     common::ObIArray<ObMVDepInfo> &dep_infos);
+};
+} // end of sql
+} // end of oceanbase
+#endif

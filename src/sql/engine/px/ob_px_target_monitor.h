@@ -17,6 +17,7 @@
 #ifndef __SQL_ENG_PX_TARGET_MONITOR_H__
 #define __SQL_ENG_PX_TARGET_MONITOR_H__
 
+#include "lib/net/ob_addr.h"
 #include "share/ob_define.h"
 #include "lib/lock/ob_monitor.h"
 #include "lib/lock/mutex.h"
@@ -30,10 +31,15 @@ namespace sql
 
 struct ObPxTargetInfo
 {
-  int64_t local_target_;
-  int64_t target_used_;
+  ObAddr server_;
+  bool is_leader_;
+  ObAddr peer_server_;
+  int64_t parallel_servers_target_;
+  int64_t peer_target_used_;
+  int64_t local_target_used_;
   int64_t local_parallel_session_count_;
-  TO_STRING_KV(K_(local_target), K_(target_used),
+  TO_STRING_KV(K_(server), K_(is_leader), K_(peer_server),
+               K_(parallel_servers_target), K_(peer_target_used), K_(local_target_used),
                K_(local_parallel_session_count));
 };
 
@@ -62,7 +68,7 @@ public:
   ObPxTargetMonitor() : spin_lock_(common::ObLatchIds::PX_TARGET_LOCK) { reset(); }
   virtual ~ObPxTargetMonitor() {}
   static ObPxTargetMonitor &get_instance();
-  int init();
+  int init(const ObAddr &server);
   void reset();
 
   // for monitor
@@ -72,21 +78,25 @@ public:
 
 
   // for px_admission
-  int apply_target(int64_t wait_time_us, int64_t session_target,
-                   int64_t minimal_req_cnt, int64_t req_cnt, int64_t &admit_count);
-  int release_target(int64_t worker_count);
+  int apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map,
+                   int64_t wait_time_us, int64_t session_target, int64_t req_cnt,
+                   int64_t &admit_count);
+  int release_target(hash::ObHashMap<ObAddr, int64_t> &worker_map);
 
   // for virtual_table iter
-  void get_target_info(ObPxTargetInfo &target_info);
+  int get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array);
 
-  TO_STRING_KV(K_(is_init), K_(parallel_servers_target), K_(px_target_used),
-               K_(parallel_session_count));
+  TO_STRING_KV(K_(is_init), K_(server), K_(px_target_used));
 
 private:
   bool is_init_;
+  ObAddr server_;
   int64_t parallel_servers_target_;
   int64_t px_target_used_;
-  // Protects the local PX worker quota counters.
+  // Protects px_target_used_ from concurrent apply/release/reset.
+  // apply_target and release_target serialize on this lock since both read-modify-write
+  // the single px_target_used_ counter (unlike the old hash map where per-server entries
+  // allowed concurrent updates).
   SpinRWLock spin_lock_;
   int64_t parallel_session_count_;
   ObPxTargetCond target_cond_;

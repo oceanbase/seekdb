@@ -20,7 +20,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_write_buffer_index_cache.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -214,6 +214,13 @@ public:
     ObTmpFileNode(ObITmpFile &file) : file_(file) {}
     ObITmpFile &file_;
   };
+  enum class ObTmpFileMode
+  {
+    INVALID = -1,
+    SHARED_NOTHING = 0,
+    SHARED_STORAGE,
+    MAX
+  };
 
 public:
   bool can_remove();
@@ -226,6 +233,7 @@ public:
   void update_read_offset(int64_t read_offset);
   int64_t get_dirty_data_page_size_with_lock();
 
+  OB_INLINE ObTmpFileMode get_mode() const { return mode_; }
   OB_INLINE int64_t get_fd() const { return fd_; }
   OB_INLINE int64_t get_dir_id() const { return dir_id_; }
   OB_INLINE void inc_ref_cnt() { ATOMIC_INC(&ref_cnt_); }
@@ -244,7 +252,7 @@ public:
   int reinsert_data_flush_node();
   int remove_data_flush_node();
 
-  VIRTUAL_TO_STRING_KV(K(is_inited_), K(dir_id_), K(fd_),
+  VIRTUAL_TO_STRING_KV(K(is_inited_), K(mode_), K(dir_id_), K(fd_),
                        K(is_deleting_), K(is_sealed_),
                        K(ref_cnt_), K(truncated_offset_), K(read_offset_),
                        K(file_size_),
@@ -325,6 +333,7 @@ protected:
 
 protected:
   bool is_inited_;
+  ObTmpFileMode mode_;
   
   int64_t dir_id_;
   int64_t fd_;

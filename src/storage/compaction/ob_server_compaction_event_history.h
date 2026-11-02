@@ -17,7 +17,7 @@
 #ifndef OB_STORAGE_COMPACTION_SERVER_COMPACTION_EVENT_HISTORY_H_
 #define OB_STORAGE_COMPACTION_SERVER_COMPACTION_EVENT_HISTORY_H_
 #include "ob_compaction_suggestion.h" // for ObInfoRingArray
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_compaction_diagnose.h" // for ADD_KV
 
 namespace oceanbase
@@ -46,7 +46,7 @@ public:
   static const char *get_comp_event_str(enum ObCompactionEvent event);
   enum ObCompactionRole : uint8_t
   {
-    ROOT_SERVICE = 0,
+    TENANT_RS = 0,
     STORAGE,
     LS_LEADER,
     LS_SVR,
@@ -99,10 +99,10 @@ public:
   ObServerCompactionEventHistory()
   : ObInfoRingArray(allocator_)
   {
-    allocator_.set_attr(lib::ObMemAttr("CompEventMgr"));
+    allocator_.set_attr(SET_USE_500("CompEventMgr"));
   }
   ~ObServerCompactionEventHistory() {}
-  static int server_module_init(ObServerCompactionEventHistory* &event_history);
+  static int mtl_init(ObServerCompactionEventHistory* &event_history);
   int init();
   void destroy();
 
@@ -141,7 +141,7 @@ private:
 PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::STORAGE, timestamp, __VA_ARGS__)
 
 #define ADD_RS_COMPACTION_EVENT(compaction_scn, event, timestamp, ...) \
-PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::ROOT_SERVICE, timestamp, __VA_ARGS__)
+PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::TENANT_RS, timestamp, __VA_ARGS__)
 
 #define ADD_ROLE_COMPACTION_EVENT(role, compaction_scn, event, timestamp, ...) \
 PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, role, timestamp, __VA_ARGS__)
@@ -165,7 +165,7 @@ PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, role, timestamp, __VA_
     event_item.timestamp_ = timestamp;                                         \
     char *buf = event_item.comment_;                                           \
     const int64_t buf_size = ::oceanbase::common::OB_DIAGNOSE_INFO_LENGTH;     \
-    SIMPLE_TO_STRING_##n if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObServerCompactionEventHistory>()     \
+    SIMPLE_TO_STRING_##n if (OB_FAIL(share::g_mp->server_compaction_event_history()     \
                                          ->add_event(event_item))) {           \
       STORAGE_LOG(WARN, "failed to add event", K(ret), K(event_item));         \
     }                                                                          \

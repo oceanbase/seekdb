@@ -18,6 +18,7 @@
 #define __OB_SQL_PX_SQC_PROXY_H__
 
 #include "lib/lock/ob_spin_lock.h"
+#include "lib/hash/ob_hashmap.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "sql/dtl/ob_dtl_task.h"
@@ -61,7 +62,10 @@ private:
 class ObPxSQCProxy
 {
 public:
-  ObPxSQCProxy(ObSqcCtx &sqc_ctx, ObPxInitSqcArgs &arg);
+  typedef hash::ObHashMap<int64_t, common::ObSArray<ObAddr> *,
+      hash::NoPthreadDefendMode> SQCP2PDhMap;
+public:
+  ObPxSQCProxy(ObSqcCtx &sqc_ctx, ObPxRpcInitSqcArgs &arg);
   virtual ~ObPxSQCProxy();
 
   // basics
@@ -105,7 +109,8 @@ public:
   template <class PieceMsg, class WholeMsg>
   int aggregate_sqc_pieces_and_get_dh_msg(uint64_t op_id, dtl::ObDtlMsgType msg_type,
                                           const PieceMsg &piece, int64_t timeout_ts, bool need_sync,
-                                          bool need_wait_whole_msg, const WholeMsg *&whole);
+                                          bool is_local, bool need_wait_whole_msg,
+                                          const WholeMsg *&whole);
 
   // for root thread
   int check_task_finish_status(int64_t timeout_ts);
@@ -122,7 +127,7 @@ public:
   bool adjoining_root_dfo() const { return sqc_arg_.sqc_.adjoining_root_dfo(); }
   int64_t get_dfo_id() { return sqc_arg_.sqc_.get_dfo_id(); }
   int64_t get_sqc_id() { return sqc_arg_.sqc_.get_sqc_id(); }
-  const ObPxInitSqcArgs &get_sqc_arg() { return sqc_arg_; }
+  const ObPxRpcInitSqcArgs &get_sqc_arg() { return sqc_arg_; }
   int make_sqc_sample_piece_msg(ObDynamicSamplePieceMsg &msg, bool &finish);
   ObDynamicSamplePieceMsg &get_piece_sample_msg() { return sample_msg_; }
   ObInitChannelPieceMsg &get_piece_init_channel_msg() { return init_channel_msg_; }
@@ -131,12 +136,15 @@ public:
   int64_t get_dh_msg_cnt() const;
   void atomic_inc_dh_msg_cnt();
   int64_t atomic_add_and_fetch_dh_msg_cnt();
+  int construct_p2p_dh_map(ObP2PDhMapInfo &map_info);
+  SQCP2PDhMap &get_p2p_dh_map()  { return p2p_dh_map_; }
+  int check_is_local_dh(int64_t p2p_dh_id, bool &is_local_dh, int64_t msg_cnt);
 private:
   /* functions */
   int setup_loop_proc(ObSqcCtx &sqc_ctx);
   int process_dtl_msg(int64_t timeout_ts);
   int do_process_dtl_msg(int64_t timeout_ts);
-  int link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg);
+  int link_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg);
   bool need_transmit_channel_map_via_dtl();
   bool need_receive_channel_map_via_dtl(int64_t child_dfo_id);
   int get_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider *&provider);
@@ -162,7 +170,7 @@ private:
 public:
   ObSqcCtx &sqc_ctx_;
 private:
-  ObPxInitSqcArgs &sqc_arg_;
+  ObPxRpcInitSqcArgs &sqc_arg_;
   // All worker nodes race for this lock, the winner becomes the leader, responsible for advancing the msg loop
   common::ObSpinLock leader_token_lock_;
   // This lock is temporary, used for mutual exclusion of multiple threads sending data through the sqc channel,
@@ -172,6 +180,7 @@ private:
   ObInitChannelPieceMsg init_channel_msg_;
   // msg cond is shared by transmit && rescive
   common::ObThreadCond msg_ready_cond_;
+  SQCP2PDhMap p2p_dh_map_;
   DISALLOW_COPY_AND_ASSIGN(ObPxSQCProxy);
 };
 
@@ -207,18 +216,36 @@ int ObPxSQCProxy::get_dh_msg(uint64_t op_id,
 template <class PieceMsg, class WholeMsg>
 int ObPxSQCProxy::aggregate_sqc_pieces_and_get_dh_msg(uint64_t op_id, dtl::ObDtlMsgType msg_type,
                                                       const PieceMsg &piece, int64_t timeout_ts,
-                                                      bool need_sync, bool need_wait_whole_msg,
+                                                      bool need_sync, bool is_local,
+                                                      bool need_wait_whole_msg,
                                                       const WholeMsg *&whole)
 {
   int ret = common::OB_SUCCESS;
   ObPxDatahubDataProvider *provider = nullptr;
   typename WholeMsg::WholeMsgProvider *detail_p = nullptr;
   if (OB_FAIL(get_whole_msg_provider(op_id, msg_type, provider))) {
+    SQL_LOG(WARN, "failed to get provider", K(ret));
   } else if (FALSE_IT(detail_p = static_cast<typename WholeMsg::WholeMsgProvider *>(provider))) {
-  } else {
+  } else if (is_local) {
+    // for local datahub message, we can directly get the whole message from provider.
     if (OB_FAIL(detail_p->aggregate_sqc_piece_msgs_and_directly_return_whole(
             piece, whole, timeout_ts, get_task_count(), need_sync, need_wait_whole_msg))) {
       SQL_LOG(WARN, "failed to aggregate_sqc_piece_msgs_and_directly_return_whole");
+    }
+  } else if (!is_local) {
+    // for remote datahub message, only last piece is under obligation to send rpc
+    bool is_last_piece = false;
+    const PieceMsg *sqc_piece = nullptr;
+    if (OB_FAIL(detail_p->aggregate_sqc_piece_msgs(piece, sqc_piece, timeout_ts, get_task_count(),
+                                                   need_sync, is_last_piece))) {
+      SQL_LOG(WARN, "failed to aggregate_sqc_piece_msgs");
+    } else if (is_last_piece && OB_ISNULL(sqc_piece)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_LOG(WARN, "unexpected null");
+    } else if (is_last_piece && OB_FAIL(send_dh_piece_msg(*sqc_piece, timeout_ts))) {
+      SQL_LOG(WARN, "failed to send_dh_piece_msg");
+    } else if (need_wait_whole_msg && OB_FAIL(wait_whole_msg(provider, whole, timeout_ts))) {
+      SQL_LOG(WARN, "failed to wait whole msg");
     }
   }
   return ret;
@@ -237,16 +264,19 @@ int ObPxSQCProxy::wait_whole_msg(ObPxDatahubDataProvider *provider, const WholeM
     ObSqcLeaderTokenGuard guard(leader_token_lock_, msg_ready_cond_);
     if (guard.hold_token()) {
       ret = process_dtl_msg(timeout_ts);
+      SQL_LOG(DEBUG, "process dtl msg done", K(ret));
     }
     if (OB_DTL_WAIT_EAGAIN == ret || OB_SUCCESS == ret) {
       const dtl::ObDtlMsg *msg = nullptr;
       if (OB_FAIL(p->get_msg_nonblock(msg, timeout_ts))) {
+        SQL_LOG(TRACE, "fail get msg", K(timeout_ts), K(ret));
       } else {
         whole = static_cast<const WholeMsg *>(msg);
       }
     }
     if (common::OB_DTL_WAIT_EAGAIN == ret) {
       if (0 == ((++wait_count) & 0x7F)) {
+        SQL_LOG(TRACE, "try to get datahub data repeatly", K(timeout_ts), K(wait_count), K(ret));
       }
       // wait 50us
       ob_usleep(50);
@@ -269,11 +299,13 @@ int ObPxSQCProxy::inner_get_dh_msg(
   int ret = common::OB_SUCCESS;
   ObPxDatahubDataProvider *provider = nullptr;
   if (OB_FAIL(get_whole_msg_provider(op_id, msg_type, provider))) {
+    SQL_LOG(WARN, "fail get provider", K(ret));
   } else if (need_sync && OB_FAIL(sync_wait_all(*provider))) {
     SQL_LOG(WARN, "failed to sync wait", K(ret));
   } else {
     if (send_piece) {
       if (OB_FAIL(send_dh_piece_msg(piece, timeout_ts))) {
+        SQL_LOG(WARN, "failed to send_dh_piece_msg");
       }
     }
     if (OB_SUCC(ret) && need_wait_whole_msg
@@ -293,8 +325,10 @@ int ObPxSQCProxy::send_dh_piece_msg(const PieceMsg &piece, int64_t timeout_ts)
   if (OB_ISNULL(ch)) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "empty channel", K(ret));
-  } else if (OB_FAIL(ch->send(piece, timeout_ts))) {
+  } else if (OB_FAIL(ch->send(piece, timeout_ts))) { // Do our best, if push fails it will be handled by other mechanisms
+    SQL_LOG(WARN, "fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush())) {
+    SQL_LOG(WARN, "fail flush dtl data", K(ret));
   }
   return ret;
 }
@@ -302,3 +336,4 @@ int ObPxSQCProxy::send_dh_piece_msg(const PieceMsg &piece, int64_t timeout_ts)
 }
 #endif /* __OB_SQL_PX_SQC_PROXY_H__ */
 //// end of header file
+

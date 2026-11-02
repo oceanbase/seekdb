@@ -1,0 +1,10 @@
+drop table if exists t1;
+CREATE TABLE `t1` (
+`c1` varchar(16) NOT NULL,
+`c2` varchar(16) NOT NULL,
+`c3` varchar(16) DEFAULT NULL,
+PRIMARY KEY (`c1`, `c2`),
+UNIQUE KEY `u_idx` (`c3`) BLOCK_SIZE 16384);
+select/*+ index(t1 u_idx)*/ c1 from t1 for update wait 1;
+c1
+drop table t1;

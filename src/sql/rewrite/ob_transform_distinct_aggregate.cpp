@@ -47,11 +47,14 @@ int ObTransformDistinctAggregate::transform_one_stmt(common::ObIArray<ObParentDM
   trans_happened = false;
   UNUSED(parent_stmts);
   if (OB_FAIL(check_transform_validity(stmt, is_valid))) {
+    LOG_WARN("failed to check transform validity", K(ret));
   } else if (!is_valid) {
     // do nothing
   } else if (OB_FAIL(do_transform(static_cast<ObSelectStmt *>(stmt),
                                   trans_happened))) {
+    LOG_WARN("failed to transform distinct aggregate", K(ret));
   } else if (trans_happened && OB_FAIL(add_transform_hint(*stmt))) {
+    LOG_WARN("failed to add transform hint", K(ret));
   } 
   return ret;
 }
@@ -73,6 +76,7 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
   is_valid = true;
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(stmt));
   } else if (!stmt->is_select_stmt()) {
     is_valid = false;
     OPT_TRACE("can not do transform, stmt is not a select stmt");
@@ -95,6 +99,7 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
     const ObAggFunRawExpr *aggr_expr = select_stmt->get_aggr_item(i);
     if (OB_ISNULL(aggr_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("agg expr is null", K(ret), K(i));
     } else if (aggr_expr->is_param_distinct()) {
       if (1 > aggr_expr->get_real_param_count()
           || (1 < aggr_expr->get_real_param_count()
@@ -108,6 +113,7 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
       } else if (distinct_exprs.empty()) {
         if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(distinct_exprs,
                                                          aggr_expr->get_real_param_exprs()))) {
+          LOG_WARN("failed to assign aggr param expr", K(ret));
         }
       } else {
         ObSqlBitSet<> visited_idx;
@@ -116,15 +122,19 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
           bool has_find = false;
           if (OB_ISNULL(param_expr)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("param of distinct aggregate function is NULL", K(ret), KPC(aggr_expr), K(j));
           }
           for (int64_t k = 0; OB_SUCC(ret) && !has_find && k < distinct_exprs.count(); ++k) {
             if (OB_ISNULL(distinct_exprs.at(k))) {
               ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("param of distinct aggregate function is NULL", K(ret), K(distinct_exprs), K(k));
             } else if (param_expr->same_as(*distinct_exprs.at(k))) {
               has_find = true;
               if (OB_FAIL(visited_idx.add_member(k))) {
+                LOG_WARN("failed to add member", K(ret));
               } else if (param_expr != distinct_exprs.at(k)
                          && OB_FAIL(replacer.add_replace_expr(param_expr, distinct_exprs.at(k)))) {
+                LOG_WARN("failed to add replace expr", K(ret));
               }
               break;
             }
@@ -137,6 +147,7 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
         }
       }
     } else if (OB_FAIL(ObOptimizerUtil::check_aggr_can_pre_aggregate(aggr_expr, is_valid))) {
+      LOG_WARN("failed to check aggr can pre aggregate", K(ret), KPC(aggr_expr));
     } else if (!is_valid) {
       OPT_TRACE("can not do transform, stmt has aggregate function that can not pre aggregate");
     }
@@ -151,9 +162,11 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
       ObRawExpr *aggr_expr = select_stmt->get_aggr_item(i);
       if (OB_ISNULL(aggr_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("agg expr is null", K(ret), K(i));
       } else if (!static_cast<ObAggFunRawExpr*>(aggr_expr)->is_param_distinct()) {
         // do nothing
       } else if (OB_FAIL(replacer.do_visit(aggr_expr))) {
+        LOG_WARN("failed to replace param expr", K(ret));
       } 
     }
   }
@@ -175,23 +188,31 @@ int ObTransformDistinctAggregate::do_transform(ObSelectStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(classify_aggr_exprs(stmt->get_aggr_items(),
                                          non_distinct_aggr,
                                          distinct_aggr))) {
+    LOG_WARN("failed to classify aggr exprs", K(ret));
   } else if (OB_FAIL(construct_view_select_exprs(non_distinct_aggr,
                                                  view_select_exprs))) {
+    LOG_WARN("failed to construct view select exprs", K(ret));
   } else if (OB_FAIL(construct_view_group_exprs(stmt->get_group_exprs(),
                                                 distinct_aggr,
                                                 view_group_exprs))) {
+    LOG_WARN("failed to construct view group exprs", K(ret));
   } else if (OB_FAIL(stmt->get_from_tables(from_tables))) {
+    LOG_WARN("failed to get from tables", K(ret));
   } else if (OB_FAIL(semi_infos.assign(stmt->get_semi_infos()))) {
+    LOG_WARN("failed to assign semi infos", K(ret));
   } else if (OB_FAIL(view_cond_exprs.assign(stmt->get_condition_exprs()))) {
+    LOG_WARN("failed to assign view cond exprs", K(ret));
   } else if (OB_FALSE_IT(stmt->get_condition_exprs().reset())) {
   } else if (OB_FAIL(ObTransformUtils::replace_with_empty_view(ctx_,
                                                                stmt,
                                                                view_table,
                                                                from_tables,
                                                                &semi_infos))) {
+    LOG_WARN("failed to create empty view", K(ret));
   } else if (OB_FAIL(ObTransformUtils::create_inline_view(ctx_,
                                                           stmt,
                                                           view_table,
@@ -200,7 +221,9 @@ int ObTransformDistinctAggregate::do_transform(ObSelectStmt *stmt,
                                                           &semi_infos,
                                                           &view_select_exprs,
                                                           &view_group_exprs))) {
+    LOG_WARN("failed to create inline view", K(ret));
   } else if (OB_FAIL(replace_aggr_func(stmt, view_table, distinct_aggr))) {
+    LOG_WARN("failed to replace aggregate functions", K(ret));
   } else {
     trans_happened = true;
   }
@@ -216,11 +239,14 @@ int ObTransformDistinctAggregate::classify_aggr_exprs(const ObIArray<ObAggFunRaw
     ObAggFunRawExpr *aggr_expr = aggr_exprs.at(i);
     if (OB_ISNULL(aggr_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("aggr expr is null", K(ret), K(i));
     } else if (aggr_expr->is_param_distinct()) {
       if (OB_FAIL(distinct_aggr.push_back(aggr_expr))) {
+        LOG_WARN("failed to push back distinct aggr", K(ret));
       }
     } else {
       if (OB_FAIL(non_distinct_aggr.push_back(aggr_expr))) {
+        LOG_WARN("failed to push back non distinct aggr", K(ret));
       }
     }
   }
@@ -240,6 +266,7 @@ int ObTransformDistinctAggregate::construct_view_select_exprs(const ObIArray<ObA
   // will be added by ObTransformUtils::create_inline_view automatically
   for (int64_t i = 0; OB_SUCC(ret) && i < non_distinct_aggr.count(); ++i) {
     if (OB_FAIL(add_var_to_array_no_dup(view_select_exprs, static_cast<ObRawExpr*>(non_distinct_aggr.at(i))))) {
+      LOG_WARN("failed to add non distinct aggr expr", K(ret));
     }
   }
   return ret;
@@ -257,15 +284,19 @@ int ObTransformDistinctAggregate::construct_view_group_exprs(const ObIArray<ObRa
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(distinct_aggr.empty() || NULL == distinct_aggr.at(0))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected distinct aggr", K(ret), K(distinct_aggr));
   } else if (OB_FAIL(append(view_group_exprs, ori_group_expr))) {
+    LOG_WARN("failed to append group exprs", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < distinct_aggr.at(0)->get_real_param_count(); ++i) {
     ObRawExpr *param_expr = distinct_aggr.at(0)->get_real_param_exprs().at(i);
     if (OB_ISNULL(param_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("param expr is null", K(ret), K(i), KPC(distinct_aggr.at(0)));
     } else if (param_expr->is_static_scalar_const_expr()) {
       // do nothing, do not need to add static const expr into group exprs
     } else if (OB_FAIL(add_var_to_array_no_dup(view_group_exprs, param_expr))) {
+      LOG_WARN("failed to add distinct aggr param", K(ret));
     }
   }
   if (OB_SUCC(ret) && view_group_exprs.empty()) {
@@ -273,7 +304,9 @@ int ObTransformDistinctAggregate::construct_view_group_exprs(const ObIArray<ObRa
     // param expr into view_group_exprs to keep the aggregate semantics.
     if (OB_UNLIKELY(1 > distinct_aggr.at(0)->get_real_param_count())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("distinct aggr does not have param", K(ret), KPC(distinct_aggr.at(0)));
     } else if (OB_FAIL(view_group_exprs.push_back(distinct_aggr.at(0)->get_real_param_exprs().at(0)))) {
+      LOG_WARN("failed to push back group exprs", K(ret));
     }
   }
   return ret;
@@ -300,7 +333,9 @@ int ObTransformDistinctAggregate::replace_aggr_func(ObSelectStmt *stmt,
       || OB_UNLIKELY(!view_table->is_generated_table())
       || OB_ISNULL(view_stmt = view_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(ctx_), K(stmt), K(view_table), K(view_stmt));
   } else  if (OB_FAIL(view_stmt->get_select_exprs(view_exprs))) {
+    LOG_WARN("failed to get origin select exprs", K(ret));
   } else {
     stmt->clear_aggr_item();
   }
@@ -313,25 +348,31 @@ int ObTransformDistinctAggregate::replace_aggr_func(ObSelectStmt *stmt,
     ObRawExpr *new_expr = NULL;
     if (OB_ISNULL(view_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret), K(i));
     } else if (!view_expr->is_aggr_expr()) {
       // do nothing
     } else if (OB_FALSE_IT(view_aggr_expr = static_cast<ObAggFunRawExpr*>(view_expr))) {
     } else if (OB_ISNULL(column_expr = stmt->get_column_expr_by_id(view_table->table_id_,
                                                                    OB_APP_MIN_COLUMN_ID + i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get column expr", K(ret), K(i), KPC(view_expr));
     } else if (OB_FAIL(ObOptimizerUtil::generate_pullup_aggr_expr(*ctx_->expr_factory_,
                                                                   ctx_->session_info_,
                                                                   view_aggr_expr->get_expr_type(),
                                                                   column_expr,
                                                                   new_aggr))) {
+      LOG_WARN("failed to build new aggregate funcion expr", K(ret));
     } else if (OB_FAIL(ObExpandAggregateUtils::add_aggr_item(stmt->get_aggr_items(),
                                                              new_aggr))) {
+      LOG_WARN("failed to add aggr item", K(ret), KPC(new_aggr));
     } else if (OB_FALSE_IT(new_expr = static_cast<ObRawExpr*>(new_aggr))) {
     } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
                                                                       view_expr,
                                                                       new_expr,
                                                                       ctx_->session_info_))) {
+      LOG_WARN("failed to add cast for new aggr expr", K(ret));
     } else if (OB_FAIL(replacer.add_replace_expr(column_expr, new_expr))) {
+      LOG_WARN("failed to add replace expr", K(ret));
     }
   }
   // create replaced distinct aggr
@@ -340,19 +381,27 @@ int ObTransformDistinctAggregate::replace_aggr_func(ObSelectStmt *stmt,
     ObAggFunRawExpr *new_aggr = NULL;
     if (OB_ISNULL(aggr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret), K(i));
     } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(aggr->get_expr_type(),
                                                             new_aggr))) {
+      LOG_WARN("failed to create new aggr expr", K(ret));
     } else if (OB_ISNULL(new_aggr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("new aggr is null", K(ret));
     } else if (OB_FAIL(new_aggr->assign(*aggr))) {
+      LOG_WARN("failed to assign aggr expr", K(ret));
     } else if (OB_FALSE_IT(new_aggr->set_param_distinct(false))) {
     } else if (OB_FAIL(new_aggr->formalize(ctx_->session_info_))) {
+      LOG_WARN("failed to formalize aggr expr", K(ret));
     } else if (OB_FAIL(ObExpandAggregateUtils::add_aggr_item(stmt->get_aggr_items(),
                                                              new_aggr))) {
+      LOG_WARN("failed to add aggr item", K(ret), KPC(new_aggr));
     } else if (OB_FAIL(replacer.add_replace_expr(aggr, new_aggr))) {
+      LOG_WARN("failed to add replace expr", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(stmt->iterate_stmt_expr(replacer))) {
+    LOG_WARN("failed to iterate stmt expr", K(ret));
   }
   return ret;
 }

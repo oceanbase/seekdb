@@ -36,9 +36,10 @@ public:
       const uint64_t index_table_id,
       const int64_t schema_version,
       const int64_t parent_task_id,
+      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const int64_t parallelism,
-      const uint64_t data_format_version,
+      const uint64_t tenant_data_version,
       const ObTableSchema &index_schema,
       const obcall::ObRebuildIndexArg &rebuild_index_arg);
   int init(const ObDDLTaskRecord &task_record);
@@ -53,7 +54,7 @@ public:
   void set_new_index_id(const int64_t id) { new_index_id_ = id; }
   int update_task_message(common::ObISQLClient &proxy);
 
-  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(local_management_service));
+  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(root_service));
   virtual int on_child_task_finish(const uint64_t child_task_key,
                                    const int ret_code) override
   {
@@ -63,20 +64,23 @@ public:
   uint64_t get_new_index_id() { return new_index_id_; };
   static bool is_ddl_type_for_rebuild_index_task(const share::ObDDLType &ddl_type)
   {
-    return share::DDL_REBUILD_INDEX == ddl_type;
+    return share::DDL_REBUILD_INDEX == ddl_type || share::DDL_REPLACE_MLOG == ddl_type;
   }
 private:
   int check_switch_succ();
   int prepare(const share::ObDDLTaskStatus new_status);
   int rebuild_index();
   int rebuild_vec_index_impl();
+  int rebuild_mlog_impl();
   int drop_index_impl();
   int prepare_drop_index_arg(ObSchemaGetterGuard &schema_guard, 
                              const ObTableSchema *index_schema,
                              const ObDatabaseSchema *database_schema,
                              const ObTableSchema *data_table_schema,
                              obcall::ObDropIndexArg &drop_index_arg);
+  int purge_old_mlog(const share::ObDDLTaskStatus next_task_status);
   int switch_index_name(const share::ObDDLTaskStatus next_task_status);
+  int get_switch_index_name_task_type(share::ObDDLTaskType &ddl_task_type);
   int create_and_wait_rebuild_task_finish(const share::ObDDLTaskStatus new_status);
   int create_and_wait_drop_task_finish(const share::ObDDLTaskStatus new_status);
   int succ();
@@ -100,7 +104,7 @@ private:
   }
 private:
   static const int64_t OB_REBUILD_INDEX_TASK_VERSION = 1;
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   obcall::ObRebuildIndexArg rebuild_index_arg_;
   int64_t index_build_task_id_;
   int64_t index_drop_task_id_;
@@ -112,3 +116,4 @@ private:
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_ROOTSERVER_OB_REBUILD_INDEX_TASK_H
+

@@ -29,6 +29,7 @@ ObEndTransCbPacketParam &ObEndTransCbPacketParam::operator=(const ObEndTransCbPa
   MEMCPY(message_, other.message_, MSG_SIZE);
   affected_rows_ = other.affected_rows_;
   last_insert_id_to_client_ = other.last_insert_id_to_client_;
+  is_partition_hit_ = other.is_partition_hit_;
   trace_id_.set(other.trace_id_);
   is_valid_ = other.is_valid_;
   return *this;
@@ -39,11 +40,12 @@ const ObEndTransCbPacketParam &ObEndTransCbPacketParam::fill(ObResultSet &rs,
                                                              const ObCurTraceId::TraceId &trace_id)
 {
   MEMCPY(message_, rs.get_message(), MSG_SIZE); // TODO: optimize out
-  // Anonymous block affected rows always return 1.
+  // oracle ANONYMOUS_BLOCK affect rows always return 1
   affected_rows_ = stmt::T_ANONYMOUS_BLOCK == rs.get_stmt_type() 
                     ? 1 : rs.get_affected_rows();
   session.set_affected_rows(affected_rows_);
   last_insert_id_to_client_ = rs.get_last_insert_id_to_client();
+  is_partition_hit_ = session.partition_hit().get_bool();
   trace_id_.set(trace_id);
   is_valid_ = true;
   return *this;
@@ -52,11 +54,13 @@ const ObEndTransCbPacketParam &ObEndTransCbPacketParam::fill(ObResultSet &rs,
 const ObEndTransCbPacketParam &ObEndTransCbPacketParam::fill(const char *message,
                                                              int64_t affected_rows,
                                                              uint64_t last_insert_id_to_client,
+                                                             bool is_partition_hit,
                                                              const ObCurTraceId::TraceId &trace_id)
 {
   MEMCPY(message_, message, strlen(message));
   affected_rows_ = affected_rows;
   last_insert_id_to_client_ = last_insert_id_to_client;
+  is_partition_hit_ = is_partition_hit;
   trace_id_.set(trace_id);
   is_valid_ = true;
   return *this;
@@ -64,3 +68,5 @@ const ObEndTransCbPacketParam &ObEndTransCbPacketParam::fill(const char *message
 
 }/* ns sql*/
 }/* ns oceanbase */
+
+

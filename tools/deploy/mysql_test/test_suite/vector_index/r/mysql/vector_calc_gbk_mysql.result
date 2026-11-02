@@ -1,4 +1,4 @@
-alter system set vector_memory_limit = 0;
+alter system set ob_vector_memory_limit_percentage = 20;
 set ob_query_timeout=1000000000;
 set ob_trx_timeout=1000000000;
 drop database if exists vector_test;
@@ -49,10 +49,10 @@ c1	c2	l1_distance(c2, NULL)	vector_distance(NULL, c2, manhattan)
 [-1.1122,2.3322,3]	NULL	NULL	NULL
 select c1, c2, l2_distance(c1, c2), l2_distance(c1, '[1,2,3]'), l2_distance([1,1,1], c2), vector_distance([1,1,1], c2, euclidean) from test;
 c1	c2	l2_distance(c1, c2)	l2_distance(c1, '[1,2,3]')	l2_distance([1,1,1], c2)	vector_distance([1,1,1], c2, euclidean)
-[1,-1,1]	[1,2,-3]	5	3.6056	4.1231	4.1231
-[2.2,2.3,2.4]	[-1.5,2.566,3.44]	3.8526	1.3748	3.8283	3.8283
-[3.55,3.66,3.777]	[1.123,2,3]	3.0413	3.1404	2.2394	2.2394
-[-1.1122,2.3322,3]	NULL	NULL	2.1382	NULL	NULL
+[1,-1,1]	[1,2,-3]	5	3.605551275463989	4.123105625617661	4.123105625617661
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	3.8525778760154687	1.374772698081317	3.828309840052829	3.828309840052829
+[3.55,3.66,3.777]	[1.123,2,3]	3.0413251108837196	3.1403549106281656	2.239448370991014	2.239448370991014
+[-1.1122,2.3322,3]	NULL	NULL	2.138164120293296	NULL	NULL
 select c1, c2, cosine_distance([1,1,1], [1,2,3]), cosine_distance(c1, [1,2,3]), cosine_distance(c2, '[1,1,1]'), vector_distance(c2, '[1,1,1]', cosine) from test;
 c1	c2	cosine_distance([1,1,1], [1,2,3])	cosine_distance(c1, [1,2,3])	cosine_distance(c2, '[1,1,1]')	vector_distance(c2, '[1,1,1]', cosine)
 [1,-1,1]	[1,2,-3]	0.07417990022744858	0.6913933000758161	1	1
@@ -62,53 +62,53 @@ c1	c2	cosine_distance([1,1,1], [1,2,3])	cosine_distance(c1, [1,2,3])	cosine_dist
 select c1, c2, inner_product(c1, '[1,2,3]'), inner_product('[1,1,1]', '[1,2,3]'), inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
 c1	c2	inner_product(c1, '[1,2,3]')	inner_product('[1,1,1]', '[1,2,3]')	inner_product('[1,1,1]', c2)	vector_distance('[1,1,1]', c2, dot)
 [1,-1,1]	[1,2,-3]	2	6	0	0
-[2.2,2.3,2.4]	[-1.5,2.566,3.44]	14	6	4.506	4.506
-[3.55,3.66,3.777]	[1.123,2,3]	22.201	6	6.123	6.123
-[-1.1122,2.3322,3]	NULL	12.5522	6	NULL	NULL
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	14.000000238418579	6	4.50600004196167	4.50600004196167
+[3.55,3.66,3.777]	[1.123,2,3]	22.20099949836731	6	6.1230000257492065	6.1230000257492065
+[-1.1122,2.3322,3]	NULL	12.552200078964233	6	NULL	NULL
 select c1, c2, negative_inner_product(c1, '[1,2,3]'), negative_inner_product('[1,1,1]', '[1,2,3]'), negative_inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
 c1	c2	negative_inner_product(c1, '[1,2,3]')	negative_inner_product('[1,1,1]', '[1,2,3]')	negative_inner_product('[1,1,1]', c2)	vector_distance('[1,1,1]', c2, dot)
 [1,-1,1]	[1,2,-3]	-2	-6	0	0
-[2.2,2.3,2.4]	[-1.5,2.566,3.44]	-14	-6	-4.506	4.506
-[3.55,3.66,3.777]	[1.123,2,3]	-22.201	-6	-6.123	6.123
-[-1.1122,2.3322,3]	NULL	-12.5522	-6	NULL	NULL
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	-14.000000238418579	-6	-4.50600004196167	4.50600004196167
+[3.55,3.66,3.777]	[1.123,2,3]	-22.20099949836731	-6	-6.1230000257492065	6.1230000257492065
+[-1.1122,2.3322,3]	NULL	-12.552200078964233	-6	NULL	NULL
 select c1, c4, l2_distance(c1, c4) from test where id = 1;
 c1	c4	l2_distance(c1, c4)
-[1,-1,1]	[1,2,3]	3.6056
-[-1.1122,2.3322,3]	[11,2,3]	12.1168
+[1,-1,1]	[1,2,3]	3.605551275463989
+[-1.1122,2.3322,3]	[11,2,3]	12.116754535131845
 select c3, c4, l2_distance(c3, c4) from test where id = 2;
 c3	c4	l2_distance(c3, c4)
 [1,2,3,4]	[1,2,3,4]	0
 select c1, l2_distance(c1, '[1,1,1]') from test group by l2_distance(c1, '[1,1,1]');
 c1	l2_distance(c1, '[1,1,1]')
 [1,-1,1]	2
-[2.2,2.3,2.4]	2.2561
-[3.55,3.66,3.777]	4.6141
-[-1.1122,2.3322,3]	3.1994
+[2.2,2.3,2.4]	2.2561028916013735
+[3.55,3.66,3.777]	4.614090261146129
+[-1.1122,2.3322,3]	3.1993977411409187
 select c1, l2_distance(c1, '[1,1,1]') from test where l2_distance(c1, '[1,1,1]') < 100;
 c1	l2_distance(c1, '[1,1,1]')
 [1,-1,1]	2
-[2.2,2.3,2.4]	2.2561
-[3.55,3.66,3.777]	4.6141
-[-1.1122,2.3322,3]	3.1994
+[2.2,2.3,2.4]	2.2561028916013735
+[3.55,3.66,3.777]	4.614090261146129
+[-1.1122,2.3322,3]	3.1993977411409187
 select l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]') from test;
 l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]')
-3.2857
-2.4359
-4.6146
+3.2857142857142856
+2.4358955043768438
+4.614582921586805
 NULL
 select c1, l2_distance(c1, '[1,1,1]') from test1;
 c1	l2_distance(c1, '[1,1,1]')
-[2.2,2.3,2.4]	2.2561
+[2.2,2.3,2.4]	2.2561028916013735
 [1,1,1]	0
-[3.55,3.66,3.777]	4.6141
-[1.1122,2.3322,3]	2.4057
+[3.55,3.66,3.777]	4.614090261146129
+[1.1122,2.3322,3]	2.4056902999019876
 select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
 id	c1	c1	l2_distance(test1.c1, test.c1)
 2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	0
 select /*+parallel(2)*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
 id	c1	c1	l2_distance(test1.c1, test.c1)
 2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	0
-select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
 id	c1	c1	l2_distance(test1.c1, test.c1)
 2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	0
 select [1,2,3] + '[1.12,1000.0001, -1.2222]', [1,2,3] - NULL, '[1.2,0.221,0.666]' * [1.11,3.33,5.55], NULL + [11,13.3,2,1.2];
@@ -138,7 +138,7 @@ c1	c1	test1.c1+test.c1
 select /*+parallel(2)*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
 c1	c1	test1.c1+test.c1
 [2.2,2.3,2.4]	[2.2,2.3,2.4]	[4.4,4.6,4.8]
-select test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
 c1	c1	test1.c1+test.c1
 [2.2,2.3,2.4]	[2.2,2.3,2.4]	[4.4,4.6,4.8]
 select c1, c1 = '[2.2,2.3,2.4]', c1 != [0.00001,0.00002,0.00003] from test;
@@ -210,7 +210,7 @@ c1	c1
 select /*+parallel(2)*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
 c1	c1
 [1,1,1]	[1,-1,1]
-select test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
 c1	c1
 [1,1,1]	[1,-1,1]
 select c1, c2, c4, vector_dims(c1), vector_dims(c2), vector_dims([1,2,3,4]), vector_dims('[1,2,3]') from test;
@@ -374,13 +374,13 @@ sum(c1)	avg(c1)	count(c1)
 [2.1122,3.3322,4]	[1.0561,1.6661,2]	2
 [2.2,2.3,2.4]	[2.2,2.3,2.4]	1
 [3.55,3.66,3.777]	[3.55,3.66,3.777]	1
-select  sum(c1),avg(c1),count(c1) from test group by id order by id;
+select /*+ OPT_PARAM('rowsets_enabled', 'FALSE') */ sum(c1),avg(c1),count(c1) from test group by id order by id;
 sum(c1)	avg(c1)	count(c1)
 [0.1,0.2,0.3]	[0.1,0.2,0.3]	1
 [-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
 [5.2,6.3,7.4]	[2.6,3.15,3.7]	2
 [100004,500004,4.99922]	[50001.8,250002,2.49961]	2
-select  sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+select /*+ OPT_PARAM('rowsets_enabled', 'FALSE') */ sum(c1),avg(c1),count(c1) from test1 group by id order by id;
 sum(c1)	avg(c1)	count(c1)
 [2.1122,3.3322,4]	[1.0561,1.6661,2]	2
 [2.2,2.3,2.4]	[2.2,2.3,2.4]	1
@@ -444,6 +444,7 @@ c1	rolling_sum_3_days
 2024-08-04	[0.9,0.9,0.9]
 2024-08-05	[1.2,1.2,1.2]
 2024-08-06	[1.5,1.5,1.5]
+set _enable_rich_vector_format = false;
 SELECT 
 c1,
 SUM(c2) OVER (
@@ -459,6 +460,7 @@ c1	rolling_sum_3_days
 2024-08-04	[0.9,0.9,0.9]
 2024-08-05	[1.2,1.2,1.2]
 2024-08-06	[1.5,1.5,1.5]
+set _enable_rich_vector_format = true;
 drop table if exists t1;
 create table t1(c1 int, c2 vector(3), c3 varchar(30), c4 char(30), c5 text, c6 blob(100), c7 varbinary(100), c8 mediumtext, c9 longtext, c10 tinyblob, c11 mediumblob, c12 longblob);
 insert into t1 values(1, [0,1,2], "[0,1,2]", "[0,1,2]", "[0,1,1]", X'000000000000803F00000040', 0x000000000000803F00000040, "[0,1,1]", "[0,1,1]", 0x000000000000803F00000040, 0x000000000000803F00000040, 0x000000000000803F00000040);
@@ -596,4 +598,4 @@ ERROR 01000: Truncated incorrect DOUBLE value
 select vector_norm(['a']) as res;
 ERROR 01000: Truncated incorrect DOUBLE value
 drop database vector_test;
-alter system set vector_memory_limit = 0;
+alter system set ob_vector_memory_limit_percentage = 0;

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "src/sql/engine/ob_exec_context.h"
@@ -43,7 +42,7 @@ constexpr bool is_array_fully_initialized(const T (&arr)[col])
 }
 
 // following .map file depends on ns oceanbase::common;
-#include "sql/engine/expr/ob_expr_merge_result_type.map"
+#include "sql/engine/expr/ob_expr_merge_result_type_oracle.map"
 #include "sql/engine/expr/ob_expr_relational_result_type.map"
 #include "sql/engine/expr/ob_expr_abs_result_type.map"
 #include "sql/engine/expr/ob_expr_neg_result_type.map"
@@ -184,7 +183,7 @@ int ObExprResultTypeUtil::get_div_result_type(ObObjType &result_type,
     bool can_use_decint_div = (ob_is_decimal_int(type1) || ob_is_integer_type(type1))
                            && (ob_is_decimal_int(type2) || ob_is_integer_type(type2))
                            && true
-                           && config::_enable_decimal_int_type();
+                           && GCONF._enable_decimal_int_type;
     if (ob_is_decimal_int(result_type)) {
       result_type = ObNumberType;
     }
@@ -315,7 +314,7 @@ int ObExprResultTypeUtil::get_remainder_result_type(ObObjType &result_type,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("the wrong type", K(type1),K(type2),K(ret));
   } else {
-    const ObArithRule &rule = MOD_RESULT_TYPE_MAP.get_rule(type1, type2, ArithOp::MOD);
+    const ObArithRule &rule = ARITH_RESULT_TYPE_ORACLE.get_rule(type1, type2, ArithOp::MOD);
     result_type = rule.result_type;
     result_ob1_type = (rule.param1_calc_type == ObMaxType ? (ObNullType == type1 ?
                                                 ObNullType : result_type) : rule.param1_calc_type);
@@ -323,6 +322,7 @@ int ObExprResultTypeUtil::get_remainder_result_type(ObObjType &result_type,
                                                 ObNullType : result_type) : rule.param2_calc_type);
     if (OB_UNLIKELY(!ob_is_valid_obj_type(result_type))) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("unsupported type for div", K(ret), K(type1), K(type2), K(lbt()));
     }
   }
   return ret;
@@ -456,55 +456,53 @@ int ObExprResultTypeUtil::get_arith_calc_type(ObObjType &calc_type,
   return get_arith_result_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2);
 }
 
-int check_string_res_type_extended(const ObExprResType &type)
+int CHECK_STRING_RES_TYPE_ORACLE(const ObExprResType &type)
 {
   int ret = OB_SUCCESS;
   if (!type.is_string_or_lob_locator_type()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("incorrect type of target type", K(ret), K(type));
   } else if (type.is_blob()) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "blob cast to other type");
+    LOG_WARN("not support blob cast to other type", K(ret));
   } else if (!ObCharset::is_valid_collation(type.get_collation_type())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("incorrect charset of target type", K(ret), K(type));
   } else if (!type.is_clob() &&
              CS_TYPE_BINARY != type.get_collation_type() &&
              LS_CHAR != type.get_length_semantics() && LS_BYTE != type.get_length_semantics()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("incorrect length_semantics of target type", K(ret), K(type));
   }
   return ret;
 }
 
 /**
- * @brief Infer the maximum string length after implicit conversion.
- * In expression type inference, if the parameter needs to be implicitly converted
- * to a string type, this function can be used to obtain the maximum length of
- * the parameter after conversion to a string. For example, if the parameter is a
- * date, then the standard datetime string length is used.
- * TODO: The length inference for constants still needs optimization; the current
- * inference result is too long.
- * @param dtc_params Type conversion information, obtained through
- * type_ctx.get_session()->get_dtc_params()
+ * @brief Oracle mode specific
+ * In expression type inference, if the parameter needs to be implicitly converted to a string type, this function can be used to obtain the maximum length of the parameter after conversion to a string.
+ * For example, if the parameter is a date, then different lengths can be inferred based on the different nls_date_format settings.
+ * TODO: The length inference for constants still needs optimization; the current inference result is too long.
+ * @param dtc_params Type conversion information, obtained through type_ctx.get_session()->get_dtc_params()
  * @param orig_type The type of the parameter being converted
  * @param target_type The target type
- * @param length The inferred maximum length, with semantics matching the length
- * semantics in target_type
- * @param calc_ls When the length semantics of the parameter need to differ from
- * the result, it can be explicitly specified, for example, in replace, translate
- * expressions
+ * @param length The inferred maximum length, with semantics matching the length semantics in target_type
+ * @param calc_ls When the length semantics of the parameter need to differ from the result, it can be explicitly specified, for example, in replace, translate expressions
  * @return ret
  */
-int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCastParams &dtc_params,
-                                                            const ObExprResType &orig_type,
-                                                            const ObExprResType &target_type,
-                                                            ObLength &length,
-                                                            const int16_t calc_ls)
+int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastParams &dtc_params,
+                                                          const ObExprResType &orig_type,
+                                                          const ObExprResType &target_type,
+                                                          ObLength &length,
+                                                          const int16_t calc_ls)
 {
   int ret = OB_SUCCESS;
   ObLengthSemantics length_semantics = target_type.get_length_semantics();
   if (target_type.is_varchar_or_char() && (LS_BYTE == calc_ls || LS_CHAR == calc_ls)) {
     length_semantics = calc_ls;
   }
-  if (OB_FAIL(check_string_res_type_extended(target_type))) {
+  if (OB_FAIL(CHECK_STRING_RES_TYPE_ORACLE(target_type))) {
+    LOG_WARN("invalid target_type", K(ret));
   } else {
     if (orig_type.is_literal()) {
       ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
@@ -518,6 +516,7 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
                       &res_accuracy);
       ObObj out;
       if (OB_FAIL(ObObjCaster::to_type(target_type.get_type(), cast_ctx, orig_obj, out))) {
+        LOG_WARN("failed to cast obj", K(ret), K(orig_obj), K(target_type.get_type()));
       } else {
         if (LS_BYTE == length_semantics) {
           length = out.get_string_len();
@@ -527,23 +526,26 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
                                                                 out.get_string_len()));
           if (!ObCharset::is_valid_collation(out.get_collation_type())) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected const value cast result", K(ret), K(out), K(orig_obj), K(target_type), K(cast_mode));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid length_semantics", K(length_semantics), K(ret));
         }
       }
     } else if (orig_type.is_string_or_lob_locator_type()) {
-      if (OB_FAIL(check_string_res_type_extended(orig_type))) {
+      if (OB_FAIL(CHECK_STRING_RES_TYPE_ORACLE(orig_type))) {
+        LOG_WARN("invalid orig_type", K(ret), K(orig_type));
       } else if (orig_type.is_clob()) {
         if (target_type.is_clob()) {
           length = orig_type.get_length();
         } else if (LS_CHAR == length_semantics) {
           // clob to LS_CHAR
           int64_t mbminlen = ObCharset::get_charset(target_type.get_collation_type())->mbminlen;
-          length = OB_MAX_EXTENDED_VARCHAR_LENGTH / mbminlen;
+          length = OB_MAX_ORACLE_VARCHAR_LENGTH / mbminlen;
         } else {
           // clob to LS_BYTE
-          length = OB_MAX_EXTENDED_VARCHAR_LENGTH;
+          length = OB_MAX_ORACLE_VARCHAR_LENGTH;
         }
       } else {
         length = orig_type.get_length();
@@ -577,7 +579,11 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
       } else if (orig_type.is_numeric_type()) {
         ascii_bytes = MAX_NUMBER_BUFFER_SIZE_IN_TYPE_UTIL;
       } else if (orig_type.is_datetime()) {
-        ascii_bytes = DATETIME_MAX_LENGTH;
+        // deduce by format
+        if (OB_FAIL(ObTimeConverter::deduce_max_len_from_oracle_dfm(
+                      dtc_params.get_nls_format(orig_type.get_type()), ascii_bytes))) {
+          LOG_WARN("fail to deduce max len from dfm format", K(ret));
+        }
       } else {
         // TODO: support rowid and urowid
         ascii_bytes = orig_type.get_length();
@@ -605,6 +611,7 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec ctx is null", K(ret));
   } else {
     uint32_t depth = 0;
     bool is_compatiable = false;
@@ -615,10 +622,14 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
     ObObjMeta element_meta;
     if (OB_FAIL(ObArrayExprUtils::check_array_type_compatibility(exec_ctx, type1.get_subschema_id(),
                                                                   type2.get_subschema_id(), is_compatiable))) {
+      LOG_WARN("failed to check array compatibilty", K(ret));
     } else if (!is_compatiable) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+      LOG_WARN("nested type is mismatch", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(), coll_elem1_type, depth, l_is_vec))) {
+      LOG_WARN("failed to get array element type", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type2.get_subschema_id(), coll_elem2_type, depth, r_is_vec))) {
+      LOG_WARN("failed to get array element type", K(ret));
     } else if (l_is_vec || r_is_vec) {
       // cast to vec
       l_is_vec ? calc_type.set_collection(type1.get_subschema_id()) : calc_type.set_collection(type2.get_subschema_id());
@@ -632,6 +643,7 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
       }
     } else if (OB_FAIL(get_array_calc_type(exec_ctx, coll_elem1_type, coll_elem2_type,
                                            depth, calc_type, element_meta))) {
+      LOG_WARN("failed to get array calc type", K(ret));
     }
   }
   return ret;
@@ -693,9 +705,12 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
   ObString type_info;
   if (coll_calc_type == ObMaxType) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("invalid subschema type", K(ret), K(type1), K(type2));
   } else if (OB_FAIL(ObArrayUtil::get_type_name(ObNestedType::OB_ARRAY_TYPE, elem_data, type_name, MAX_LEN, depth))) {
+    LOG_WARN("failed to convert len to string", K(ret));
   } else if (FALSE_IT(type_info.assign_ptr(type_name, static_cast<ObString::obstr_size_t>(strlen(type_name))))) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(type_info, subschema_id))) {
+    LOG_WARN("failed get subschema id", K(ret), K(type_info));
   } else {
     calc_type.set_collection(subschema_id);
     element_meta = elem_data.meta_;
@@ -745,6 +760,7 @@ int ObExprResultTypeUtil::assign_type_array(const ObIArray<ObRawExprResType> &sr
   dest.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < src.count(); ++i) {
     if (OB_FAIL(dest.push_back(src.at(i)))) {
+      LOG_WARN("failed to push back", K(ret));
     }
   }
   return ret;
@@ -760,10 +776,14 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
   const ObSqlCollectionInfo *r_coll_info = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_info_by_subschema_id(exec_ctx, type1.get_subschema_id(), l_coll_info))) {
+    LOG_WARN("failed to get left coll type", K(ret), K(type1.get_subschema_id()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_info_by_subschema_id(exec_ctx, type2.get_subschema_id(), r_coll_info))) {
+    LOG_WARN("failed to get right coll type", K(ret), K(type2.get_subschema_id()));
   } else if (!l_coll_info->has_same_super_type(*r_coll_info)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("nested type is mismatch", K(ret));
   } else if (l_coll_info->collection_meta_->type_id_ == ObNestedType::OB_MAP_TYPE 
              || r_coll_info->collection_meta_->type_id_ == ObNestedType::OB_MAP_TYPE
              || l_coll_info->collection_meta_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE 
@@ -777,6 +797,7 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
     const ObCollectionMapType *r_map_type = dynamic_cast<const ObCollectionMapType*>(r_coll_info->collection_meta_);
     if (OB_ISNULL(l_map_type) || OB_ISNULL(r_map_type)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("map type is null", K(ret));
     } else {
       uint32_t key_depth = 0;
       uint32_t value_depth = 0;
@@ -786,9 +807,12 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
       ObDataType r_map_value_type = r_map_type->get_basic_meta(value_depth);
       if (OB_FAIL(get_array_calc_type(exec_ctx, l_map_key_type, r_map_key_type,
                                              key_depth, key_calc_type, key_meta))) {
+        LOG_WARN("failed to get key calc type", K(ret));
       } else if (OB_FAIL(get_array_calc_type(exec_ctx, l_map_value_type, r_map_value_type,
                                              value_depth, value_calc_type, value_meta))) {
+        LOG_WARN("failed to get value calc type", K(ret));
       } else if (OB_FAIL(ObArrayExprUtils::deduce_map_subschema_id(exec_ctx, key_calc_type.get_subschema_id(), value_calc_type.get_subschema_id(), subschema_id))) {
+        LOG_WARN("failed to deduce map subschema id", K(ret));
       } else {
         calc_type.set_collection(subschema_id);
       }
@@ -815,6 +839,7 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
       }
     } else if (OB_FAIL(get_array_calc_type(exec_ctx, coll_elem1_type, coll_elem2_type,
                                            depth, calc_type, element_meta))) {
+      LOG_WARN("failed to get array calc type", K(ret));
     }
   }
   return ret;

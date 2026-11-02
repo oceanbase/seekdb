@@ -33,7 +33,6 @@ namespace common
 {
 
 static const int64_t MAX_CACHE_NUM = 32;
-static constexpr int64_t MAX_KVCACHE_MEMORY_SIZE = 1LL << 40; // 1T
 static const int64_t INVALID_CACHE_ID = -1;  // cache id must be in [0,MAX_CACHE_NUM)
 static const int32_t MAX_CACHE_NAME_LENGTH = 127;
 static const double CACHE_SCORE_DECAY_FACTOR = 0.9;
@@ -120,6 +119,7 @@ struct ObKVMemBlockHandle : public common::ObDLink
   int64_t recent_get_cnt_;
   double score_;
   int64_t kv_cnt_;
+  int64_t ref_cnt_;
   int64_t seq_num_;
   int64_t last_modified_time_us_;
   ObKVMBHandleStatus status_;
@@ -188,13 +188,13 @@ public:
   const ObKVCacheConfig *config_;
   ObPCNonAtomicCounter total_put_cnt_;
   ObPCNonAtomicCounter total_hit_cnt_;
-  ObPCNonAtomicCounter total_miss_cnt_;
   int64_t kv_cnt_;
   int64_t store_size_;
   int64_t retired_size_;
   int64_t lru_mb_cnt_;
   int64_t lfu_mb_cnt_;
   int64_t last_hit_cnt_;
+  int64_t total_miss_cnt_;
   double base_mb_score_;
 };
 
@@ -210,7 +210,8 @@ struct ObKVCacheStoreMemblockInfo
 {
 public:
   ObKVCacheStoreMemblockInfo()
-    : using_status_(-1),
+    : ref_count_(-1),
+      using_status_(-1),
       policy_(-1),
       kv_cnt_(-1),
       get_cnt_(-1),
@@ -223,9 +224,10 @@ public:
   }
   ~ObKVCacheStoreMemblockInfo() = default;
   bool is_valid() const { return score_ >= 0; }
-  TO_STRING_KV(K_(using_status), K_(policy), K_(kv_cnt), K_(get_cnt),
+  TO_STRING_KV(K_(ref_count), K_(using_status), K_(policy), K_(kv_cnt), K_(get_cnt),
           K_(recent_get_cnt), K_(score), K_(align_size), KP_(memblock_ptr));
 public: 
+  int64_t ref_count_;
   int64_t using_status_;
   int64_t policy_;
   int64_t kv_cnt_;

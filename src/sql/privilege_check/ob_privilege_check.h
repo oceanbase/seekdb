@@ -19,7 +19,8 @@
 
 #include <cstdint>
 #include "share/schema/ob_schema_struct.h"
-#include "share/statement/ob_stmt_type.h"
+#include "share/ob_compatibility_control.h"
+#include "sql/resolver/ob_stmt_type.h"
 namespace oceanbase {
 namespace sql {
 struct ObSqlCtx;
@@ -49,6 +50,11 @@ public:
                                  const ObStmt *basic_stmt,
                                  share::schema::ObStmtNeedPrivs &stmt_need_privs);
 
+  static int can_do_operation_on_db(const share::schema::ObSessionPrivInfo &session_priv,
+                                    const common::ObString &db_name);
+  static int can_do_operation_on_db(const share::schema::ObSessionPrivInfo &session_priv,
+                                    const common::ObIArray<const ObDmlTableInfo*> &table_infos,
+                                    const common::ObString &op_literal);
   static int can_do_grant_on_db_table(const share::schema::ObSessionPrivInfo &session_priv,
                                       const ObPrivSet priv_set,
                                       const common::ObString &db_name,
@@ -71,6 +77,11 @@ public:
   static int get_stmt_need_privs(const share::schema::ObSessionPrivInfo &session_priv,
                                  const ObStmt *basic_stmt,
                                  common::ObIArray<share::schema::ObNeedPriv> &stmt_need_priv);
+  // check privilege version for upgrade compatibility
+  static int get_priv_need_check(const share::schema::ObSessionPrivInfo &session_priv,
+                                 const share::ObCompatFeatureType feature_type,
+                                 bool &need_check);
+
   static int check_read_only(const ObSqlCtx &ctx,
                              const stmt::StmtType stmt_type,
                              const bool has_global_variable,

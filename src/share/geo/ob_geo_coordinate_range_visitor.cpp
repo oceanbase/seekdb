@@ -53,6 +53,7 @@ int ObGeoCoordinateRangeVisitor::calculate_point_range(const ObSrsItem *srs,
   if (longti <= -M_PI || longti > M_PI) {
     result.is_long_out_range_ = true;
     if (OB_FAIL(srs->from_radians_to_srs_unit(longti, result.value_out_range_))) {
+      LOG_WARN("failed to convert radians to srs unit", K(ret), K(longti), K(srs));
     }
   } else {
     // convert to radian in srs defined direction and meridian
@@ -66,6 +67,7 @@ int ObGeoCoordinateRangeVisitor::calculate_point_range(const ObSrsItem *srs,
     if (lati < -M_PI_2 || lati > M_PI_2) {
       result.is_lati_out_range_ = true;
       if (OB_FAIL(srs->from_radians_to_srs_unit(lati, result.value_out_range_))) {
+       LOG_WARN("failed to convert radians to srs unit", K(ret), K(lati), K(srs));
       }
     }
   }
@@ -86,10 +88,12 @@ int ObGeoCoordinateRangeVisitor::visit(ObIWkbGeogPoint *geo)
   ObGeoCoordRangeResult result;
   if (OB_ISNULL(srs_) || OB_ISNULL(geo)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs or geo is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
   } else if (OB_FAIL(calculate_point_range(srs_, geo->x(), geo->y(), is_normalized_, result))){
+    LOG_WARN("failed to calculate point range", K(ret));
   } else {
     is_lati_out_range_ = result.is_lati_out_range_;
     is_long_out_range_ = result.is_long_out_range_;
@@ -104,10 +108,12 @@ int ObGeoCoordinateRangeVisitor::visit(ObGeographPoint *geo)
   ObGeoCoordRangeResult result;
   if (OB_ISNULL(srs_) || OB_ISNULL(geo)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs or geo is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
   } else if (OB_FAIL(calculate_point_range(srs_, geo->x(), geo->y(), is_normalized_, result))) {
+    LOG_WARN("failed to calculate point range", K(ret));
   } else {
     is_lati_out_range_ = result.is_lati_out_range_;
     is_long_out_range_ = result.is_long_out_range_;

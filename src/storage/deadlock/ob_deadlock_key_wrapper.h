@@ -18,10 +18,13 @@
 #define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_KEY_WRAPPER_
 #include "ob_deadlock_parameters.h"
 #include "lib/ob_errno.h"
+#include "lib/utility/ob_unify_serialize.h"
+#include "lib/utility/serialization.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/utility.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/ob_errno.h"
+#include "lib/allocator/ob_malloc.h"
 #define NEED_DECLARATION
 #include "ob_deadlock_key_register.h"
 #undef NEED_DECLARATION
@@ -61,8 +64,12 @@ public:\
 #undef USER_REGISTER
 #undef REGISTE_TYPE_ID
 
+class ObDetectorLabelRequest;
+
 class UserBinaryKey
 {
+  // for serialization
+  OB_UNIS_VERSION(1);
 public:
   UserBinaryKey();
   UserBinaryKey(const UserBinaryKey &other);
@@ -80,6 +87,10 @@ public:
   uint64_t hash() const;
   // for log print
   int64_t to_string(char *buffer, const int64_t length) const;
+  struct BufferFactory {
+    static uint64_t malloc_times;
+    static uint64_t free_times;
+  };
 private:
   uint64_t key_type_id_;
   uint64_t key_binary_code_buffer_length_;
@@ -98,6 +109,7 @@ int UserBinaryKey::set_user_key(const T &user_key)
   } else if (OB_FAIL(user_key.serialize(key_binary_code_buffer_,
                                         user_key.get_serialize_size(),
                                         length))) {
+    DETECT_LOG(WARN, "user key serialization failed", PRINT_WRAPPER);
   } else {
     key_type_id_ = GET_ID(T);
     key_binary_code_buffer_length_ = user_key.get_serialize_size();

@@ -45,10 +45,12 @@ int ObExprReverse::do_reverse(const ObString &input_str,
   char *buf = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("nullptr allocator.", K(allocator));
   } else if (OB_UNLIKELY(input_length == 0)) {
     res_str.reset();
   } else if (OB_ISNULL(input_start)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid string, buf is null", K(ret));
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator->alloc(input_length)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc memory failed. ", "size", input_length);
@@ -62,6 +64,7 @@ int ObExprReverse::do_reverse(const ObString &input_str,
           input_start + char_begin,
           input_length - converted_length,
           char_length))) {
+        LOG_WARN("Get first valid char failed ", K(ret));
       } else {
         MEMCPY(buf_tail - char_length, input_start + char_begin, char_length);
         buf_tail -= char_length;
@@ -81,6 +84,7 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else if (ob_is_collection_sql_type(expr.args_[0]->datum_meta_.get_type())) {
@@ -94,11 +98,14 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("subschema id not match", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arg->get_string(), src_arr))) {
+      LOG_WARN("construct array obj failed", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
+      LOG_WARN("construct child array obj failed", K(ret));
     }
     for (int64_t i = 0; i < src_arr->size() && OB_SUCC(ret); i++) {
       int64_t idx = src_arr->size() - i - 1;
       if (OB_FAIL(res_arr->insert_from(*src_arr, idx, 1))) {
+        LOG_WARN("failed to insert elem", K(ret), K(i), K(idx));
       }
     } //end for
     if (OB_FAIL(ret)) {
@@ -106,6 +113,7 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       ObString res_str;
       if (OB_FAIL(ObArrayExprUtils::set_array_res(
               res_arr, res_arr->get_raw_binary_len(), expr, ctx, res_str))) {
+        LOG_WARN("get array binary string failed", K(ret));
       } else {
         res_datum.set_string(res_str);
       }
@@ -117,6 +125,7 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
       ObExprStrResAlloc res_alloc(expr, ctx);
       if (OB_FAIL(ObExprReverse::do_reverse(arg_str, arg_cs_type, &res_alloc, res_str))) {
+        LOG_WARN("do_reverse failed", K(ret), K(arg_str), K(arg_cs_type));
       } else {
         // expr reverse is in mysql mode. no need to check res_str.empty()
         res_datum.set_string(res_str);
@@ -130,13 +139,16 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
       ObTextStringIter input_iter(expr.args_[0]->datum_meta_.type_, arg_cs_type, arg->get_string(), has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
-      if (OB_FAIL(ObTextStringHelper::build_text_iter(
-              input_iter, ctx.exec_ctx_, &calc_alloc))) {
+      if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
+        LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
       } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
+        LOG_WARN("get input byte len failed", K(ret));
       } else if (OB_FAIL(output_result.init(total_byte_len))) {
+        LOG_WARN("init stringtext result failed", K(ret));
       } else if (total_byte_len == 0) {
         output_result.set_result();
       } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
+        LOG_WARN("stringtext result reserve buffer failed", K(ret));
       } else {
         ObTextStringIterState state;
         ObString src_block_data;
@@ -146,7 +158,9 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
                && (state = input_iter.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
           ObDataBuffer data_buf(buf, buf_size);
           if (OB_FAIL(ObExprReverse::do_reverse(src_block_data, arg_cs_type, &data_buf, res_str))) {
+            LOG_WARN("do_reverse failed", K(ret), K(arg_str), K(arg_cs_type));
           } else if (OB_FAIL(output_result.lseek(res_str.length(), 0))) {
+            LOG_WARN("result lseek failed", K(ret));
           } else {
             buf += res_str.length();
             buf_size -= res_str.length();
@@ -156,6 +170,7 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
                 input_iter.get_inner_ret() : OB_INVALID_DATA;
+          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
         } else {
           output_result.set_result();
         }

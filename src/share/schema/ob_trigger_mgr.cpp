@@ -69,21 +69,21 @@ int ObSimpleTriggerSchema::deep_copy(const ObSimpleTriggerSchema &other)
 
 
 ObTriggerMgr::ObTriggerMgr()
-    : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(local_allocator_),
-      trigger_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_TRIGGER_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
-      trigger_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_TRIGGER_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      trigger_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_TRIGGER_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      trigger_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_TRIGGER_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      trigger_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_TRIGGER_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      trigger_name_map_(SET_USE_500(ObModIds::OB_SCHEMA_TRIGGER_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
       is_inited_(false)
 {
 }
 
 ObTriggerMgr::ObTriggerMgr(ObIAllocator &allocator)
-    : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(allocator),
-      trigger_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_TRIGGER_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
-      trigger_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_TRIGGER_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      trigger_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_TRIGGER_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      trigger_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_TRIGGER_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      trigger_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_TRIGGER_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      trigger_name_map_(SET_USE_500(ObModIds::OB_SCHEMA_TRIGGER_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
       is_inited_(false)
 {
 }
@@ -93,7 +93,9 @@ int ObTriggerMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(trigger_id_map_.init())) {
+    LOG_WARN("init trigger id map failed", K(ret));
   } else if (OB_FAIL(trigger_name_map_.init())) {
+    LOG_WARN("init trigger name map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -105,6 +107,7 @@ void ObTriggerMgr::reset()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     // reset will not release memory for vector, use clear()
     trigger_infos_.clear();
@@ -119,6 +122,7 @@ int ObTriggerMgr::assign(const ObTriggerMgr &other)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (this != &other) {
     reset();
     #define ASSIGN_FIELD(x)                        \
@@ -140,6 +144,7 @@ int ObTriggerMgr::deep_copy(const ObTriggerMgr &other)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (this != &other) {
     reset();
     for (TriggerIter iter = other.trigger_infos_.begin();
@@ -147,7 +152,9 @@ int ObTriggerMgr::deep_copy(const ObTriggerMgr &other)
       ObSimpleTriggerSchema *trigger = *iter;
       if (OB_ISNULL(trigger)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("NULL ptr", K(trigger), K(ret));
       } else if (OB_FAIL(add_trigger(*trigger))) {
+        LOG_WARN("add trigger failed", K(*trigger), K(ret));
       }
     }
   }
@@ -156,24 +163,24 @@ int ObTriggerMgr::deep_copy(const ObTriggerMgr &other)
 
 bool ObTriggerMgr::compare_trigger(const ObSimpleTriggerSchema *lhs, const ObSimpleTriggerSchema *rhs)
 {
-  return lhs->get_trigger_id() < rhs->get_trigger_id();
+  return lhs->get_tenant_trigger_id() < rhs->get_tenant_trigger_id();
 }
 
 bool ObTriggerMgr::equal_trigger(const ObSimpleTriggerSchema *lhs, const ObSimpleTriggerSchema *rhs)
 {
-  return lhs->get_trigger_id() == rhs->get_trigger_id();
+  return lhs->get_tenant_trigger_id() == rhs->get_tenant_trigger_id();
 }
 
-bool ObTriggerMgr::compare_with_trigger_id(const ObSimpleTriggerSchema *lhs,
-                                                 const ObTriggerId &trigger_id)
+bool ObTriggerMgr::compare_with_tenant_trigger_id(const ObSimpleTriggerSchema *lhs,
+                                                 const ObTenantTriggerId &tenant_trigger_id)
 {
-  return NULL != lhs ? (lhs->get_trigger_id() < trigger_id.get_trigger_id()) : false;
+  return NULL != lhs ? (lhs->get_tenant_trigger_id() < tenant_trigger_id) : false;
 }
 
-bool ObTriggerMgr::equal_with_trigger_id(const ObSimpleTriggerSchema *lhs,
-                                                    const ObTriggerId &trigger_id)
+bool ObTriggerMgr::equal_with_tenant_trigger_id(const ObSimpleTriggerSchema *lhs,
+                                                    const ObTenantTriggerId &tenant_trigger_id)
 {
-  return NULL != lhs ? (lhs->get_trigger_id() == trigger_id.get_trigger_id()) : false;
+  return NULL != lhs ? (lhs->get_tenant_trigger_id() == tenant_trigger_id) : false;
 }
 
 int ObTriggerMgr::add_triggers(const ObIArray<ObSimpleTriggerSchema> &trigger_schemas)
@@ -181,9 +188,11 @@ int ObTriggerMgr::add_triggers(const ObIArray<ObSimpleTriggerSchema> &trigger_sc
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     FOREACH_CNT_X(trigger_schema, trigger_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_trigger(*trigger_schema))) {
+        LOG_WARN("add trigger failed", K(ret), "trigger_schema", *trigger_schema);
       }
     }
   }
@@ -226,23 +235,23 @@ int ObTriggerMgr::add_trigger(const ObSimpleTriggerSchema &trigger_schema)
   return ret;
 }
 
-int ObTriggerMgr::del_trigger(const ObTriggerId &trigger_id)
+int ObTriggerMgr::del_trigger(const ObTenantTriggerId &tenant_trigger_id)
 {
   int ret = OB_SUCCESS;
   ObSimpleTriggerSchema *deleted_trigger = NULL;
-  const uint64_t raw_trigger_id = trigger_id.get_trigger_id();
+  uint64_t trigger_id = tenant_trigger_id.get_trigger_id();
   OV (is_inited_, OB_NOT_INIT);
-  OV (trigger_id.is_valid(), OB_INVALID_ARGUMENT, trigger_id);
-  OZ (trigger_infos_.remove_if(trigger_id, compare_with_trigger_id,
-                               equal_with_trigger_id, deleted_trigger));
-  OV (OB_NOT_NULL(deleted_trigger), OB_ERR_UNEXPECTED, trigger_id);
+  OV (tenant_trigger_id.is_valid(), OB_INVALID_ARGUMENT, tenant_trigger_id);
+  OZ (trigger_infos_.remove_if(tenant_trigger_id, compare_with_tenant_trigger_id,
+                               equal_with_tenant_trigger_id, deleted_trigger));
+  OV (OB_NOT_NULL(deleted_trigger), OB_ERR_UNEXPECTED, tenant_trigger_id);
   // The following is error injection
   DEBUG_SYNC(DEL_TRIGGER_BEFORE_MAP);
   int skip_map = OB_E(EventTable::EN_ADD_TRIGGER_SKIP_MAP) 0;
   if (OB_SUCC(ret) && skip_map == 0) {
     ObTriggerNameHashWrapper name_wrapper(deleted_trigger->get_database_id(),
                                           deleted_trigger->get_trigger_name());
-    OZ (trigger_id_map_.erase_refactored(raw_trigger_id));
+    OZ (trigger_id_map_.erase_refactored(trigger_id));
     ret = (ret == OB_HASH_NOT_EXIST) ? OB_SUCCESS : ret;
     OZ (trigger_name_map_.erase_refactored(name_wrapper));
     ret = (ret == OB_HASH_NOT_EXIST) ? OB_SUCCESS : ret;
@@ -309,14 +318,17 @@ int ObTriggerMgr::get_trigger_schema(uint64_t trigger_id, const ObSimpleTriggerS
   trigger_schema = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == trigger_id) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(trigger_id));
   } else {
     ObSimpleTriggerSchema *tmp_schema = NULL;
     int hash_ret = trigger_id_map_.get_refactored(trigger_id, tmp_schema);
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
       } else {
         trigger_schema = tmp_schema;
       }
@@ -333,8 +345,10 @@ int ObTriggerMgr::get_trigger_schema( uint64_t database_id,
   trigger_schema = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == database_id || trigger_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(database_id), K(trigger_name));
   } else {
     ObSimpleTriggerSchema *tmp_schema = NULL;
     ObTriggerNameHashWrapper name_wrapper(database_id, trigger_name);
@@ -342,6 +356,7 @@ int ObTriggerMgr::get_trigger_schema( uint64_t database_id,
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
       } else {
         trigger_schema = tmp_schema;
       }
@@ -350,18 +365,23 @@ int ObTriggerMgr::get_trigger_schema( uint64_t database_id,
   return ret;
 }
 
-int ObTriggerMgr::get_trigger_schemas_in_runtime(ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const
+int ObTriggerMgr::get_trigger_schemas_in_tenant(ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const
 {
   int ret = OB_SUCCESS;
-  ObTriggerId trigger_id_lower(OB_MIN_ID);
-  ConstTriggerIter trigger_begin =
-      trigger_infos_.lower_bound(trigger_id_lower, compare_with_trigger_id);
+  ObTenantTriggerId tenant_trigger_id_lower(OB_MIN_ID);
+  ConstTriggerIter tenant_trigger_begin =
+      trigger_infos_.lower_bound(tenant_trigger_id_lower, compare_with_tenant_trigger_id);
+  bool is_stop = false;
   trigger_schemas.reset();
-  for (ConstTriggerIter iter = trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end(); ++iter) {
+  for (ConstTriggerIter iter = tenant_trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end() && !is_stop; ++iter) {
     const ObSimpleTriggerSchema *trigger = NULL;
     if (OB_ISNULL(trigger = *iter)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL ptr", K(ret), K(trigger));
+    } else if (false) {
+      is_stop = true;
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {
+      LOG_WARN("push back trigger failed", K(ret));
     }
   }
   return ret;
@@ -371,17 +391,22 @@ int ObTriggerMgr::get_trigger_schemas_in_database(uint64_t database_id,
                                                   ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const
 {
   int ret = OB_SUCCESS;
-  ObTriggerId trigger_id_lower(OB_MIN_ID);
-  ConstTriggerIter trigger_begin =
-      trigger_infos_.lower_bound(trigger_id_lower, compare_with_trigger_id);
+  ObTenantTriggerId tenant_trigger_id_lower(OB_MIN_ID);
+  ConstTriggerIter tenant_trigger_begin =
+      trigger_infos_.lower_bound(tenant_trigger_id_lower, compare_with_tenant_trigger_id);
+  bool is_stop = false;
   trigger_schemas.reset();
-  for (ConstTriggerIter iter = trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end(); ++iter) {
+  for (ConstTriggerIter iter = tenant_trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end() && !is_stop; ++iter) {
     const ObSimpleTriggerSchema *trigger = NULL;
     if (OB_ISNULL(trigger = *iter)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL ptr", K(ret), K(trigger));
+    } else if (false) {
+      is_stop = true;
     } else if (trigger->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {
+      LOG_WARN("push back trigger failed", K(ret));
     }
   }
   return ret;
@@ -393,6 +418,7 @@ int ObTriggerMgr::get_trigger_schema_count(int64_t &trigger_schema_count) const
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     trigger_schema_count = trigger_infos_.size();
   }
@@ -406,11 +432,13 @@ int ObTriggerMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
   schema_info.schema_type_ = TRIGGER_SCHEMA;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     schema_info.count_ = trigger_infos_.size();
     for (ConstTriggerIter it = trigger_infos_.begin(); OB_SUCC(ret) && it != trigger_infos_.end(); it++) {
       if (OB_ISNULL(*it)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema is null", K(ret));
       } else {
         schema_info.size_ += (*it)->get_convert_size();
       }

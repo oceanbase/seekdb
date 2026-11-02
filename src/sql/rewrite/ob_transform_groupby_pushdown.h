@@ -130,6 +130,7 @@ private:
     support_cross_join = false;
     if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret));
     } else {
       support_cross_join = true;
     }
@@ -388,6 +389,11 @@ private:
     }
     return num;
   }
+  // TODO This function already exists in ObTransformUtils in the updated version, but not in this version
+  // So first write one yourself, handle it when merging
+  int create_aggr_expr(ObTransformerCtx *ctx, ObItemType type,
+                       ObAggFunRawExpr *&agg_expr, ObRawExpr *child_expr);
+
 };
 
 }

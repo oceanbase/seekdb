@@ -34,6 +34,8 @@ namespace oceanbase
 {
 namespace storage
 {
+class ObStorageLoggerManager;
+
 class ObStorageLogger
 {
 public:
@@ -42,18 +44,14 @@ public:
 public:
   //NOT thread safe.
   //Init the redo log and do recovery if there is redo logs in log_dir.
-  int init(
-      const char *root_dir,
-      const int64_t max_log_file_size,
-      const blocksstable::ObLogFileSpec &log_file_spec,
-      const bool is_server = false);
+  int init(ObStorageLoggerManager &slogger_manager, const bool is_server = false);
   int start();
   void stop();
   void wait();
   void destroy();
   int write_log(ObStorageLogParam &param);
   int write_log(ObIArray<ObStorageLogParam> &param_arr);
-  const char *get_dir() { return slog_dir_; }
+  const char *get_dir() { return tnt_slog_dir_; }
   int get_active_cursor(common::ObLogCursor &log_cursor);
   int remove_useless_log_file(const int64_t end_file_id);
 
@@ -63,24 +61,9 @@ public:
 private:
   static const int64_t MAX_FLUSH_WAIT_TIME_MS = 60 * 1000; // 60s
   static const int64_t MAX_APPEND_WAIT_TIME_MS = 365LL * 24 * 3600 * 1000000; // 1h
-  static constexpr int64_t NORMAL_LOG_ITEM_SIZE = 8 * 1024; //8KB
 
 private:
   int get_start_file_id(int64_t &start_file_id);
-
-  // allocate item and its buffer
-  int alloc_item(const int64_t buf_size, ObStorageLogItem *&log_item, const int64_t num);
-  // free item and its buffer
-  int free_item(ObStorageLogItem *log_item);
-
-  // allocate buffer
-  int alloc_log_buffer(void *&log_buffer);
-  // allocate item
-  int alloc_log_item(ObStorageLogItem *&log_item);
-  // free buffer
-  int free_log_buffer(void *log_buffer);
-  // free item
-  int free_log_item(ObStorageLogItem *log_item);
 
   // construct log item and fill it with single log
   int build_log_item(const ObStorageLogParam &param, ObStorageLogItem *&log_item);
@@ -90,9 +73,10 @@ private:
 private:
   bool is_inited_;
   ObStorageLogWriter *log_writer_;
-  ObStorageLogWriter local_log_writer_;
+  ObStorageLogWriter tenant_log_writer_;
   ObServerSlogWriter server_log_writer_;
-  char slog_dir_[MAX_PATH_SIZE];
+  char tnt_slog_dir_[MAX_PATH_SIZE];
+  ObStorageLoggerManager *slogger_mgr_;
   // When we write logs with multiple threads, log_writer_'s cursor may not be the newest
   // In other word, the log_writer_'s cursor is only updated when the backup thread flushes
   // So, we need maintain another variable los_seq_ in this class

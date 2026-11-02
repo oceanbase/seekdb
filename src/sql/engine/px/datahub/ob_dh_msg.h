@@ -53,7 +53,17 @@ public:
     return OB_SUCCESS;
   }
 
-  // Merge all worker pieces in one local SQC before forwarding the aggregate to the QC.
+  /*
+    This interface is for merge all piece msgs in one sqc into a big piece
+          SQC
+    worker 1  piece ---\
+                        \         rpc
+                       big piece -----> QC
+                        /
+    worker 2  piece ---/
+    ....              /
+    worker N  piece -/
+   */
   virtual int aggregate_piece(const dtl::ObDtlMsg &other_piece) { return OB_NOT_IMPLEMENT; }
   VIRTUAL_TO_STRING_KV(K_(op_id), K_(source_dfo_id), K_(thread_id), K_(target_dfo_id),
                        K_(piece_count));
@@ -120,7 +130,10 @@ OB_DEF_DESERIALIZE(ObDatahubPieceMsg<T>, template<dtl::ObDtlMsgType T>)
               op_id_,
               source_dfo_id_,
               thread_id_,
-              piece_count_,
+              piece_count_);
+  // for compat
+  target_dfo_id_ = source_dfo_id_;
+  LST_DO_CODE(OB_UNIS_DECODE,
               target_dfo_id_);
   return ret;
 }
@@ -142,3 +155,4 @@ OB_DEF_SERIALIZE_SIZE(ObDatahubPieceMsg<T>, template<dtl::ObDtlMsgType T>)
 }
 #endif /* _OB_SQL_ENGINE_PX_DATAHUB_DH_MSG_H__ */
 //// end of header file
+

@@ -148,8 +148,11 @@ DEFINE_SERIALIZE(ObLockID)
   int ret = OB_SUCCESS;
   if ((OB_ISNULL(buf)) || (buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, ", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, (int8_t)obj_type_))) {
+    LOG_WARN("serialize obj_type_ failed, ", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, obj_id_))) {
+    LOG_WARN("serialize obj_id_ failed, ", K(ret), KP(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -159,9 +162,12 @@ DEFINE_DESERIALIZE(ObLockID)
   int ret = OB_SUCCESS;
   if ((OB_ISNULL(buf)) || (data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, ", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t *)&obj_type_))) {
+    LOG_WARN("deserialize obj_type_ failed.", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos,
       reinterpret_cast<int64_t *>(&obj_id_)))) {
+    LOG_WARN("deserialize obj_id_ failed.", K(ret), KP(buf), K(data_len), K(pos));
   } else {
     hash_value_ = inner_hash();
   }
@@ -182,6 +188,7 @@ int ObLockID::convert_to(common::ObTabletID &tablet_id) const
   common::ObTabletID tmp_id(obj_id_);
   if (!is_tablet_lock() || !tmp_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("can not convert to", K(ret), K_(obj_type), K_(obj_id));
   } else {
     tablet_id = tmp_id;
   }
@@ -194,6 +201,7 @@ int ObLockID::set(const ObLockOBJType &type, const uint64_t obj_id)
 
   if (!is_lock_obj_type_valid(type) || !is_valid_id(obj_id)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("init fail", K(ret), K(type), K(obj_id));
   } else {
     obj_type_ = type;
     obj_id_ = obj_id;
@@ -209,8 +217,10 @@ int get_lock_id(const uint64_t table_id,
   int ret = OB_SUCCESS;
   if (!is_valid_id(table_id)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument ", K(ret), K(table_id));
   } else if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_TABLE,
                                  table_id))) {
+    LOG_WARN("create lock id failed.", K(ret));
   }
   return ret;
 }
@@ -221,8 +231,10 @@ int get_lock_id(const ObTabletID &tablet,
   int ret = OB_SUCCESS;
   if (!tablet.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument ", K(ret), K(tablet));
   } else if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_TABLET,
                                  tablet.id()))) {
+    LOG_WARN("create lock id failed.", K(ret), K(tablet));
   }
   return ret;
 }
@@ -237,11 +249,52 @@ int get_lock_id(const ObIArray<ObTabletID> &tablets,
     tablet = tablets.at(i);
     if (!tablet.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument ", K(ret), K(tablet));
     } else if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_TABLET, tablet.id()))) {
+      LOG_WARN("create lock id failed.", K(ret), K(tablet));
     } else if (OB_FAIL(lock_ids.push_back(lock_id))) {
+      LOG_WARN("push back lock id failed.", K(ret), K(tablet));
     }
   }
   return ret;
+}
+
+int ObOldLockOwner::convert_from_value(const int64_t packed_id)
+{
+  int ret = OB_SUCCESS;
+  pack_ = packed_id;
+  return ret;
+}
+
+int ObOldLockOwner::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, pack_))) {
+    LOG_WARN("serialize ID failed", KR(ret), KP(buf), K(buf_len), K(pos));
+  }
+  return ret;
+}
+
+int ObOldLockOwner::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
+  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &pack_))) {
+    LOG_WARN("deserialize ID failed", KR(ret), KP(buf), K(data_len), K(pos));
+  }
+  return ret;
+}
+
+int64_t ObOldLockOwner::get_serialize_size() const
+{
+  int64_t size = 0;
+  size += serialization::encoded_length_vi64(pack_);
+  return size;
 }
 
 ObTableLockOwnerID ObTableLockOwnerID::default_owner()
@@ -262,8 +315,17 @@ ObTableLockOwnerID ObTableLockOwnerID::get_owner(const unsigned char type,
 void ObTableLockOwnerID::convert_from_value_ignore_ret(const unsigned char owner_type,
                                                        const int64_t id)
 {
-  type_ = owner_type;
-  id_ = id;
+  if (ObLockOwnerType::INVALID_OWNER_TYPE == static_cast<ObLockOwnerType>(owner_type)) {
+    // convert from old version
+    ObOldLockOwner old_id;
+    old_id.convert_from_value(id);
+    type_ = old_id.type_;
+    id_ = old_id.id_;
+  } else {
+    type_ = owner_type;
+    id_ = id;
+  }
+
   hash_value_ = inner_hash();
 }
 
@@ -271,26 +333,36 @@ int ObTableLockOwnerID::convert_from_value(const ObLockOwnerType owner_type,
                                            const int64_t id)
 {
   int ret = OB_SUCCESS;
-  type_ = static_cast<unsigned char>(owner_type);
-  id_ = id;
+  if (ObLockOwnerType::INVALID_OWNER_TYPE == owner_type) {
+    // convert from old version
+    ObOldLockOwner old_id;
+    old_id.convert_from_value(id);
+    type_ = old_id.type_;
+    id_ = old_id.id_;
+  } else {
+    type_ = static_cast<unsigned char>(owner_type);
+    id_ = id;
+  }
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(owner_type), K(id), K(type_), K(id_));
   } else {
     hash_value_ = inner_hash();
   }
   return ret;
 }
 
-int ObTableLockOwnerID::convert_from_session_id(const uint32_t sessid,
-                                                const uint64_t sess_create_ts)
+int ObTableLockOwnerID::convert_from_client_sessid(const uint32_t client_sessid,
+                                                   const uint64_t client_sess_create_ts)
 {
   int ret = OB_SUCCESS;
-  if (INVALID_SESSID == sessid) {
+  if (INVALID_SESSID == client_sessid) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("client session id is default value", K(ret), K(client_sessid), K(client_sess_create_ts));
   } else {
     type_ = static_cast<unsigned char>(ObLockOwnerType::SESS_ID_OWNER_TYPE);
-    int64_t session_unique_id = sess_create_ts & SESS_CREATE_TS_MASK;
-    id_ = (static_cast<int64_t>(sessid)) | (session_unique_id << SESS_ID_BIT);
+    int64_t client_unique_id = client_sess_create_ts & CLIENT_SESS_CREATE_TS_MASK;
+    id_ = (static_cast<int64_t>(client_sessid)) | (client_unique_id << CLIENT_SESS_ID_BIT);
     hash_value_ = inner_hash();
   }
   return ret;
@@ -301,8 +373,9 @@ int ObTableLockOwnerID::convert_to_sessid(uint32_t &sessid) const
   int ret = OB_SUCCESS;
   if (type_ != static_cast<int64_t>(ObLockOwnerType::SESS_ID_OWNER_TYPE)) {
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("this lock owner id cannot be converted to session id", K(ret), K_(type));
   } else {
-    sessid = static_cast<uint32_t>(id_ & SESS_ID_MASK);
+    sessid = static_cast<uint32_t>(id_ & CLIENT_SESS_ID_MASK);
   }
   return ret;
 }
@@ -310,8 +383,10 @@ int ObTableLockOwnerID::convert_to_sessid(uint32_t &sessid) const
 int ObTableLockOwnerID::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
 {
   int ret = OB_SUCCESS;
+  uint64_t data_version = 0;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 MAGIC_NUM,
@@ -324,18 +399,53 @@ int ObTableLockOwnerID::serialize(char* buf, const int64_t buf_len, int64_t& pos
 int ObTableLockOwnerID::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
 {
   int ret = OB_SUCCESS;
+  const int64_t origin_pos = pos;
   int64_t magic_num = 0;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, magic_num))) {
-  } else if (OB_UNLIKELY(magic_num != MAGIC_NUM)) {
-    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("deserialize magic num failed", KR(ret), KP(buf), K(data_len), K(pos));
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE, type_, id_);
-    if (OB_SUCC(ret)) {
-      hash_value_ = inner_hash();
+    pos = origin_pos;
+    if (OB_UNLIKELY(magic_num != MAGIC_NUM)) {
+      // this is an old version data.
+      ObOldLockOwner old_id;
+      if (OB_FAIL(old_id.deserialize(buf, data_len, pos))) {
+        LOG_WARN("deserialize owner id failed", KR(ret), KP(buf), K(data_len), K(pos));
+      } else {
+        type_ = old_id.type_;
+        id_ = old_id.id_;
+      }
+    } else {
+      // new version.
+      LST_DO_CODE(OB_UNIS_DECODE,
+                  magic_num,
+                  type_,
+                  id_);
     }
+    hash_value_ = inner_hash();
   }
+  return ret;
+}
+
+int ObTableLockOwnerID::get_data_version_(uint64_t &data_version) const
+{
+  int ret = OB_SUCCESS;
+  const static int64_t CACHE_REFRESH_INTERVAL = 1_s;
+  RLOCAL_INIT(int64_t, last_check_timestamp, 0);
+  RLOCAL_INIT(uint64_t, last_result, 0);
+  
+  int64_t current_time = ObClockGenerator::getClock();
+  uint64_t tmp_data_version = 0;
+  if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tmp_data_version))) {
+    LOG_WARN("get data version failed", K(ret));
+  } else {
+    last_result = tmp_data_version;
+    last_check_timestamp = current_time;
+  }
+  data_version = last_result;
   return ret;
 }
 
@@ -356,6 +466,7 @@ int ObTableLockOwnerID::get_ddl_owner_id(int64_t &id) const
       && static_cast<unsigned char>(ObLockOwnerType::DEFAULT_OWNER_TYPE) != type_
       && static_cast<unsigned char>(ObLockOwnerType::FORK_TABLE_OWNER_TYPE) != type_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("this is not a ddl owner", K(ret), K(type_));
   } else {
     id = id_;
   }
@@ -392,7 +503,9 @@ void ObTableLockOp::set(
 bool ObTableLockOp::is_valid() const
 {
   bool is_valid = false;
-  if (is_out_trans_lock_op() && owner_id_.id() == 0) {
+  if (TABLET_SPLIT == op_type_) {
+    is_valid = commit_scn_.is_valid() && !commit_scn_.is_min() && lock_id_.is_valid();
+  } else if (is_out_trans_lock_op() && owner_id_.id() == 0) {
     is_valid = false;
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "owner_id should not be 0 in out_trans lock", K_(owner_id));
   } else {

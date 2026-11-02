@@ -37,7 +37,10 @@ DEF_EXPR_INFO_FLAG(IS_LAST_INSERT_ID)
 DEF_EXPR_INFO_FLAG(IS_WINDOW_FUNC)
 DEF_EXPR_INFO_FLAG(IS_RAND_FUNC)         // rand(const) or rand() is a random function , rand(some column) is not a random function
 DEF_EXPR_INFO_FLAG(IS_PSEUDO_COLUMN)
+DEF_EXPR_INFO_FLAG(IS_OUTER_JOIN_SYMBOL)
+DEF_EXPR_INFO_FLAG(IS_SO_UDF_EXPR)   // expression contains user defined function(dll) expression. add prefix 'SO', means different with PL UDF.
 DEF_EXPR_INFO_FLAG(IS_PL_UDF)
+DEF_EXPR_INFO_FLAG(IS_SEQ_EXPR)
 DEF_EXPR_INFO_FLAG(IS_DYNAMIC_PARAM) //for opt to distinguish normal paramaterized const and exec-params
 DEF_EXPR_INFO_FLAG(IS_ENUM_OR_SET)
 DEF_EXPR_INFO_FLAG(IS_VOLATILE_CONST) // the const expr may be altered by overwrite, non-const in execution.
@@ -74,7 +77,10 @@ DEF_EXPR_INFO_FLAG(CNT_LAST_INSERT_ID)
 DEF_EXPR_INFO_FLAG(CNT_WINDOW_FUNC)
 DEF_EXPR_INFO_FLAG(CNT_RAND_FUNC)
 DEF_EXPR_INFO_FLAG(CNT_PSEUDO_COLUMN)
+DEF_EXPR_INFO_FLAG(CNT_OUTER_JOIN_SYMBOL)
+DEF_EXPR_INFO_FLAG(CNT_SO_UDF)      // expression contains user defined function(dll) expression. add prefix 'SO', means different with PL UDF.
 DEF_EXPR_INFO_FLAG(CNT_PL_UDF)
+DEF_EXPR_INFO_FLAG(CNT_SEQ_EXPR)
 DEF_EXPR_INFO_FLAG(CNT_DYNAMIC_PARAM)
 DEF_EXPR_INFO_FLAG(CNT_ENUM_OR_SET)
 DEF_EXPR_INFO_FLAG(CNT_VOLATILE_CONST)
@@ -101,11 +107,12 @@ DEF_EXPR_INFO_FLAG(IS_PL_ACCESS_IDX)
 DEF_EXPR_INFO_FLAG(IS_SELECT_REF)     // expr is refer to select item
 DEF_EXPR_INFO_FLAG(IS_SHARED_REF)
 DEF_EXPR_INFO_FLAG(IS_OP_OPERAND_IMPLICIT_CAST) // is implicit cast added for operand casting (add in type deducing)
-DEF_EXPR_INFO_FLAG(RESERVED_EXPR_INFO_87)
+DEF_EXPR_INFO_FLAG(IS_UDT_UDF_SELF_PARAM) // this is a udt udf self param mock by pl engine
 DEF_EXPR_INFO_FLAG(IS_PL_MOCK_DEFAULT_EXPR)
 DEF_EXPR_INFO_FLAG(IS_PROBABLY_LOCAL) // probably executed in local thread, for partial expr serialization
 DEF_EXPR_INFO_FLAG(IS_MARKED)
 DEF_EXPR_INFO_FLAG(IS_TABLE_ASSIGN) // update t1 set c1 = const
+DEF_EXPR_INFO_FLAG(IS_AUTO_PART_EXPR)
 DEF_EXPR_INFO_FLAG(IS_ATTR_EXPR)  // collection attr expr
 DEF_EXPR_INFO_FLAG(IS_EXISTS)
 DEF_EXPR_INFO_FLAG(IS_CUT_CALC_EXPR)

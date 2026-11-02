@@ -1,0 +1,190 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_OB_TENANT_DATA_VERSION_H_
+#define OCEANBASE_OBSERVER_OB_TENANT_DATA_VERSION_H_
+
+#include "lib/ob_define.h"
+#include "lib/hash/ob_hashmap.h"
+#include "common/ob_version_def.h"
+#include "rpc/frame/ob_req_packet_code.h"
+
+namespace oceanbase 
+{
+namespace common 
+{
+/**
+ * ObTenantDataVersionMgr maintains the data_version of all tenants by a
+ * data_version map.
+ *
+ * The data_version map is persisted in a disk file, and whenever
+ * the data_version of a tenant need to be updated, the disk file will be
+ * modified before the map updated in memory, so we can ensure the data_version
+ * will not go back in this machine.
+ *
+ * The path of the disk file is $observer_home/etc/observer.data_version.bin.
+ * This file is composed of a header part and a data part.
+ * | ---------------------HEADER (Not Readable)---------------------- |
+ * | ObRecordHeader(magic_number, length, checksum...)                |
+ * | ------------------------DATA (Readable)------------------------- |
+ * | version_str version_val removed remove_timestamp        \n    |
+ * | 1001: 4.3.0.1 17180065793 0 0\n                                  |
+ * | 1002: 4.3.0.1 17180065793 0 0\n                                  |
+ * |                              ...                                 |
+ * | ------------------------------------------------------------------
+
+ * The insert/update/remove operations will set a mgr-level write lock first,
+ * however the get operation can access the map directly without a lock,
+ * therefore the overhead of the get operation is relatively small.
+ *
+ */
+class ObTenantDataVersionMgr 
+{
+public:
+  ObTenantDataVersionMgr()
+      : is_inited_(false), version_(nullptr), allocator_(lib::ObLabel("TenantDVMgr")), mock_data_version_(0),
+        enable_compatible_monotonic_(false), file_exists_when_loading_(false)
+  {
+  }
+  ~ObTenantDataVersionMgr() {}
+  static ObTenantDataVersionMgr& get_instance();
+  int init(bool enable_compatible_monotonic);
+  int get(uint64_t &data_version) const;
+  /**
+   * update the tenant's data_version, if the tenant is not in the mgr yet,
+   * insert the entry instead.
+   */
+  int set(const uint64_t data_version);
+  int remove();
+  int load_from_file();
+  bool is_enable_compatible_monotonic() 
+  {
+    return ATOMIC_LOAD(&enable_compatible_monotonic_);
+  }
+  void set_enable_compatible_monotonic(bool enable) 
+  {
+    ATOMIC_STORE(&enable_compatible_monotonic_, enable);
+  }
+  bool get_file_exists_when_loading() 
+  {
+    return ATOMIC_LOAD(&file_exists_when_loading_);
+  }
+  static bool need_set_for_rpc(rpc::frame::ObReqPacketCode pcode) 
+  {
+    return true;
+  }
+  // for unittest
+  void set_mock_data_version(const uint64_t data_version) 
+  {
+    ATOMIC_STORE(&mock_data_version_, data_version);
+  }
+private:
+  struct ObTenantDataVersion 
+  {
+    ObTenantDataVersion(uint64_t version)
+        : removed_(false), remove_timestamp_(0), version_(version) {}
+    ObTenantDataVersion(bool removed, uint64_t remove_timestamp_, uint64_t version)
+        : removed_(removed), remove_timestamp_(remove_timestamp_), version_(version) {}
+    ~ObTenantDataVersion() {}
+    // version_str version_val removed remove_timestamp
+    // for removed field, 1 stands for tenant is removed, 0 stands for tenant is active
+    // e.g. 1001: 4.3.0.1 17180065793 0 0
+#ifdef _WIN32
+    static constexpr const char *DUMP_BUF_FORMAT = "%s %llu %d %llu";
+#else
+    static constexpr const char *DUMP_BUF_FORMAT = "%s %lu %d %lu";
+#endif
+    // the max length of uint64 decimal format is 20, so:
+    // version_str(OB_SERVER_VERSION_LENGTH) + version_val(20) +
+    // removed(1) + remove_timestamp(20) + spaces_and_others(10)
+    static constexpr int64_t MAX_DUMP_BUF_SIZE = OB_SERVER_VERSION_LENGTH + 20 + 1 + 20 + 10;
+    bool is_removed() const 
+    { 
+      return ATOMIC_LOAD(&removed_); 
+    }
+    uint64_t get_remove_timestamp() const 
+    { 
+      return ATOMIC_LOAD(&remove_timestamp_); 
+    }
+    void set_removed(bool removed, uint64_t remove_ts) 
+    {
+      ATOMIC_STORE(&removed_, removed);
+      ATOMIC_STORE(&remove_timestamp_, remove_ts);
+    }
+    uint64_t get_version() const 
+    { 
+      return ATOMIC_LOAD(&version_); 
+    }
+    void set_version(uint64_t version) 
+    { 
+      ATOMIC_STORE(&version_, version); 
+    }
+    TO_STRING_KV(K_(removed), K_(remove_timestamp), K_(version));
+  private:
+    bool removed_;
+    uint64_t remove_timestamp_;
+    uint64_t version_;
+  };
+  int set_(const uint64_t data_version);
+  // for set: set data_version before dump
+  int set_and_dump_to_file_(const uint64_t data_version, const bool need_to_insert);
+  // for remove: remove the data_version before dump
+  int remove_and_dump_to_file_(const int64_t remove_ts);
+  int dump_data_version_(char *buf, int64_t buf_length, int64_t &pos,
+                         const bool removed, const int64_t remove_ts,
+                         const uint64_t data_version);
+  int load_data_version_(char *buf, int64_t &pos);
+  int write_to_file_(char *buf, int64_t buf_length, int64_t data_length);
+  void set_file_exists_when_loading_() 
+  {
+    ATOMIC_STORE(&file_exists_when_loading_, true);
+  }
+private:
+  // we use NoPthreadDefendMode here, so the hashmap will not lock buckets before get/set. 
+  // to ensure thread safety, we have several promises:
+  // 1. we only insert new entry into the hashmap, never delete or overwrite existing entry
+  // 2. before insert new entry, we acquire a global lock in ObTenantDataVersionMgr
+  static constexpr const char *TENANT_DATA_VERSION_FILE_PATH = "etc/seekdb.data_version.bin";
+  static constexpr int64_t TENANT_DATA_VERSION_FILE_MAX_SIZE = 1 << 26; // 64MB
+  // The number of tenant won't be too large, so 1024 buckets should be enough
+  static constexpr int64_t TENANT_DATA_VERSION_BUCKET_NUM = 1024;
+  static constexpr int16_t OB_CONFIG_MAGIC = static_cast<int16_t>(0XBEDE);
+  static const int16_t OB_CONFIG_VERSION = 1;
+  bool is_inited_;
+  // single-tenant: collapsed from ObHashMap<tenant, ObTenantDataVersion*> (only OB_SYS entry) to a single pointer; nullptr = not exist
+  ObTenantDataVersion *version_;
+  common::SpinRWLock lock_;
+  common::ObArenaAllocator allocator_;
+  // for unittest
+  uint64_t mock_data_version_;
+  bool enable_compatible_monotonic_;
+  bool file_exists_when_loading_;
+};
+
+class ObDataVersionPrinter
+{
+public:
+  ObDataVersionPrinter(const uint64_t data_version);
+  TO_STRING_KV("version_str", version_str_, "version_val", version_val_);
+private:
+  uint64_t version_val_;
+  char version_str_[OB_SERVER_VERSION_LENGTH];
+};
+
+} // namespace common
+} // namespace oceanbase
+#define ODV_MGR (::oceanbase::common::ObTenantDataVersionMgr::get_instance())
+#endif // OCEANBASE_OBSERVER_OB_TENANT_DATA_VERSION_H_

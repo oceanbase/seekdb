@@ -17,8 +17,9 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_DELETE_REPLAY_EXECUTOR
 #define OCEANBASE_STORAGE_OB_TABLET_DELETE_REPLAY_EXECUTOR
 
+#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
-#include "storage/tablet/ob_tablet_replay_executor.h"
+#include "logservice/replayservice/ob_tablet_replay_executor.h"
 
 namespace oceanbase
 {
@@ -32,21 +33,22 @@ struct ObRemoveTabletArg
 public:
   inline bool is_valid() const
   {
-    return tablet_id_.is_valid();
+    return ls_id_.is_valid() && tablet_id_.is_valid();
   }
 
-  TO_STRING_KV(K_(tablet_id));
+  TO_STRING_KV(K_(ls_id), K_(tablet_id));
 
 public:
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };
 
-class ObTabletDeleteReplayExecutor final : public ObTabletReplayExecutor
+class ObTabletDeleteReplayExecutor final : public logservice::ObTabletReplayExecutor
 {
 public:
   ObTabletDeleteReplayExecutor();
 
-  int init(mds::BufferCtx &ctx, const share::SCN &scn);
+  int init(mds::BufferCtx &ctx, const share::SCN &scn, const bool for_old_mds);
 
 protected:
   bool is_replay_update_tablet_status_() const override
@@ -62,8 +64,10 @@ protected:
   }
 
 private:
+  const ObRemoveTabletArg *arg_;
   mds::BufferCtx *ctx_;
   share::SCN scn_;
+  bool for_old_mds_;
 };
 
 

@@ -28,10 +28,13 @@ int ObRawExprSetUtils::to_expr_set(common::ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   if (exprs.count() <= 0 || OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("params are invalid", K(ret), K(allocator), K(exprs.count()));
   } else {
     expr_set.set_allocator(allocator);
     if (OB_FAIL(expr_set.init(exprs.count()))) {
+      LOG_WARN("failed to init expr set", K(ret));
     } else if (OB_FAIL(common::append(expr_set, exprs))) {
+      LOG_WARN("faield to append expr", K(ret));
     }
   }
   return ret;
@@ -46,14 +49,18 @@ int ObRawExprSetUtils::add_expr_set(common::ObIAllocator *allocator,
   void *ptr = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("params are invalid", K(ret), K(allocator));
   } else if (exprs.count() <= 0) {
     /*do nothing*/
   } else if (OB_ISNULL(ptr = allocator->alloc(sizeof(ObRawExprSet)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("no memory to create ObRawExprSet", K(ret));
   } else {
     expr_set = new(ptr) ObRawExprSet();
     if (OB_FAIL(to_expr_set(allocator, exprs, *expr_set))) {
+      LOG_WARN("failed to convert array to expr set", K(ret));
     } else if (OB_FAIL(expr_sets.push_back(expr_set))) {
+      LOG_WARN("failed to push back expr set", K(ret));
     }
   }
   if (OB_FAIL(ret) && expr_set != NULL) {

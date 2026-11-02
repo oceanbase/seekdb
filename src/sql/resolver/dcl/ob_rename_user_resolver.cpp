@@ -38,6 +38,7 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("Session info is not inited", K(ret));
   } else if (node != NULL && T_RENAME_USER == node->type_ && node->num_child_ > 0) {
     if (OB_ISNULL(rename_user_stmt = create_stmt<ObRenameUserStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -49,6 +50,7 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
         ParseNode *rename_info = NULL;
         if (OB_ISNULL(rename_info = node->children_[i])) {
           ret = OB_ERR_PARSE_SQL;
+          LOG_WARN("Child should not be NULL", K(ret), K(i));
         } else if (4 == rename_info->num_child_ && T_RENAME_INFO == rename_info->type_
                    && NULL != rename_info->children_[0] && NULL != rename_info->children_[2]) {
           ObString from_user(rename_info->children_[0]->str_len_, rename_info->children_[0]->str_value_);
@@ -78,17 +80,22 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
                                                      session_info_->get_priv_user_id(),
                                                      from_user,
                                                      from_host))) {
+            LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user",
+                     K(ret), K(session_info_->get_user_name()), K(from_user));
           } else if (OB_FAIL(rename_user_stmt->add_rename_info(from_user, from_host, to_user, to_host))) {
+            LOG_WARN("Failed to add user to ObRenameUserStmt", K(ret));
           } else {
             //do nothing
           }
         } else {
           ret = OB_ERR_PARSE_SQL;
+          LOG_WARN("sql_parser parse rename_info error", K(ret));
         }
       } // end for
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("rename user ParseNode error", K(ret));
   }
   return ret;
 }

@@ -38,12 +38,18 @@ int ObPackageInfo::assign(const ObPackageInfo &package_info)
     schema_version_ = package_info.schema_version_;
     type_ = package_info.type_;
     flag_ = package_info.flag_;
+    comp_flag_ = package_info.comp_flag_;
 
     if (OB_FAIL(deep_copy_str(package_info.get_package_name(), package_name_))) {
+      LOG_WARN("deep copy package name failed", "package_name", package_info.package_name_, K(ret));
     } else if (OB_FAIL(deep_copy_str(package_info.get_source(), source_))) {
+      LOG_WARN("deep copy src failed", "source", package_info.source_, K(ret));
     } else if (OB_FAIL(deep_copy_str(package_info.exec_env_, exec_env_))) {
+      LOG_WARN("deep copy exec env failed", K(ret), "exec_env", package_info.exec_env_);
     } else if (OB_FAIL(deep_copy_str(package_info.comment_, comment_))) {
+      LOG_WARN("deep copy comment failed", K(ret), "comment", package_info.comment_);
     } else if (OB_FAIL(deep_copy_str(package_info.route_sql_, route_sql_))) {
+      LOG_WARN("deep copy comment failed", K(ret), "route_sql", package_info.route_sql_);
     }else {
       // do nothing
     }
@@ -74,6 +80,7 @@ void ObPackageInfo::reset()
   schema_version_ = common::OB_INVALID_VERSION;
   type_ = INVALID_PACKAGE_TYPE;
   flag_ = 0;
+  comp_flag_ = 0;
   reset_string(exec_env_);
   reset_string(source_);
   reset_string(comment_);
@@ -110,6 +117,7 @@ OB_DEF_SERIALIZE(ObPackageInfo)
               package_name_,
               type_,
               flag_,
+              comp_flag_,
               exec_env_,
               source_,
               comment_,
@@ -127,6 +135,7 @@ OB_DEF_DESERIALIZE(ObPackageInfo)
               package_name_,
               type_,
               flag_,
+              comp_flag_,
               exec_env_,
               source_,
               comment_,
@@ -144,6 +153,7 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
               package_name_,
               type_,
               flag_,
+              comp_flag_,
               exec_env_,
               source_,
               comment_,
@@ -153,5 +163,7 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
+
+
 
 

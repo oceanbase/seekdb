@@ -18,22 +18,26 @@
 #define _OCEANBASE_SQL_OPTIMIZER_OB_TABLE_LOCATION_H
 
 #include "lib/hash/ob_pointer_hashmap.h"
-#include "query/optimizer/ob_optimizer_location_defs.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/das/ob_das_define.h"
-#include "sql/das/ob_das_tablet_mapper.h"
 #include "sql/engine/expr/ob_sql_expression.h"
 #include "sql/engine/expr/ob_sql_expression_factory.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
+#include "sql/ob_phy_table_location.h"
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/engine/px/ob_granule_util.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "lib/hash/ob_pointer_hashmap.h"
+#include "sql/das/ob_das_location_router.h"
 //#include "sql/resolver/ddl/ob_alter_table_stmt.h"
 
 namespace oceanbase
 {
+namespace share
+{
+  class ObLSLocation;
+}
 namespace sql
 {
 class ObRawExpr;
@@ -42,7 +46,39 @@ class ObColumnRefRawExpr;
 class ObExprEqualCheckContext;
 class ObDASTabletMapper;
 class ObDASCtx;
+class DASRelatedTabletMap;
 typedef common::ObSEArray<int64_t, 1> RowkeyArray;
+class ObPartIdRowMapManager
+{
+public:
+  ObPartIdRowMapManager()
+    : manager_(), part_idx_(common::OB_INVALID_INDEX) {}
+  typedef common::ObSEArray<int64_t, 12> ObRowIdList;
+  struct MapEntry
+  {
+  public:
+    MapEntry(): list_() { }
+    TO_STRING_KV(K_(list));
+    int assign(const MapEntry &entry);
+  public:
+    ObRowIdList list_;
+  };
+  typedef common::ObSEArray<MapEntry, 1> ObPartRowManager;
+  const ObRowIdList* get_row_id_list(int64_t part_index);
+  void reset() { manager_.reset(); part_idx_ = common::OB_INVALID_INDEX; }
+  int64_t get_part_count() const { return manager_.count(); }
+  int64_t get_part_idx() const { return part_idx_; }
+  void set_part_idx(int64_t part_idx) { part_idx_ = part_idx; }
+  const MapEntry &at(int64_t i) const { return manager_.at(i); }
+  common::ObNewRow &get_part_row() { return part_row_; }
+  TO_STRING_KV(K_(manager), K_(part_idx));
+private:
+  ObPartRowManager manager_;
+  int64_t part_idx_;//used for parameter pass only.
+  common::ObNewRow part_row_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObPartIdRowMapManager);
+};
 
 enum ValueExprType {
   INVILID_TYPE,
@@ -350,6 +386,23 @@ struct ObGetHashPartMapKey<ObHashPartMapKey, ObHashPartMapValue *>
   }
 };
 
+struct TableLocationKey
+{
+  uint64_t table_id_;
+  uint64_t ref_table_id_;
+
+  bool operator==(const TableLocationKey &other) const;
+
+  inline uint64_t hash() const {
+    uint64_t hash_ret = 0;
+    hash_ret = common::murmurhash(&table_id_, sizeof(uint64_t), hash_ret);
+    hash_ret = common::murmurhash(&ref_table_id_, sizeof(uint64_t), hash_ret);
+    return hash_ret;
+  }
+
+  TO_STRING_KV(K_(table_id), K_(ref_table_id));
+};
+
 class ObOptimizerContext;
 // Default false=false, array etc memory uses the allocator inside the array, must explicitly destruct this object.
 // For non-plan set calls, specifying false makes no difference, because the allocator must be passed to the constructor,
@@ -422,8 +475,10 @@ public:
     common::ObIAllocator &allocator_;
   };
 
-  ObTableLocationType get_location_type(
-      const ObCandiTabletLocIArray &phy_part_loc_info_list) const;
+  int get_location_type(
+      const common::ObAddr &server,
+      const ObCandiTabletLocIArray &phy_part_loc_info_list,
+      ObTableLocationType &location_type) const;
 
   //get virtual talbe partition ids or fake id. ref_table_id should be partitioned virtual table
   //@param [in] ref_table_id partitioned virtual table
@@ -479,7 +534,9 @@ public:
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     object_id_(OB_INVALID_ID),
     related_list_(allocator_),
-    check_no_partition_(false)
+    check_no_partition_(false),
+    is_broadcast_table_(false),
+    is_dynamic_replica_select_table_(false)
   {
   }
   // Used for optimizers etc., where destructors are not called, to ensure each member array is passed an external allocator
@@ -526,7 +583,9 @@ public:
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     object_id_(OB_INVALID_ID),
     related_list_(allocator_),
-    check_no_partition_(false)
+    check_no_partition_(false),
+    is_broadcast_table_(false),
+    is_dynamic_replica_select_table_(false)
   {
   }
   virtual ~ObTableLocation() { reset(); }
@@ -576,6 +635,10 @@ public:
                               const ObSQLSessionInfo *session_info,
                               const ObSqlCtx *sql_ctx,
                               bool &is_weak_read);
+
+  int send_add_interval_partition_rpc(ObExecContext &exec_ctx,
+                                      share::schema::ObSchemaGetterGuard *schema_guard,
+                                      ObNewRow &row) const;
 
   /**
    * Calculate the table's partition location list from the input parameters.
@@ -654,6 +717,12 @@ public:
                                  const ObIArray<ObObjectID> &partition_ids,
                                  const ObIArray<ObObjectID> &first_level_part_ids) const;
 
+  static int send_add_interval_partition_rpc_new_engine(ObIAllocator &allocator,
+                                                        ObSQLSessionInfo *session,
+                                                        ObSchemaGetterGuard *schema_guard,
+                                                        const ObTableSchema *table_schema,
+                                                        ObNewRow &row);
+
   inline void set_table_id(uint64_t table_id) { loc_meta_.table_loc_id_ = table_id; }
 
   inline uint64_t get_table_id() const { return loc_meta_.table_loc_id_; }
@@ -680,11 +749,24 @@ public:
                                         common::ObIArray<ObRawExpr *> *sort_exprs) const;
   bool has_generated_column() const { return NULL != se_gen_col_expr_ || NULL != se_sub_gen_col_expr_ ||
                                              NULL != gen_col_node_ || NULL != sub_gen_col_node_; }
-  static int build_full_local_table_loc(ObDASCtx &das_ctx,
-                                        ObIAllocator &allocator,
-                                        uint64_t table_id,
-                                        uint64_t ref_table_id,
-                                        ObDASTableLoc *&table_loc);
+  static int get_full_leader_table_loc(ObDASLocationRouter &loc_router,
+                                       ObIAllocator &allocator,
+                                       uint64_t table_id,
+                                       uint64_t ref_table_id,
+                                       ObDASTableLoc *&table_loc);
+  bool is_duplicate_table() const { return loc_meta_.is_dup_table_; }
+  bool is_dynamic_replica_select_table() const { return is_dynamic_replica_select_table_; } 
+  void set_dynamic_replica_select_table(const bool is_dynamic_replica_select_table) {
+    is_dynamic_replica_select_table_ = is_dynamic_replica_select_table;
+  }
+  void set_broadcast_table(const bool is_broadcast_table) {
+    is_broadcast_table_ = is_broadcast_table;
+  }
+  bool get_is_broadcast_table() const { return is_broadcast_table_; }
+  bool is_duplicate_table_not_in_dml() const
+  { return loc_meta_.is_dup_table_ && !loc_meta_.select_leader_; }
+  void set_duplicate_type(ObDuplicateType v) { duplicate_type_to_loc_meta(v, loc_meta_); }
+  ObDuplicateType get_duplicate_type() const { return loc_meta_to_duplicate_type(loc_meta_); }
   int add_part_hint_ids(const ObIArray<ObObjectID> &part_ids) {
     return append_array_no_dup(part_hint_ids_, part_ids);
   }
@@ -1169,6 +1251,8 @@ private:
   ObObjectID object_id_;
   common::ObList<DASRelatedTabletMap::MapEntry, common::ObIAllocator> related_list_;
   bool check_no_partition_;
+  bool is_broadcast_table_;
+  bool is_dynamic_replica_select_table_;
 };
 
 }

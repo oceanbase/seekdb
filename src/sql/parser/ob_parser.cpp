@@ -21,7 +21,7 @@
 #include "parse_malloc.h"
 #include "parse_node.h"
 #include "ob_sql_parser.h"
-#include "sql/pl/parser/ob_pl_parser.h"
+#include "pl/parser/ob_pl_parser.h"
 using namespace oceanbase::pl;
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -61,7 +61,9 @@ bool ObParser::is_pl_stmt(const ObString &stmt, bool *is_create_func, bool *is_c
       case S_BEGIN:
       case S_DROP:
       case S_ALTER:
-      case S_UPDATE: {
+      case S_UPDATE:
+      case S_SUBMIT:
+      case S_CANCEL: {
         if (ISSPACE(*p)) {
           p++;
         } else {
@@ -362,6 +364,7 @@ ObParser::State ObParser::transform_normal(ObString &normal)
   ELSIF(9, S_PROCEDURE, "procedure")
   ELSIF(7, S_PACKAGE, "package")
   ELSIF(7, S_TRIGGER, "trigger")
+  ELSIF(5, S_EVENT, "event")
   ELSIF(4, S_TYPE, "type")
   ELSIF(2, S_OR, "or")
   ELSIF(7, S_REPLACE, "replace")
@@ -381,6 +384,9 @@ ObParser::State ObParser::transform_normal(ObString &normal)
   ELSIF(6, S_SIGNAL, "signal")
   ELSIF(8, S_RESIGNAL, "resignal")
   ELSIF(5, S_FORCE, "force")
+  ELSIF(6, S_SUBMIT, "submit")
+  ELSIF(6, S_CANCEL, "cancel")
+  ELSIF(3, S_JOB, "job")
   ELSE()
 
   if (S_INVALID == state
@@ -412,6 +418,7 @@ ObParser::State ObParser::transform_normal(
         case S_FUNCTION:
         case S_PACKAGE:
         case S_TRIGGER:
+        case S_EVENT:
         case S_TYPE:
         case S_SIGNAL:
         case S_RESIGNAL: {
@@ -429,7 +436,9 @@ ObParser::State ObParser::transform_normal(
         case S_BEGIN:
         case S_DROP:
         case S_ALTER:
-        case S_UPDATE: {
+        case S_UPDATE:
+        case S_SUBMIT:
+        case S_CANCEL: {
           state = token;
         } break;
         case S_INVALID:
@@ -444,6 +453,7 @@ ObParser::State ObParser::transform_normal(
         case S_PROCEDURE:
         case S_PACKAGE:
         case S_TRIGGER:
+        case S_EVENT:
         case S_TYPE:
         case S_DEFINER: {
           is_pl = true;
@@ -484,7 +494,7 @@ ObParser::State ObParser::transform_normal(
     case S_ALTER: {
       State token = transform_normal(normal);
       if (S_PROCEDURE == token || S_FUNCTION == token
-          || S_PACKAGE == token || S_TRIGGER == token || S_TYPE == token || S_DEFINER == token) {
+          || S_PACKAGE == token || S_TRIGGER == token ||  S_EVENT == token || S_TYPE == token || S_DEFINER == token) {
         is_pl = true;
       } else {
         is_not_pl = true;
@@ -492,6 +502,15 @@ ObParser::State ObParser::transform_normal(
     } break;
     case S_UPDATE: {
       if (S_OF == transform_normal(normal)) {
+        is_pl = true;
+      } else {
+        is_not_pl = true;
+      }
+    } break;
+    case S_SUBMIT:
+    case S_CANCEL: {
+      State token = transform_normal(normal);
+      if (S_JOB == token) {
         is_pl = true;
       } else {
         is_not_pl = true;
@@ -712,6 +731,7 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
           parse_stat.fail_query_idx_ = queries.count() - 1;
           parse_stat.fail_ret_ = tmp_ret;
         }
+        LOG_WARN("fail parse multi part", K(part), K(stmt), K(ret));
       }
       allocator_ = bak_allocator;
     }
@@ -727,6 +747,7 @@ int ObParser::check_is_insert(common::ObIArray<common::ObString> &queries, bool 
   bool is_replace = false;
   if (queries.count() < 1) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("queries is unexpected", K(ret));
   } else if (queries.count() > 1) {
     // query count greater than 1, multi query no optimization
   } else {
@@ -756,6 +777,8 @@ int32_t ObParser::get_well_formed_errlen(const ObCharsetInfo *charset_info,
                                                                  err_ptr + err_len,
                                                                  UINT64_MAX,
                                                                  &err));
+    LOG_DEBUG("check well_formed_errlen", K(well_formed_errlen), K(err_len),
+              K(err), K(charset_info->name));
     if (err != 0
         && well_formed_errlen < err_len
         && err_len - well_formed_errlen < charset_info->mbmaxlen) {
@@ -871,15 +894,37 @@ int ObParser::parse_sql(const ObString &stmt,
 #endif
   if (parse_result.is_fp_ || parse_result.is_multi_query_) {
     if (OB_FAIL(ret) && !no_throw_parser_error) {
+      LOG_WARN("failed to fast parameterize", K(stmt_str), K(ret));
     }
   }
   if (OB_SUCC(ret) &&
       parse_result.enable_compatible_comment_ &&
       parse_result.mysql_compatible_comment_) {
     ret = OB_ERR_PARSE_SQL;
+    LOG_WARN("the sql is invalid", K(ret), K(stmt_str));
   }
   if (OB_FAIL(ret) && !no_throw_parser_error) {
     auto err_charge_sql_mode = false;
+    LOG_WARN("failed to parse the statement",
+             K(stmt_str),
+             K(parse_result.is_fp_),
+             K(parse_result.is_multi_query_),
+             K(parse_result.yyscan_info_),
+             K(parse_result.result_tree_),
+             K(parse_result.malloc_pool_),
+             "message", parse_result.error_msg_,
+             "start_col", parse_result.start_col_,
+             "end_col", parse_result.end_col_,
+             K(parse_result.line_),
+             K(parse_result.yycolumn_),
+             K(parse_result.yylineno_),
+             K(parse_result.extra_errno_),
+             K(parse_result.is_for_remap_),
+             K(err_charge_sql_mode),
+             K(sql_mode_),
+             K(parse_result.sql_mode_),
+             K(parse_result.may_bool_value_),
+             K(ret));
 
     int32_t error_offset = parse_result.start_col_ > 0 ? (parse_result.start_col_ - 1) : 0;
     int32_t error_length = stmt.empty() ? 0 : get_well_formed_errlen(parse_result.charset_info_,
@@ -906,6 +951,7 @@ int ObParser::parse_(const ObString &query,
                     const bool is_batched_multi_stmt_split_on,
                     const bool no_throw_parser_error,
                     const bool is_pl_inner_parse,
+                    const bool is_dbms_sql,
                     const bool is_parse_dynamic_sql)
 {
   int ret = OB_SUCCESS;
@@ -930,7 +976,6 @@ int ObParser::parse_(const ObString &query,
   ObString stmt(len, query.ptr());
   memset(&parse_result, 0, sizeof(ParseResult));
   parse_result.is_multi_values_parser_ = (INS_MULTI_VALUES == parse_mode);
-  parse_result.is_method_opt_parser_ = (METHOD_OPT_MODE == parse_mode);
   parse_result.is_fp_ = (FP_MODE == parse_mode
                          || FP_PARAMERIZE_AND_FILTER_HINT_MODE == parse_mode
                          || FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE== parse_mode);
@@ -939,6 +984,7 @@ int ObParser::parse_(const ObString &query,
                                   || FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE == parse_mode);
   parse_result.is_for_trigger_ = (TRIGGER_MODE == parse_mode);
   parse_result.is_dynamic_sql_ = (DYNAMIC_SQL_MODE == parse_mode);
+  parse_result.is_dbms_sql_ = (DBMS_SQL_MODE == parse_mode) || is_dbms_sql;
   parse_result.is_batched_multi_enabled_split_ = is_batched_multi_stmt_split_on;
   parse_result.is_not_utf8_connection_ = ObCharset::is_valid_collation(charsets4parser_.string_collation_) ?
         (ObCharset::charset_type_by_coll(charsets4parser_.string_collation_) != CHARSET_UTF8MB4) : false;
@@ -950,7 +996,7 @@ int ObParser::parse_(const ObString &query,
   parse_result.minus_ctx_.pos_ = -1;
   parse_result.minus_ctx_.raw_sql_offset_ = -1;
   parse_result.charset_info_ = ObCharset::get_charset(charsets4parser_.string_collation_);
-  parse_result.charset_info_nls_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
+  parse_result.charset_info_oracle_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
         ObCharset::get_charset(charsets4parser_.nls_collation_) : NULL;
   parse_result.connection_collation_ = charsets4parser_.string_collation_;
   parse_result.mysql_compatible_comment_ = false;
@@ -962,6 +1008,7 @@ int ObParser::parse_(const ObString &query,
     void *buffer = nullptr;
     if (OB_ISNULL(buffer = allocator_->alloc(sizeof(InsMultiValuesResult)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate InsMultiValuesResult failed", K(ret), K(sizeof(InsMultiValuesResult)));
     } else {
       parse_result.ins_multi_value_res_ = new(buffer)InsMultiValuesResult();
     }
@@ -969,6 +1016,7 @@ int ObParser::parse_(const ObString &query,
 
   if (OB_SUCC(ret) && stmt.empty()) {
     ret = OB_ERR_EMPTY_QUERY;
+    LOG_WARN("query is empty", K(ret));
   }
 
   if (OB_SUCC(ret) && (parse_result.is_fp_ || parse_result.is_dynamic_sql_)) {
@@ -1029,11 +1077,15 @@ int ObParser::parse_(const ObString &query,
       if (OB_FAIL(parse_sql(stmt, parse_result, no_throw_parser_error))) {
         // if fail, regard /*! */ as comment, and retry;
         if (!no_throw_parser_error) {
+          LOG_WARN("failed to parse stmt as sql",
+                   "stmt", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : stmt,
+                   K(parse_mode), K(ret));
         }
       }
     } else {
       ObPLParser pl_parser(*(ObIAllocator*)(parse_result.malloc_pool_), charsets4parser_, sql_mode_);
       if (OB_FAIL(pl_parser.parse(stmt, stmt, parse_result, is_pl_inner_parse))) {
+        LOG_WARN("failed to parse stmt as pl", K(stmt), K(ret));
         // may create ddl func, try it.
         if ((OB_ERR_PARSE_SQL == ret
             && is_create_func
@@ -1041,6 +1093,9 @@ int ObParser::parse_(const ObString &query,
             (OB_ERR_PARSE_SQL == ret && is_mysql_comment)) {
           if (OB_FAIL(parse_sql(stmt, parse_result, no_throw_parser_error))) {
             if (!no_throw_parser_error) {
+              LOG_WARN("failed to parse stmt as sql",
+                  "stmt", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : stmt,
+                  K(parse_mode), K(ret));
             }
           }
         }
@@ -1056,6 +1111,7 @@ int ObParser::parse(const ObString &query,
                     const bool is_batched_multi_stmt_split_on,
                     const bool no_throw_parser_error,
                     const bool is_pl_inner_parse,
+                    const bool is_dbms_sql,
                     const bool is_parse_dynamic_sql)
 {
   return SMART_CALL(parse_(query,
@@ -1064,6 +1120,7 @@ int ObParser::parse(const ObString &query,
                           is_batched_multi_stmt_split_on,
                           no_throw_parser_error,
                           is_pl_inner_parse,
+                          is_dbms_sql,
                           is_parse_dynamic_sql));
 }
 

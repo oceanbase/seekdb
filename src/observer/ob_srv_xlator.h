@@ -18,14 +18,27 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "rpc/frame/ob_req_translator.h"
-#include "share/ob_server_struct.h"
+#include "rpc/frame/ob_req_session_handler.h"
+#include "rpc/obmysql/ob_mysql_translator.h"
+#include "observer/ob_server_struct.h"
 
+#define MAX_PCODE 0xFFFF
+#define CALLP_BUF_SIZE 1280
 union EP_CALLP_BUF;
 RLOCAL_EXTERN(EP_CALLP_BUF, co_ep_callp_buf);
+
+// obcall RPC dispatch removed: ObSrvRpcXlator (which derived from
+// obcall::ObCallTranslator), its DirectHandler/RPCProcessFunc tables and the
+// init_srv_xlator_for_* registration helpers are gone — every observer-service
+// RPC is dispatched in-process now, so no obcall packets are translated here.
+// ObSrvXlator is MySQL-only; it still derives from rpc::frame::ObReqTranslator
+// (the framework translator the shared request queue handler needs).
 
 namespace oceanbase { namespace observer {
 
 using rpc::frame::ObReqProcessor;
+using rpc::frame::ObReqSessionHandler;
+using obmysql::ObMySQLTranslator;
 using common::ObIAllocator;
 
 extern thread_local bool g_in_sync_dispatch;
@@ -35,30 +48,35 @@ template <typename T> void worker_allocator_delete(T *&ptr) {
   if (NULL != ptr) { ptr->~T(); get_sql_arena_allocator().free(ptr); ptr = NULL; }
 }
 
-class ObSrvMySQLXlator : public rpc::frame::ObReqTranslator {
+class ObSrvMySQLXlator : public ObMySQLTranslator {
 public:
-  explicit ObSrvMySQLXlator(const share::ObGlobalContext &gctx) : gctx_(gctx) {}
+  explicit ObSrvMySQLXlator(const ObGlobalContext &gctx) : gctx_(gctx) {}
   int translate(rpc::ObRequest &req, ObReqProcessor *&processor);
 protected:
   ObReqProcessor *get_processor(rpc::ObRequest &) { return NULL; }
   int get_mp_connect_processor(ObReqProcessor *&ret_proc);
 private:
-  const share::ObGlobalContext &gctx_;
+  const ObGlobalContext &gctx_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvMySQLXlator);
 };
 
 class ObSrvXlator : public rpc::frame::ObReqTranslator {
 public:
-  explicit ObSrvXlator(const share::ObGlobalContext &gctx)
+  explicit ObSrvXlator(const ObGlobalContext &gctx)
       : mysql_xlator_(gctx) {}
   int th_init();
   int th_destroy();
   int release(ObReqProcessor *processor);
+  // The session handler is owned here only because ObSrvDeliver (shared by the
+  // MySQL/RPC listener) takes a reference to one in its constructor. It is no
+  // longer driven by any obcall RPC translation path.
+  ObReqSessionHandler &get_session_handler() { return session_handler_; }
 protected:
   ObReqProcessor *get_processor(rpc::ObRequest &);
 private:
   ObReqProcessor *get_error_mysql_processor(const int ret);
   ObSrvMySQLXlator mysql_xlator_;
+  ObReqSessionHandler session_handler_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvXlator);
 };
 

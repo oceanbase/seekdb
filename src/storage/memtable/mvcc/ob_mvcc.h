@@ -91,6 +91,11 @@ public:
   { return common::OB_SUCCESS; }
   virtual int64_t get_data_size() { return 0; }
   virtual MutatorType get_mutator_type() const; 
+  virtual int get_cluster_version(uint64_t &cluster_version) const
+  {
+    UNUSED(cluster_version);
+    return common::OB_SUCCESS;
+  }
   virtual blocksstable::ObDmlFlag get_dml_flag() const { return blocksstable::ObDmlFlag::DF_NOT_EXIST; }
   virtual void set_not_calc_checksum(const bool not_calc_checksum) { UNUSED(not_calc_checksum); }
   ObITransCallback *get_next() const { return ATOMIC_LOAD(&next_); }
@@ -124,7 +129,7 @@ public:
 
   // elr_trans_preparing is used for early lock release, if you want to release
   // the lock after proposing the commit log and even before the commit log
-  // successfully synced for the transaction.
+  // successfully synced for single ls txn.
   virtual int elr_trans_preparing() { return OB_SUCCESS; }
   // elr_trans_revoke is used to revoke elr after commit failed
   virtual void elr_trans_revoke() { }
@@ -142,7 +147,7 @@ public:
   // NB: You need notice the data should be checkpointed so all information
   // should be stored somewhere to satisfy the STEAL policy. So the checksum and
   // data should all be saved. What's more, the log itself must be stored. In
-  // our implementation, the callbacks being checkpointed must be durably committed
+  // our implementation, the callbacks be checkpointed must be paxos committed
   // and applied successfully.
   virtual int checkpoint_callback() { return OB_SUCCESS; }
 
@@ -153,10 +158,10 @@ public:
   //
   // NB: You need notice the data should be rollbacked so all information should
   // never be readable according to the ATOMICITY policy. While the data may
-  // already be saved and the log has been durably committed, so we need calculate
+  // already be saved and the log has been paxos committed, so we need calculate
   // the checksum for these and push them into UNDO_STATUS for our correctness
   // and visibility. In our implementation, the callbacks be rollbacked can be
-  // both durably committed and not yet committed.
+  // both paxos committed and or not.
   virtual int rollback_callback() { return OB_SUCCESS; }
 
 
@@ -181,3 +186,4 @@ private:
 }; // namespace oceanbase
 
 #endif //OCEANBASE_MEMTABLE_MVCC_OB_MVCC_
+

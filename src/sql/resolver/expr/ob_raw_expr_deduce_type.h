@@ -21,7 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "common/udt/ob_collection_type.h"
 #include "common/ob_accuracy.h"
-#include "query/engine/expr/ob_sql_expression.h"
+#include "share/ob_i_sql_expression.h"
 #include "ob_raw_expr_util.h"
 #include "share/ob_define.h"
 
@@ -109,13 +109,22 @@ private:
   int64_t get_expr_output_column(const ObRawExpr &expr);
   int get_row_expr_param_type(const ObRawExpr &expr, ObIExprResTypes &types);
   int deduce_type_visit_for_special_func(int64_t param_index, const ObRawExpr &expr, ObIExprResTypes &types);
+  // init udf expr
+  int init_normal_udf_expr(ObNonTerminalRawExpr &expr, ObExprOperator *op);
+  // get agg udf result type
+  int set_agg_udf_result_type(ObAggFunRawExpr &expr);
+
   int set_agg_group_concat_result_type(ObAggFunRawExpr &expr, ObExprResType &result_type);
   int set_json_agg_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type, bool &need_add_cast);
   int set_asmvt_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type);
+  int set_rb_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type);
+  int set_rb_calc_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type);
+  int set_rb_cardinality_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type);
   int set_agg_json_array_result_type(ObAggFunRawExpr &expr, ObExprResType &result_type);
 
   int set_agg_min_max_result_type(ObAggFunRawExpr &expr, ObExprResType &result_type,
                                   bool &need_add_cast);
+  int set_agg_regr_result_type(ObAggFunRawExpr &expr, ObExprResType &result_type);  
   int set_array_agg_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type);
 
   // helper functions for add_implicit_cast
@@ -138,10 +147,12 @@ private:
                                               const ObExprResType &input_type,
                                               const ObCastMode &cm);
   int check_group_aggr_param(ObAggFunRawExpr &expr);
+  int check_group_rank_aggr_param(ObAggFunRawExpr &expr);
   int check_median_percentile_param(ObAggFunRawExpr &expr);
   int add_median_percentile_implicit_cast(ObAggFunRawExpr &expr,
                                           const ObCastMode& cast_mode,
                                           const bool keep_type);
+  int add_group_aggr_implicit_cast(ObAggFunRawExpr &expr, const ObCastMode& cast_mode);
   int adjust_cast_as_signed_unsigned(ObSysFunRawExpr &expr);
 
   bool ignore_scale_adjust_for_decimal_int(const ObItemType expr_type);
@@ -208,7 +219,7 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
       if (T_FUN_UDF == parent.get_expr_type()
           && ObNumberTC == ori_tc
           && ObLobTC == expect_tc) {
-        // Number-to-text casts are not allowed for this path.
+        // oracle mode can not cast number to text, but mysql mode can
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         SQL_RESV_LOG(WARN, "cast to lob type not allowed", K(ret));
       }
@@ -224,6 +235,7 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
 #endif
       if (OB_FAIL(ret) && my_session_->is_varparams_sql_prepare()) {
         ret = OB_SUCCESS;
+        SQL_RESV_LOG(DEBUG, "ps prepare phase ignores type deduce error");
       }
       //add local vars to cast expr
       if (OB_SUCC(ret)) {

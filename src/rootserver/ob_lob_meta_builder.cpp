@@ -45,8 +45,10 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
   int ret = OB_SUCCESS;
   if (!ddl_service_.is_inited() || NULL == schema_service) {
     ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (!data_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else {
     uint64_t new_table_id = specified_table_id;
     const int64_t buf_size = 64;
@@ -54,14 +56,18 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
     MEMSET(buf, 0, buf_size);
     int64_t pos = 0;
     if (OB_FAIL(generate_schema(data_schema, aux_lob_meta_schema))) {
+      LOG_WARN("generate_schema for aux vp table failed", K(data_schema), K(ret));
     } else if (OB_INVALID_ID == new_table_id
                && OB_FAIL(schema_service->fetch_new_table_id(new_table_id))) {
+      LOG_WARN("failed to fetch_new_table_id",  K(ret));
     } else if (OB_FAIL(generate_lob_meta_table_name(new_table_id, buf, buf_size, pos))) {
+      LOG_WARN("failed to generate_lob_meta_table_name", K(ret), K(new_table_id));
     } else {
       ObString aux_lob_meta_table_name(pos, buf);
       aux_lob_meta_schema.set_table_id(new_table_id);
       aux_lob_meta_schema.set_table_type(AUX_LOB_META);
       if (OB_FAIL(aux_lob_meta_schema.set_table_name(aux_lob_meta_table_name))) {
+        LOG_WARN("set_table_name failed", K(aux_lob_meta_table_name), K(ret));
       } else {
         // column
         int64_t column_count = aux_lob_meta_schema.get_column_count();
@@ -69,6 +75,7 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
           ObColumnSchemaV2 *column = NULL;
           if (NULL == (column = aux_lob_meta_schema.get_column_schema_by_idx(i))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("column is null", K(ret));
           } else {
             
             column->set_table_id(aux_lob_meta_schema.get_table_id());
@@ -77,15 +84,21 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (data_schema.is_partitioned_table()
-               && OB_FAIL(aux_lob_meta_schema.assign_partition_schema(data_schema))) {
+    } else if (OB_FAIL(set_lob_table_column_store_if_need(aux_lob_meta_schema))) {
+      LOG_WARN("fail to set lob table column store if need", KR(ret));
+    } else if ((data_schema.is_partitioned_table() || data_schema.is_auto_partitioned_table())
+               && OB_FAIL(aux_lob_meta_schema.assign_partition_schema_without_auto_part_attr(data_schema))) {
+      LOG_WARN("fail to assign partition schema", K(aux_lob_meta_schema), K(ret));
     } else if (need_generate_id) {
       if (OB_FAIL(ddl_service_.generate_object_id_for_partition_schema(aux_lob_meta_schema))) {
+        LOG_WARN("fail to fetch new object id", K(aux_lob_meta_schema), K(ret));
       } else if (OB_FAIL(ddl_service_.generate_tablet_id(aux_lob_meta_schema))) {
+        LOG_WARN("fail to fetch new tablet id", K(aux_lob_meta_schema), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       aux_lob_meta_schema.set_micro_index_clustered(data_schema.get_micro_index_clustered());
+      aux_lob_meta_schema.set_enable_macro_block_bloom_filter(data_schema.get_enable_macro_block_bloom_filter());
     }
 
   }
@@ -100,7 +113,9 @@ int ObLobMetaBuilder::generate_schema(
   if (OB_SUCC(ret)) {
     // reuse inner lob table create schema
     if (OB_FAIL(ObInnerTableSchema::all_column_aux_lob_meta_schema(aux_lob_meta_schema))) {
+      LOG_WARN("get lob meta schema failed", K(data_schema), K(ret));
     } else if (OB_FAIL(set_basic_infos(data_schema, aux_lob_meta_schema))) {
+      LOG_WARN("set_basic_infos failed", K(data_schema), K(ret));
     }
   }
 
@@ -125,6 +140,11 @@ int ObLobMetaBuilder::set_basic_infos(
   // priority same with data table schema
   
   aux_lob_meta_schema.set_database_id(data_schema.get_database_id());
+  if (is_inner_table(data_schema.get_table_id())) {
+    aux_lob_meta_schema.set_tablegroup_id(data_schema.get_tablegroup_id());
+  } else {
+    aux_lob_meta_schema.set_tablegroup_id(OB_INVALID_ID);
+  }
   aux_lob_meta_schema.set_load_type(data_schema.get_load_type());
   aux_lob_meta_schema.set_def_type(data_schema.get_def_type());
   aux_lob_meta_schema.set_charset_type(data_schema.get_charset_type());
@@ -141,8 +161,12 @@ int ObLobMetaBuilder::set_basic_infos(
   // aux_lob_meta_schema.set_table_mode(data_schema.get_table_mode());
   aux_lob_meta_schema.set_block_size(data_schema.get_block_size());
   aux_lob_meta_schema.set_pctfree(data_schema.get_pctfree());
+  aux_lob_meta_schema.set_storage_format_version(data_schema.get_storage_format_version());
   aux_lob_meta_schema.set_progressive_merge_round(data_schema.get_progressive_merge_round());
+  aux_lob_meta_schema.set_duplicate_attribute(data_schema.get_duplicate_scope(),
+                                              data_schema.get_duplicate_read_consistency());
   if (OB_FAIL(aux_lob_meta_schema.set_compress_func_name(data_schema.get_compress_func_name()))) {
+    LOG_WARN("set_compress_func_name failed", K(data_schema));
   }
   return ret;
 }
@@ -158,10 +182,24 @@ int ObLobMetaBuilder::generate_lob_meta_table_name(
   // __AUX_LOB_META_<table_id>_
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_size), K(pos));
   } else if ((pos = snprintf(buf, buf_size, "__AUX_LOB_META_%lu_", new_table_id)) >= buf_size || pos < 0) {
     ret = common::OB_BUF_NOT_ENOUGH;
+    LOG_WARN("buf is not large enough", K(ret), K(buf_size), K(new_table_id));
   }
 
+  return ret;
+}
+
+int ObLobMetaBuilder::set_lob_table_column_store_if_need(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  table_schema.set_column_store(true);
+  if (table_schema.get_column_group_count() == 0) {
+    if (OB_FAIL(table_schema.add_default_column_group())) {
+      LOG_WARN("fail to add default column group", KR(ret), "table_id", table_schema.get_table_id());
+    }
+  }
   return ret;
 }
 

@@ -55,11 +55,14 @@ int ObExprFormat::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == type_array || (params_count != 2 && params_count != 3))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(type_array), K(params_count));
   } else if (params_count == 3) {
     //to do, format function support a optional locale parameter
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("format function not support an optional locale parameter", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "optional locale parameter of format");
   } else if (OB_FAIL(calc_result_type(type, type_array))) {
+    LOG_WARN("failed to calc result type", K(ret));
   } else {
     type.set_default_collation_type();
     type.set_collation_level(CS_LEVEL_COERCIBLE);
@@ -77,6 +80,7 @@ int ObExprFormat::get_origin_param_type(ObExprResType &ori_type) const
   ObRawExpr *expr = NULL;
   if (OB_ISNULL(expr = get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get_raw_expr", K(ret));
   } else if (expr->get_param_count() >= 1 && OB_NOT_NULL(expr = expr->get_param_expr(0))
              && expr->get_expr_type() == T_FUN_SYS_CAST
              && CM_IS_IMPLICIT_CAST(expr->get_cast_mode())) {
@@ -84,6 +88,7 @@ int ObExprFormat::get_origin_param_type(ObExprResType &ori_type) const
       if (expr->get_param_count() >= 1
           && OB_ISNULL(expr = expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get_param_expr", K(ret));
       }
     } while (OB_SUCC(ret) && T_FUN_SYS_CAST == expr->get_expr_type()
              && CM_IS_IMPLICIT_CAST(expr->get_cast_mode()));
@@ -99,6 +104,7 @@ int ObExprFormat::calc_result_type(ObExprResType &type, ObExprResType *type_arra
   int ret = OB_SUCCESS;
   ObExprResType ori_type = type_array[0];
   if (OB_FAIL(get_origin_param_type(ori_type))) {
+    LOG_WARN("fail to get_origin_param_type", K(ret));
   } else {
     const ObObjType obj_type = ori_type.get_type();
     if (ob_is_integer_type(obj_type)) {
@@ -181,6 +187,7 @@ int ObExprFormat::calc_result_type(ObExprResType &type, ObExprResType *type_arra
         }
         default: {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("input type not supported", K(ret), K(obj_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "The input type of the FORMAT function");
           break;
         }
@@ -251,6 +258,7 @@ int ObExprFormat::build_format_str(char *buf,
   } else if (decimal_length && locale.decimal_point_ != '.') {
     if (decimal_length > str_length) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid str.", K(ret), K(scale), K(num_str));
     } else {
       num_str.ptr()[str_length - decimal_length] = locale.decimal_point_;
     }
@@ -280,20 +288,28 @@ int ObExprFormat::convert_num_to_str(const ObDatumMeta &x_meta,
                 x_meta.precision_, x_meta.scale_,
                 x_meta.precision_ - x_meta.scale_ + 1 + scale, scale, scale,
                 x_datum, builder))) {
+      LOG_WARN("do_round_decimalint failed",
+               K(ret), K(x_meta.precision_), K(x_meta.scale_),
+               K(x_meta.precision_ - x_meta.scale_ + 1 + scale), K(scale));
     } else if (OB_FAIL(wide::to_string(builder.get_decimal_int(), builder.get_int_bytes(),
                        scale, buf, buf_len, str_len, false))) {
+      LOG_WARN("to_string failed", K(ret));
     }
   } else {
     number::ObNumber num = x_datum.get_number();
     number::ObNumber nmb;
     ObNumStackOnceAlloc tmp_alloc;
     if (OB_FAIL(nmb.from(num, tmp_alloc))) {
+      LOG_WARN("copy number failed.", K(ret), K(num));
     } else if (OB_FAIL(nmb.round(scale))) {
+      LOG_WARN("round failed.", K(ret), K(num.format()), K(scale));
     } else if (OB_FAIL(nmb.format_v2(buf, buf_len, str_len, scale))) {
+      LOG_WARN("fail to convert number to string", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     num_str.assign_ptr(buf, static_cast<int32_t>(str_len));
+    LOG_DEBUG("convert_num_to_str", K(ret), K(num_str), K(str_len));
   }
   return ret;
 }
@@ -306,6 +322,7 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *d_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, d_datum))) {
+    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if ((OB_NOT_NULL(x_datum) && x_datum->is_null())
             || (OB_NOT_NULL(d_datum) && d_datum->is_null())) {
     res_datum.set_null();
@@ -325,9 +342,11 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       LOG_ERROR("fail to allocate memory", K(buf_len), K(ret));
     } else if (OB_FAIL(convert_num_to_str(x_meta, *x_datum, tmp_buf, MAX_FORMAT_BUFFER_SIZE,
                                           scale, str))) {
+      LOG_WARN("fail to convert num to str", K(ret));
     } else {
       tmp_buf = tmp_buf + MAX_FORMAT_BUFFER_SIZE;
       if (OB_FAIL(build_format_str(tmp_buf, locale, scale, str))) {
+        LOG_WARN("fail to build format str", K(ret));
       } else if (!ob_is_text_tc(expr.datum_meta_.type_)) {
         if (OB_ISNULL(res_buf = expr.get_str_res_mem(ctx, str.length()))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -340,7 +359,9 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       } else { // text tc
         ObTextStringDatumResult text_res(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
         if (OB_FAIL(text_res.init(str.length()))) {
+          LOG_WARN("init lob result failed", K(ret), K(str.length()));
         } else if (OB_FAIL(text_res.append(str.ptr(), str.length()))) {
+          LOG_WARN("failed to append realdata", K(ret), K(str), K(text_res));
         } else {
           text_res.set_result();
         }
@@ -358,6 +379,7 @@ int ObExprFormat::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 2)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_format_expr;
   }

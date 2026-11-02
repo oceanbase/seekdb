@@ -15,7 +15,7 @@
  */
 
 #include "sql/resolver/ddl/ob_create_table_like_resolver.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server.h"
 
 namespace oceanbase
 {
@@ -55,6 +55,9 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
       if (NULL != parse_tree.children_[0]) {
         if (T_TEMPORARY == parse_tree.children_[0]->type_) {
           is_temporary_table = true;
+        } else if (T_EXTERNAL == parse_tree.children_[0]->type_) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create external table like");
         } else {
           ret = OB_INVALID_ARGUMENT;
           SQL_RESV_LOG(WARN, "invalid argument.",
@@ -62,7 +65,17 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
         }
       }
       if (OB_SUCC(ret) && is_temporary_table) {
-        create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
+        char create_host_str[OB_MAX_HOST_NAME_LENGTH];
+        MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
+        if (OB_ISNULL(allocator_)) {
+          ret = OB_INVALID_ARGUMENT;
+          SQL_RESV_LOG(WARN, "not init", K(ret));
+        } else if (OB_FAIL(create_table_like_stmt->set_create_host(*allocator_, ObString(create_host_str)))) {
+          SQL_RESV_LOG(WARN, "set create host failed", K(ret));
+        } else {
+          CHECK_COMPATIBILITY_MODE(session_info_);
+          create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
+        }
       } else {
         create_table_like_stmt->set_table_type(share::schema::USER_TABLE);
       }
@@ -88,9 +101,13 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
         if (OB_FAIL(resolve_table_relation_node(new_relation_node,
                                                 new_table_name,
                                                 new_database_name))) {
+          SQL_RESV_LOG(WARN, "failed to resolve table name.",
+                       K(new_table_name), K(new_database_name), K(ret));
         } else if (OB_FAIL(resolve_table_relation_node(origin_relation_node,
                                                        origin_table_name,
                                                        origin_database_name))) {
+            SQL_RESV_LOG(WARN, "failed to resolve origin name.",
+                         K(origin_table_name), K(origin_database_name), K(ret));
         } else if (ObString(OB_RECYCLEBIN_SCHEMA_NAME) == new_database_name
                    || ObString(OB_PUBLIC_SCHEMA_NAME) == new_database_name) {
           ret = OB_OP_NOT_ALLOW;
@@ -105,11 +122,15 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
                                                      new_database_name,
                                                      OB_TABLE_NAME_CLASS,
                                                      db_equal))) {
+            SQL_RESV_LOG(WARN, "failed to compare db names", K(origin_database_name),
+                         K(new_database_name), K(ret));
           } else if (OB_FAIL(ObResolverUtils::name_case_cmp(session_info_,
                                                             origin_table_name,
                                                             new_table_name,
                                                             OB_TABLE_NAME_CLASS,
                                                             table_equal))) {
+            SQL_RESV_LOG(WARN, "failed to compare table names", K(origin_table_name),
+                         K(new_table_name), K(ret));
           } else if (db_equal && table_equal) {
             ret = OB_ERR_NONUNIQ_TABLE;
             LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, origin_table_name.length(), origin_table_name.ptr());

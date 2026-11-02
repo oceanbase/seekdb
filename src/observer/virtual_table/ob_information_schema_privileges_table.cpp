@@ -76,16 +76,21 @@ int ObInfoSchemaSchemaPrivilegesTable::inner_get_next_row(common::ObNewRow *&row
     if (!start_to_read_) {
       ObArray<const ObDBPriv *> db_priv_array;
       if (OB_FAIL(get_db_privs(user_id_, db_priv_array))) {
+        SERVER_LOG(WARN, "Failed to get table privs", K(ret));
       } else {
         for (int64_t dp_id = 0; OB_SUCC(ret) && dp_id < db_priv_array.count(); ++dp_id) {
           const ObDBPriv *db_priv = db_priv_array.at(dp_id);
           if (OB_ISNULL(db_priv)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("db_priv is null", K(ret), K(dp_id));
           } else if (ObString(OB_RECYCLEBIN_SCHEMA_NAME) == db_priv->get_database_name_str()
                      || ObString(OB_PUBLIC_SCHEMA_NAME) == db_priv->get_database_name_str()
-                     || ObString(OB_EXTENDED_SYS_SCHEMA_NAME) == db_priv->get_database_name_str()) {
+                     || ObString(OB_ORA_SYS_SCHEMA_NAME) == db_priv->get_database_name_str()
+                     || ObString(OB_ORA_LBACSYS_NAME) == db_priv->get_database_name_str()
+                     || ObString(OB_ORA_AUDITOR_NAME) == db_priv->get_database_name_str()) {
             continue;
           } else if (OB_FAIL(fill_row_with_db_priv(db_priv))) {
+            SERVER_LOG(WARN, "failed to fill row", K(ret));
           }// get db priv success
         }// traverse db priv
         if (OB_SUCC(ret)) {
@@ -122,16 +127,20 @@ int ObInfoSchemaSchemaPrivilegesTable::get_db_privs(const uint64_t user_id,
     SERVER_LOG(WARN, "session_ is null", K(ret));
   } else {
     ObPrivSet user_db_priv_set = session_->get_user_priv_set();
+    //ObOriginalDBKey db_key(sys tenant, user_id, ObString::make_string("mysql"));
     ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
     if (OB_FAIL(schema_guard_->get_db_priv_set(user_id, ObString::make_string("mysql"), db_priv_set))) {
+      SERVER_LOG(WARN, "get db priv set failed", K(ret));
     } else {
       user_db_priv_set |= db_priv_set;
       if (OB_PRIV_HAS_ANY(user_db_priv_set, OB_PRIV_SELECT)) {
         if (OB_FAIL(schema_guard_->get_db_priv_by_id(db_privs))) {
+          SERVER_LOG(WARN, "Get db priv with tenant id error", K(ret));
         }
       } else {
         if (OB_FAIL(schema_guard_->get_db_priv_with_user_id(user_id_,
                                                             db_privs))) {
+          SERVER_LOG(WARN, "Get db priv with user id error", K(ret));
         }
       }
     }
@@ -149,7 +158,7 @@ int ObInfoSchemaSchemaPrivilegesTable::get_user_name_from_db_priv(const ObDBPriv
   if (OB_ISNULL(db_priv)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "db_priv is null", K(ret));
-  } else if (OB_ISNULL(user_info = schema_guard_->get_user_info(db_priv->get_user_id()))) {
+  } else if (OB_ISNULL(user_info = schema_guard_->get_user_info(db_priv->get_tenant_user_id().user_id_))) {
     ret = OB_USER_NOT_EXIST;
     SERVER_LOG(WARN, "user not exist", K(ret));
   } else {
@@ -178,6 +187,7 @@ int ObInfoSchemaSchemaPrivilegesTable::fill_row_with_db_priv(
     ObString host_name;
     ObString account_name;
     if (OB_FAIL(get_user_name_from_db_priv(db_priv, user_name, host_name))) {
+      SERVER_LOG(WARN, "Failed to get user name", K(ret));
     } else {
       int64_t pos = 0;
       int64_t buf_size = user_name.length() + host_name.length() + USERNAME_AUX_LEN;// "''@''"
@@ -185,6 +195,7 @@ int ObInfoSchemaSchemaPrivilegesTable::fill_row_with_db_priv(
       memset(account_name_buf, 0, sizeof(account_name_buf));
       if (OB_FAIL(databuff_printf(account_name_buf, sizeof(account_name_buf),
           pos, "'%.*s'@'%.*s'", user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr()))) {
+        SERVER_LOG(WARN, "databuff_printf failed", K(ret), K(buf_size), K(pos), K(user_name), K(host_name));
       } else {
         account_name.assign_ptr(account_name_buf, static_cast<int32_t>(sizeof(account_name_buf) - 1));
         bool with_grant_option = OB_PRIV_HAS_ANY(db_priv->get_priv_set(), OB_PRIV_GRANT);
@@ -229,6 +240,7 @@ int ObInfoSchemaSchemaPrivilegesTable::fill_row_with_db_priv(
             } // traverse column
             if (OB_SUCC(ret)) {
               if (OB_FAIL(scanner_.add_row(cur_row_))) {
+                SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
               }
             }
           } else {

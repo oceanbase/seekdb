@@ -76,6 +76,9 @@ public:
       if (OB_SUCC(ret)) {
         if (end_part < start_part) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("Invalid part position, the end part must be greater than "
+                   "start part",
+                   K(ret), K(start_part), K(end_part));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                          "SPLIT_PART function. The end part must be greater "
                          "than start part.");
@@ -84,6 +87,7 @@ public:
           end_part = end_part + splits_pos.count();
         } else if (start_part < 0 || end_part < 0) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("Invalid part position", K(ret), K(start_part), K(end_part));
           LOG_USER_ERROR(
               OB_INVALID_ARGUMENT,
               "SPLIT_PART function. The start_part and end_part must both be "
@@ -111,6 +115,23 @@ public:
   }
   static int calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
                                         ObDatum &res);
+  static int calc_split_part_expr_vec(const ObExpr &expr,
+                                      ObEvalCtx &ctx,
+                                      const ObBitVector &skip,
+                                      const EvalBound &bound);
+
+  template <typename StartPartVecType, typename EndPartVecType>
+  static int calc_split_part_expr_dispatch(const ObExpr &expr,
+                                            ObEvalCtx &ctx,
+                                            ObCollationType cs_type,
+                                            const ObBitVector &skip,
+                                            const EvalBound &bound,
+                                            ObBitVector &eval_flags,
+                                            ObIVector *res_vec,
+                                            ObIVector *str_vec,
+                                            ObIVector *delimiter_vec,
+                                            StartPartVecType *start_part_vec,
+                                            EndPartVecType *end_part_vec);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSplitPart);

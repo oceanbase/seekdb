@@ -56,6 +56,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
   int64_t cur_ts = ObTimeUtility::current_time();
   int64_t retry_cnt = 0;
   const bool is_big_log = (size > palf::MAX_NORMAL_LOG_BODY_SIZE);
+  const bool allow_compression = true;
 
   if (base_scn.convert_to_ts() > cur_ts + 86400000000L) {
     // only print error log
@@ -84,11 +85,11 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     }
     do {
       if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
-                                                              cb, lsn, scn))) {
+                                                              allow_compression, cb, lsn, scn))) {
         TRANS_LOG(WARN, "append big log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
               K(need_nonblock), K(block_flag), K(expire_us), K(is_big_log));
       } else if (!is_big_log && OB_FAIL(log_handler_->append(buf, size, base_scn, block_flag,
-                                                         cb, lsn, scn))) {
+                                                         allow_compression, cb, lsn, scn))) {
         TRANS_LOG(WARN, "append log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
               K(need_nonblock), K(block_flag), K(expire_us));
       } else {
@@ -96,6 +97,8 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
         cb->set_lsn(lsn);
         cb->set_log_ts(scn);
         cb->set_submit_ts(cur_ts);
+        ObTransStatistic::get_instance().add_clog_submit_count( 1);
+        ObTransStatistic::get_instance().add_trans_log_total_size( size);
       }
       if (!need_nonblock) {
         // retries are not needed in block mode.
@@ -110,6 +113,31 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     } while (OB_EAGAIN == ret && cur_ts < expire_us);
     
   }
+  TRANS_LOG(DEBUG, "ObLSTxLogAdapter::submit_ls_log", KR(ret), KP(cb));
+
+  return ret;
+}
+
+int ObLSTxLogAdapter::get_role(bool &is_leader, int64_t &epoch)
+{
+  int ret = OB_SUCCESS;
+
+  ObRole role = INVALID_ROLE;
+  if (OB_ISNULL(log_handler_)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", KR(ret), KP(log_handler_));
+  } else if (OB_FAIL(log_handler_->get_role(role, epoch))) {
+    if (ret == OB_NOT_INIT || ret == OB_NOT_RUNNING) {
+      ret = OB_SUCCESS;
+      is_leader = false;
+    } else {
+      TRANS_LOG(WARN, "get role failed", K(ret));
+    }
+  } else if (LEADER == role) {
+    is_leader = true;
+  } else {
+    is_leader = false;
+  }
 
   return ret;
 }
@@ -122,6 +150,21 @@ int ObLSTxLogAdapter::get_max_decided_scn(SCN &scn)
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else {
     ret = log_handler_->get_max_decided_scn(scn);
+  }
+  return ret;
+}
+
+int ObLSTxLogAdapter::get_palf_committed_max_scn(share::SCN &scn) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(log_handler_) || !log_handler_->is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
+  } else if (OB_FAIL(log_handler_->get_max_decided_scn_as_leader(scn))) {
+    TRANS_LOG(WARN, "get palf committed_max_scn fail", K(ret));
+  } else if (!scn.is_valid_and_not_min()) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "get an invalid scn", K(ret), K(scn));
   }
   return ret;
 }

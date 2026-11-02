@@ -51,10 +51,13 @@ static int check_expr_and_eval_param(const ObExpr &expr,
       OB_UNLIKELY(expr.arg_cnt_ != 1) ||
       OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(eval_ctx, param_datum))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (param_datum->is_null()) {
     found_null = true;
   } else {
+    LOG_DEBUG("succeed to check expr and eval param", K(ret));
   }
   return ret;
 }
@@ -77,6 +80,7 @@ DEF_EVAL_NEG_FUNC(ObIntTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else if (param->get_int() == INT64_MIN) {
@@ -97,6 +101,7 @@ DEF_EVAL_NEG_FUNC(ObUIntTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -114,6 +119,7 @@ DEF_EVAL_NEG_FUNC(ObFloatTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -127,6 +133,7 @@ DEF_EVAL_NEG_FUNC(ObDoubleTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -140,6 +147,7 @@ DEF_EVAL_NEG_FUNC(ObNumberTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -161,6 +169,7 @@ DEF_EVAL_NEG_FUNC(ObDecimalIntTC)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param_datum, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -175,6 +184,7 @@ DEF_EVAL_NEG_FUNC(ObDecimalIntTC)
       MAKE_DECIMAL_INT_OPPOSITE(int512)
       default: {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
         break;
       }
     }
@@ -212,12 +222,14 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
   const ObSQLSessionInfo *session = dynamic_cast<const ObSQLSessionInfo *>(type_ctx.get_session());
   if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_LIKELY(NOT_ROW_DIMENSION == row_dimension_)) {
     // result type
     ObObjType itype = ObMaxType;
     if (OB_SUCC(ObExprResultTypeUtil::get_neg_result_type(itype, type1.get_type()))) {
       if (ObMaxType == itype) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        LOG_WARN("unsupported type for neg", K(ret), K(type1), K(itype));
       } else {
         type.set_type(itype);
       }
@@ -245,7 +257,9 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
           type.set_type(ObDoubleType);
           type1.set_calc_type(ObDoubleType);
       } else if (OB_FAIL(calc_param_type(type1, res_param_type, result_type))) {
+        LOG_WARN("failed to calc param type", K(ret));
       } else {
+        LOG_DEBUG("calc reuslt type", K(res_param_type), K(result_type));
         type.set_type(result_type);
         type1.set_calc_type(res_param_type);
         if (ObDecimalIntType == res_param_type) {
@@ -271,6 +285,7 @@ int ObExprNeg::cg_expr(ObExprCGCtx &op_cg_ctx,
       OB_UNLIKELY(rt_expr.arg_cnt_ != 1) ||
       OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     ObObjTypeClass param_tc = OBJ_TYPE_TO_CLASS[rt_expr.args_[0]->datum_meta_.type_];
     rt_expr.eval_func_ = eval_neg_funcs[param_tc];
@@ -300,6 +315,7 @@ int ObExprNeg::calc_param_type(const ObExprResType &param_type,
       const ObObj &obj = param_type.get_param();
       if (OB_UNLIKELY(!obj.is_int())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected obj type", K(ret), K(obj), K(param_type));
       } else if (INT64_MIN == obj.get_int()) {
         // select --9223372036854775808;
         // -9223372036854775808 is a decimal. otherwise neg will overflow.

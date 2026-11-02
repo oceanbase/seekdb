@@ -40,14 +40,19 @@ int ObGeoFuncDistanceSphereUtil::eval(const GeoType1 *g1,
 
   if (OB_ISNULL(sphere_radius)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sphere_radius is null", K(ret), K(context.get_val_count()));
   } else if (OB_ISNULL(g1) || OB_ISNULL(g2)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry is null", K(ret), KP(g1), KP(g2));
   } else if (ObGeoCRS::Geographic != g1->crs() || ObGeoCRS::Geographic != g2->crs()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid crs type", K(ret), K(g1->crs()), K(g1->crs()));
   } else if (ObGeoType::POINT != g1->type() && ObGeoType::MULTIPOINT != g1->type()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid geo1 type", K(ret), K(g1->type()));
   } else if (ObGeoType::POINT != g2->type() && ObGeoType::MULTIPOINT != g2->type()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid geo2 type", K(ret), K(g2->type()));
   } else if (ObGeoType::MULTIPOINT == g1->type() && ObGeoType::MULTIPOINT == g2->type()) {
     double min_dis = DBL_MAX;
     double tmp_result = 0.0;
@@ -59,6 +64,7 @@ int ObGeoFuncDistanceSphereUtil::eval(const GeoType1 *g1,
       tmp_point.set<0>(iter->get<0>());
       tmp_point.set<1>(iter->get<1>());
       if (OB_FAIL(eval(geog_mpt1, &tmp_point, context, tmp_result))) {
+        LOG_WARN("fail to calc distance", K(ret));
       } else if (tmp_result < min_dis) {
         min_dis = tmp_result;
       }
@@ -84,10 +90,12 @@ int ObGeoFuncDistanceSphereUtil::eval(const ObGeometry *g1,
 
   if (OB_ISNULL(g1) || OB_ISNULL(g2)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry is null", K(ret), KP(g1), KP(g2));
   } else {
     const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
     const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
     if (OB_FAIL(eval(geo1, geo2, context, result))) {
+      LOG_WARN("fail to eval distance sphere result", K(ret), K(geo1->type()), K(geo2->type()));
     }
   }
 
@@ -126,7 +134,9 @@ int ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(const ObWkbGeomPoint *ca
 
   if (OB_ISNULL(cart_pt)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry is null", K(ret));
   } else if (OB_FAIL(reinterpret_as_degrees(cart_pt->get<0>(), cart_pt->get<1>(), x, y, result))) {
+    LOG_WARN("fail to cast to degree", K(ret), K(cart_pt->get<0>()), K(cart_pt->get<1>()));
   } else {
     geog_pt.set<0>(x);
     geog_pt.set<1>(y);
@@ -146,14 +156,19 @@ int ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(ObIAllocator *allocator,
 
   if (OB_ISNULL(g)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("geometry is null", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("allocator is null", K(ret));
   } else if (ObGeoType::MULTIPOINT != g->type()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid geometry type", K(ret), K(g->type()));
   } else if (ObGeoCRS::Cartesian != g->crs()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid crs type", K(ret), K(g->crs()));
   } else if (OB_ISNULL(buf = allocator->alloc(g->length()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", K(ret), K(g->length()));
   } else {
     MEMMOVE(buf, g->val(), g->length());
     crat_mpt = new (buf) ObWkbGeomMultiPoint();
@@ -162,6 +177,7 @@ int ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(ObIAllocator *allocator,
     ObWkbGeomMultiPoint::iterator iter = crat_mpt->begin();
     for (; OB_SUCC(ret) && iter != crat_mpt->end(); ++iter) {
       if (OB_FAIL(reinterpret_as_degrees(iter->get<0>(), iter->get<1>(), x, y, result))) {
+        LOG_WARN("fail to cast to degree", K(ret), K(iter->get<0>()), K(iter->get<1>()));
       } else {
         iter->set<0>(x);
         iter->set<1>(y);
@@ -204,9 +220,12 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncDistanceSphereImpl,
   const ObWkbGeomPoint *cart_p2 = reinterpret_cast<const ObWkbGeomPoint *>(g2->val());
 
   if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(cart_p1, geog_p1, result))) {
+    LOG_WARN("fail to reinterpret point1 as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(cart_p2, geog_p2, result))) {
+    LOG_WARN("fail to reinterpret poin2 as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::eval(&geog_p1, &geog_p2,
       context, result))) {
+    LOG_WARN("fail to eval distance sphere result", K(ret));
   }
 
   return ret;
@@ -223,10 +242,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncDistanceSphereImpl,
   const ObWkbGeogMultiPoint *geog_mpt = NULL;
 
   if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(cart_pt, geog_pt, result))) {
+    LOG_WARN("fail to reinterpret point as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(context.get_allocator(),
       g2, geog_mpt, result))) {
+    LOG_WARN("fail to reinterpret multipoint as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::eval(&geog_pt, geog_mpt,
       context, result))) {
+    LOG_WARN("fail to eval distance sphere result", K(ret));
   }
 
   return ret;
@@ -243,10 +265,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncDistanceSphereImpl,
   const ObWkbGeomPoint *cart_pt = reinterpret_cast<const ObWkbGeomPoint *>(g2->val());
 
   if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(cart_pt, geog_pt, result))) {
+    LOG_WARN("fail to reinterpret point as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(context.get_allocator(),
       g1, geog_mpt, result))) {
+    LOG_WARN("fail to reinterpret multipoint as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::eval(geog_mpt, &geog_pt,
       context, result))) {
+    LOG_WARN("fail to eval distance sphere result", K(ret));
   }
 
   return ret;
@@ -263,10 +288,13 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncDistanceSphereImpl,
 
   if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(context.get_allocator(),
       g1, geog_mpt1, result))) {
+    LOG_WARN("fail to reinterpret multipoint as degree", K(ret));
   } else if (OB_FAIL(ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(context.get_allocator(),
       g2, geog_mpt2, result))) {
+    LOG_WARN("fail to reinterpret multipoint as degree", K(ret));
   } else if (OB_FAIL(SMART_CALL(ObGeoFuncDistanceSphereUtil::eval(geog_mpt1, geog_mpt2,
       context, result)))) {
+    LOG_WARN("fail to eval distance sphere result", K(ret));
   }
 
   return ret;

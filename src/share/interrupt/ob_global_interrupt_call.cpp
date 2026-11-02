@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "share/interrupt/ob_global_interrupt_call.h"
-#include "lib/ob_running_mode.h"
 #include "share/ob_ex_rpc.h"
 
 namespace oceanbase {
@@ -95,19 +94,19 @@ ObGlobalInterruptManager *ObGlobalInterruptManager::getInstance()
   return instance_;
 }
 
-int ObGlobalInterruptManager::init()
+int ObGlobalInterruptManager::init(const common::ObAddr &local)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(map_.create(lib::is_mini_mode()
-                                     ? MINI_MODE_HASH_MAP_BUCKETS_COUNT
-                                     : DEFAULT_HASH_MAP_BUCKETS_COUNT,
+  } else if (OB_FAIL(map_.create(!lib::is_mini_mode() ? DEFAULT_HASH_MAP_BUCKETS_COUNT :
+                                 MINI_MODE_HASH_MAP_BUCKETS_COUNT,
                                  ObModIds::OB_HASH_BUCKET_INTERRUPT_CHECKER,
                                  ObModIds::OB_HASH_NODE_INTERRUPT_CHECKER))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LIB_LOG(WARN, "create hash table failed", K(ret));
   } else {
+    local_ = local;
     is_inited_ = true;
   }
   return ret;
@@ -130,6 +129,7 @@ int ObGlobalInterruptManager::register_checker(ObInterruptChecker *checker,
     ret = OB_HASH_EXIST;
     LIB_LOG(ERROR, "the check has already registered", K(ret));
   } else if (OB_FAIL(create_checker_node(checker, checker_node))) {
+    LIB_LOG(ERROR, "fail to create checker node", K(ret));
   } else {
     // A slightly more complicated but safe inspection operation
     // Since map does not provide the operation of "create or modify", nor does it provide the ability to hold bucket locks
@@ -183,6 +183,7 @@ int ObGlobalInterruptManager::unregister_checker(ObInterruptChecker *checker,
       ObInterruptCheckerRemoveCall call(checker_node);
       ret = map_.atomic_refactored(tid, call);
       if (OB_LIKELY(OB_SUCCESS != ret)) {
+        LIB_LOG(ERROR, "unregister checker failed", K(ret));
       } else if (call.is_empty()) {
         // Delete here must be successful
         ignore = map_.erase_refactored(tid, nullptr);
@@ -218,20 +219,23 @@ int ObGlobalInterruptManager::interrupt(const ObInterruptibleTaskID &tid, ObInte
   return ret;
 }
 
-int ObGlobalInterruptManager::interrupt_async(const ObInterruptibleTaskID &tid,
-                                              ObInterruptCode &interrupt_code)
+int ObGlobalInterruptManager::interrupt(const ObAddr &dst, const ObInterruptibleTaskID &tid,
+                                        ObInterruptCode &interrupt_code)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LIB_LOG(ERROR, "interrupt manager not inited", K(tid), K(interrupt_code), K(ret));
+    LIB_LOG(ERROR, "interrupt manager not inited", K(dst), K(tid), K(interrupt_code), K(ret));
   } else {
-    // Keep fire-and-forget ordering while delivering entirely in-process.
+    // single-replica: dst is always local; deliver async in-process (ex-RPC),
+    // restoring the original async remote_interrupt_call(msg, NULL) fire-and-forget.
+    // tid/interrupt_code are copied by value; the map update runs on a worker thread.
+    UNUSED(dst);
     const ObInterruptibleTaskID tid_copy = tid;
     ObInterruptCode code_copy = interrupt_code;
     (void)ex_rpc::async_call([this, tid_copy, code_copy]() mutable {
       ObInterruptCheckerUpdateCall updatecall(code_copy);
-      // The target task may finish before this asynchronous update runs.
+      //Consider that in the remote call, the execution time of the suspend command is later than the completion time of the remote execution. At this time, it should not be handled according to the sending failure.
       int tmp_ret = map_.atomic_refactored(tid_copy, updatecall);
       tmp_ret = tmp_ret == OB_HASH_NOT_EXIST ? OB_SUCCESS : tmp_ret;
       (void)tmp_ret;

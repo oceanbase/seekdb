@@ -90,9 +90,11 @@ int ObClusterColumnReader::init(
   int64_t serialize_column_cnt = 0;
   if (OB_UNLIKELY(nullptr == cluster_buf || !info_mask.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(cluster_buf), K(cluster_len), K(info_mask));
   } else if (FALSE_IT(serialize_column_cnt = info_mask.is_sparse_row() ? info_mask.get_sparse_column_count() : cluster_col_cnt)) {
   } else if (OB_UNLIKELY(info_mask.get_total_array_size(serialize_column_cnt) >= cluster_len)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("invalid cluster reader argument", K(ret), K(info_mask), K(cluster_len));
   } else {
     cluster_buf_ = cluster_buf;
     const int64_t specail_val_pos = cluster_len - info_mask.get_special_value_array_size(serialize_column_cnt);
@@ -110,6 +112,8 @@ int ObClusterColumnReader::init(
       column_idx_array_ = cluster_buf_ + cell_end_pos_;
     }
     is_inited_ = true;
+    LOG_DEBUG("success to init cluster column reader", K(ret), K(cluster_len),
+        KPC(this), K(cell_end_pos_), K(column_cnt_), K(sparse_column_cnt_));
   }
   return ret;
 }
@@ -148,8 +152,10 @@ int ObClusterColumnReader::read_storage_datum(const int64_t column_idx, ObStorag
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("cluster column reader is not init", K(ret), K(column_idx));
   } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(column_idx), K(column_cnt_));
   } else {
     int64_t idx = is_sparse_row_ ? get_sparse_col_idx(column_idx) : column_idx;
 
@@ -157,10 +163,13 @@ int ObClusterColumnReader::read_storage_datum(const int64_t column_idx, ObStorag
       datum.set_nop();
     } else if (idx >= 0 && idx < column_cnt_) {
       if (OB_FAIL(read_datum(idx, datum))) {
+        LOG_WARN("read datum fail", K(ret), KP(cluster_buf_), K(cell_end_pos_), K(idx), K(column_idx));
       } else {
+        LOG_DEBUG("read_storage_datum", K(idx), K(datum));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid idx for read datum", K(ret), K(column_idx), K(idx), K(datum));
     }
   }
   return ret;
@@ -171,8 +180,10 @@ int ObClusterColumnReader::sequence_read_datum(const int64_t column_idx, ObStora
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("cluster column reader is not init", K(ret), K(column_idx));
   } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(column_idx), K(column_cnt_));
   } else {
     int64_t idx = -1;
     if (is_sparse_row_) {
@@ -188,6 +199,7 @@ int ObClusterColumnReader::sequence_read_datum(const int64_t column_idx, ObStora
       datum.set_nop();
     } else if (idx >= 0 && idx < column_cnt_) {
       if (OB_FAIL(read_datum(idx, datum))) {
+        LOG_WARN("read datum fail", K(ret), KP(cluster_buf_), K(cell_end_pos_), K(idx), K(column_idx));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -213,11 +225,13 @@ int ObClusterColumnReader::sequence_deep_copy_datums_of_sparse(
       special_val = (ObRowHeader::SPECIAL_VAL)read_special_value(cur_idx_);
       if (OB_UNLIKELY(ObRowHeader::VAL_NOP == special_val)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected nop val", K(ret), K(i), K(col_idx), K(tmp_pos));
       } else if (ObRowHeader::VAL_NULL == special_val) {
         datums[col_idx].set_null();
       } else if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_val
           && ObRowHeader::VAL_ENCODING_NORMAL != special_val)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected specail val", K(ret), K(i), K(col_idx), K(special_val));
       } else {
         tmp_pos = get_offset_func[offset_bytes_](column_offset_, cur_idx_);
         if (cur_idx_ + 1 < sparse_column_cnt_) {
@@ -225,7 +239,9 @@ int ObClusterColumnReader::sequence_deep_copy_datums_of_sparse(
         } else { // cur cell is the last cell
           next_pos = cell_end_pos_;
         }
+        LOG_DEBUG("sequence_deep_copy_datums_of_sparse", K(col_idx), K(tmp_pos), K(next_pos), K(cell_end_pos_));
         if (OB_FAIL(read_column_from_buf(tmp_pos, next_pos, special_val, datums[col_idx]))) {
+          LOG_WARN("failed to read column from buf", K(ret), K(tmp_pos), K(next_pos), K(special_val));
         }
       }
       cur_idx_++;
@@ -254,6 +270,7 @@ int ObClusterColumnReader::sequence_deep_copy_datums_of_dense(const int64_t star
     } else if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_val
         && ObRowHeader::VAL_ENCODING_NORMAL != special_val)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected specail val", K(ret), K(idx), K(cur_idx), K(special_val));
     } else {
       datums[cur_idx].reset();
       if (idx + 1 < column_cnt_) {
@@ -261,7 +278,9 @@ int ObClusterColumnReader::sequence_deep_copy_datums_of_dense(const int64_t star
       } else { // cur cell is the last cell
         next_pos = cell_end_pos_;
       }
+      LOG_DEBUG("sequence_deep_copy_datums_of_dense", K(cur_idx), K(tmp_pos), K(next_pos));
       if (OB_FAIL(read_column_from_buf(tmp_pos, next_pos, special_val, datums[cur_idx]))) {
+        LOG_WARN("failed to read column from buf", K(ret), K(tmp_pos), K(next_pos), K(special_val));
       }
     }
   } // end of for
@@ -279,6 +298,7 @@ int ObClusterColumnReader::read_8_bytes_column(
   uint64_t value = 0;
   if (OB_UNLIKELY(buf_len <= 0 || buf_len >= sizeof(uint64_t))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid size of column ", K(ret), KP(buf), K(buf_len));
   } else {
     switch (buf_len) {
     case 1:
@@ -292,11 +312,13 @@ int ObClusterColumnReader::read_8_bytes_column(
     break;
     default:
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("Not supported buf_len ", KP(buf), K(buf_len), K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     datum.reuse();
     datum.set_uint(value);
+    LOG_DEBUG("ObClusterColumnReader read 8 bytes column ", K(value));
   }
   return ret;
 }
@@ -312,8 +334,10 @@ int ObClusterColumnReader::read_column_from_buf(
   const int64_t buf_len = next_pos - tmp_pos;
   if (special_val == ObRowHeader::VAL_ENCODING_NORMAL) {
     if (OB_FAIL(read_8_bytes_column(buf, buf_len, datum))) {
+      LOG_WARN("failed to decode 8 bytes column", K(ret), K(special_val), KP(buf), K(buf_len), KPC(this));
     }
   } else if (OB_FAIL(datum.from_buf_enhance(buf, buf_len))) {
+    LOG_WARN("failed to copy datum", K(ret), K(special_val), KP(buf), K(buf_len), KPC(this));
   }
   return ret;
 }
@@ -329,6 +353,7 @@ int ObClusterColumnReader::read_datum(const int64_t column_idx, ObStorageDatum &
   } else if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_val
       && ObRowHeader::VAL_ENCODING_NORMAL != special_val)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected specail val", K(ret), K(column_idx), K(special_val));
   } else {
     int64_t next_pos = -1;
     int64_t tmp_pos = get_offset_func[offset_bytes_](column_offset_, column_idx);
@@ -338,6 +363,7 @@ int ObClusterColumnReader::read_datum(const int64_t column_idx, ObStorageDatum &
       next_pos = cell_end_pos_;
     }
     if (OB_FAIL(read_column_from_buf(tmp_pos, next_pos, special_val, datum))) {
+      LOG_WARN("failed to read column from buf", K(ret), KP(tmp_pos), K(next_pos), K(special_val));
     }
   }
   return ret;
@@ -359,10 +385,12 @@ inline int ObRowReader::setup_row(
     row_len_ = row_len;
     cur_read_cluster_idx_ = -1;
     if (OB_FAIL(analyze_row_header())) {
+      LOG_WARN("invalid row reader argument.", K(ret));
     } else {
       is_setuped_ = true;
     }
   }
+  LOG_DEBUG("ObRowReaderV2::setup_row", K(ret), KPC(row_header_), KPC(this));
   return ret;
 }
 
@@ -394,7 +422,9 @@ int ObRowReader::read_memtable_row(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!read_info.is_valid() || read_info.get_request_count() > datum_row.get_capacity() || read_finished)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument to read row", K(ret), K(read_info), K(datum_row), K(read_finished));
   } else if (OB_FAIL(setup_row(row_buf, row_len))) {
+    LOG_WARN("Fail to set up row", K(ret), K(row_len));
   } else {
     datum_row.count_ = read_info.get_request_count();
     int64_t store_idx = 0;
@@ -405,6 +435,7 @@ int ObRowReader::read_memtable_row(
         store_idx = cols_index.at(i);
         if (store_idx < 0 || store_idx >= row_header_->get_column_count()) { // not exists
         } else if (OB_FAIL(read_specific_column_in_cluster(store_idx, datum_row.storage_datums_[i]))) {
+          LOG_WARN("failed to read datum from cluster column reader", K(ret), KPC(row_header_), K(store_idx));
         } else if (!datum_row.storage_datums_[i].is_nop()) {
           nop_bitmap.set_false(i);
         }
@@ -436,6 +467,7 @@ OB_INLINE int ObRowReader::analyze_row_header()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row header is invalid", K(ret), K(row_len_), KPC(row_header_));
   } else if (OB_FAIL(analyze_cluster_info())) {
+    LOG_WARN("failed to analyze cluster info", K(ret), KPC(row_header_));
   }
 
   return ret;
@@ -449,9 +481,13 @@ int ObRowReader::analyze_cluster_info()
   const int64_t cluster_offset_len = row_header_->get_offset_type_len() * cluster_cnt_;
   if (OB_UNLIKELY(ObRowHeader::get_serialized_size() + cluster_offset_len >= row_len_)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("invalid row reader argument", K(ret), K(row_len_), KPC(row_header_));
     row_header_ = NULL;
   } else {
     cluster_offset_ = buf_ + row_len_ - cluster_offset_len;
+    LOG_DEBUG("analyze cluster info", K(ret), K(cluster_offset_),
+        K(cluster_offset_len), K(cluster_cnt_),
+        K(row_len_), KPC(row_header_));
   }
   return ret;
 }
@@ -473,6 +509,7 @@ int ObRowReader::analyze_info_and_init_reader(const int64_t cluster_idx)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cluster_idx < 0 || cluster_idx > cluster_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KPC(row_header_), K(cluster_idx));
   } else if (cur_read_cluster_idx_ != cluster_idx) { // need init another ClusterReader
     cluster_reader_.reset();
     const uint64_t cluster_start_pos = get_cluster_offset(cluster_idx);
@@ -482,6 +519,7 @@ int ObRowReader::analyze_info_and_init_reader(const int64_t cluster_idx)
             get_cluster_end_pos(cluster_idx) - cluster_start_pos, // cluster len
             row_header_->is_single_cluster() ? row_header_->get_column_count() : info_mask->get_column_count(),
             *info_mask))) {
+      LOG_WARN("failed to init cluster column reader", K(ret), KPC(row_header_), K(cluster_idx));
     } else {
       // only rowkey independent cluster have columns more than CLUSTER_COLUMN_CNT, but it can't be sparse
       cur_read_cluster_idx_ = cluster_idx;
@@ -502,7 +540,9 @@ int ObRowReader::read_row(
   // set position and get row header
   if (OB_UNLIKELY((nullptr != read_info && !read_info->is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument to read row", K(ret), KPC(read_info));
   } else if (OB_FAIL(setup_row(row_buf, row_len))) {
+    LOG_WARN("Fail to set up row", K(ret), K(row_len));
   } else {
     int64_t seq_read_cnt = 0;
     int64_t column_cnt = 0;
@@ -514,8 +554,10 @@ int ObRowReader::read_row(
     }
     if (datum_row.is_valid()) {
       if (OB_FAIL(datum_row.reserve(column_cnt))) {
+        STORAGE_LOG(WARN, "Failed to reserve datum row", K(ret), K(column_cnt));
       }
     } else if (OB_FAIL(datum_row.init(column_cnt))) {
+      STORAGE_LOG(WARN, "Failed to init datum row", K(ret), K(column_cnt));
     }
     if (OB_SUCC(ret)) {
       SET_ROW_BASIC_INFO(datum_row);  // set flag/row_type_flag/trans_id
@@ -526,6 +568,7 @@ int ObRowReader::read_row(
         int64_t cluster_col_cnt = 0;
       for (int64_t cluster_idx = 0; OB_SUCC(ret) && cluster_idx < row_header_->get_cluster_cnt() && idx < seq_read_cnt; ++cluster_idx) {
         if (OB_FAIL(analyze_info_and_init_reader(cluster_idx))) {
+          LOG_WARN("failed to init cluster column reader", K(ret), KPC(row_header_), K(cluster_idx));
         } else {
           cluster_col_cnt = cluster_reader_.get_column_count();
           for (int64_t i = 0; OB_SUCC(ret) && i < cluster_col_cnt && idx < seq_read_cnt; ++idx, ++i) {
@@ -535,7 +578,10 @@ int ObRowReader::read_row(
             } else if (i >= row_header_->get_column_count()) { // not exists
               datum_row.storage_datums_[i].set_nop();
             } else if (OB_FAIL(cluster_reader_.sequence_read_datum(i, datum_row.storage_datums_[idx]))) {
+              LOG_WARN("Fail to read column", K(ret), K(idx));
             } else {
+              LOG_DEBUG("sequence read datum", K(ret), K(idx), K(i), K(datum_row.storage_datums_[idx]),
+                  K(cluster_col_cnt));
             }
           }
         }
@@ -550,6 +596,7 @@ int ObRowReader::read_row(
         if (store_idx < 0 || store_idx >= row_header_->get_column_count()) { // not exists
           datum_row.storage_datums_[idx].set_nop();
         } else if (OB_FAIL(read_specific_column_in_cluster(store_idx, datum_row.storage_datums_[idx]))) {
+          LOG_WARN("failed to read datum from cluster column reader", K(ret), KPC(row_header_), K(store_idx));
         }
       } // end of for
     }
@@ -567,11 +614,14 @@ int ObRowReader::read_column(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(setup_row(row_buf, row_len))) {
+    LOG_WARN("failed to setup row", K(ret), K(row_buf), K(row_len));
   } else if (OB_UNLIKELY(col_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(col_idx));
   } else if (OB_UNLIKELY(col_idx >= row_header_->get_column_count())) {
     datum.set_nop();
   } else if (OB_FAIL(read_specific_column_in_cluster(col_idx, datum))) {
+    LOG_WARN("failed to read obj from cluster column reader", K(ret), KPC(row_header_), K(col_idx));
   }
   return ret;
 }
@@ -597,8 +647,13 @@ int ObRowReader::read_specific_column_in_cluster(
     cluster_idx = ObRowHeader::calc_cluster_idx(idx) + 1;
     col_idx_in_cluster = ObRowHeader::calc_column_idx_in_cluster(idx);
   }
+  LOG_DEBUG("DEBUG cluster reader", K(cluster_idx), K(col_idx_in_cluster), K(cur_read_cluster_idx_));
   if (OB_FAIL(analyze_info_and_init_reader(cluster_idx))) {
+    LOG_WARN("failed to init cluster column reader", K(ret), KPC(row_header_),
+        K(cluster_idx), K(col_idx_in_cluster));
   } else if (OB_FAIL(cluster_reader_.read_storage_datum(col_idx_in_cluster, datum))) {
+    LOG_WARN("failed to read datum from cluster column reader", K(ret), KPC(row_header_),
+        K(cluster_idx), K(col_idx_in_cluster));
   }
   return ret;
 }
@@ -615,14 +670,19 @@ int ObRowReader::compare_meta_rowkey(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!rhs.is_valid() || !datum_utils.is_valid() || nullptr == buf || row_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid row header argument.", K(ret), K(datum_utils),
+             K(rhs), K(buf), K(row_len));
   } else {
     cmp_result = 0;
     const int64_t compare_column_count = rhs.get_datum_cnt();
     if (OB_UNLIKELY(datum_utils.get_rowkey_count() < compare_column_count)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Invalid argument to compare meta rowkey", K(ret), K(compare_column_count), K(rhs), K(datum_utils));
     } else if (OB_FAIL(setup_row(buf, row_len))) {
+      LOG_WARN("row reader fail to setup.", K(ret), K(OB_P(buf)), K(row_len));
     } else if (OB_UNLIKELY(row_header_->get_rowkey_count() < compare_column_count)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Unexpected rowkey count", K(ret), K(compare_column_count), K(rhs), KPC(row_header_));
     } else {
       ObStorageDatum datum;
       int64_t cluster_col_cnt = 0;
@@ -631,14 +691,18 @@ int ObRowReader::compare_meta_rowkey(
           OB_SUCC(ret) && cmp_result == 0 && cluster_idx < row_header_->get_cluster_cnt() && idx < compare_column_count;
           ++cluster_idx) {
         if (OB_FAIL(analyze_info_and_init_reader(cluster_idx))) {
+          LOG_WARN("failed to init cluster column reader", K(ret), KPC(row_header_), K(cluster_idx));
         } else {
           cluster_col_cnt = cluster_reader_.get_column_count();
           for (int64_t i = 0;
               OB_SUCC(ret) && cmp_result == 0 && i < cluster_col_cnt && idx < compare_column_count;
               ++idx, ++i) {
             if (OB_FAIL(cluster_reader_.sequence_read_datum(i, datum))) {
+              LOG_WARN("Fail to read column", K(ret), K(i), K(idx), K(datum_utils));
             } else if (OB_FAIL(datum_utils.get_cmp_funcs().at(idx).compare(datum, rhs.datums_[idx], cmp_result))) {
+              STORAGE_LOG(WARN, "Failed to compare datums", K(ret), K(idx), K(datum), K(rhs.datums_[idx]));
             }
+            LOG_DEBUG("chaser debug compare rowkey", K(datum), K(idx), K(datum), K(rhs.datums_[idx]));
           }
         }
       }

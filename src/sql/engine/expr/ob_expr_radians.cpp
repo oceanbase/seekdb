@@ -58,6 +58,7 @@ int ObExprRadians::calc_radians_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -76,6 +77,7 @@ int ObExprRadians::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_) ||
       (ObDoubleType != rt_expr.args_[0]->datum_meta_.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid arg_cnt_ or arg res type is invalid", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_radians_expr;
   }

@@ -71,9 +71,10 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_INTERSECTS);
   bool inter_result = false;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
+    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     res.set_null();
   } else {
@@ -88,7 +89,7 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
     uint32_t srid2;
     ObString wkb1 = gis_datum1->get_string();
     ObString wkb2 = gis_datum2->get_string();
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     bool is_geo1_cached = false;
     bool is_geo2_cached = false;
@@ -103,13 +104,11 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
     if (gis_arg2->is_static_const_) {
       ObGeoExprUtils::expr_get_const_param_cache(const_param_cache, geo2, srid2, is_geo2_cached, 1);
     }
-    if (!is_geo1_cached && OB_FAIL(ObGeoExprUtils::expr_prepare_build_geometry(
-            ctx.exec_ctx_, temp_allocator, *gis_datum1, *gis_arg1, wkb1, type1, srid1))) {
+    if (!is_geo1_cached && OB_FAIL(ObGeoExprUtils::expr_prepare_build_geometry(temp_allocator, *gis_datum1, *gis_arg1, wkb1, type1, srid1))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_INTERSECTS);
       }
-    } else if (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::expr_prepare_build_geometry(
-                   ctx.exec_ctx_, temp_allocator, *gis_datum2, *gis_arg2, wkb2, type2, srid2))) {
+    } else if (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::expr_prepare_build_geometry(temp_allocator, *gis_datum2, *gis_arg2, wkb2, type2, srid2))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_INTERSECTS);
       }
@@ -119,32 +118,47 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       
-    } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, srid1, srs))) {
+      LOG_WARN("failed to get session", K(ret));
+    } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(srs_guard, srid1, srs))) {
+      LOG_WARN("fail to get srs item", K(ret), K(srid1));
     } else if (!is_geo1_cached && OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb1, geo1, nullptr, N_ST_INTERSECTS, ObGeoBuildFlag::GEO_ALLOW_3D_CARTESIAN))) {
+      LOG_WARN("get first geo by wkb failed", K(ret));   
     } else if (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb2, geo2, nullptr, N_ST_INTERSECTS, ObGeoBuildFlag::GEO_ALLOW_3D_CARTESIAN))) {
+      LOG_WARN("get second geo by wkb failed", K(ret));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(geo1->length() + geo2->length()))) {
     } else if ((!is_geo1_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty)))
         || (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty)))) {
+      LOG_WARN("check geo empty failed", K(ret));
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2, is_geo1_cached, is_geo2_cached))) {
+      LOG_WARN("zoom in geos failed", K(ret));
     } else if (OB_FAIL(guard.init())) {
+      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       if (OB_NOT_NULL(const_param_cache)) {
         if (gis_arg1->is_static_const_ && !is_geo1_cached &&
             OB_FAIL(const_param_cache->add_const_param_cache(0, *geo1))) {
+          LOG_WARN("add geo1 to const cache failed", K(ret));
         } else if (gis_arg2->is_static_const_ && !is_geo2_cached &&
             OB_FAIL(const_param_cache->add_const_param_cache(1, *geo2))) {
+          LOG_WARN("add geo2 to const cache failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObGeoExprUtils::get_intersects_res(*geo1, *geo2, gis_arg1, gis_arg2, 
                                                             const_param_cache, srs, 
                                                             mem_ctx, inter_result))) {
+        LOG_WARN("fail to get intersects res", K(ret));
       } else {
         res.set_bool(inter_result);
       }
+    }
+    if (mem_ctx != nullptr) {
+      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
   return ret;

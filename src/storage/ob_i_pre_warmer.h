@@ -34,6 +34,7 @@ class ObTabletID;
 }
 namespace share
 {
+class ObLSID;
 class ObIPreWarmer
 {
 public:
@@ -56,6 +57,7 @@ enum ObPreWarmerType : uint8_t
 {
   PRE_WARM_TYPE_NONE = 0,
   MEM_PRE_WARM, // ObDataBlockCachePreWarmer
+  MEM_AND_FILE_PRE_WARM, // for SS
   PRE_WARM_TYPE_MAX
 };
 
@@ -70,7 +72,7 @@ public:
   {}
   virtual ~ObPreWarmerParam() { type_ = PRE_WARM_TYPE_MAX; }
   virtual bool is_valid() const { return type_ >= PRE_WARM_TYPE_NONE && type_ < PRE_WARM_TYPE_MAX; }
-  virtual int init(const common::ObTabletID &tablet_id, const bool use_fixed_percentage = false);
+  virtual int init(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id, const bool use_fixed_percentage = false);
   VIRTUAL_TO_STRING_KV(K_(type), K_(fixed_percentage));
   ObPreWarmerType type_;
   int64_t fixed_percentage_;

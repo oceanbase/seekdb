@@ -33,10 +33,12 @@ public:
     int ret = OB_SUCCESS;
     ObPxDatahubDataProvider *p = nullptr;
     if (OB_FAIL(sqc_ctx.get_whole_msg_provider(pkt.op_id_, msg_type, p))) {
+      LOG_WARN("fail get whole msg provider", K(ret));
     } else {
       typename WholeMsg::WholeMsgProvider *provider =
           static_cast<typename WholeMsg::WholeMsgProvider *>(p);
       if (OB_FAIL(provider->add_msg(pkt))) {
+        LOG_WARN("fail set whole msg to provider", K(ret));
       }
     }
     return ret;
@@ -49,6 +51,7 @@ int ObPxSubCoordMsgProc::on_transmit_data_ch_msg(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sqc_ctx_.transmit_data_ch_provider_.add_msg(pkt))) {
+    LOG_WARN("fail set transmit channel msg to ch provider", K(ret));
   }
   return ret;
 }
@@ -63,6 +66,7 @@ int ObPxSubCoordMsgProc::on_receive_data_ch_msg(
   // Then they might get the wrong channel (got it backwards)
   // To avoid this situation, a shared memory approach is taken, where the receive op itself determines whether the channel belongs to it
   if (OB_FAIL(sqc_ctx_.receive_data_ch_provider_.add_msg(pkt))) {
+    LOG_WARN("fail set receive channel msg to ch provider", K(ret));
   }
   return ret;
 }
@@ -74,6 +78,7 @@ int ObPxSubCoordMsgProc::on_interrupted(const ObInterruptCode &ic) const
   sqc_ctx_.interrupted_ = true;
   // Throw error code to main processing routine, end SQC
   ret = ic.code_;
+  LOG_TRACE("sqc received a interrupt and throw out of msg proc", K(ic));
   return ret;
 }
 
@@ -95,6 +100,13 @@ int ObPxSubCoordMsgProc::on_whole_msg(
 {
   ObDhWholeeMsgProc<ObDynamicSampleWholeMsg> proc;
   return proc.on_whole_msg(sqc_ctx_, dtl::DH_DYNAMIC_SAMPLE_WHOLE_MSG, pkt);
+}
+
+int ObPxSubCoordMsgProc::on_whole_msg(
+    const ObRollupKeyWholeMsg &pkt) const
+{
+  ObDhWholeeMsgProc<ObRollupKeyWholeMsg> proc;
+  return proc.on_whole_msg(sqc_ctx_, dtl::DH_ROLLUP_KEY_WHOLE_MSG, pkt);
 }
 
 int ObPxSubCoordMsgProc::on_whole_msg(
@@ -123,6 +135,18 @@ int ObPxSubCoordMsgProc::on_whole_msg(
 {
   ObDhWholeeMsgProc<ObOptStatsGatherWholeMsg> proc;
   return proc.on_whole_msg(sqc_ctx_, dtl::DH_OPT_STATS_GATHER_WHOLE_MSG, pkt);
+}
+
+int ObPxSubCoordMsgProc::on_whole_msg(const SPWinFuncPXWholeMsg &pkt) const
+{
+  ObDhWholeeMsgProc<SPWinFuncPXWholeMsg> proc;
+  return proc.on_whole_msg(sqc_ctx_, dtl::DH_SP_WINFUNC_PX_WHOLE_MSG, pkt);
+}
+
+int ObPxSubCoordMsgProc::on_whole_msg(const RDWinFuncPXWholeMsg &pkt) const
+{
+  ObDhWholeeMsgProc<RDWinFuncPXWholeMsg> proc;
+  return proc.on_whole_msg(sqc_ctx_, dtl::DH_RD_WINFUNC_PX_WHOLE_MSG, pkt);
 }
 
 int ObPxSubCoordMsgProc::on_whole_msg(const ObJoinFilterCountRowWholeMsg &pkt) const

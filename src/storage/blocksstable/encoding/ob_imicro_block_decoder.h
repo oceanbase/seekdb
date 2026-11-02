@@ -18,17 +18,13 @@
 #define OB_STORAGE_BLOCKSSTABLE_ENCODING_OB_IMICRO_BLOCK_DECODER_H_
 
 #include "lib/container/ob_bitmap.h"
-#include "query/engine/basic/ob_pushdown_filter.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/ob_imicro_block_reader.h"
 #include "storage/blocksstable/ob_row_reader.h"
 #include "storage/ob_i_store.h"
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObTruncateFilterEvaluator;
-}
 namespace blocksstable
 {
 
@@ -49,12 +45,9 @@ public:
   virtual int filter_pushdown_filter(const sql::ObPushdownFilterExecutor *parent,
     sql::ObWhiteFilterExecutor &filter, const sql::PushdownFilterInfo &pd_filter_info,
     common::ObBitmap &result_bitmap) = 0;
-  virtual int filter_truncate_evaluator(
-      storage::ObTruncateFilterEvaluator &evaluator,
-      const int64_t start,
-      const int64_t count,
-      const common::ObBitmap *candidate_rows,
-      common::ObBitmap &result_bitmap) = 0;
+  virtual int filter_pushdown_truncate_filter(const sql::ObPushdownFilterExecutor *parent,
+    sql::ObPushdownFilterExecutor &filter, const sql::PushdownFilterInfo &pd_filter_info,
+    common::ObBitmap &result_bitmap) = 0;
   virtual int get_rows(const common::ObIArray<int32_t> &cols,
     const common::ObIArray<const share::schema::ObColumnParam *> &col_params, const bool is_padding_mode,
     const int32_t *row_ids, const char **cell_datas, const int64_t row_cap,
@@ -69,10 +62,25 @@ public:
       const int64_t begin_idx,
       int64_t &row_idx,
       bool &equal) override;
+  virtual int get_rows(
+      const common::ObIArray<int32_t> &cols,
+      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+      const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
+      const bool is_padding_mode,
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      const char **cell_datas,
+      const int64_t vec_offset,
+      uint32_t *len_array,
+      sql::ObEvalCtx &eval_ctx,
+      sql::ObExprPtrIArray &exprs,
+      const bool need_init_vector) = 0;
+
 protected:
   virtual int find_bound(const ObDatumRange &range, const int64_t begin_idx, int64_t &row_idx,
     bool &equal, int64_t &end_key_begin_idx, int64_t &end_key_end_idx) override;
 
+  // For column store
   virtual int find_bound(const ObDatumRowkey &key, const bool lower_bound, const int64_t begin_idx,
     const int64_t end_idx, int64_t &row_idx, bool &equal) override;
 

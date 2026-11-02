@@ -70,6 +70,9 @@ class ObExprIs: public ObExprIsBase
                   const ObRawExpr &raw_expr,
                   ObExpr &rt_expr) const override;
 
+  // keep this function for compatibility with server before 4.1
+  static int calc_is_date_int_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+
   static int calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   static int int_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   static int int_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
@@ -87,6 +90,18 @@ class ObExprIs: public ObExprIsBase
   static int decimal_int_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   static int decimal_int_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
 
+  static int calc_vector_is_null(const ObExpr &expr,
+                                 ObEvalCtx &ctx,
+                                 const ObBitVector &skip,
+                                 const EvalBound &bound);
+  static int calc_vector_is_true(const ObExpr &expr,
+                                 ObEvalCtx &ctx,
+                                 const ObBitVector &skip,
+                                 const EvalBound &bound);
+  static int calc_vector_is_false(const ObExpr &expr,
+                                  ObEvalCtx &ctx,
+                                  const ObBitVector &skip,
+                                  const EvalBound &bound);
 private:
   // types and constants
 private:
@@ -125,6 +140,18 @@ public:
   static int decimal_int_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
   static int decimal_int_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
 
+  static int calc_vector_is_not_null(const ObExpr &expr,
+                                     ObEvalCtx &ctx,
+                                     const ObBitVector &skip,
+                                     const EvalBound &bound);
+  static int calc_vector_is_not_true(const ObExpr &expr,
+                                     ObEvalCtx &ctx,
+                                     const ObBitVector &skip,
+                                     const EvalBound &bound);
+  static int calc_vector_is_not_false(const ObExpr &expr,
+                                      ObEvalCtx &ctx,
+                                      const ObBitVector &skip,
+                                      const EvalBound &bound);
 private:
   // types and constants
 private:

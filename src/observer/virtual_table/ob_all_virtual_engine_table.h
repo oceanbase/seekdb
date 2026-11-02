@@ -25,12 +25,13 @@ namespace observer
 {
 class ObAllVirtualEngineTable : public common::ObVirtualTableScannerIterator
 {
-  static const int32_t ENGINE_COLUMN_COUNT = 5;
+  static const int32_t ENGINE_COLUMN_COUNT = 6;
   enum COLUMN_NAME {
     ENGINE = common::OB_APP_MIN_COLUMN_ID,
     SUPPORT,
     COMMENT,
     TRANSACTIONS,
+    XA,
     SAVEPOINTS,
   };
 public:

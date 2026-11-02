@@ -17,7 +17,7 @@
 #ifndef _OCEABASE_OBSERVER_OB_SRV_TASK_H_
 #define _OCEABASE_OBSERVER_OB_SRV_TASK_H_
 
-#include "share/rpc/ob_server_task.h"
+#include "rpc/ob_request.h"
 #include "observer/mysql/obmp_disconnect.h"
 
 namespace oceanbase
@@ -30,8 +30,19 @@ class ObFreeSessionCtx;
 namespace observer
 {
 
+class ObSrvTask
+    : public rpc::ObRequest
+{
+public:
+  ObSrvTask()
+      : ObRequest(ObRequest::OB_TASK)
+  {}
+
+  virtual rpc::frame::ObReqProcessor &get_processor() = 0;
+}; // end of class ObSrvTask
+
 class ObDisconnectTask
-    : public rpc::ObSrvTask
+    : public ObSrvTask
 {
 public:
   ObDisconnectTask(const sql::ObFreeSessionCtx &ctx)

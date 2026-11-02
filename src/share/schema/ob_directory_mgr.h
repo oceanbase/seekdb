@@ -1,0 +1,168 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_SCHEMA_OB_DIRECTORY_MGR_H_
+#define OCEANBASE_SHARE_SCHEMA_OB_DIRECTORY_MGR_H_
+
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/hash/ob_pointer_hashmap.h"
+#include "share/ob_define.h"
+#include "share/schema/ob_schema_struct.h"
+#include "lib/container/ob_vector.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObDirectoryNameHashKey
+{
+public:
+  ObDirectoryNameHashKey()
+    : directory_name_()
+  {
+  }
+  ObDirectoryNameHashKey(common::ObString directory_name)
+    : directory_name_(directory_name)
+  {
+  }
+  ~ObDirectoryNameHashKey()
+  {
+  }
+  uint64_t hash() const
+  {
+    uint64_t hash_ret = 0;
+    hash_ret = common::murmurhash(directory_name_.ptr(), directory_name_.length(), 0);
+    return hash_ret;
+  }
+  bool operator == (const ObDirectoryNameHashKey &rv) const
+  {
+    return true && directory_name_ == rv.directory_name_;
+  }
+  
+  void set_directory_name(const common::ObString &directory_name) { directory_name_ = directory_name;}
+  
+  const common::ObString &get_directory_name() const { return directory_name_; }
+private:
+  common::ObString directory_name_;
+};
+
+template<class T, class V>
+struct ObGetDirectoryKey
+{
+  void operator()(const T &t, const V &v) const
+  {
+    UNUSED(t);
+    UNUSED(v);
+  }
+};
+
+template<>
+struct ObGetDirectoryKey<ObDirectoryNameHashKey, ObDirectorySchema *>
+{
+  ObDirectoryNameHashKey operator()(const ObDirectorySchema *schema) const
+  {
+    return OB_ISNULL(schema) ?
+          ObDirectoryNameHashKey()
+        : ObDirectoryNameHashKey(schema->get_directory_name_str());
+  }
+};
+
+template<>
+struct ObGetDirectoryKey<uint64_t, ObDirectorySchema *>
+{
+  uint64_t operator()(const ObDirectorySchema *schema) const
+  {
+    return OB_ISNULL(schema) ? common::OB_INVALID_ID : schema->get_directory_id();
+  }
+};
+
+class ObDirectoryMgr
+{
+public:
+  ObDirectoryMgr();
+  explicit ObDirectoryMgr(common::ObIAllocator &allocator);
+  virtual ~ObDirectoryMgr();
+
+
+  int init();
+  void reset();
+
+  int assign(const ObDirectoryMgr &other);
+  int deep_copy(const ObDirectoryMgr &other);
+  int add_directory(const ObDirectorySchema &schema);
+  // TYPO, but we keep it as "directorys" other than "directories" for macro usage
+  int add_directorys(const common::ObIArray<ObDirectorySchema> &schemas);
+  int del_directory(const ObTenantDirectoryId &id);
+  int get_directory_schema_by_id(const uint64_t directory_id,
+                                 const ObDirectorySchema *&schema) const;
+  int get_directory_schema_by_name(const common::ObString &name,
+                                   const ObDirectorySchema *&schema) const;
+  int get_directory_schemas_in_tenant(common::ObIArray<const ObDirectorySchema *> &schemas) const;
+  int get_directory_schema_count(int64_t &schema_count) const;
+  int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
+private:
+  int rebuild_directory_hashmap();
+  static bool schema_compare(const ObDirectorySchema *lhs, const ObDirectorySchema *rhs);
+  static bool schema_equal(const ObDirectorySchema *lhs, const ObDirectorySchema *rhs);
+  static bool compare_with_tenant_directory_id(const ObDirectorySchema *lhs, const ObTenantDirectoryId &id);
+  static bool equal_to_tenant_directory_id(const ObDirectorySchema *lhs, const ObTenantDirectoryId &id);
+public:
+  typedef common::ObSortedVector<ObDirectorySchema *> DirectoryInfos;
+  typedef common::hash::ObPointerHashMap<ObDirectoryNameHashKey,
+                                         ObDirectorySchema *,
+                                         ObGetDirectoryKey, 128> ObDirectoryNameMap;
+  typedef common::hash::ObPointerHashMap<uint64_t,
+                                         ObDirectorySchema *,
+                                         ObGetDirectoryKey, 128> ObDirectoryIdMap;
+  typedef DirectoryInfos::iterator DirectoryIter;
+  typedef DirectoryInfos::const_iterator ConstDirectoryIter;
+private:
+  static const char *DIRECTORY_MGR;
+  bool is_inited_;
+  common::ObArenaAllocator local_allocator_;
+  common::ObIAllocator &allocator_;
+  DirectoryInfos directory_infos_;
+  ObDirectoryNameMap directory_name_map_;
+  ObDirectoryIdMap directory_id_map_;
+};
+
+OB_INLINE bool ObDirectoryMgr::schema_compare(const ObDirectorySchema *lhs, const ObDirectorySchema *rhs)
+{
+  return lhs->get_directory_id() < rhs->get_directory_id();
+}
+
+OB_INLINE bool ObDirectoryMgr::schema_equal(const ObDirectorySchema *lhs, const ObDirectorySchema *rhs)
+{
+  return true
+      && lhs->get_directory_id() == rhs->get_directory_id();
+}
+
+OB_INLINE bool ObDirectoryMgr::compare_with_tenant_directory_id(const ObDirectorySchema *lhs, const ObTenantDirectoryId &id)
+{
+  return NULL != lhs ? (lhs->get_tenant_directory_id() < id) : false;
+}
+
+OB_INLINE bool ObDirectoryMgr::equal_to_tenant_directory_id(const ObDirectorySchema *lhs, const ObTenantDirectoryId &id)
+{
+  return NULL != lhs ? (lhs->get_tenant_directory_id() == id) : false;
+}
+} // namespace schema
+} // namespace share
+} // namespace oceanbase
+
+#endif // OCEANBASE_SHARE_SCHEMA_OB_DIRECTORY_MGR_H_

@@ -40,9 +40,13 @@ int ObLogOptimizerStatsGathering::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (NULL != calc_part_id_expr_ && OB_FAIL(all_exprs.push_back(calc_part_id_expr_))) {
+    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(append(all_exprs, get_col_conv_exprs()))) {
+    LOG_WARN("fail to append column conv expr", K(ret));
   } else if (OB_FAIL(append(all_exprs, get_generated_column_exprs()))) {
+    LOG_WARN("fail to append column conv expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
+    LOG_WARN("failed to get exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -58,15 +62,19 @@ int ObLogOptimizerStatsGathering::inner_get_table_schema(const ObTableSchema *&t
       || OB_ISNULL(schema_guard = opt_ctx->get_sql_schema_guard())
       || OB_ISNULL(stmt = get_plan()->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_UNLIKELY(!stmt->is_insert_stmt())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected stmt", K(ret), KPC(stmt));
   } else {
     const ObInsertStmt *ins_stmt = static_cast<const ObInsertStmt*>(stmt);
     uint64_t table_id = ins_stmt->get_insert_table_info().table_id_;
     uint64_t ref_table_id = ins_stmt->get_insert_table_info().ref_table_id_;
     if (OB_FAIL(schema_guard->get_table_schema(table_id, ref_table_id, ins_stmt, table_schema))) {
+      LOG_WARN("fail to get table schema", K(ref_table_id), K(table_schema), K(ret));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index schema should not be null", K(table_schema), K(ret));
     }
   }
   return ret;
@@ -81,10 +89,14 @@ int ObLogOptimizerStatsGathering::est_cost()
   const ObTableSchema *tab_schema = NULL;
   if (OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(inner_get_table_schema(tab_schema))) {
+    LOG_WARN("fail to get table schema", K(ret));
   } else if (OB_FAIL(inner_get_stat_part_cnt(tab_schema, total_part_num))) {
+    LOG_WARN("fail to get pstat num", K(ret));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected parallel", K(parallel), K(ret));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     op_cost_ = 0;
@@ -114,6 +126,7 @@ int ObLogOptimizerStatsGathering::get_target_osg_id(uint64_t &target_id)
   ObLogicalOperator *node = get_parent();
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else {
     bool is_find = false;
     while (NULL != node && !is_find) {
@@ -126,6 +139,7 @@ int ObLogOptimizerStatsGathering::get_target_osg_id(uint64_t &target_id)
     }
     if (OB_SUCC(ret) && !is_find) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("can not find next producer id", K(ret));
     }
   }
   return ret;
@@ -135,7 +149,9 @@ int ObLogOptimizerStatsGathering::inner_replace_op_exprs(ObRawExprReplacer &repl
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, col_conv_exprs_))) {
+    LOG_WARN("failed to replace exprs", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, generated_column_exprs_))) {
+    LOG_WARN("failed to replace exprs", K(ret));
   }
   return ret;
 }
@@ -146,6 +162,7 @@ int ObLogOptimizerStatsGathering::inner_get_stat_part_cnt(const ObTableSchema *t
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret));
   } else if (!table_schema->is_partitioned_table()) {
     part_num = 1; //for non-part table, only have global stats.
   } else {
@@ -159,6 +176,7 @@ int ObLogOptimizerStatsGathering::inner_get_stat_part_cnt(const ObTableSchema *t
       for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
         if (OB_ISNULL(cur_part = (table_schema->get_part_array())[i])) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else {
           total_subpart_num += cur_part->get_sub_part_num();
         }

@@ -20,11 +20,16 @@
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
+#include "logrpc/ob_log_rpc_req.h"
+#include "logrpc/ob_log_service_rpc_shell.h"
 #include "palf/log_block_pool_interface.h"             // ILogBlockPool
-#include "share/log/palf/log_define.h"
-#include "localservice/ob_local_log_handler_set.h"
+#include "palf/log_define.h"
+#include "rcservice/ob_role_change_service.h"
 #include "replayservice/ob_log_replay_service.h"
-#include "ob_i_log_storage.h"
+#include "ob_net_keepalive_adapter.h"
+#include "ob_ls_adapter.h"
+#include "ob_location_adapter.h"
+#include "ob_log_flashback_service.h"                    // ObLogFlashbackService
 #include "ob_log_handler.h"
 #include "ob_log_monitor.h"
 
@@ -33,82 +38,97 @@ namespace oceanbase
 namespace common
 {
 class ObAddr;
-class ObIODevice;
-class ObIOManager;
 class ObILogAllocator;
+class ObMySQLProxy;
+}
+
+namespace rpc
+{
+namespace frame
+{
+class ObReqTransport;
+}
 }
 
 namespace share
 {
+class ObLSID;
+class ObLocationService;
 class SCN;
 }
 
 namespace palf
 {
 class PalfHandleGuard;
+class PalfRoleChangeCb;
 class PalfDiskOptions;
 class PalfEnv;
+}
+namespace storage
+{
+class ObLSService;
 }
 
 namespace logservice
 {
-
-struct ObLogRuntimeConfig
-{
-  int64_t log_disk_utilization_threshold_;
-  int64_t log_disk_utilization_limit_threshold_;
-  int64_t log_disk_throttling_percentage_;
-  int64_t log_disk_throttling_maximum_duration_;
-  int64_t log_storage_warning_tolerance_time_;
-  bool enable_log_cache_;
-};
 
 class ObLogService
 {
 public:
   ObLogService();
   virtual ~ObLogService();
-  static int server_module_init(
-      ObLogService *&logservice,
-      const palf::PalfOptions &options,
-      const char *runtime_clog_dir,
-      const char *clog_dir,
-      const common::ObAddr &self,
-      ObILogStorage *log_storage,
-      palf::ILogBlockPool *log_block_pool,
-      common::ObIODevice *log_local_device,
-      common::ObIOManager *io_manager,
-      bool is_shared_storage_mode,
-      int64_t replay_thread_quota,
-      const ObLogRuntimeConfig &runtime_config);
-  static void server_module_destroy(ObLogService* &logservice);
+  static int mtl_init(ObLogService* &logservice);
+  static void mtl_destroy(ObLogService* &logservice);
   int start();
   void stop();
   void wait();
   void destroy();
 public:
+  static palf::AccessMode get_palf_access_mode(const share::ObTenantRole &tenant_role);
   int init(const palf::PalfOptions &options,
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
-           ObILogStorage *log_storage,
+           storage::ObLSService *ls_service,
+           share::ObLocationService *location_service,
            palf::ILogBlockPool *log_block_pool,
-           common::ObIODevice *log_local_device,
-           common::ObIOManager *io_manager,
-           bool is_shared_storage_mode,
-           int64_t replay_thread_quota,
-           const ObLogRuntimeConfig &runtime_config);
-  // Create the unique log stream from its persisted base point.
-  int create_ls(const palf::PalfBaseInfo &palf_base_info,
+           common::ObMySQLProxy *sql_proxy,
+           IObNetKeepAliveAdapter *net_keepalive_adapter);
+  //--Log stream related interfaces--
+  //New log stream interface, this interface will create the corresponding directory for the log stream and create a new log stream with PalfBaseInfo as the log base point.
+  //This includes generating and initializing the corresponding ObReplayStatus structure
+  // @param [in] id, log stream identifier
+  // @param [in] replica_type, the replica type of the log stream
+  // @param [in] tenant_role, tenant role, this decides the Palf usage mode (APPEND/RAW_WRITE)
+  // @param [in] palf_base_info, log synchronization base point information
+  // @param [out] log_handler, new log stream returned in the form of ObLogHandler, ensuring the lifecycle of the log stream when used by upper layers
+  int create_ls(const share::ObLSID &id,
+                const common::ObReplicaType &replica_type,
+                const share::ObTenantRole &tenant_role,
+                const palf::PalfBaseInfo &palf_base_info,
+                const bool allow_log_sync,
                 ObLogHandler &log_handler);
   //Delete log stream interface: After the outer call to create_ls(), if subsequent processes fail, remove_ls() needs to be called
-  int remove_ls(ObLogHandler &log_handler);
+  int remove_ls(const share::ObLSID &id,
+                ObLogHandler &log_handler);
 
-  int check_palf_exist(bool &exist) const;
-  // Restart recovery interface for the single log stream.
-  int add_ls(ObLogHandler &log_handler);
+  int check_palf_exist(const share::ObLSID &id, bool &exist) const;
+  //Downtime restart recovery log stream interface, including generating and initializing the corresponding ObReplayStatus structure
+  // @param [in] id, log stream identifier
+  // @param [out] log_handler, new log stream returned in the form of ObLogHandler, ensuring the lifecycle of the log stream when used by upper layers
+  int add_ls(const share::ObLSID &id,
+             ObLogHandler &log_handler);
 
-  int open_palf(palf::PalfHandleGuard &palf_handle);
+  int open_palf(const share::ObLSID &id,
+                palf::PalfHandleGuard &palf_handle);
+
+  // get role of current palf replica.
+  // NB: distinguish the difference from get_role of log_handler
+  // In general, get the replica role to do migration/blance/report, use this interface,
+  // to write log, use get_role of log_handler
+  int get_palf_role(const share::ObLSID &id,
+                    common::ObRole &role,
+                    int64_t &proposal_id);
 
   int update_replayable_point(const share::SCN &replayable_point);
   int get_replayable_point(share::SCN &replayable_point);
@@ -125,8 +145,8 @@ public:
   int get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
   // why we need update 'log_disk_size_' and 'log_disk_util_threshold' separately.
   //
-  // 'log_disk_size' is part of the server resource configuration.
-  // 'log_disk_util_threshold' and 'log_disk_util_limit_threshold' are runtime parameters.
+  // 'log_disk_size' is a member of unit config.
+  // 'log_disk_util_threshold' and 'log_disk_util_limit_threshold' are members of tenant parameters.
   // If we just only provide 'update_disk_options', the correctness of PalfDiskOptions can not be guaranteed.
   // for example, original PalfDiskOptions is that
   // {
@@ -147,37 +167,56 @@ public:
   //   log_disk_util_limit_threshold = 85,
   //   log_disk_util_threshold = 80
   // }.
-  int update_palf_options_except_disk_usage_limit_size(
-      const ObLogRuntimeConfig &runtime_config);
+  int update_palf_options_except_disk_usage_limit_size();
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
   int get_palf_options(palf::PalfOptions &options);
-  int stat_palf(palf::PalfStat &palf_stat);
-  int stat_apply(LSApplyStat &apply_stat);
-  int stat_replay(LSReplayStat &replay_stat);
+  int iterate_palf(const ObFunction<int(const palf::PalfHandle&)> &func);
+  int iterate_apply(const ObFunction<int(const ObApplyStatus&)> &func);
+  int iterate_replay(const ObFunction<int(const ObReplayStatus&)> &func);
 
-  int diagnose_replay(ReplayDiagnoseInfo &diagnose_info);
-  int diagnose_apply(ApplyDiagnoseInfo &diagnose_info);
+  // @desc: flashback all log_stream's redo log of tenant 'tenant'
+  // @params [in] const uint64_t tenant: id of tenant which should be flashbacked
+  // @params [in] const SCN &flashback_scn: flashback point
+  // @params [in] const int64_t timeout_us: timeout time (us)
+  // @return
+  //   - OB_SUCCESS
+  //   - OB_INVALID_ARGUEMENT: invalid tenant or flashback_scn
+  //   - OB_NOT_SUPPORTED: meta tenant or sys tenant can't be flashbacked
+  //   - OB_EAGAIN: another flashback operation is doing
+  //   - OB_TIMEOUT: timeout
+  int flashback(const share::SCN &flashback_scn, const int64_t timeout_us);
+
+  int diagnose_role_change(RCDiagnoseInfo &diagnose_info);
+  int diagnose_replay(const share::ObLSID &id, ReplayDiagnoseInfo &diagnose_info);
+  int diagnose_apply(const share::ObLSID &id, ApplyDiagnoseInfo &diagnose_info);
   int get_io_start_time(int64_t &last_working_time);
   int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
+  obcall::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
+  ObLogFlashbackService *get_flashback_service() { return &flashback_service_; }
   // Get restore net driver for standby log sync
   // Returns the net driver from restore service if available
   class ObLogRestoreNetDriver;
   ObLogRestoreNetDriver *get_restore_net_driver();
+  // Get CDC service for log fetcher (standby log sync server side)
   int check_need_do_checkpoint(bool &need_do_checkpoint);
-  ObILogStorage *get_log_storage() const { return log_storage_; }
-  int64_t get_log_storage_warning_tolerance_time() const
-  {
-    return runtime_config_.log_storage_warning_tolerance_time_;
-  }
 
 private:
-  int create_ls_(const palf::PalfBaseInfo &palf_base_info,
+  int create_ls_(const share::ObLSID &id,
+                 const common::ObReplicaType &replica_type,
+                 const share::ObTenantRole &tenant_role,
+                 const palf::PalfBaseInfo &palf_base_info,
+                 const bool allow_log_sync,
                  ObLogHandler &log_handler);
-  int get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size);
+  struct GetUnrecycableLogDiskSizeFunctor {
+    GetUnrecycableLogDiskSizeFunctor() : unrecycable_log_disk_size_(0) {}
+    ~GetUnrecycableLogDiskSizeFunctor() { unrecycable_log_disk_size_ = 0; }
+    int operator()(ObLS *ls);
+    int64_t unrecycable_log_disk_size_;
+  };
 private:
   bool is_inited_;
   bool is_running_;
@@ -185,15 +224,20 @@ private:
 
   common::ObAddr self_;
   palf::PalfEnv *palf_env_;
+  IObNetKeepAliveAdapter *net_keepalive_adapter_;
   common::ObILogAllocator *alloc_mgr_;
 
   ObLogApplyService apply_service_;
   ObLogReplayService replay_service_;
-  ObILogStorage *log_storage_;
-  ObLogRuntimeConfig runtime_config_;
+  ObRoleChangeService role_change_service_;
+  ObLocationAdapter location_adapter_;
+  ObLSAdapter ls_adapter_;
+  obcall::ObLogServiceRpcProxy rpc_proxy_;
+  ObLogFlashbackService flashback_service_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
   // Restore service for standby log sync
+  // CDC service for log fetcher (standby log sync server side)
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogService);
 };
@@ -204,11 +248,8 @@ namespace oceanbase
 {
 namespace logservice
 {
-// Checks whether the clog disk is full or hung through the server log module.
-int check_clog_disk_full_or_hang(
-    ObLogService &log_service,
-    bool &clog_disk_is_full,
-    bool &clog_disk_is_hang);
+// demoted from share::ObShareUtil(checks whether the clog disk is full or hung, through MTL ObLogService)
+int check_clog_disk_full_or_hang(bool &clog_disk_is_full, bool &clog_disk_is_hang);
 }
 }
 

@@ -19,21 +19,23 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 
 /**
- * DELETE syntax supported by seekdb
+ * DELETE syntax from MySQL 5.7
  *
  * Single-Table Syntax:
- *   DELETE FROM tbl_name
+ *   DELETE [LOW_PRIORITY] [QUICK] [IGNORE] FROM tbl_name
  *   [PARTITION (partition_name,...)]
  *   [WHERE where_condition]
  *   [ORDER BY ...]
  *   [LIMIT row_count]
  *
  * Multiple-Table Syntax
- *   DELETE tbl_name[.*] [, tbl_name[.*]] ...
+ *   DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
+ *   tbl_name[.*] [, tbl_name[.*]] ...
  *   FROM table_references
  *   [WHERE where_condition]
  *  Or:
- *   DELETE FROM tbl_name[.*] [, tbl_name[.*]] ...
+ *   DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
+ *   FROM tbl_name[.*] [, tbl_name[.*]] ...
  *   USING table_references
  *   [WHERE where_condition]
  */
@@ -60,8 +62,10 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
   // create the delete stmt
   ObDeleteStmt *delete_stmt = NULL;
   bool is_multi_table_delete = false;
+  bool disable_limit_offset = false;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
   } else if (OB_ISNULL(delete_stmt = create_stmt<ObDeleteStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create delete stmt failed", K(ret));
@@ -70,6 +74,10 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("parse tree type is invalid", K_(parse_tree.type), K_(parse_tree.num_child));
   } else if (OB_ISNULL(parse_tree.children_[TABLE])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table_node is null", K(ret));
+  } else if (OB_FAIL(session_info_->check_feature_enable(ObCompatFeatureType::UPD_LIMIT_OFFSET, 
+                                                         disable_limit_offset))) {
+    LOG_WARN("failed to check feature enable", K(ret));
   } else {
     stmt_ = delete_stmt;
     // Only support the syntax of delete ignore, and there is no semantic support.
@@ -79,38 +87,55 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
 //      session_info_->set_ignore_stmt(true);
 //    }
     if (OB_FAIL(resolve_outline_data_hints())) {
+      LOG_WARN("resolve outline data hints failed", K(ret));
     } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
+      LOG_WARN("resolve with clause failed", K(ret));
     } else if (OB_FAIL(resolve_table_list(*parse_tree.children_[TABLE], is_multi_table_delete))) {
+      LOG_WARN("resolve table failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < delete_tables_.count(); ++i) {
         const TableItem *table_item = delete_tables_.at(i);
         if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(generate_delete_table_info(*table_item))) {
+          LOG_WARN("failed to generate delete table info", K(ret));
         } else { /*do nothing*/ }
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_multi_delete_table_conflict())) {
+        LOG_WARN("failed to check multi-delete table conflict", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(resolve_hints(parse_tree.children_[HINT]))) {
+        LOG_WARN("resolve hints failed", K(ret));
       } else if (OB_FAIL(resolve_where_clause(parse_tree.children_[WHERE]))) {
+        LOG_WARN("resolve delete where clause failed", K(ret));
       } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
-      } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
+        LOG_WARN("resolve delete order clause failed", K(ret));
+      } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], disable_limit_offset))) {
+        LOG_WARN("resolve delete limit clause failed", K(ret));
       } else if (OB_FAIL(delete_stmt->formalize_stmt(session_info_))) {
+        LOG_WARN("pull stmt all expr relation ids failed", K(ret));
       } else { /*do nothing*/ }
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(view_pullup_part_exprs())) {
+      if (!delete_stmt->has_instead_of_trigger() && OB_FAIL(view_pullup_part_exprs())) {
+        // instead of trigger's delete statement does not need pull up
+        LOG_WARN("view pull up part exprs failed", K(ret));
       } else if (OB_FAIL(check_view_deletable())) {
+        LOG_WARN("failed to check view deletable", K(ret));
       } else if (OB_FAIL(delete_stmt->check_dml_need_filter_null())) {
+        LOG_WARN("failed to check dml need filter null", K(ret));
       } else if (OB_FAIL(delete_stmt->check_dml_source_from_join())) {
+        LOG_WARN("failed to check dml source from join");
       } else if (OB_FAIL(check_safe_update_mode(delete_stmt, is_multi_table_delete))) {
+        LOG_WARN("failed to check safe update mode", K(ret));
       } else { /*do nothing */ }
     }
   }
@@ -123,7 +148,9 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
   bool is_sql_safe_updates = false;
   if (OB_ISNULL(params_.session_info_) || OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected", K(ret), K(params_.session_info_), K(delete_stmt));
   } else if (OB_FAIL(params_.session_info_->get_sql_safe_updates(is_sql_safe_updates))) {
+    LOG_WARN("failed to get is safe update mode", K(ret));
   } else if (is_sql_safe_updates) {
     /*Update table values in mysql safe mode, needs to meet:
     * Precondition: single table delete, cannot be multi-table delete, must contain where condition;
@@ -134,6 +161,7 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
     */
     if (is_multi_table_delete || delete_stmt->get_condition_exprs().empty()) {//precondition}
       ret = OB_ERR_SAFE_UPDATE_MODE_NEED_WHERE_OR_LIMIT;
+      LOG_WARN("using safe update mode need WHERE or LIMIT", K(ret));
     } else if (delete_stmt->has_limit()) {//condition 1
       bool is_const_expr = true;
       for (int64_t i = 0;
@@ -142,12 +170,14 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
         const ObRawExpr *expr = delete_stmt->get_condition_expr(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(expr));
         } else {
           is_const_expr = expr->is_const_expr();
         }
       }
       if (OB_SUCC(ret) && is_const_expr) {
         ret = OB_ERR_SAFE_UPDATE_MODE_NEED_WHERE_OR_LIMIT;
+        LOG_WARN("using safe update mode need WHERE or LIMIT", K(ret));
       }
     }
   } else {/*do nothing*/}
@@ -160,6 +190,7 @@ int ObDeleteResolver::check_multi_delete_table_conflict()
   const ObDeleteStmt *delete_stmt = get_delete_stmt();
   if (OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (delete_stmt->get_delete_table_info().count() <= 1) {
     /*do nothing*/
   } else {
@@ -167,10 +198,12 @@ int ObDeleteResolver::check_multi_delete_table_conflict()
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count() - 1; ++i) {
       if (OB_ISNULL(tables_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else {
         for (int64_t j = i + 1; OB_SUCC(ret) && j < tables_info.count(); ++j) {
           if (OB_ISNULL(tables_info.at(j))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected null", K(ret));
           } else if (tables_info.at(i)->ref_table_id_ == tables_info.at(j)->ref_table_id_) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "multiple aliases to same table");
@@ -209,22 +242,28 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
     CK(OB_NOT_NULL(table_node));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
-      } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
+        LOG_WARN("failed to resolve table", K(ret));
+      } else if (table_item->is_function_table() || table_item->is_json_table()) {//compatible with oracle behavior
         ret = OB_WRONG_TABLE_NAME;
+        LOG_WARN("invalid table name", K(ret));
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {
+        LOG_WARN("add reference table to namespace checker failed", K(ret));
       } else if (OB_FAIL(delete_stmt->add_from_item(table_item->table_id_,
                                                     table_item->is_joined_table()))) {
+        LOG_WARN("failed to add from item", K(ret));
       } else {
         /*
           In order to share the same logic with 'select' to generate access path costly, we
           add the table in the udpate stmt in the from_item list as well.
          */
+        LOG_DEBUG("succ to add from item", KPC(table_item));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (NULL == delete_list) {
+      bool has_tg = false;
       //single table delete, delete list is same with from list
       CK(delete_stmt->get_table_size() == 1);
       OZ(delete_tables_.push_back(delete_stmt->get_table_item(0)));
@@ -241,15 +280,20 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
         table_item = NULL;
         const ParseNode *table_node = delete_list->children_[i];
         if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name, true))) {
+          LOG_WARN("failed to resolve table relation node", K(ret));
         } else if (OB_FAIL(find_delete_table_with_mysql_rule(db_name, table_name, table_item))) {
+          LOG_WARN("failed to find delete table with mysql rule", K(ret));
         } else if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get null table item", K(ret));
         } else if (OB_UNLIKELY(ObOptimizerUtil::find_item(delete_tables_, table_item))) {
           ret = OB_ERR_NONUNIQ_TABLE;
           LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item->table_name_.length(),
                       table_item->table_name_.ptr());
         } else if (OB_FAIL(check_need_fired_trigger(table_item))) {
+          LOG_WARN("failed to check need fired trigger", K(ret));
         } else if (OB_FAIL(delete_tables_.push_back(table_item))) {
+          LOG_WARN("failed to push back table item", K(ret));
         }
       }
     }
@@ -265,9 +309,14 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
           LOG_USER_ERROR(OB_ERR_NON_UPDATABLE_TABLE,
                           table_name.length(), table_name.ptr(),
                           scope_name.length(), scope_name.ptr());
+          LOG_WARN("table is not updatable", K(ret));
         } else if ((*table_item)->is_generated_table() || (*table_item)->is_temp_table()) {
-          if (OB_FAIL(set_base_table_for_view(**table_item))) {
-          } else if (OB_FAIL(add_all_column_to_updatable_view(*delete_stmt, **table_item))) {
+          if (!delete_stmt->has_instead_of_trigger()
+              && OB_FAIL(set_base_table_for_view(**table_item))) {
+            LOG_WARN("set base table for delete view failed", K(ret));
+          } else if (OB_FAIL(add_all_column_to_updatable_view(*delete_stmt, **table_item,
+                            delete_stmt->has_instead_of_trigger()))) {
+            LOG_WARN("add all column to updatable view failed", K(ret));
           }
         }
       }
@@ -344,28 +393,40 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(params_.session_info_) ||
       OB_ISNULL(allocator_) || OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(schema_checker_), K(params_.session_info_),
+        K(allocator_), K(delete_stmt), K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
                                                        table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
+    LOG_WARN("failed to get global index", K(ret));
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
+    LOG_WARN("fail to get binlog row image", K(ret));
   } else if (NULL == (ptr = allocator_->alloc(sizeof(ObDeleteTableInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate table info", K(ret));
   } else {
     table_info = new(ptr) ObDeleteTableInfo();
     if (OB_FAIL(table_info->part_ids_.assign(base_table_item.part_ids_))) {
-    } else {
+      LOG_WARN("failed to assign part ids", K(ret));
+    } else if (!delete_stmt->has_instead_of_trigger()) {
       // todo @zimiao error logging also need all columns ?
       if (OB_FAIL(add_all_rowkey_columns_to_stmt(table_item, table_info->column_exprs_))) {
+        LOG_WARN("add all rowkey columns to stmt failed", K(ret));
       } else if (need_all_columns(*table_schema, binlog_row_image)) {
         if (OB_FAIL(add_all_columns_to_stmt(table_item, table_info->column_exprs_))) {
+          LOG_WARN("fail to add all column to stmt", K(ret), K(table_item));
         }
       } else if (OB_FAIL(add_all_index_rowkey_to_stmt(table_item,
                                                       table_info->column_exprs_))) {
+        LOG_WARN("fail to add relate column to stmt", K(ret), K(table_item));
       } else if (OB_FAIL(add_all_lob_columns_to_stmt(table_item, table_info->column_exprs_))) {
+        LOG_WARN("fail to add lob column to stmt", K(ret), K(table_item));
       }
       if (OB_SUCC(ret)) {
         table_info->table_id_ = table_item.table_id_;
@@ -373,10 +434,23 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
         table_info->ref_table_id_ = base_table_item.ref_id_;
         table_info->table_name_ = table_schema->get_table_name_str();
       }
+    } else {
+      uint64_t view_id = OB_INVALID_ID;
+      if (OB_FAIL(add_all_columns_to_stmt_for_trigger(table_item, table_info->column_exprs_))) {
+        LOG_WARN("failed to add all columns to stmt", K(ret));
+      } else if (OB_FAIL(get_view_id_for_trigger(table_item, view_id))) {
+        LOG_WARN("get view id failed", K(table_item), K(ret));
+      } else {
+        table_info->table_id_ = table_item.table_id_;
+        table_info->loc_table_id_ = table_item.table_id_;
+        table_info->ref_table_id_ = view_id;
+        table_info->table_name_ = table_item.table_name_;
+      }
     }
     if (OB_SUCC(ret)) {
       TableItem *rowkey_doc = NULL;
       if (OB_FAIL(delete_stmt->get_delete_table_info().push_back(table_info))) {
+        LOG_WARN("failed to push back table info", K(ret));
       } else if (gindex_cnt > 0) {
         delete_stmt->set_has_global_index(true);
       } else { /*do nothing*/ }
@@ -393,10 +467,12 @@ int ObDeleteResolver::check_view_deletable()
     const TableItem *table = *it;
     if (OB_ISNULL(*it)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL table table ", K(ret));
     } else if (!table->is_generated_table() && !table->is_temp_table()) {
       continue;
     } else if (OB_ISNULL(table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ref query is NULL for generate table", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -406,7 +482,10 @@ int ObDeleteResolver::check_view_deletable()
         bool ref_update_table = false;
         if (OB_FAIL(ObResolverUtils::uv_check_select_item_subquery(
             *table, has_subquery, has_dependent_subquery, ref_update_table))) {
+          LOG_WARN("updatable view check select table failed", K(ret));
         } else {
+          LOG_DEBUG("update view check",
+              K(has_subquery), K(has_dependent_subquery), K(ref_update_table));
           ret = (has_dependent_subquery || ref_update_table) ? OB_ERR_NON_UPDATABLE_TABLE : OB_SUCCESS;
         }
       }

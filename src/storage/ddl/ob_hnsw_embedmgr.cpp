@@ -15,15 +15,12 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
 #include "lib/allocator/ob_malloc.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/oblog/ob_log.h"
-#include "query/ai/ob_ai_endpoint_resolver.h"
-#include "query/engine/expr/ob_ai_model_resolver.h"
-#include "query/engine/expr/ob_expr_lob_utils.h"
-#include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
 
 using namespace oceanbase::storage;
@@ -54,6 +51,7 @@ int ObEmbeddingConfig::assign(const ObEmbeddingConfig &other)
   if (this != &other) {
     if (!other.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(other));
     } else {
       model_url_ = other.model_url_;
       model_name_ = other.model_name_;
@@ -65,21 +63,18 @@ int ObEmbeddingConfig::assign(const ObEmbeddingConfig &other)
 }
 
 // -------------------------------- ObEmbeddingResult --------------------------------
-int ObEmbeddingResult::set_text(
-    const blocksstable::ObStorageDatum &text,
-    ObArenaAllocator &allocator,
-    const common::ObLobReadOptions &lob_read_options)
+int ObEmbeddingResult::set_text(const blocksstable::ObStorageDatum &text, ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   ObString tmp_text = text.get_string();
-  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
-          lob_read_options, &allocator, ObLongTextType,
-          CS_TYPE_BINARY, true, tmp_text))) {
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, ObLongTextType, CS_TYPE_BINARY, true, tmp_text))) {
+    LOG_WARN("read real string data failed", K(ret));
   } else {
     if (tmp_text.length() > 0) {
       char *text_buf = static_cast<char*>(allocator.alloc(tmp_text.length()));
       if (OB_ISNULL(text_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate text buffer failed", K(ret), K(tmp_text.length()));
       } else {
         MEMCPY(text_buf, tmp_text.ptr(), tmp_text.length());
         text_ = common::ObString(tmp_text.length(), text_buf);
@@ -96,12 +91,15 @@ int ObEmbeddingResult::set_extra_cols(const common::ObArray<blocksstable::ObStor
   if (src_extras.count() == 0) {
     // nothing to do
   } else if (OB_FAIL(extra_values_.reserve(src_extras.count()))) {
+    LOG_WARN("reserve extra array failed", K(ret), K(src_extras.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < src_extras.count(); ++i) {
       const blocksstable::ObStorageDatum &src_datum = src_extras.at(i);
       blocksstable::ObStorageDatum dst_datum;
       if (OB_FAIL(dst_datum.deep_copy(src_datum, allocator))) {
+        LOG_WARN("deep copy extra datum failed", K(ret), K(i));
       } else if (OB_FAIL(extra_values_.push_back(dst_datum))) {
+        LOG_WARN("push extra datum failed", K(ret), K(i));
       }
     }
   }
@@ -131,8 +129,10 @@ int ObEmbeddingIOCallback::init(ObEmbeddingTaskMgr *mgr, const int64_t slot_idx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("embedding batch callback init twice", K(ret));
   } else if (OB_ISNULL(mgr) || slot_idx < 0 || OB_ISNULL(batch_info) || OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args for embedding batch callback init", K(ret), KP(mgr), K(slot_idx), KP(batch_info), KP(task));
   } else {
     mgr_ = mgr;
     slot_idx_ = slot_idx;
@@ -149,11 +149,14 @@ int ObEmbeddingIOCallback::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("embedding callback not inited", K(ret));
   } else {
     common::ObArray<float*> vectors;
     if (OB_FAIL(task_->get_async_result(vectors))) {
+      LOG_WARN("get async result failed", K(ret), K(slot_idx_), "vec_cnt", vectors.count());
     } else if (vectors.count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("empty vectors", K(ret), K(slot_idx_), "vec_cnt", vectors.count());
     } else {
       int64_t embedding_count = batch_info_->get_need_embedding_count();
       const common::ObArray<ObEmbeddingResult*> &results = batch_info_->get_results();
@@ -166,9 +169,11 @@ int ObEmbeddingIOCallback::process()
           ObEmbeddingResult *r = results.at(i);
           if (OB_ISNULL(r)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("null result slot in batch", K(ret), K(i), K(slot_idx_));
           } else if (r->need_embedding()) {
             if (vec_idx >= vectors.count()) {
               ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("vector index out of bounds", K(ret), K(vec_idx), K(vectors.count()));
             } else {
               //deep copy
               const int64_t bytes = dim_ * static_cast<int64_t>(sizeof(float));
@@ -186,6 +191,7 @@ int ObEmbeddingIOCallback::process()
   // Mark task as ready and return ret to embedding task mgr, regardless of success.
   int mark_ret = mgr_->mark_task_ready(slot_idx_, ret);
   if (OB_SUCCESS != mark_ret) {
+    LOG_WARN("mark task ready failed", K(mark_ret), K(slot_idx_), "task_ret", ret);
   }
 
   return ret;
@@ -197,23 +203,28 @@ int ObTaskBatchInfo::init(const int64_t batch_size, const int64_t vec_dim)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(batch_size <= 0 || vec_dim <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(batch_size), K(vec_dim));
   } else if (OB_UNLIKELY(batch_size_ > 0)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("ObTaskBatchInfo init twice", K(ret), K_(batch_size));
   } else {
     batch_size_ = batch_size;
     vec_dim_ = vec_dim;
     current_count_ = 0;
     
     if (OB_FAIL(results_.reserve(batch_size))) {
+      LOG_WARN("reserve results array failed", K(ret), K(batch_size));
     } else {
       // Pre-allocate all result objects
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
         void *buf = allocator_.alloc(sizeof(ObEmbeddingResult));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("allocate result object failed", K(ret), K(i), K(batch_size));
         } else {
           ObEmbeddingResult *result = new (buf) ObEmbeddingResult();
           if (OB_FAIL(results_.push_back(result))) {
+            LOG_WARN("push result to array failed", K(ret), K(i));
             result->~ObEmbeddingResult();
           }
         }
@@ -229,12 +240,14 @@ int ObTaskBatchInfo::add_item(const blocksstable::ObStorageDatum &text,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(current_count_ >= batch_size_)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("batch is full", K(ret), K_(current_count), K_(batch_size));
   } else {
     ObEmbeddingResult *result = results_.at(current_count_);
     //deep copy
-    const common::ObLobReadOptions lob_read_options(lob_read_service_);
-    if (OB_FAIL(result->set_text(text, allocator_, lob_read_options))) {
+    if (OB_FAIL(result->set_text(text, allocator_))) {
+      LOG_WARN("set text failed", K(ret));
     } else if (OB_FAIL(result->set_extra_cols(extras, allocator_))) {
+      LOG_WARN("set extra cols failed", K(ret));
     } else {
       const ObString tmp_text = result->get_text();
       ObEmbeddingResult::EmbeddingStatus status = tmp_text.length() > 0 ? ObEmbeddingResult::NEED_EMBEDDING : ObEmbeddingResult::SKIP_EMBEDDING;
@@ -249,6 +262,7 @@ int ObTaskBatchInfo::add_item(const blocksstable::ObStorageDatum &text,
       float *vec_buf = static_cast<float*>(allocator_.alloc(vec_dim_ * sizeof(float)));
       if (OB_ISNULL(vec_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate vector buffer failed", K(ret), K_(vec_dim));
       } else {
         result->set_vector(vec_buf, vec_dim_);
         current_count_++;
@@ -299,11 +313,14 @@ int ObTaskSlotRing::init(const int64_t capacity)
   
   if (capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid capacity", K(ret), K(capacity));
   } else if (slots_.count() > 0) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("slot ring already initialized", K(ret));
   } else {
     capacity_ = capacity + 1; // +1 for the extra slot to differentiate between full and empty queue
     if (OB_FAIL(slots_.prepare_allocate(capacity_))) {
+      LOG_WARN("prepare allocate slots failed", K(ret), K(capacity_));
     } else {
       next_idx_ = 0;
       head_idx_ = 0;
@@ -320,6 +337,7 @@ int ObTaskSlotRing::reserve_slot(int64_t &slot_idx)
   const int64_t cap = slots_.count();
   if (cap <= 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("slots count is 0", K(ret), K(cap));
   } else {
     // Reserve one empty slot to differentiate between full and empty queue
     int64_t next = (next_idx_ + 1) % cap;
@@ -327,6 +345,7 @@ int ObTaskSlotRing::reserve_slot(int64_t &slot_idx)
       ret = OB_EAGAIN;
     } else if (slots_.at(next_idx_).task_ != nullptr || slots_.at(next_idx_).batch_info_ != nullptr || slots_.at(next_idx_).ready_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("next slot not empty", K(ret), K(next_idx_));
     } else {
       Slot &slot = slots_.at(next_idx_);
       slot.reset();
@@ -344,6 +363,7 @@ int ObTaskSlotRing::mark_ready(const int64_t slot_idx, const int ret_code)
   
   if (slot_idx < 0 || slot_idx >= slots_.count()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid slot idx", K(ret), K(slot_idx), K(slots_.count()));
   } else {
     slots_.at(slot_idx).ret_code_ = ret_code;
     slots_.at(slot_idx).ready_ = true;
@@ -361,6 +381,7 @@ int ObTaskSlotRing::pop_ready_in_order(ObTaskBatchInfo *&batch_info, int &ret_co
     Slot &slot = slots_.at(head_idx_);
     if (!slot.ready_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("slot not ready", K(ret));
     } else if (OB_UNLIKELY(slot.ret_code_ != OB_SUCCESS)) {
       ret_code = slot.ret_code_;
       // Even if failed, transfer ownership of batch_info for cleanup
@@ -431,6 +452,7 @@ int ObTaskSlotRing::wait_all_tasks_finished()
     Slot &slot = slots_.at(i);
     if (OB_NOT_NULL(slot.task_)) {
       if (OB_FAIL(slot.task_->wait_for_completion())) {
+        LOG_WARN("wait for task completion failed", K(ret), K(i));
       }
     }
   }
@@ -454,6 +476,7 @@ int ObTaskSlotRing::wait_for_head_completion()
   
   if (OB_NOT_NULL(task_to_wait)) {
     if (OB_FAIL(task_to_wait->wait_for_completion())) {
+      LOG_WARN("wait for head embedding task completion failed", K(ret));
     }
   }
   return ret;
@@ -536,6 +559,7 @@ ObEmbeddingTaskMgr::~ObEmbeddingTaskMgr()
   if (is_inited_) {
     slot_ring_.disable_all_callbacks();
     if (OB_FAIL(slot_ring_.wait_all_tasks_finished())) {
+      LOG_WARN("failed to wait for all tasks to finish", K(ret));
     }
     slot_ring_.clean_all_slots();
     is_inited_ = false;
@@ -547,23 +571,28 @@ int ObEmbeddingTaskMgr::init(const ObString &model_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("embedding task mgr init twice", K(ret));
   } else if (OB_FAIL(get_ai_config(model_id))) {
+    LOG_WARN("load cfg from sys table failed", K(ret));
   } else {
-    ObIVectorIndexRuntime *service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
+    ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
     if (OB_ISNULL(service)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("plugin vector index service is null", K(ret));
     } else if (OB_FAIL(service->get_embedding_task_handler(embedding_handler_))) {
+      LOG_WARN("failed to get embedding task handler", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
-    model_request_timeout_us_ = config::model_request_timeout();
-    model_max_retries_ = config::model_max_retries();
+    model_request_timeout_us_ = GCONF.model_request_timeout;
+    model_max_retries_ = GCONF.model_max_retries;
   }
 
   if (OB_SUCC(ret)) {
     const int64_t reserve_slots = ring_capacity_;
     if (OB_FAIL(slot_ring_.init(reserve_slots))) {
+      LOG_WARN("init slot ring failed", K(ret), K(reserve_slots));
     } else {
       is_inited_ = true;
     }
@@ -577,16 +606,20 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("embedding task mgr not inited", K(ret));
   } else if (OB_ISNULL(batch_info)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("batch_info is null", K(ret), K(batch_info));
   } else if (OB_UNLIKELY(batch_info->get_count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("batch_info is empty", K(ret));
   } else {
     int64_t slot_idx = -1;
     if (OB_FAIL(slot_ring_.reserve_slot(slot_idx))) {
       if (OB_EAGAIN == ret) {
         LOG_DEBUG("slots is full", "batch_count", batch_info->get_count(), K(slot_idx));
       } else {
+        LOG_WARN("reserve task slot failed", K(ret));
       }
     } else {
       common::ObArray<ObString> texts;
@@ -594,10 +627,12 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
       const int64_t count = batch_info->get_count();
       int64_t embedding_count = batch_info->get_need_embedding_count();
       if (OB_FAIL(texts.reserve(embedding_count))) {
+        LOG_WARN("reserve texts failed", K(ret), K(embedding_count));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
           if (OB_NOT_NULL(results.at(i)) && results.at(i)->need_embedding()) {
             if (OB_FAIL(texts.push_back(results.at(i)->get_text()))) {
+              LOG_WARN("push text failed", K(ret), K(i));
             }
           }
         }
@@ -608,6 +643,7 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
         void *cb_buf = ob_malloc(sizeof(ObEmbeddingIOCallback), ObMemAttr("EmbedCb"));
         if (OB_ISNULL(cb_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("alloc embedding callback failed", K(ret));
         } else {
           ObEmbeddingIOCallback *cb = new (cb_buf) ObEmbeddingIOCallback();
           ObEmbeddingIOCallbackHandle *cb_handle = nullptr;
@@ -615,24 +651,29 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
           
           if (OB_ISNULL(cb_handle = ObEmbeddingIOCallbackHandle::create(cb))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("create callback handle failed", K(ret));
           } else {
             void *task_mem = ob_malloc(sizeof(share::ObEmbeddingTask), ObMemAttr("EmbeddingTask"));
             if (OB_ISNULL(task_mem)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to allocate memory for EmbeddingTask", K(ret));
             } else {
               task = new (task_mem) share::ObEmbeddingTask();
               const int64_t vec_dim = results.at(0)->get_vector_dim();
               if (OB_FAIL(task->init(cfg_.model_url_, cfg_.model_name_, cfg_.provider_, 
                                    cfg_.user_key_, texts, vec_dim, model_request_timeout_us_, model_max_retries_, cb_handle))) {
+                LOG_WARN("failed to initialize EmbeddingTask", K(ret));
               }
             }
           }
           
           if (OB_SUCC(ret) && OB_NOT_NULL(task)) {
             if (OB_FAIL(cb->init(this, slot_idx, batch_info, task, results.at(0)->get_vector_dim()))) {
+              LOG_WARN("init callback failed", K(ret));
             } else {
               task->retain_if_managed();
               if (OB_FAIL(embedding_handler_->push_task(*task))) {
+                LOG_WARN("submit task failed", K(ret));
                 task->release_if_managed();
               }
             }
@@ -657,6 +698,7 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
       } else if (OB_SUCC(ret) && embedding_count == 0) {
         // Just mark this slot as ready immediately without embedding
         if (OB_FAIL(mark_task_ready(slot_idx, OB_SUCCESS))) {
+          LOG_WARN("mark task ready failed", K(ret), K(slot_idx));
         } else {
           slot_ring_.set_batch_info(slot_idx, batch_info); // Take ownership
           batch_info = nullptr;
@@ -675,7 +717,9 @@ int ObEmbeddingTaskMgr::get_ready_batch_info(ObTaskBatchInfo *&batch_info, int &
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("embedding task mgr not inited", K(ret));
   } else if (OB_FAIL(slot_ring_.pop_ready_in_order(batch_info, error_ret_code))) {
+    LOG_WARN("pop ready batch failed", K(ret));
   } else if (OB_UNLIKELY(OB_SUCCESS != error_ret_code)) {
     set_failed();
     LOG_WARN("error ret code", K(error_ret_code));
@@ -694,30 +738,36 @@ int ObEmbeddingTaskMgr::get_ai_config(const common::ObString &model_id)
 
   if (model_id.empty()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("model_id is empty", K(ret), K(model_id));
   } else {
-    ObString model_name;
-    share::ObAiModelEndpointInfo endpoint_info;
-    query::ObIAiEndpointResolver *endpoint_resolver =
-        ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
+    ObAIFuncExprInfo *info = nullptr;
+    const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
+    omt::ObAiServiceGuard ai_service_guard;
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     bool use_request_model_name = false;
-    if (OB_FAIL(query::ObAIModelResolver::resolve_model_name(
-            allocator_, model_id, model_name))) {
-    } else if (OB_ISNULL(endpoint_resolver)) {
+    if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator_, const_cast<common::ObString&>(model_id), info))) {
+      LOG_WARN("failed to get ai func info", K(ret), K(model_id));
+    } else if (OB_ISNULL(info)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
-                   model_id, allocator_, endpoint_info))) {
-    } else if (OB_FALSE_IT(use_request_model_name =
-                              !endpoint_info.get_request_model_name().empty())) {
-    } else if (OB_FAIL(ob_write_string(
-                   allocator_, endpoint_info.get_url(), cfg_.model_url_))) {
-    } else if (use_request_model_name && OB_FAIL(ob_write_string(
-                   allocator_, endpoint_info.get_request_model_name(), cfg_.model_name_))) {
-    } else if (!use_request_model_name && OB_FAIL(ob_write_string(
-                   allocator_, model_name, cfg_.model_name_))) {
-    } else if (OB_FAIL(endpoint_info.get_unencrypted_access_key(
-                   allocator_, cfg_.user_key_))) {
-    } else if (OB_FAIL(ob_write_string(
-                   allocator_, endpoint_info.get_provider(), cfg_.provider_))) {
+      LOG_WARN("ai func info is null", K(ret));
+    } else if (OB_ISNULL(ai_service)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai service is null", K(ret));
+    } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
+      LOG_WARN("failed to get ai service guard", K(ret));
+    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
+      LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
+    } else if (OB_FALSE_IT(use_request_model_name = !endpoint_info->get_request_model_name().empty())) {
+    } else if (OB_FAIL(ob_write_string(allocator_, endpoint_info->get_url(), cfg_.model_url_))) {
+      LOG_WARN("failed to copy model_url", K(ret));
+    } else if (use_request_model_name && OB_FAIL(ob_write_string(allocator_, endpoint_info->get_request_model_name(), cfg_.model_name_))) {
+      LOG_WARN("failed to copy model_name", K(ret));
+    } else if (!use_request_model_name && OB_FAIL(ob_write_string(allocator_, info->model_, cfg_.model_name_))) {
+      LOG_WARN("failed to copy model_name", K(ret));
+    } else if (OB_FAIL(endpoint_info->get_unencrypted_access_key(allocator_, cfg_.user_key_))) {
+      LOG_WARN("failed to copy user_key", K(ret));
+    } else if (OB_FAIL(ob_write_string(allocator_, endpoint_info->get_provider(), cfg_.provider_))) {
+      LOG_WARN("failed to copy provider", K(ret));
     }
   }
   return ret;
@@ -728,7 +778,9 @@ int ObEmbeddingTaskMgr::mark_task_ready(const int64_t slot_idx, const int ret_co
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("embedding task mgr not inited", K(ret));
   } else if (OB_FAIL(slot_ring_.mark_ready(slot_idx, ret_code))) {
+    LOG_WARN("mark task ready failed", K(ret));
   }
   return ret;
 }
@@ -738,7 +790,9 @@ int ObEmbeddingTaskMgr::wait_for_completion()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("embedding task mgr not inited", K(ret));
   } else if (OB_FAIL(slot_ring_.wait_for_head_completion())) {
+    LOG_WARN("wait for head completion failed", K(ret));
   }
   return ret;
 }

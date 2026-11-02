@@ -16,7 +16,7 @@
 
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "ob_multi_data_source.h"
-#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 #define NEED_MDS_REGISTER_DEFINE
 #include "storage/multi_data_source/compile_utility/mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
@@ -39,7 +39,7 @@ namespace transaction
 
 int ObMulSourceTxDataNotifier::notify_table_lock(const ObTxBufferNodeArray &array,
                                                  const ObMulSourceDataNotifyArg &arg,
-                                                 ObTxCtx *part_ctx,
+                                                 ObPartTransCtx *part_ctx,
                                                  int64_t &total_time)
 {
   int ret = OB_SUCCESS;
@@ -64,6 +64,7 @@ int ObMulSourceTxDataNotifier::notify_table_lock(const ObTxBufferNodeArray &arra
 
       if (ObTxDataSourceType::TABLE_LOCK == node.type_) {
         if (OB_FAIL(notify_table_lock(notify_type, buf, len, tmp_notify_arg, mt_ctx))) {
+          TRANS_LOG(WARN, "notify table lock failed", KR(ret), K(node));
         }
       }
       if (notify_time.get_diff() > 1 * 1000 * 1000) {
@@ -80,16 +81,20 @@ int ObMulSourceTxDataNotifier::notify_table_lock(const ObTxBufferNodeArray &arra
 int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
                                       const NotifyType notify_type,
                                       const ObMulSourceDataNotifyArg &arg,
-                                      ObTxCtx *part_ctx,
+                                      ObPartTransCtx *part_ctx,
                                       int64_t &total_time)
 {
   int ret = OB_SUCCESS;
+  ObMemtableCtx *mt_ctx = nullptr;
   const char *can_not_do_tx_end_reason = nullptr;
   bool can_do_tx_end = true;
   ObMulSourceDataNotifyArg tmp_notify_arg = arg;
   if (OB_ISNULL(part_ctx)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(part_ctx));
+  } else if (OB_ISNULL(mt_ctx = part_ctx->get_memtable_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "memtable ctx should not null", KR(ret), K(part_ctx));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < array.count(); ++i) {
       ObTimeGuard notify_time;
@@ -111,13 +116,16 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         }
       }
 
+      OB_ASSERT(node.type_ != ObTxDataSourceType::BEFORE_VERSION_4_1);
       if(OB_FAIL(ret)) {
         //do nothing
-      } else if (uses_builtin_mds_notifier(node.type_)) {
+      } else if (node.type_ < ObTxDataSourceType::BEFORE_VERSION_4_1
+          && ObTxDataSourceType::CREATE_TABLET_NEW_MDS != node.type_
+          && ObTxDataSourceType::DELETE_TABLET_NEW_MDS != node.type_
+          && ObTxDataSourceType::UNBIND_TABLET_NEW_MDS != node.type_) {
         switch (node.type_) {
         case ObTxDataSourceType::TABLE_LOCK: {
-          ret = notify_table_lock(
-              notify_type, buf, len, tmp_notify_arg, part_ctx->get_memtable_ctx());
+          ret = notify_table_lock(notify_type, buf, len, tmp_notify_arg, mt_ctx);
           break;
         }
         case ObTxDataSourceType::LS_TABLE: {
@@ -126,6 +134,14 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         }
         case ObTxDataSourceType::DDL_TRANS: {
           ret = notify_ddl_trans(notify_type, buf, len, tmp_notify_arg);
+          break;
+        }
+        case ObTxDataSourceType::DDL_BARRIER: {
+          ret = notify_ddl_barrier(notify_type, buf, len, tmp_notify_arg);
+          break;
+        }
+        case ObTxDataSourceType::STANDBY_UPGRADE: {
+          ret = notify_standby_upgrade(notify_type, buf, len, tmp_notify_arg);
           break;
         }
         default: {
@@ -171,14 +187,16 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
               buffer_ctx.on_redo(arg.scn_);\
               break;\
               case NotifyType::TX_END:\
-              can_do_tx_end = common::meta::MdsCheckCanDoTxEndWrapper<HELPER_CLASS>::\
-                              check_can_do_tx_end(arg.willing_to_commit_,\
-                                                  arg.for_replay_,\
-                                                  arg.scn_,\
-                                                  buf,\
-                                                  len,\
-                                                  *const_cast<mds::BufferCtx*>(node.get_buffer_ctx_node().get_ctx()),\
-                                                  can_not_do_tx_end_reason);\
+              if (node.type_ == ObTxDataSourceType::TEST1) {\
+                can_do_tx_end = common::meta::MdsCheckCanDoTxEndWrapper<HELPER_CLASS>::\
+                                check_can_do_tx_end(arg.willing_to_commit_,\
+                                                    arg.for_replay_,\
+                                                    arg.scn_,\
+                                                    buf,\
+                                                    len,\
+                                                    *const_cast<mds::BufferCtx*>(node.get_buffer_ctx_node().get_ctx()),\
+                                                    can_not_do_tx_end_reason);\
+              }\
               if (!can_do_tx_end) {\
                 ret = OB_EAGAIN;\
                 MDS_ASSERT(OB_NOT_NULL(can_not_do_tx_end_reason));\
@@ -194,7 +212,12 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
               break;\
               case NotifyType::ON_COMMIT:\
               MDS_LOG(INFO, "buffer ctx on_commit", K(node), KP(&buffer_ctx), K(buffer_ctx));\
-              if (arg.for_replay_ && !common::meta::MdsCheckCanReplayWrapper<HELPER_CLASS>::\
+              if (OB_FAIL(common::meta::MdsCommitForOldMdsWrapper<HELPER_CLASS>::\
+                          on_commit_for_old_mds(buf,\
+                                                len,\
+                                                tmp_notify_arg))) {\
+                MDS_LOG(WARN, "fail to on_commit_for_old_mds", KR(ret));\
+              } else if (arg.for_replay_ && !common::meta::MdsCheckCanReplayWrapper<HELPER_CLASS>::\
                                             check_can_replay_commit(buf,\
                                                                     len,\
                                                                     arg.scn_,\
@@ -222,6 +245,7 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         mds::TLOCAL_MDS_INFO.reset();
       }
       if (OB_FAIL(ret)) {
+        TRANS_LOG(WARN, "notify data source failed", KR(ret), K(node));
       }
 
       if (notify_time.get_diff() > 1 * 1000 * 1000) {
@@ -245,7 +269,7 @@ void ObMulSourceTxDataNotifier::ob_abort_log_cb_notify_(const NotifyType type,
   if (NotifyType::ON_REDO == type || NotifyType::ON_PREPARE == type || NotifyType::ON_COMMIT == type
       || NotifyType::ON_ABORT == type) {
     if (for_replay) {
-      if (OB_SUCCESS != err_code && OB_SERVER_RUNTIME_OUT_OF_MEM != err_code
+      if (OB_SUCCESS != err_code && OB_TENANT_OUT_OF_MEM != err_code
           && OB_ALLOCATE_MEMORY_FAILED != err_code && OB_EAGAIN != err_code) {
         need_core = true;
       }
@@ -287,13 +311,16 @@ int ObMulSourceTxDataNotifier::notify_table_lock(
     // TABLELOCK only need deal with replay process, but not apply.
     // the replay process will produce a lock op and will be dealt at trans end.
   } else if (OB_FAIL(lock_op.deserialize(buf, len, pos))) {
+    TRANS_LOG(WARN, "deserialize lock op failed", K(ret), K(len), KP(buf));
   } else if (FALSE_IT(lock_op.create_timestamp_ = OB_MIN(curr_timestamp,
                                                          lock_op.create_timestamp_))) {
   } else if (OB_FAIL(mt_ctx->replay_lock(lock_op,
                                          arg.scn_))) {
+    TRANS_LOG(WARN, "replay lock failed", K(ret));
   } else {
     // do nothing
   }
+  TABLELOCK_LOG(DEBUG, "ObMulSourceTxDataNotifier::notify_table_lock", K(ret), K(type), K(arg.for_replay_), K(lock_op));
 
   ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
 
@@ -310,14 +337,48 @@ int ObMulSourceTxDataNotifier::notify_ls_table(const NotifyType type,
   return ret;
 }
 
+int ObMulSourceTxDataNotifier::notify_standby_upgrade(const NotifyType type,
+                                               const char *buf, const int64_t len,
+                                               const ObMulSourceDataNotifyArg &arg)
+{
+  int ret = OB_SUCCESS;
+  share::ObStandbyUpgrade data_version;
+  int64_t pos = 0;
+
+  if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(buf), K(len), K(type));
+  } else if (OB_FAIL(data_version.deserialize(buf, len, pos))) {
+    TRANS_LOG(WARN, "failed to deserialize data_version", KR(ret), K(buf), K(len));
+  } else if (pos > len) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
+  }
+  TRANS_LOG(INFO, "standby upgrade notify", KR(ret), K(data_version), K(len), K(type));
+
+  ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
+
+  return ret;
+}
+
 int ObMulSourceTxDataNotifier::notify_ddl_trans(const NotifyType type,
                                                 const char *buf, const int64_t len,
                                                 const ObMulSourceDataNotifyArg &arg)
 {
   int ret = OB_SUCCESS;
+  TRANS_LOG(DEBUG, "ddl trans commit notify", KR(ret), K(type), KP(buf), K(len));
 
   ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
 
+  return ret;
+}
+
+int ObMulSourceTxDataNotifier::notify_ddl_barrier(const NotifyType type,
+                                                  const char *buf, const int64_t len,
+                                                  const ObMulSourceDataNotifyArg &arg)
+{
+  int ret = OB_SUCCESS;
+  ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
   return ret;
 }
 
@@ -343,6 +404,7 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::TABLE_LOCK: {
       tablelock::ObTableLockOp lock_op;
       if (OB_FAIL(lock_op.deserialize(buf, len, pos))) {
+        TRANS_LOG(WARN, "deserialize lock op failed", K(ret), K(len), KP(buf));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -359,6 +421,7 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::CREATE_TABLET_NEW_MDS: {
       obcall::ObBatchCreateTabletArg create_arg;
       if (OB_FAIL(create_arg.deserialize(buf, len, pos))) {
+        TRANS_LOG(WARN, "deserialize failed for ls_member trans", KR(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -370,6 +433,7 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::DELETE_TABLET_NEW_MDS: {
       obcall::ObBatchRemoveTabletArg remove_arg;
       if (OB_FAIL(remove_arg.deserialize(buf, len, pos))) {
+        TRANS_LOG(WARN, "deserialize failed for ls_member trans", KR(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -378,9 +442,22 @@ ObMulSourceTxDataDump::dump_buf(
       }
       break;
     }
+    case ObTxDataSourceType::DDL_BARRIER: {
+      ObDDLBarrierLog log;
+      if (OB_FAIL(log.deserialize(buf, len, pos))) {
+        TRANS_LOG(WARN, "failed to deserialize buf", K(ret));
+      } else if (pos > len) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
+      } else {
+        dump_str = helper.convert(log);
+      }
+      break;
+    }
     case ObTxDataSourceType::UNBIND_TABLET_NEW_MDS: {
       ObBatchUnbindTabletArg modify_arg;
       if (OB_FAIL(modify_arg.deserialize(buf, len, pos))) {
+        TRANS_LOG(WARN, "failed to deserialize arg", K(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -392,6 +469,7 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::UNBIND_LOB_TABLET: {
       ObBatchUnbindLobTabletArg modify_arg;
       if (OB_FAIL(modify_arg.deserialize(buf, len, pos))) {
+        TRANS_LOG(WARN, "failed to deserialize arg", K(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -419,7 +497,7 @@ OB_SERIALIZE_MEMBER(ObRegisterMdsFlag, need_flush_redo_instantly_, mds_base_scn_
 // ObMDSStr
 //#####################################################
 
-OB_SERIALIZE_MEMBER(ObMDSInnerSQLStr, mds_str_, type_, register_flag_);
+OB_SERIALIZE_MEMBER(ObMDSInnerSQLStr, mds_str_, type_, ls_id_, register_flag_);
 
 ObMDSInnerSQLStr::ObMDSInnerSQLStr() { reset(); }
 
@@ -429,23 +507,26 @@ void ObMDSInnerSQLStr::reset()
 {
   mds_str_.reset();
   type_ = ObTxDataSourceType::UNKNOWN;
+  ls_id_.reset();
   register_flag_.reset();
 }
 
 int ObMDSInnerSQLStr::set(const char *msd_buf,
                           const int64_t msd_buf_len,
                           const ObTxDataSourceType &type,
+                          const share::ObLSID ls_id,
                           const ObRegisterMdsFlag &register_flag)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(msd_buf) || 0 == msd_buf_len || ObTxDataSourceType::UNKNOWN == type) {
+  if (OB_ISNULL(msd_buf) || 0 == msd_buf_len || ObTxDataSourceType::UNKNOWN == type || !ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid arguments", K(ret), KP(msd_buf), K(msd_buf_len), K(type));
+    TRANS_LOG(WARN, "invalid arguments", K(ret), KP(msd_buf), K(msd_buf_len), K(type), K(ls_id));
   } else if (!mds_str_.empty()) {
     TRANS_LOG(WARN, "MSD str is not empty", K(ret), K(*this));
   } else {
     mds_str_.assign_ptr(msd_buf, msd_buf_len);
     type_ = type;
+    ls_id_ = ls_id;
     register_flag_ = register_flag;
   }
   return ret;

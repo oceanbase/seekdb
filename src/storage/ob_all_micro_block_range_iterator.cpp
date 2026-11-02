@@ -87,12 +87,15 @@ int ObAllMicroBlockRangeIterator::open(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("Inited twice", K(ret));
   } else if (OB_UNLIKELY(!sstable.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid sstable", K(ret));
   } else if (sstable.is_empty()) {
     is_iter_end_ = true;
     is_inited_ = true;
   } else if (OB_FAIL(tree_cursor_.init(sstable, allocator, &rowkey_read_info))) {
+    LOG_WARN("Fail to init index tree cursor", K(ret), K(sstable));
   } else {
     schema_rowkey_cnt_ = rowkey_read_info.get_schema_rowkey_count();
     range_ = &range;
@@ -104,11 +107,13 @@ int ObAllMicroBlockRangeIterator::open(
           range.get_border_flag().inclusive_start(),
           start_bound_micro_block_,
           start_key_beyond_range))) {
+        LOG_WARN("Fail to locate start bound micro block", K(ret));
       } else if (OB_FAIL(locate_bound_micro_block(
           range.get_end_key(),
           !range.get_border_flag().inclusive_end(),
           end_bound_micro_block_,
           end_key_beyond_range))) {
+        LOG_WARN("Fail to locate end bound micro block", K(ret));
       } else {
         curr_key_ = range.get_end_key();
       }
@@ -118,11 +123,13 @@ int ObAllMicroBlockRangeIterator::open(
           !range.get_border_flag().inclusive_end(),
           end_bound_micro_block_,
           end_key_beyond_range))) {
+        LOG_WARN("Fail to locate end bound micro block", K(ret));
       } else if (OB_FAIL(locate_bound_micro_block(
           range.get_start_key(),
           range.get_border_flag().inclusive_start(),
           start_bound_micro_block_,
           start_key_beyond_range))) {
+        LOG_WARN("Fail to locate start bound micro block", K(ret));
       } else {
         curr_key_ = range.get_start_key();
       }
@@ -183,13 +190,16 @@ int ObAllMicroBlockRangeIterator::locate_bound_micro_block(
   ObLogicMacroBlockId logic_id;
   bool equal = false;
   if (OB_FAIL(tree_cursor_.pull_up_to_root())) {
+    LOG_WARN("Fail to pull up tree cursor back to root", K(ret));
   } else if (OB_FAIL(tree_cursor_.drill_down(
       rowkey,
       ObIndexBlockTreeCursor::LEAF,
       lower_bound,
       equal,
       is_beyond_range))) {
+    LOG_WARN("Fail to locate micro block address in index tree", K(ret));
   } else if (OB_FAIL(tree_cursor_.get_idx_row_header(idx_header))) {
+    LOG_WARN("Fail to get index block row header", K(ret));
   } else {
     bound_block.macro_id_ = idx_header->get_macro_id();
     bound_block.offset_ = idx_header->get_block_offset();

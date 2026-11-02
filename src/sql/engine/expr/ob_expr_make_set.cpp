@@ -44,6 +44,7 @@ int ObExprMakeSet::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if(OB_UNLIKELY(param_num <= 1)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument number, param should not less than 2", K(ret), K(param_num));
   } else {
     // set expected type of parameter
     ObLength max_len = 0;
@@ -68,6 +69,7 @@ int ObExprMakeSet::calc_result_typeN(ObExprResType &type,
     // set expected type of results
     type.set_length(max_len);
     if OB_FAIL(aggregate_charsets_for_string_result(type, &types[1], param_num - 1, type_ctx)) {
+      LOG_WARN("aggregate charset for string result failed", K(ret));
     } else {
       for (int64_t i = 1; i < param_num; i++) {
         types[i].set_calc_collation_type(type.get_collation_type());
@@ -85,11 +87,14 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *input_bits_dat = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ < 2)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, input_bits_dat))) {
+    LOG_WARN("eval param failed", K(ret));
   } else if (input_bits_dat->is_null()) {
     res.set_null();
   } else if (ob_is_text_tc(expr.datum_meta_.type_)) {
     if (OB_FAIL(calc_text(expr, ctx, *input_bits_dat, res))) {
+      LOG_WARN("calc concat text ws failed", K(ret));
     }
   } else {
     // compute input bits representation
@@ -103,6 +108,7 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
       const ObDatum &dat = expr.locate_param_datum(ctx, pos);
       if (((temp_input_bits & 1) > 0) && (!dat.is_null())) {
         if (OB_FAIL(words.push_back(dat.get_string()))) {
+          LOG_WARN("push back word failed", K(ret));
         }
       }
     }
@@ -115,7 +121,9 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
         ObExprStrResAlloc res_alloc(expr, ctx);
         if (sep_str.empty()) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get empty separator string", K(ret), K(expr.datum_meta_));
         } else if (OB_FAIL(ObExprConcatWs::calc(sep_str, words, res_alloc, res_str))) {
+          LOG_WARN("calc concat ws failed", K(ret), K(sep_str));
         } else {
           res.set_string(res_str);
         }
@@ -143,12 +151,14 @@ int ObExprMakeSet::calc_text(const ObExpr &expr, ObEvalCtx &ctx, const ObDatum &
     const ObDatum &dat = expr.locate_param_datum(ctx, pos);
     if (((temp_input_bits & 1) > 0) && (!dat.is_null())) {
       if (OB_FAIL(words.push_back(expr.args_[pos]))) {
+        LOG_WARN("push back word failed", K(ret), K(pos), K(input_bits), K(temp_input_bits));
       }
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObExprConcatWs::calc_text(expr, ctx, sep_str, words, temp_allocator, res))) {
+    LOG_WARN("calc_text fail", K(ret), K(expr), K(words), K(sep_str));
   }
   return ret;
 }

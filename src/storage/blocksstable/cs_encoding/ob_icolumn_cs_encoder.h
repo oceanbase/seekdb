@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENCODING_OB_ICOLUMN_CS_ENCODER_H_
+#define OCEANBASE_ENCODING_OB_ICOLUMN_CS_ENCODER_H_
+
+#include "storage/blocksstable/ob_data_buffer.h"
+#include "ob_column_encoding_struct.h"
+#include "storage/blocksstable/ob_imicro_block_writer.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+
+
+class ObIColumnCSEncoder
+{
+public:
+  ObIColumnCSEncoder();
+  virtual ~ObIColumnCSEncoder() {}
+  ObCSColumnHeader &get_column_header() { return column_header_; }
+  virtual int store_column(ObMicroBufferWriter &buf_writer) = 0;
+  virtual int store_column_meta(ObMicroBufferWriter &buf_writer) = 0;
+  virtual ObCSColumnHeader::Type get_type() const = 0;
+  virtual int init(const ObColumnCSEncodingCtx &ctx, const int64_t column_index, const int64_t row_count);
+  virtual void reuse();
+  // Used to choose the best column encoding algorithm which has the minimal store size
+  virtual int64_t estimate_store_size() const = 0;
+  virtual int get_identifier_and_stream_types(
+      ObColumnEncodingIdentifier &identifier_, const ObIntegerStream::EncodingType *&types) const = 0;
+  //Only for encoding pre-allocated space
+  virtual int get_maximal_encoding_store_size(int64_t &size) const = 0;
+  virtual int get_string_data_len(uint32_t &len) const = 0;
+
+  int get_stream_offsets(ObIArray<uint32_t> &offsets) const;
+  int get_previous_cs_encoding(ObPreviousColumnEncoding *&pre_col_encoding);
+  int64_t get_row_count() const {return row_count_; }
+
+  VIRTUAL_TO_STRING_KV(K_(column_index), K_(column_type), K_(store_class),
+    KPC_(ctx), K_(row_count), K_(column_header), K_(is_force_raw), K_(stream_offsets));
+
+protected:
+  int store_null_bitamp(ObMicroBufferWriter &buf_writer);
+
+private:
+  int init_common_(const ObColumnCSEncodingCtx &ctx,
+                   const int64_t column_index,
+                   const ObObjMeta& col_type,
+                   const int64_t row_count);
+
+protected:
+  bool is_inited_;
+  common::ObObjMeta column_type_;
+  ObObjTypeStoreClass store_class_;
+  const ObColumnCSEncodingCtx *ctx_;
+  int64_t column_index_;
+  int64_t row_count_;
+  ObCSColumnHeader column_header_;
+  bool is_force_raw_;
+  ObSEArray<uint32_t, 4> stream_offsets_;
+  ObIntegerStream::EncodingType int_stream_encoding_types_[ObCSColumnHeader::MAX_INT_STREAM_COUNT_OF_COLUMN];
+  int32_t int_stream_count_;
+
+};
+
+
+
+} // end namespace blocksstable
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ENCODING_OB_ICOLUMN_ENCODER_H_

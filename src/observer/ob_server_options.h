@@ -40,12 +40,10 @@ public:
 public:
   int     port_        = 0;
   int8_t  log_level_   = 0;
-  bool    log_level_specified_ = false;
   bool    nodaemon_    = false;
   bool    use_ipv6_    = false;
+  bool    embed_mode_  = false;
   bool    embedded_    = false;
-  // In-process hosts own signals and process lifetime.
-  bool    in_process_  = false;
   bool    initialize_  = false; // TODO wangyunlai.wyl remove me before 2025-12-01
 
   common::ObSqlString base_dir_;
@@ -53,9 +51,10 @@ public:
   common::ObSqlString redo_dir_;
   KeyValueArray       parameters_;
   KeyValueArray       variables_;
+  const char *        devname_ = nullptr;
   
-  // Server role configuration
-  common::ObSqlString role_;      // PRIMARY only
+  // Primary-Standby configuration
+  common::ObSqlString role_;      // PRIMARY or STANDBY
 
 #ifdef _WIN32
   bool    install_service_ = false;

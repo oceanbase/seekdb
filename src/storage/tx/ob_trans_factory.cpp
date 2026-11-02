@@ -16,23 +16,24 @@
 
 
 #include "ob_trans_factory.h"
-#include "lib/worker.h"
-#include "query/session/ob_session_access.h"
-#include "share/rc/ob_server_runtime.h"
-#include "share/ob_server_struct.h"
-#include "ob_tx_ctx.h"
-#include "tx_ctx_cache.h"
+#include "share/rc/ob_module_provider.h"
+#include "ob_trans_part_ctx.h"
+#include "storage/tx/ob_gti_rpc.h"
+#include "storage/tx/ob_leak_checker.h"
+#include "observer/ob_server.h"
 
 namespace oceanbase
 {
 
 using namespace common;
+using namespace obcall;
 
 namespace transaction
 {
-int64_t ObTxCtxFactory::active_tx_ctx_count_ CACHE_ALIGNED = 0;
-int64_t ObTxCtxFactory::total_release_tx_ctx_count_ CACHE_ALIGNED = 0;
-const char *ObTxCtxFactory::mod_type_ = "OB_TX_CTX";
+int64_t ObTransCtxFactory::active_coord_ctx_count_ CACHE_ALIGNED = 0;
+int64_t ObTransCtxFactory::active_part_ctx_count_ CACHE_ALIGNED = 0;
+int64_t ObTransCtxFactory::total_release_part_ctx_count_ CACHE_ALIGNED = 0;
+const char *ObTransCtxFactory::mod_type_ = "OB_TRANS_CTX";
 
 int64_t ObLSTxCtxMgrFactory::alloc_count_ = 0;
 int64_t ObLSTxCtxMgrFactory::release_count_ = 0;
@@ -41,8 +42,20 @@ const char *ObLSTxCtxMgrFactory::mod_type_ = "OB_PARTITION_TRANS_CTX_MGR";
 
 //static TransObjFactory<TransRpcTask> trans_rpc_task_factory("OB_TRANS_RPC_TASK");
 
+#define OB_FREE(object, ...) ob_free(object)
 #define RP_FREE(object, LABEL) rp_free(object, LABEL)
+#define OB_ALLOC(object, LABEL) object##alloc()
+
 #define RP_ALLOC(object, LABEL) rp_alloc(object, LABEL)
+
+#define MAKE_OB_ALLOC(object_name, LABEL)  \
+  object_name *object_name##alloc() \
+  {  \
+    object_name *object = NULL;  \
+    object = (object_name*)ob_malloc(sizeof(object_name), LABEL);  \
+    return object == NULL ? object : new(object) object_name(); \
+  }  \
+
 
 #define MAKE_FACTORY_CLASS_IMPLEMENT(object_name, LABEL, allocator_type, arg...)  \
   int64_t object_name##Factory::alloc_count_ = 0; \
@@ -57,7 +70,7 @@ const char *ObLSTxCtxMgrFactory::mod_type_ = "OB_PARTITION_TRANS_CTX_MGR";
                 "label", #LABEL,                   \
                 K_(alloc_count), K_(release_count), "used", alloc_count_ - release_count_);  \
     }  \
-    if (NULL != (object = allocator_type##_ALLOC(object_name, LABEL))) { \
+    if (!ObTransErrsim::is_memory_errsim() && NULL != (object = allocator_type##_ALLOC(object_name, LABEL))) { \
       (void)ATOMIC_FAA(&alloc_count_, 1);  \
     }  \
     return object;  \
@@ -86,53 +99,63 @@ const char *ObLSTxCtxMgrFactory::mod_type_ = "OB_PARTITION_TRANS_CTX_MGR";
     return mod_type_;\
   }\
 
+#define MAKE_FACTORY_CLASS_IMPLEMENT_USE_OB_ALLOC(object_name, LABEL, arg...) MAKE_FACTORY_CLASS_IMPLEMENT(object_name, LABEL, OB, arg)
 #define MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(object_name, LABEL, arg...) MAKE_FACTORY_CLASS_IMPLEMENT(object_name, LABEL, RP, arg)
 
-ObTxCtx *ObTxCtxFactory::alloc(TxCtxCache *cache)
+ObTransCtx *ObTransCtxFactory::alloc(const int64_t ctx_type)
 {
   int tmp_ret = OB_SUCCESS;
-  ObTxCtx *ctx = NULL;
+  ObTransCtx *ctx = NULL;
 
-  // During restart, the number of transaction contexts is relatively large
-  // and cannot be limited, otherwise there will be circular dependencies.
-  if (ATOMIC_LOAD(&active_tx_ctx_count_) > MAX_TX_CTX_COUNT && GCTX.status_ == ObServiceStatus::SS_SERVING) {
-    TRANS_LOG_RET(ERROR, tmp_ret, "transaction context memory alloc failed", K_(active_tx_ctx_count));
-    tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
-  } else {
-    if (nullptr == cache) {
-      sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
-      cache = static_cast<TxCtxCache *>(
-          query::ObSessionAccess::get_tx_ctx_cache(session, true));
-    }
-    if (nullptr != cache) {
-      ctx = cache->alloc();
+  if (OB_LIKELY(!ObTransErrsim::is_memory_errsim())) {
+    if (ObTransCtxType::PARTICIPANT == ctx_type) {
+      // During restart, the number of transaction contexts is relatively large
+      // and cannot be limited, otherwise there will be circular dependencies
+      if (ATOMIC_LOAD(&active_part_ctx_count_) > MAX_PART_CTX_COUNT && GCTX.status_ == ObServiceStatus::SS_SERVING) {
+        TRANS_LOG_RET(ERROR, tmp_ret, "participant context memory alloc failed", K_(active_part_ctx_count));
+        tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
+      } else if (NULL != (ctx = mtl_sop_borrow(ObPartTransCtx))) {
+        (void)ATOMIC_FAA(&active_part_ctx_count_, 1);
+        TRANS_LOG(DEBUG,
+                  "[Tx Ctx] alloc part_ctx success",
+                  KP(ctx),
+                  K(active_part_ctx_count_),
+                  K(total_release_part_ctx_count_));
+      } else {
+        // do nothing
+      }
     } else {
-      TxCtxCache::Node *node = TxCtxCache::alloc_node(nullptr);
-      ctx = nullptr == node ? nullptr : TxCtxCache::node_to_ctx(node);
+      tmp_ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG_RET(ERROR, tmp_ret, "unexpected error when context alloc", K(ctx_type));
     }
-  }
-  if (NULL != ctx) {
-    (void)ATOMIC_FAA(&active_tx_ctx_count_, 1);
   }
   if (REACH_TIME_INTERVAL(TRANS_MEM_STAT_INTERVAL)) {
-    TRANS_LOG(INFO, "ObTxCtx statistics", K_(active_tx_ctx_count), K_(total_release_tx_ctx_count));
-    (void)ATOMIC_STORE(&total_release_tx_ctx_count_, 0);
+    TRANS_LOG(INFO, "ObTransCtx statistics",
+      K_(active_coord_ctx_count),
+      K_(active_part_ctx_count),
+      K_(total_release_part_ctx_count));
+      (void)ATOMIC_STORE(&total_release_part_ctx_count_, 0);
   }
 
   (void) tmp_ret; // make compiler happy
   return ctx;
 }
 
-void ObTxCtxFactory::release(ObTransCtx *ctx)
+void ObTransCtxFactory::release(ObTransCtx *ctx)
 {
   if (OB_ISNULL(ctx)) {
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "context pointer is null when released", KP(ctx));
   } else {
-    ObTxCtx *tx_ctx = static_cast<ObTxCtx *>(ctx);
-    tx_ctx->destroy();
-    TxCtxCache::free(tx_ctx);
-    (void)ATOMIC_FAA(&active_tx_ctx_count_, -1);
-    (void)ATOMIC_FAA(&total_release_tx_ctx_count_, 1);
+    ObPartTransCtx *part_ctx = static_cast<ObPartTransCtx *>(ctx);
+    part_ctx->destroy();
+    mtl_sop_return(ObPartTransCtx, part_ctx);
+    (void)ATOMIC_FAA(&active_part_ctx_count_, -1);
+    (void)ATOMIC_FAA(&total_release_part_ctx_count_, 1);
+    TRANS_LOG(DEBUG,
+              "[Tx Ctx] release part_ctx success",
+              KP(ctx),
+              K(active_part_ctx_count_),
+              K(total_release_part_ctx_count_));
     ctx = NULL;
   }
 }
@@ -218,22 +241,33 @@ const char *TransRpcTaskFactory::get_mod_type()
 }
 */
 
+MAKE_OB_ALLOC(ObGtsRequestRpc, ObModIds::OB_GTS_REQUEST_RPC)
+MAKE_OB_ALLOC(ObGtiRequestRpc, ObModIds::OB_GTI_REQUEST_RPC)
+
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ClogBuf, ObModIds::OB_TRANS_CLOG_BUF)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(MutatorBuf, ObModIds::OB_TRANS_MUTATOR_BUF)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTransTraceLog, ObModIds::OB_TRANS_AUDIT_RECORD)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObPartitionAuditInfo, ObModIds::OB_PARTITION_AUDIT_INFO)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObCoreLocalPartitionAuditInfo, ObModIds::OB_CORE_LOCAL_STORAGE)
+MAKE_FACTORY_CLASS_IMPLEMENT_USE_OB_ALLOC(ObGtsRequestRpc, ObModIds::OB_GTS_REQUEST_RPC)
+MAKE_FACTORY_CLASS_IMPLEMENT_USE_OB_ALLOC(ObGtiRequestRpc, ObModIds::OB_GTI_REQUEST_RPC)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTxCommitCallbackTask, ObModIds::OB_END_TRANS_CB_TASK)
 
-void *MultiTxDataFactory::alloc(const int64_t len)
+void *MultiTxDataFactory::alloc(const int64_t len, const uint64_t arg1, const uint64_t arg2)
 {
-  return server_malloc(len, "MultiTxData");
+  const char *mod_name = "MultiTxData";
+  void *ptr = mtl_malloc(len, mod_name);
+  if (NULL != ptr) {
+    ObLeakChecker::reg((uint64_t)ptr, arg1, arg2, mod_name);
+  }
+  return ptr;
 }
 
 void MultiTxDataFactory::free(void *ptr)
 {
   if (NULL != ptr) {
-    server_free(ptr);
+    ObLeakChecker::unreg((uint64_t)ptr);
+    mtl_free(ptr);
   }
 }
 

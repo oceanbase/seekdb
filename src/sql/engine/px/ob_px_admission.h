@@ -22,11 +22,14 @@
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/lock/ob_monitor.h"
 #include "lib/lock/mutex.h"
-#include "share/statement/ob_stmt_type.h"
+#include "lib/rc/ob_rc.h"
+#include "lib/hash/ob_hashset.h"
+#include "sql/resolver/ob_stmt_type.h"
 
 namespace oceanbase
 {
 using namespace oceanbase::common;
+using namespace oceanbase::common::hash;
 
 namespace sql
 {
@@ -42,7 +45,7 @@ public:
   ~ObPxAdmission() = default;
   static int64_t admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
                        int64_t wait_time_us, int64_t minimal_px_worker_count, int64_t &session_target,
-                       int64_t req_cnt, int64_t &admit_cnt);
+                       ObHashMap<ObAddr, int64_t> &worker_map, int64_t req_cnt, int64_t &admit_cnt);
   static int enter_query_admission(sql::ObSQLSessionInfo &session,
                                    sql::ObExecContext &exec_ctx,
                                    sql::stmt::StmtType stmt_type,
@@ -63,6 +66,7 @@ class ObPxSubAdmission
 public:
   ObPxSubAdmission() = default;
   ~ObPxSubAdmission() = default;
+  static void acquire(int64_t max, int64_t min, int64_t &acquired_cnt);
   static void release(int64_t acquired_cnt);
 private:
   /* variables */

@@ -17,23 +17,23 @@
 #ifndef OCEANBASE_TRANSACTION_OB_TRANS_REDO_SUBMITTER
 #define OCEANBASE_TRANSACTION_OB_TRANS_REDO_SUBMITTER
 
-#include "lib/literals/ob_literals.h"
-#include "ob_tx_ctx.h"
+#include "ob_trans_part_ctx.h"
 
 namespace oceanbase
 {
 namespace transaction
 {
-class ObTxCtx;
+class ObPartTransCtx;
 
 class ObTxRedoSubmitter
 {
 public:
-  ObTxRedoSubmitter(ObTxCtx &tx_ctx,
+  ObTxRedoSubmitter(ObPartTransCtx &tx_ctx,
                     memtable::ObMemtableCtx &mt_ctx) :
     tx_ctx_(tx_ctx),
     mt_ctx_(mt_ctx),
     tx_id_(tx_ctx.get_trans_id()),
+    ls_id_(tx_ctx.get_ls_id()),
     log_block_(NULL),
     log_cb_(NULL),
     helper_(NULL),
@@ -84,6 +84,7 @@ private:
   int after_submit_redo_out_();
 public:
   TO_STRING_KV(K_(tx_id),
+               K_(ls_id),
                K_(from_all_list),
                K_(flush_all),
                K_(flush_freeze_clock),
@@ -93,9 +94,10 @@ public:
                K_(submit_out_cnt),
                K_(submit_cb_list_idx));
 private:
-  ObTxCtx &tx_ctx_;
+  ObPartTransCtx &tx_ctx_;
   memtable::ObMemtableCtx &mt_ctx_;
   const ObTransID tx_id_;
+  const share::ObLSID ls_id_;
   ObTxLogBlock *log_block_;
   ObTxLogCb *log_cb_;
   memtable::ObRedoLogSubmitHelper *helper_;
@@ -123,7 +125,7 @@ private:
 #define FLUSH_REDO_TRACE_LEVEL DEBUG
 #define FLUSH_REDO_TRACE(fmt, ...) TRANS_LOG(FLUSH_REDO_TRACE_LEVEL, "[REDO FLUSH]" fmt, K(ret), KPC(this), ## __VA_ARGS__);
 
-inline ObTxRedoSubmitter::~ObTxRedoSubmitter()
+ObTxRedoSubmitter::~ObTxRedoSubmitter()
 {
   if (log_cb_) {
     tx_ctx_.return_redo_log_cb(log_cb_);
@@ -135,7 +137,7 @@ inline ObTxRedoSubmitter::~ObTxRedoSubmitter()
 // flush redo after mvcc_write when txn has switched to parallel_logging
 //
 // the caller hold TxCtx's FlushRedo read Lock
-inline int ObTxRedoSubmitter::parallel_submit(const ObTxSEQ &write_seq_no)
+int ObTxRedoSubmitter::parallel_submit(const ObTxSEQ &write_seq_no)
 {
   int ret = OB_SUCCESS;
   int save_ret = OB_SUCCESS;
@@ -190,7 +192,7 @@ inline int ObTxRedoSubmitter::parallel_submit(const ObTxSEQ &write_seq_no)
 // the caller has hold TransCtx's FlushRedo write Lock
 // which ensure no writer thread is logging
 // and also hold TransCtx's CtxLock, which is safe to operate in the flush pipline
-inline int ObTxRedoSubmitter::submit_(const bool flush_all,
+int ObTxRedoSubmitter::submit_(const bool flush_all,
                                const uint32_t freeze_clock,
                                const bool is_final,
                                const bool display_blocked_info)
@@ -216,7 +218,7 @@ inline int ObTxRedoSubmitter::submit_(const bool flush_all,
 //
 // the caller has hold TxCtx's CtxLock
 // the caller has hold TxCtx's FlushRedo write Lock
-inline int ObTxRedoSubmitter::fill(ObTxLogBlock &block,
+int ObTxRedoSubmitter::fill(ObTxLogBlock &block,
                             memtable::ObRedoLogSubmitHelper &helper,
                             const bool display_blocked_info)
 {
@@ -231,7 +233,7 @@ inline int ObTxRedoSubmitter::fill(ObTxLogBlock &block,
   return ret;
 }
 
-inline int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_info)
+int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_info)
 {
   int ret = OB_SUCCESS;
   memtable::ObTxFillRedoCtx ctx;
@@ -243,7 +245,7 @@ inline int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_
   while (OB_SUCC(ret) && !stop) {
     if (submit_if_not_full_ && OB_FAIL(prepare_())) {
       if (OB_TX_NOLOGCB != ret) {
-        TRANS_LOG(ERROR, "prepare for submit log fail", K(ret));
+        TRANS_LOG(WARN, "prepare for submit log fail", K(ret));
       }
     } else {
       bool skip_submit = false;
@@ -349,7 +351,7 @@ inline int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_
   return ret;
 }
 
-inline int ObTxRedoSubmitter::submit_log_block_out_(const int64_t replay_hint, bool &submitted)
+int ObTxRedoSubmitter::submit_log_block_out_(const int64_t replay_hint, bool &submitted)
 {
   int ret = OB_SUCCESS;
   submitted = false;
@@ -371,7 +373,7 @@ inline int ObTxRedoSubmitter::submit_log_block_out_(const int64_t replay_hint, b
   return ret;
 }
 
-inline int ObTxRedoSubmitter::after_submit_redo_out_()
+int ObTxRedoSubmitter::after_submit_redo_out_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(mt_ctx_.log_submitted(*helper_))) {
@@ -386,7 +388,7 @@ inline int ObTxRedoSubmitter::after_submit_redo_out_()
 }
 
 // allocate/reserve resource for `after_submit_log_out_`
-inline int ObTxRedoSubmitter::prepare_()
+int ObTxRedoSubmitter::prepare_()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(log_cb_)) {
@@ -400,13 +402,13 @@ inline int ObTxRedoSubmitter::prepare_()
   return ret;
 }
 
-inline int ObTxRedoSubmitter::fill_log_block_(memtable::ObTxFillRedoCtx &ctx)
+int ObTxRedoSubmitter::fill_log_block_(memtable::ObTxFillRedoCtx &ctx)
 {
   int ret = OB_SUCCESS;
   bool need_retry = false;
   do {
     need_retry = false;
-    ObTxRedoLog log;
+    ObTxRedoLog log(tx_ctx_.get_cluster_version());
     ret = log_block_->prepare_mutator_buf(log);
     ctx.buf_ = log.get_mutator_buf();
     ctx.buf_len_ = log.get_mutator_size();

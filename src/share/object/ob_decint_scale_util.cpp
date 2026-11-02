@@ -24,6 +24,8 @@ namespace common
 {
 namespace decint_scale
 {
+WarnFn g_warn_from_exec_ctx = nullptr;
+
 static inline bool decimal_int_truncated_check(const ObDecimalInt *decint, const int32_t int_bytes,
                                        const unsigned scale)
 {
@@ -136,7 +138,9 @@ int scale_const_decimalint_expr(const ObDecimalInt *decint, const int32_t int_by
   } else {
     int cmp_max = 0, cmp_min = 0;
     if (OB_FAIL(wide::compare(res, min_v, cmp_min))) {
+      LOG_WARN("compare failed", K(ret));
     } else if (OB_FAIL(wide::compare(res, max_v, cmp_max))) {
+      LOG_WARN("compare failed", K(ret));
     } else if (cmp_max < 0 && cmp_min > 0) { // max(P, S) >= res >= min(P, S)
       if (expected_int_bytes > res.get_int_bytes()) {
         res.extend(expected_int_bytes);
@@ -158,7 +162,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
                                          const ObScale in_scale, const ObScale out_scale,
                                          const ObPrecision out_prec, const ObCastMode cast_mode,
                                          ObDecimalIntBuilder &val,
-                                         const ObIObjCastRuntime *runtime)
+                     const void *warn_payload, WarnFn warn_fn)
 {
   int ret = OB_SUCCESS;
   ObDecimalIntBuilder max_v, min_v;
@@ -166,6 +170,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
   int cmp_min = 0, cmp_max = 0;
   if (OB_ISNULL(decint)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null decimal int", K(ret), K(decint));
   } else if (CM_IS_CONST_TO_DECIMAL_INT(cast_mode)) {
     ret = scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cast_mode, val);
   } else if (CM_IS_COLUMN_CONVERT(cast_mode) || CM_IS_EXPLICIT_CAST(cast_mode)) {
@@ -174,8 +179,11 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     min_v.from(wide::ObDecimalIntConstValue::get_min_lower(out_prec), check_int_bytes);
     if (OB_FAIL(
           wide::common_scale_decimalint(decint, int_bytes, in_scale, out_scale, scaled_val))) {
+      LOG_WARN("scale decimal int failed", K(ret));
     } else if (OB_FAIL(wide::compare(scaled_val, min_v, cmp_min))) {
+      LOG_WARN("compare failed", K(ret));
     } else if (OB_FAIL(wide::compare(scaled_val, max_v, cmp_max))) {
+      LOG_WARN("compare failed", K(ret));
     } else if (cmp_min > 0 && cmp_max < 0) {
       ret = align_decint_precision_unsafe(scaled_val.get_decimal_int(), scaled_val.get_int_bytes(),
                                           check_int_bytes, val);
@@ -189,15 +197,15 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     if (OB_SUCC(ret)) {
       if (in_scale > out_scale &&
             decimal_int_truncated_check(decint, int_bytes, in_scale - out_scale)) {
-        if (nullptr != runtime) {
-          runtime->report_warning(
-              OB_ERR_DATA_TRUNCATED, ObString(""), ObString(""), cast_mode);
+        if (nullptr != warn_fn) {
+          warn_fn(warn_payload, OB_ERR_DATA_TRUNCATED, ObString(""), ObString(""), cast_mode);
         }
       }
     }
   } else {
     if (OB_FAIL(
           wide::common_scale_decimalint(decint, int_bytes, in_scale, out_scale, scaled_val))) {
+      LOG_WARN("scale decimal int failed", K(ret));
     }
     int32_t expected_int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
     if (OB_UNLIKELY(out_prec == PRECISION_UNKNOWN_YET)) {
@@ -209,6 +217,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     } else if (OB_FAIL(align_decint_precision_unsafe(scaled_val.get_decimal_int(),
                                                      scaled_val.get_int_bytes(), expected_int_bytes,
                                                      val))) {
+      LOG_WARN("align decimal int precision failed", K(ret));
     }
   }
   return ret;
@@ -232,12 +241,15 @@ int check_decimalint_accuracy(const ObCastMode cast_mode,
     is_finish = true;
   } else if (OB_ISNULL(res_decint)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null decimal int", K(ret), K(res_decint));
   } else if (OB_UNLIKELY(precision < OB_MIN_DECIMAL_PRECISION
                          || precision > number::ObNumber::MAX_PRECISION)
              || OB_UNLIKELY(scale < 0 || scale > number::ObNumber::MAX_SCALE)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid precision and scale", K(ret), K(precision), K(scale));
   } else if (OB_UNLIKELY(precision < scale)) {
     ret = OB_ERR_M_BIGGER_THAN_D;
+    LOG_WARN("invalid precision and scale", K(ret), K(precision), K(scale));
   }
   if (OB_SUCC(ret) && !is_finish) {
     const ObDecimalInt *min_decint = nullptr, *max_decint = nullptr;
@@ -251,6 +263,8 @@ int check_decimalint_accuracy(const ObCastMode cast_mode,
     if (OB_ISNULL(cmp_fp) || OB_ISNULL(res_decint) || OB_ISNULL(min_decint)
         || OB_ISNULL(max_decint)) {
       ret = OB_ERR_UNDEFINED;
+      LOG_WARN("unexpected null cmp function", K(ret), K(int_bytes), K(int_bytes2), K(res_decint),
+               K(min_decint), K(max_decint));
     } else {
       int cmp_min = cmp_fp(res_decint, min_decint);
       int cmp_max = cmp_fp(res_decint, max_decint);

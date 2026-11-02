@@ -23,6 +23,10 @@
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObDMLBaseParam;
+}
 namespace sql
 {
 class ObPxMultiPartDeleteOpInput : public ObPxMultiPartModifyOpInput
@@ -32,6 +36,10 @@ public:
   ObPxMultiPartDeleteOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObPxMultiPartModifyOpInput(ctx, spec)
   {}
+  int init(ObTaskInfo &task_info) override
+  {
+    return ObPxMultiPartModifyOpInput::init(task_info);
+  }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartDeleteOpInput);
 };
@@ -118,3 +126,4 @@ private:
 }
 #endif /* _OB_SQL_ENGINE_PDML_PX_MULTI_PART_DELETE_OP_H_ */
 //// end of header file
+

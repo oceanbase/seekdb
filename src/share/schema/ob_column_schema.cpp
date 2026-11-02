@@ -72,6 +72,7 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     prev_column_id_ = src_schema.prev_column_id_;
     next_column_id_ = src_schema.next_column_id_;
     encoding_type_ = src_schema.encoding_type_;
+    sequence_id_ = src_schema.sequence_id_;
     srs_id_ = src_schema.srs_id_;
     udt_set_id_ = src_schema.udt_set_id_;
     sub_type_ = src_schema.sub_type_;
@@ -79,31 +80,40 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     lob_chunk_size_ = src_schema.lob_chunk_size_;
 
     if (OB_FAIL(deep_copy_obj(src_schema.orig_default_value_, orig_default_value_))) {
+      LOG_WARN("Fail to deepy copy orig_default_value, ", K(ret));
     } else if (OB_FAIL(deep_copy_obj(src_schema.cur_default_value_, cur_default_value_))) {
+      LOG_WARN("Fail to deep copy cur_default_value, ", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.column_name_, column_name_))) {
+      LOG_WARN("Fail to deep copy column name, ", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
+      LOG_WARN("Fail to deep copy comment, ", K(ret));
     } else if (OB_FAIL(set_extended_type_info(src_schema.extended_type_info_))) {
+      LOG_WARN("set_extended_type_info failed", K(ret));
     } else if (src_schema.column_ref_idxs_ != NULL) {
       if (OB_FAIL(alloc_column_ref_set())) {
+        LOG_WARN("alloc column ref set failed", K(ret));
       } else if (OB_FAIL(column_ref_idxs_->add_members(*src_schema.column_ref_idxs_))) {
+        LOG_WARN("add members to column reference idxs failed", K(ret));
       }
     } else {/*do nothing*/}
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(local_session_vars_.deep_copy(src_schema.local_session_vars_))) {
+        LOG_WARN("fail to deep copy sys var info", K(ret));
       }
     }
 
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
     }
+    LOG_DEBUG("operator =", K(src_schema), K(*this));
   }
   return ret;
 }
 
 bool ObColumnSchemaV2::operator==(const ObColumnSchemaV2 &r) const
 {
-  return (table_id_ == r.table_id_ && column_id_ == r.column_id_
+  return (true && table_id_ == r.table_id_ && column_id_ == r.column_id_
       && schema_version_ == r.schema_version_);
 }
 
@@ -181,6 +191,7 @@ void ObColumnSchemaV2::reset()
   prev_column_id_ = UINT64_MAX;
   next_column_id_ = UINT64_MAX;
   encoding_type_ = INT64_MAX;
+  sequence_id_ = INT64_MAX;
   srs_id_ = OB_DEFAULT_COLUMN_SRS_ID;
   udt_set_id_ = 0;
   sub_type_ = 0;
@@ -227,9 +238,12 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
               next_column_id_);
 
   if (!OB_SUCC(ret)) {
+    LOG_WARN("Fail to serialize fixed length data", K(ret));
   } else if (OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
+    LOG_WARN("serialize_string_array failed", K(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
+                sequence_id_,
                 srs_id_,
                 udt_set_id_,
                 sub_type_,
@@ -275,6 +289,7 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
               has_column_ref);
   if (OB_SUCC(ret) && has_column_ref) {
     if (OB_FAIL(alloc_column_ref_set())) {
+      LOG_WARN("alloc column reference set failed", K(ret));
     }
     OB_UNIS_DECODE(*column_ref_idxs_);
   }
@@ -283,13 +298,20 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
               next_column_id_);
 
   if (!OB_SUCC(ret)) {
+    LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
+    LOG_WARN("deserialize_string_array failed", K(ret));
   } else if (OB_FAIL(deep_copy_obj(orig_default_value, orig_default_value_))) {
+    LOG_WARN("Fail to deep copy orig_default_value, ", K(ret), K_(orig_default_value));
   } else if (OB_FAIL(deep_copy_obj(cur_default_value, cur_default_value_))) {
+    LOG_WARN("Fail to deep copy cur_default_value, ", K(ret), K_(cur_default_value));
   } else if (OB_FAIL(deep_copy_str(column_name, column_name_))) {
+    LOG_WARN("Fail to deep copy column_name, ", K(ret), K_(column_name));
   } else if (OB_FAIL(deep_copy_str(comment, comment_))) {
+    LOG_WARN("Fail to deep copy comment, ", K(ret), K_(comment));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
+                sequence_id_,
                 srs_id_,
                 udt_set_id_,
                 sub_type_,
@@ -335,6 +357,7 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
               next_column_id_);
   len += get_string_array_serialize_size(extended_type_info_);
   LST_DO_CODE(OB_UNIS_ADD_LEN,
+              sequence_id_,
               srs_id_,
               udt_set_id_,
               sub_type_,
@@ -349,6 +372,7 @@ int ObColumnSchemaV2::set_part_key_pos(const int64_t part_key_pos)
   int ret = OB_SUCCESS;
   if (part_key_pos > UINT8_MAX) {
     ret =OB_ERR_UNEXPECTED;
+    LOG_WARN("Partition key position should not big than UINT8_MAX", K(ret), K(part_key_pos));
   } else {
     part_pos_.part_key_pos_ = static_cast<uint8_t>(part_key_pos);
     if (0 != part_pos_.part_key_pos_) {
@@ -363,6 +387,7 @@ int ObColumnSchemaV2::set_subpart_key_pos(const int64_t subpart_key_pos)
   int ret = OB_SUCCESS;
   if (subpart_key_pos > UINT8_MAX) {
     ret =OB_ERR_UNEXPECTED;
+    LOG_WARN("Partition key position should not big than UINT8_MAX", K(ret), K(subpart_key_pos));
   } else {
     part_pos_.subpart_key_pos_ = static_cast<uint8_t>(subpart_key_pos);
     if (0 != part_pos_.subpart_key_pos_) {
@@ -402,6 +427,7 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
     K_(extended_type_info),
     K_(prev_column_id),
     K_(next_column_id),
+    K_(sequence_id),
     K_(encoding_type),
     K_(srs_id),
     K_(udt_set_id),
@@ -422,8 +448,9 @@ int ObColumnSchemaV2::get_byte_length(
   if (CS_TYPE_INVALID == get_collation_type()
       && !ob_is_extend(meta_type_.get_type())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("collation type is invalid", K(ret));
   } else if (ob_is_text_tc(meta_type_.get_type()) || ob_is_json(meta_type_.get_type())
-             || ob_is_geometry(meta_type_.get_type())) {
+             || ob_is_geometry(meta_type_.get_type()) || ob_is_roaringbitmap(meta_type_.get_type())) {
     if (for_check_length) {
       // when check row length, a lob will occupy at most 512B
       length = min(get_data_length(), OB_MAX_LOB_HANDLE_LENGTH);
@@ -434,6 +461,7 @@ int ObColumnSchemaV2::get_byte_length(
     int64_t mbmaxlen = 0;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(get_collation_type(), mbmaxlen))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get mbmaxlen", K(ret), K(get_collation_type()));
     } else {
       length = get_data_length() * mbmaxlen;
     }
@@ -459,11 +487,13 @@ int ObColumnSchemaV2::add_cascaded_column_id(uint64_t column_id)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(column_ref_idxs_)) {
     if (OB_FAIL(alloc_column_ref_set())) {
+      LOG_WARN("alloc column ref set failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(column_ref_idxs_->add_member(column_id - OB_APP_MIN_COLUMN_ID))) {
+      LOG_WARN("add member to cascaded column idxs failed", K(ret));
     } else {
       LOG_DEBUG("succ to add_cascaded_column_id", K(ret), K(*this), K(column_id), K(lbt()));
     }
@@ -476,9 +506,12 @@ int ObColumnSchemaV2::del_cascaded_column_id(const uint64_t column_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(column_id < OB_APP_MIN_COLUMN_ID)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid column id", K(ret));
   } else if (OB_ISNULL(column_ref_idxs_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid column ref idxs", K(ret));
   } else if (OB_FAIL(column_ref_idxs_->del_member(column_id - OB_APP_MIN_COLUMN_ID))) {
+    LOG_WARN("failed to delete cascaded column id", K(ret));
   } else {
     // do nothing
   }
@@ -501,6 +534,7 @@ int ObColumnSchemaV2::get_cascaded_column_ids(ObIArray<uint64_t> &column_ids) co
     for (int64_t i = 0; OB_SUCC(ret) && i < column_ref_idxs_->bit_count(); ++i) {
       if (column_ref_idxs_->has_member(i)) {
         if (OB_FAIL(column_ids.push_back(i + OB_APP_MIN_COLUMN_ID))) {
+          LOG_WARN("store column id failed", K(i));
         }
       }
     }
@@ -523,17 +557,21 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 1> old_column_ids;
   if (OB_FAIL(get_cascaded_column_ids(old_column_ids))) {
+    LOG_WARN("failed to get cascaded column ids", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < old_column_ids.count(); i++) {
       const uint64_t old_column_id = old_column_ids.at(i);
       if (OB_FAIL(del_cascaded_column_id(old_column_id))) {
+        LOG_WARN("failed to delete cascaded column id", K(ret), K(old_column_id));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < old_column_ids.count(); i++) {
       const uint64_t old_column_id = old_column_ids.at(i);
       uint64_t new_column_id = 0;
       if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
+        LOG_WARN("failed to get new column id", K(ret));
       } else if (OB_FAIL(add_cascaded_column_id(new_column_id))) {
+        LOG_WARN("failed to add cascaded column id", K(ret), K(old_column_id), K(new_column_id));
       }
     }
   }
@@ -542,6 +580,7 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
     const uint64_t old_column_id = get_column_id();
     uint64_t new_column_id = 0;
     if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
+      LOG_WARN("failed to get new column id", K(ret), K(old_column_id));
     } else {
       set_column_id(new_column_id);
     }
@@ -553,6 +592,7 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
     if (old_column_id == BORDER_COLUMN_ID || old_column_id == UINT64_MAX) {
       // do nothing
     } else if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
+      LOG_WARN("failed to get new prev column id", K(ret), K(old_column_id));
     } else {
       set_prev_column_id(new_column_id);
     }
@@ -564,6 +604,7 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
     if (old_column_id == BORDER_COLUMN_ID || old_column_id == UINT64_MAX) {
       // do nothing
     } else if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
+      LOG_WARN("failed to get new next column id", K(ret), K(old_column_id));
     } else {
       set_next_column_id(new_column_id);
     }
@@ -575,6 +616,7 @@ int ObColumnSchemaV2::serialize_extended_type_info(char *buf, const int64_t buf_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
+    LOG_WARN("fail to serialize extended type info", K(ret));
   }
   return ret;
 }
@@ -585,6 +627,7 @@ int ObColumnSchemaV2::deserialize_extended_type_info(const char *buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
+    LOG_WARN("fail to deserialize extended type info", K(ret));
   }
   return ret;
 }
@@ -635,18 +678,45 @@ int ObColumnSchemaV2::set_geo_type(const int32_t type_val)
 
     default: {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("undefined geometry type", K(ret), K(type_val));
       break;
     }
   }
 
   return ret;
 }
+int ObColumnSchemaV2::get_each_column_group_name(ObString &cg_name) const {
+  int ret = OB_SUCCESS;
+  /* to avoid column_name_str not end with \0, write cg_name using ObString::write*/
+  char tmp_cg_name[OB_MAX_COLUMN_GROUP_NAME_LENGTH] = {'\0'};
+  int32_t write_len = snprintf(tmp_cg_name, OB_MAX_COLUMN_GROUP_NAME_LENGTH, "%.*s_%.*s", 
+                               static_cast<int>(sizeof(OB_COLUMN_GROUP_NAME_PREFIX)),
+                               OB_COLUMN_GROUP_NAME_PREFIX, column_name_.length(), column_name_.ptr());
+  if (write_len < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to format column group_name", K(ret), K(write_len));
+  } else if (write_len > OB_MAX_COLUMN_GROUP_NAME_LENGTH) {
+    ret = OB_ERR_TOO_LONG_IDENT;
+    LOG_WARN("too long column name to format column group name", K(ret), KPC(this), K(write_len));
+    LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, column_name_.length(), column_name_.ptr());
+  }
+
+  if (OB_SUCC(ret)) {
+    if (cg_name.write(tmp_cg_name, write_len) != write_len) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to write column group name to str", K(ret), K(cg_name), K(write_len));
+    }
+  } 
+  return ret;
+}
+
 int ObColumnSchemaV2::is_same_collection_column(const ObColumnSchemaV2 &other, bool &is_same) const
 {
   int ret = OB_SUCCESS;
   if (get_extended_type_info().count() == other.get_extended_type_info().count()) {
     if (get_extended_type_info().count() != 1) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to check type info incremental change", K(ret));
     } else {
       ObString src_sub_name = get_extended_type_info().at(0);
       ObString dst_sub_name = other.get_extended_type_info().at(0);

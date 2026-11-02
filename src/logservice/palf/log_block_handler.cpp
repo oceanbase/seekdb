@@ -17,7 +17,7 @@
 #include "log_block_handler.h"
 #include "lib/stat/ob_diagnose_info.h"        // EVENT_*
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "share/rc/ob_server_runtime.h"                    // server_malloc
+#include "share/rc/ob_tenant_base.h"                    // mtl_malloc
 #include "log_writer_utils.h"                           // LogWriteBuf
 #include "log_io_utils.h"                               // close_with_ret
 #include "log_io_adapter.h"                             // LogIOAdapter
@@ -50,7 +50,7 @@ int LogDIOAlignedBuf::init(uint32_t align_size, uint32_t aligned_buf_size)
     ret = OB_INIT_TWICE;
     PALF_LOG(ERROR,"LogDIOAlignedBuf has initted", K(ret), KPC(this));
   } else if (OB_ISNULL(aligned_data_buf_ = reinterpret_cast<char *>(
-      server_malloc_align(align_size, aligned_buf_size, "LogDIOAligned")))) {
+      mtl_malloc_align(align_size, aligned_buf_size, "LogDIOAligned")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     buf_write_offset_ = 0;
@@ -69,7 +69,7 @@ void LogDIOAlignedBuf::destroy()
   if (IS_INIT) {
     is_inited_ = false;
     if (NULL != aligned_data_buf_) {
-      server_free_align(aligned_data_buf_);
+      mtl_free_align(aligned_data_buf_);
       aligned_data_buf_ = NULL;
     }
     PALF_LOG(INFO, "destroy LogDIOAlignedBuf success");
@@ -88,6 +88,7 @@ int LogDIOAlignedBuf::align_buf(const char *input,
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(input),
         K(input_len), K(offset));
   } else if (false == need_align_()) {
+    PALF_LOG(TRACE, "no need align", K(ret));
   } else {
     int64_t start_ts = ObTimeUtility::fast_current_time();
     memcpy(static_cast<char*>(aligned_data_buf_) + buf_write_offset_, input, input_len);
@@ -117,6 +118,7 @@ void LogDIOAlignedBuf::truncate_buf()
     }
     int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
     truncate_used_ts_ += cost_ts;
+    PALF_LOG(TRACE, "truncate_buf success", KPC(this), K(buf_write_offset_), K(buf_padding_size_), K(tail_part_start));
   }
 }
 
@@ -175,6 +177,7 @@ int LogBlockHandler::init(const int64_t log_block_size,
     PALF_LOG(ERROR, "invalid argument", K(ret), K(log_block_size), KP(io_adapter));
   } else if (OB_FAIL(dio_aligned_buf_.init(align_size,
           align_buf_size))) {
+    PALF_LOG(ERROR, "init dio_aligned_buf_ failed", K(ret));
   } else {
     log_block_size_ = log_block_size;
     io_adapter_ = io_adapter;
@@ -205,8 +208,11 @@ int LogBlockHandler::switch_next_block(const char *block_path)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(inner_close_())) {
+    PALF_LOG(ERROR, "inner_close_", K(ret), K(block_path));
   } else if (OB_FAIL(open(block_path))) {
+    PALF_LOG(WARN, "open failed", K(ret));
   } else {
+    PALF_LOG(TRACE, "switch_next_block success", K(ret), KPC(this));
   }
   return ret;
 }
@@ -215,6 +221,7 @@ int LogBlockHandler::open(const char *block_path)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_open_(block_path))) {
+    PALF_LOG(ERROR, "inner open block failed", K(ret), K(block_path));
   } else {
     PALF_LOG(INFO, "open block success", K(ret), KPC(this));
   }
@@ -225,6 +232,7 @@ int LogBlockHandler::close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_close_())) {
+    PALF_LOG(WARN, "close current block failed", K(ret), KPC(this));
   } else {
     PALF_LOG(INFO, "LogFileHandler close success", K(ret), KPC(this));
   }
@@ -235,6 +243,7 @@ int LogBlockHandler::truncate(const offset_t offset)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_truncate_(offset))) {
+    PALF_LOG(WARN, "inner_truncate_ failed", K(ret), K(offset), KPC(this));
   } else {
     PALF_LOG(INFO, "LogBlockHandler truncate success", K(ret), K(offset), KPC(this));
   }
@@ -245,6 +254,7 @@ int LogBlockHandler::load_data(const offset_t offset)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_load_data_(offset))) {
+    PALF_LOG(WARN, "inner_load_data_ failed", K(ret), K(offset), KPC(this));
   } else {
     PALF_LOG(INFO, "LogBlockHandler load_data success", K(ret), K(offset), KPC(this));
   }
@@ -258,7 +268,9 @@ int LogBlockHandler::pwrite(const offset_t offset,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(inner_write_once_(offset, buf, buf_len))) {
+    PALF_LOG(ERROR, "inner_write_once_ failed", K(ret));
   } else {
+    PALF_LOG(TRACE, "pwrite success", K(ret), K(offset), KPC(this));
   }
   return ret;
 }
@@ -268,7 +280,9 @@ int LogBlockHandler::writev(const offset_t offset,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_writev_once_(offset, write_buf))) {
+    PALF_LOG(ERROR, "inner_write_once_ failed", K(ret), K(offset), K(write_buf));
   } else {
+    PALF_LOG(TRACE, "writev success", K(ret), K(offset), K(write_buf), KPC(this));
   }
   return ret;
 }
@@ -345,10 +359,12 @@ int LogBlockHandler::inner_load_data_(const offset_t offset)
   offset_t aligned_read_count = upper_align(offset - aligned_offset, LOG_DIO_ALIGN_SIZE);
   int64_t aligned_out_read_count = 0;
   if (OB_ISNULL(input = reinterpret_cast<char *>(
-      server_malloc_align(LOG_DIO_ALIGN_SIZE, aligned_read_count, "LogDIOAligned")))) {
+      mtl_malloc_align(LOG_DIO_ALIGN_SIZE, aligned_read_count, "LogDIOAligned")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "allocate memory failed", K(ret));
   } else if (OB_FAIL(io_adapter_->pread(io_fd_, aligned_read_count, aligned_offset, input, aligned_out_read_count))) {
+    PALF_LOG(WARN, "ob_pread failed", K(ret), K(offset), K(read_count), K(aligned_read_count),
+             K(aligned_offset), K(dio_aligned_buf_), K(io_fd_), KPC(this));
   } else if (0 != aligned_out_read_count && OB_FAIL(dio_aligned_buf_.align_buf(
           input, read_count, output, output_len, out_offset))) {
     PALF_LOG(WARN, "align_buf failed", K(ret), K(dio_aligned_buf_));
@@ -358,7 +374,7 @@ int LogBlockHandler::inner_load_data_(const offset_t offset)
         K(aligned_out_read_count));
   }
   if (NULL != input) {
-    server_free_align(input);
+    mtl_free_align(input);
   }
   return ret;
 }
@@ -374,7 +390,11 @@ int LogBlockHandler::inner_write_once_(const offset_t offset,
   offset_t aligned_block_offset = offset;
   if (OB_FAIL(dio_aligned_buf_.align_buf(buf, buf_len, aligned_buf,
       aligned_buf_len, aligned_block_offset))) {
+    PALF_LOG(ERROR, "align_buf failed", K(ret), K(buf), K(buf_len),
+        K(aligned_buf), K(aligned_buf_len), K(aligned_block_offset), K(offset));
   } else if (OB_FAIL(inner_write_impl_(io_fd_, aligned_buf, aligned_buf_len, aligned_block_offset))){
+    PALF_LOG(ERROR, "pwrite failed", K(ret), K(io_fd_), K(aligned_buf), K(aligned_block_offset),
+        K(offset), K(buf_len));
   } else {
     dio_aligned_buf_.truncate_buf();
     const int64_t total_write_size = ATOMIC_AAF(&total_write_size_, buf_len);
@@ -406,7 +426,9 @@ int LogBlockHandler::inner_writev_once_(const offset_t offset,
     const char *buf = NULL;
     int64_t buf_len = 0;
     if (OB_FAIL(write_buf.get_write_buf(i, buf, buf_len))) {
+      PALF_LOG(ERROR, "LogWriteBuf get_write_buf failed", K(ret), K(i));
     } else if (OB_FAIL(inner_write_once_(curr_write_offset, buf, buf_len))) {
+      PALF_LOG(ERROR, "inner_write_once_ failed", K(ret), K(offset));
     } else {
       // NB: Advance write offset
       curr_write_offset += buf_len;
@@ -429,9 +451,13 @@ int LogBlockHandler::inner_write_impl_(const ObIOFd &io_fd, const char *buf, con
       }
       ob_usleep(RETRY_INTERVAL);
     } else {
+      PALF_LOG(TRACE, "pwrite successfully", K(io_fd), K(offset), K(count), K(write_size));
     }
   } while (OB_FAIL(ret));
   int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
+  EVENT_TENANT_INC(ObStatEventIds::PALF_WRITE_IO_COUNT);
+  EVENT_ADD(ObStatEventIds::PALF_WRITE_SIZE, count);
+  EVENT_ADD(ObStatEventIds::PALF_WRITE_TIME, cost_ts);
   ATOMIC_AAF(&ob_pwrite_used_ts_, cost_ts);
   return ret;
 }

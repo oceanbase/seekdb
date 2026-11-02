@@ -20,6 +20,8 @@
 #include "share/cache/ob_kv_storecache.h"
 #include "share/ob_task_define.h"
 #include "share/ob_debug_sync.h"             // DEBUG_SYNC
+#include "share/ob_thread_mgr.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
@@ -51,6 +53,7 @@ int ObKVCacheHandle::assign(const ObKVCacheHandle& other)
   int ret = OB_SUCCESS;
   reset();
   if (OB_FAIL(this->hazptr_holder_.assign(other.hazptr_holder_))) {
+    COMMON_LOG(WARN, "Fail to assign hazptr_holder, ", K(ret));
   }
   return ret;
 }
@@ -101,6 +104,7 @@ int ObKVCacheIterator::init(const int64_t cache_id, ObKVCacheMap * const map)
 //TODO bucket num level map should be system parameter
 const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
     {
+#ifdef OB_BUILD_EMBED_MODE
       196613l,      // more than 2G, 1.5M kvcache meta
       393241l,      // more than 4G, 3M kvcache meta
       786433l,      // more than 8G, 6M kvcache meta
@@ -111,10 +115,23 @@ const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
       25165843l,    // more than 256G, 200M kvcache meta
       50331653l,    // more than 512G, 500M kvcache meta
       100663319l,   // more than 1024G, 1G kvcache meta
+#else
+      786433l,      // more than 2G, 6M kvcache meta
+      1572869l,     // more than 4G, 12M kvcache meta
+      3145739l,     // more than 8G, 25M kvcache meta
+      6291469l,     // more than 16G, 50M kvcache meta
+      12582917l,    // more than 32G, 100M kvcache meta
+      25165843l,    // more than 64G, 200M kvcache meta
+      50331653l,   // more than 128G, 500M kvcache meta
+      100663319l,   // more than 256G, 1G kvcache meta
+      201326611l,   // more than 512G, 2G kvcache meta
+      402653189ll   // more than 1024G, 4G kvcache meta
+#endif
     };
 
 ObKVGlobalCache::ObKVGlobalCache()
     : inited_(false),
+      mem_limit_getter_(nullptr),
       cache_num_(0),
       mutex_(common::ObLatchIds::GLOBAL_KV_CACHE_CONFIG_LOCK),
       map_clean_pos_(0),
@@ -122,8 +139,6 @@ ObKVGlobalCache::ObKVGlobalCache()
       map_replace_pos_(0),
       map_once_replace_num_(0),
       map_replace_skip_count_(0),
-      wash_timer_(),
-      replace_timer_(),
       stopped_(true),
       cache_wash_interval_(0)
 {
@@ -140,84 +155,75 @@ ObKVGlobalCache &ObKVGlobalCache::get_instance()
   return instance_;
 }
 
-int ObKVGlobalCache::calculate_suitable_bucket_num(
-    const int64_t cache_memory_limit,
-    int64_t &bucket_num)
+int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
 {
   INIT_SUCC(ret);
+  int64_t memory_limit = GMEMCONF.get_server_memory_limit();
+  int64_t server_memory_factor = upper_align(memory_limit, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
+  int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
   bucket_num = -1;
-  if (cache_memory_limit <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const int64_t bounded_limit = MIN(cache_memory_limit, MAX_CACHE_SIZE);
-    const int64_t required_bucket_num =
-        upper_align(bounded_limit, KVCACHE_BYTES_PER_BUCKET)
-        / KVCACHE_BYTES_PER_BUCKET;
-    int64_t bucket_level = 0;
-    while (bucket_level < MAX_BUCKET_NUM_LEVEL - 1
-           && bucket_num_array_[bucket_level] < required_bucket_num) {
-      ++bucket_level;
+  for (int64_t bucket_level = MAX_BUCKET_NUM_LEVEL -1; bucket_level >= 0; bucket_level--) {
+    if ((1 << bucket_level) > server_memory_factor) {
+      // pass
+    } else {
+      if (bucket_num_array_[bucket_level] * static_cast<int64_t>(sizeof(void *)) <= reserved_memory * MAX_RESERVED_MEMORY_RATIO) {
+        bucket_num = bucket_num_array_[bucket_level];
+        break;
+      }
     }
-    bucket_num = bucket_num_array_[bucket_level];
   }
-
-  return ret;
-}
-
-int ObKVGlobalCache::get_suitable_bucket_num(
-    const int64_t cache_memory_limit,
-    int64_t& bucket_num)
-{
-  int ret = calculate_suitable_bucket_num(cache_memory_limit, bucket_num);
-  if (OB_FAIL(ret)) {
-    COMMON_LOG(ERROR, "failed to calculate suitable bucket num", K(ret),
-               K(cache_memory_limit));
+  if (-1 == bucket_num) {
+    ret = OB_ERR_UNEXPECTED;
+    COMMON_LOG(ERROR, "reserved memory is not enough!", K(memory_limit), K(server_memory_factor), K(reserved_memory));
   } else {
     share::ObTaskController::get().allow_next_syslog();
-    COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num),
-               K(cache_memory_limit));
+    COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num), K(server_memory_factor), K(reserved_memory));
   }
 
   return ret;
 }
 
 int ObKVGlobalCache::init(
+    ObITenantMemLimitGetter *mem_limit_getter,
     const int64_t bucket_num,
     const int64_t max_cache_size,
     const int64_t block_size,
-    const int64_t cache_wash_interval,
-    const ObKVCacheRuntimeOptions &runtime_options)
+    const int64_t cache_wash_interval)
 {
   int ret = OB_SUCCESS;
-  const int64_t cache_memory_limit =
-      ObKVCacheRuntimeOptions::USE_MAX_CACHE_SIZE == runtime_options.cache_memory_limit_
-          ? max_cache_size
-          : runtime_options.cache_memory_limit_;
+
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVGlobalCache has been inited, ", K(ret));
-  } else if (bucket_num <= 0 ||
+  } else if (OB_ISNULL(mem_limit_getter) ||
+             bucket_num <= 0 ||
              max_cache_size <= 0 ||
-             max_cache_size > MAX_CACHE_SIZE ||
              block_size <= 0 ||
-             cache_wash_interval < 0 ||
-             !runtime_options.is_valid() ||
-             cache_memory_limit <= 0 ||
-             cache_memory_limit > max_cache_size) {
+             cache_wash_interval < 0) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(bucket_num),
-               K(max_cache_size), K(block_size), K(cache_wash_interval));
+    COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(mem_limit_getter),
+               K(bucket_num), K(max_cache_size), K(block_size), K(cache_wash_interval));
   } else if (OB_FAIL(hazard_domain_.init(ObKVCacheStore::compute_mb_handle_num(max_cache_size, block_size)))) {
-  } else if (OB_FAIL(store_.init(max_cache_size, block_size, cache_memory_limit))) {
-  } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_, &insts_))) {
-  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, map_.get_node_allocator()))) {
-  } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {
-  } else if (OB_FAIL(replace_timer_.init("KVCacheRep", ObMemAttr("KVCacheRep")))) {
+    COMMON_LOG(WARN, "Fail to init hazard domain, ", K(ret));
+  } else if (OB_FAIL(store_.init(max_cache_size,
+                                 block_size,
+                                 *mem_limit_getter))) {
+    COMMON_LOG(WARN, "Fail to init store, ", K(ret));
+  } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
+    COMMON_LOG(WARN, "Fail to init map, ", K(ret), K(bucket_num));
+  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter, map_.get_node_allocator()))) {
+    COMMON_LOG(WARN, "Fail to init insts, ", K(ret));
+  } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheWash))) {
+    COMMON_LOG(WARN, "Fail to init wash timer, ", K(ret));
+  } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheRep))) {
+    COMMON_LOG(WARN, "Fail to init replace timer", K(ret));
   } else if (FALSE_IT(cache_wash_interval_ = cache_wash_interval)) {
-  } else if (OB_FAIL(reload_config(runtime_options))) {
+  } else if (OB_FAIL(reload_wash_interval())) {
+    COMMON_LOG(WARN, "failed to reload wash interval", K(ret));
   } else {
     cache_num_ = 0;
     stopped_ = false;
+    mem_limit_getter_ = mem_limit_getter;
     map_once_clean_num_ = bucket_num / MAP_ONCE_CLEAN_RATIO;
     if (map_once_clean_num_ > MAX_MAP_ONCE_CLEAN_NUM) {
       map_once_clean_num_ = MAX(MAX_MAP_ONCE_CLEAN_NUM, map_once_clean_num_/EXPAND_MAP_ONCE_CLEAN_RATIO);
@@ -240,16 +246,16 @@ void ObKVGlobalCache::stop()
 {
   if (inited_) {
     stopped_ = true;
-    wash_timer_.stop();
-    replace_timer_.stop();
+    TG_STOP(lib::TGDefIDs::KVCacheWash);
+    TG_STOP(lib::TGDefIDs::KVCacheRep);
   }
 }
 
 void ObKVGlobalCache::wait()
 {
   if (inited_) {
-    wash_timer_.wait();
-    replace_timer_.wait();
+    TG_WAIT(lib::TGDefIDs::KVCacheWash);
+    TG_WAIT(lib::TGDefIDs::KVCacheRep);
   }
 }
 
@@ -261,8 +267,6 @@ void ObKVGlobalCache::destroy()
     // cache in wash thread.
     stop();
     wait();
-    wash_timer_.destroy();
-    replace_timer_.destroy();
     map_.destroy();
     store_.destroy();
     hazard_domain_.reset_retire_list();
@@ -271,6 +275,8 @@ void ObKVGlobalCache::destroy()
       configs_[i].reset();
     }
     cache_num_ = 0;
+    mem_limit_getter_ = nullptr;
+
     inited_ = false;
     COMMON_LOG(INFO, "The ObKVGlobalCache has been destroyed!");
   }
@@ -308,6 +314,7 @@ int ObKVGlobalCache::put(
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid inst_key", K(inst_key), K(ret));
   } else if (OB_FAIL(insts_.get_cache_inst(inst_key, inst_handle))) {
+    COMMON_LOG(WARN, "Fail to get cache inst, ", K(ret));
   } else if (NULL == inst_handle.get_inst()) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "The inst is NULL, ", K(ret));
@@ -324,6 +331,7 @@ int ObKVGlobalCache::put(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(store.store(key, value, kvpair, hazptr_holder))) {
+    COMMON_LOG(WARN, "Fail to store kvpair to store, ", K(ret));
   } else {
     pvalue = kvpair->value_;
     if (OB_FAIL(map_.put(*inst_handle.get_inst(), key, kvpair, hazptr_holder, overwrite))) {
@@ -372,11 +380,13 @@ int ObKVGlobalCache::alloc(
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "Cannot overwrite valid hazptr_holder", K(ret), K(hazptr_holder));
   } else if (OB_FAIL(insts_.get_cache_inst(inst_key, inst_handle))) {
+    COMMON_LOG(WARN, "Fail to get cache inst, ", K(ret));
   } else if (OB_ISNULL(inst_handle.get_inst())) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "The inst is NULL, ", K(ret));
   } else if (OB_FAIL(store.alloc_kvpair(
           key_size, value_size, kvpair, hazptr_holder))) {
+    COMMON_LOG(WARN, "Fail to store kvpair, ", K(ret));
   }
   return ret;
 }
@@ -426,8 +436,37 @@ int ObKVGlobalCache::erase_cache()
   } else {
     store_.flush_washable_mbs(false);
     if (OB_FAIL(map_.erase_all())) {
+      COMMON_LOG(WARN, "fail to erase cache, ", K(ret));
     }
   }
+  return ret;
+}
+
+int ObKVGlobalCache::sync_flush_tenant()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    COMMON_LOG(WARN, "The global kvcache has not been inited", K(ret));
+  } else if (OB_ISNULL(mem_limit_getter_)) {
+    ret = OB_ERR_UNEXPECTED;
+    COMMON_LOG(WARN, "Unexpected null mem limit getter", K(ret), KP(mem_limit_getter_));
+  } else if (mem_limit_getter_->has_tenant()) {  // check tenant
+    ret = OB_ERR_UNEXPECTED;
+    COMMON_LOG(WARN, "The tenant is still existed", K(ret));
+  } else if (OB_FAIL(insts_.mark_tenant_delete())) {
+    COMMON_LOG(WARN, "Fail to mark tenant cache inst delete", K(ret));
+  } else if (OB_FAIL(store_.flush_washable_mbs(true /* force flush */))) {
+    COMMON_LOG(WARN, "Fail to erase tenant from store", K(ret));
+  } else if (OB_FAIL(map_.erase_tenant(true /* force_erase */))) {
+    COMMON_LOG(WARN, "Fail to retire cache node from map", K(ret));
+  } else if (OB_FAIL(insts_.erase_tenant())) {
+    COMMON_LOG(WARN, "Fail to erase tenant from insts", K(ret));
+  }
+
+  COMMON_LOG(INFO, "erase tenant cache details", K(ret));
+
   return ret;
 }
 
@@ -450,6 +489,7 @@ int ObKVGlobalCache::erase_cache(const char *cache_name)
     if (-1 != cache_id) {
       store_.flush_washable_mbs(false);
       if (OB_FAIL(map_.erase_all(cache_id))) {
+        COMMON_LOG(WARN, "fail to erase cache, ", K(ret), K(cache_id));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -561,42 +601,38 @@ void ObKVGlobalCache::revert(HazptrHolder& hazptr_holder)
   }
 }
 
-int ObKVGlobalCache::reload_config(const ObKVCacheRuntimeOptions &runtime_options)
+int ObKVGlobalCache::reload_wash_interval()
 {
   int ret = OB_SUCCESS;
-  if (!runtime_options.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid cache runtime options", K(ret),
-               K(runtime_options.wash_interval_us_),
-               K(runtime_options.cache_memory_limit_));
-  } else if (ObKVCacheRuntimeOptions::USE_MAX_CACHE_SIZE
-                 != runtime_options.cache_memory_limit_
-             && OB_FAIL(store_.set_cache_memory_limit(
-                 runtime_options.cache_memory_limit_))) {
-    COMMON_LOG(WARN, "failed to reload cache memory limit", K(ret),
-               K(runtime_options.cache_memory_limit_));
-  } else if (0 == cache_wash_interval_) {
-    const int64_t wash_interval = runtime_options.wash_interval_us_;
-    bool is_exist = wash_timer_.task_exist(wash_task_);
-    if (is_exist && OB_FAIL(wash_timer_.cancel_task(wash_task_))) {
+  if (0 == cache_wash_interval_) {
+    const int64_t wash_interval = GCONF._cache_wash_interval;
+    bool is_exist = false;
+    if (OB_FAIL(TG_TASK_EXIST(lib::TGDefIDs::KVCacheWash, wash_task_, is_exist))) {
+      COMMON_LOG(WARN, "failed to check wash task exist", K(ret));
+    } else if (is_exist && OB_FAIL(TG_CANCEL_R(lib::TGDefIDs::KVCacheWash, wash_task_))) {
       COMMON_LOG(WARN, "failed to cancel wash task", K(ret));
-    } else if (OB_FAIL(wash_timer_.schedule(wash_task_, wash_interval, true))) {
+    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, wash_interval, true))) {
+      COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
     }
 
     is_exist = false;
     if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(is_exist = replace_timer_.task_exist(replace_task_))) {
-    } else if (is_exist && OB_FAIL(replace_timer_.cancel_task(replace_task_))) {
+    } else if (OB_FAIL(TG_TASK_EXIST(lib::TGDefIDs::KVCacheRep, replace_task_, is_exist))) {
+      COMMON_LOG(WARN, "failed to check replace task exist", K(ret));
+    } else if (is_exist && OB_FAIL(TG_CANCEL_R(lib::TGDefIDs::KVCacheRep, replace_task_))) {
       COMMON_LOG(WARN, "failed to cancel replace task", K(ret));
-    } else if (OB_FAIL(replace_timer_.schedule(replace_task_, wash_interval, true))) {
+    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_, wash_interval, true))) {
+      COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
     if (OB_SUCC(ret)) {
       COMMON_LOG(INFO, "success to reload_wash_interval", K(wash_interval));
     }
   } else if (!inited_) {
-    if (OB_FAIL(wash_timer_.schedule(wash_task_, cache_wash_interval_, true))) {
-    } else if (OB_FAIL(replace_timer_.schedule(replace_task_,
-                                               cache_wash_interval_, true))) {
+    if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, cache_wash_interval_, true))) {
+      COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
+    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_,
+                                   cache_wash_interval_, true))) {
+      COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
   }
   return ret;
@@ -609,6 +645,7 @@ int ObKVGlobalCache::get_washable_size(int64_t &washable_size)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(store_.get_washable_size(washable_size))) {
+    COMMON_LOG(WARN, "get tenant washable size failed", K(ret), K(washable_size));
   }
   return ret;
 }
@@ -650,6 +687,7 @@ int ObKVGlobalCache::get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_han
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVGlobalCache has not been inited", K(ret));
   } else if (OB_FAIL(insts_.get_cache_info(inst_handles))) {
+    COMMON_LOG(WARN, "Fail to get all cache info", K(ret));
   }
 
   return ret;
@@ -662,6 +700,7 @@ int ObKVGlobalCache::get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &mem
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVGlobalCache has not been inited", K(ret));
   } else if (OB_FAIL(store_.get_memblock_info(memblock_infos))) {
+    COMMON_LOG(WARN, "Fail to get all memblock info", K(ret));
   }
   return ret;
 }

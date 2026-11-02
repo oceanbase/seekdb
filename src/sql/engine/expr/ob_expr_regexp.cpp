@@ -44,8 +44,10 @@ int ObExprRegexp::assign(const ObExprOperator &other)
   const ObExprRegexp *tmp_other = dynamic_cast<const ObExprRegexp *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObFuncExprOperator failed", K(ret));
     } else {
       this->regexp_idx_ = tmp_other->regexp_idx_;
       this->pattern_is_const_ = tmp_other->pattern_is_const_;
@@ -71,6 +73,7 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
   } else if (OB_UNLIKELY(!is_type_valid_regexp(type1.get_type()) || !is_type_valid_regexp(type2.get_type()))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the param is not castable", K(ret), K(type1), K(type2));
   } else if ((ObExprRegexContext::is_binary_string(type1) || ObExprRegexContext::is_binary_string(type2))
               && (!ObExprRegexContext::is_binary_compatible(type1) || !ObExprRegexContext::is_binary_compatible(type2))) {
     const char *coll_name1 = ObCharset::collation_name(type1.get_collation_type());
@@ -79,13 +82,14 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     ObString collation2 = ObString::make_string(coll_name2);
     ret = OB_ERR_MYSQL_CHARACTER_SET_MISMATCH;
     LOG_USER_ERROR(OB_ERR_MYSQL_CHARACTER_SET_MISMATCH, collation1.length(), collation1.ptr(), collation2.length(), collation2.ptr());
-  } else if (OB_FAIL(ObCharset::aggregate_collation_new(type1.get_collation_level(),
+    LOG_WARN("If one of the params is binary string, all of the params should be implicitly castable to binary charset.", K(ret), K(type1), K(type2));
+  } else if (OB_FAIL(ObCharset::aggregate_collation_old(type1.get_collation_level(),
                                               type1.get_collation_type(),
                                               type2.get_collation_level(),
                                               type2.get_collation_type(),
                                               res_cs_level,
-                                              res_cs_type,
-                                              OB_COLL_ALLOW_CONV))) {
+                                              res_cs_type))) {
+      LOG_WARN("fail to aggregate collation", K(ret), K(type1), K(type2));
   } else {
     type.set_int32();
     type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
@@ -101,6 +105,7 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     const ObCollationType regexp_calc_coll =
         ObExprRegexContext::get_regexp_calc_collation(res_cs_type, is_case_sensitive);
     if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
+      LOG_WARN("fail to check need utf8", K(ret));
     } else {
       type2.set_calc_collation_type(regexp_calc_coll);
     }
@@ -108,6 +113,7 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     need_utf8 = false;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
+      LOG_WARN("fail to check need utf8", K(ret));
     } else {
       type1.set_calc_collation_type(regexp_calc_coll);
     }
@@ -135,6 +141,7 @@ int ObExprRegexp::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObE
      const bool const_pattern = pattern->is_const_expr();
      rt_expr.extra_ = (!const_text && const_pattern) ? 1 : 0;
      rt_expr.eval_func_ = eval_regexp;
+     LOG_DEBUG("regexp expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_));
   }
   return ret;
 }
@@ -154,6 +161,7 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       const char *tmp_char = NULL;
       LOG_USER_WARN(OB_ERR_INVALID_CHARACTER_STRING, static_cast<int>(charset_name_len), charset_name, 0, tmp_char);
     } else {
+      LOG_WARN("evaluate parameters failed", K(ret));
     }
   } else if (text->is_null() || pattern->is_null()) {
     expr_datum.set_null();
@@ -161,8 +169,10 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
                          !RegExpCtx::is_regexp_calc_collation(expr.args_[0]->datum_meta_.cs_type_) ||
                          !RegExpCtx::is_regexp_calc_collation(expr.args_[1]->datum_meta_.cs_type_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(expr));
   } else if (0 == pattern->len_) {
     ret = OB_ERR_REGEXP_ERROR;
+    LOG_WARN("empty regex expression", K(ret));
     expr_datum.set_null();
   } else {
     const bool reusable = (0 != expr.extra_)
@@ -173,8 +183,10 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       if (NULL == (regex_ctx = static_cast<RegExpCtx *>(
                   ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
         if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regex_ctx))) {
+          LOG_WARN("create expr regex context failed", K(ret), K(expr));
         } else if (OB_ISNULL(regex_ctx)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("NULL context returned", K(ret));
         }
       }
     }
@@ -193,22 +205,27 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       const ObCollationType res_coll_type = ObCharset::is_bin_sort(expr.args_[0]->datum_meta_.cs_type_) ?
                                             expected_bin_coll : expected_ci_coll;
       if (OB_FAIL(RegExpCtx::get_regexp_flags(match_string, is_case_sensitive, false, true, flags))) {
+        LOG_WARN("failed to get regexp flags", K(ret));
       } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
+        LOG_WARN("fail to get regexp");
       } else if (OB_FAIL(regex_ctx->init(reusable ? ctx.exec_ctx_.get_allocator() : tmp_alloc,
                                          regexp_vars,
                                          pattern->get_string(), flags, reusable, expr.args_[1]->datum_meta_.cs_type_))) {
+        LOG_WARN("init regex context failed", K(ret), K(pattern->get_string()));
       } else if (expr.args_[0]->datum_meta_.cs_type_ != expected_ci_coll &&
                  expr.args_[0]->datum_meta_.cs_type_ != expected_bin_coll) {
         if (OB_FAIL(RegExpCtx::convert_to_regexp_utf16(tmp_alloc,
                                                        text->get_string(),
                                                        expr.args_[0]->datum_meta_.cs_type_,
                                                        text_utf))) {
+          LOG_WARN("convert charset failed", K(ret));
         }
       } else {
         text_utf = text->get_string();
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(regex_ctx->match(tmp_alloc, text_utf, res_coll_type, start_pos - 1, match))) {
+        LOG_WARN("regex match failed", K(ret));
       } else {
         expr_datum.set_int32(match);
       }

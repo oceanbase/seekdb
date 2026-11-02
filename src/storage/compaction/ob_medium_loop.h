@@ -29,7 +29,7 @@ struct ObMediumLoop
   ObMediumLoop()
     : merge_version_(ObBasicMergeScheduler::INIT_COMPACTION_SCN),
       loop_cnt_(0),
-      tablet_iter_(true/*is_major*/)
+      ls_tablet_iter_(true/*is_major*/)
   {}
   ~ObMediumLoop() {}
   int start_merge(const int64_t merge_version);
@@ -42,8 +42,8 @@ struct ObMediumLoop
       || OB_LS_NOT_EXIST == ret;
   }
 private:
-  int loop_tablets(
-    storage::ObLS *ls,
+  int loop_in_ls(
+    storage::ObLSHandle &ls_handle,
     ObScheduleTabletFunc &tablet_schedule_func);
   int update_report_scn_as_ls_leader(
     storage::ObLS &ls,
@@ -55,20 +55,20 @@ private:
   int64_t merge_version_;
   int64_t loop_cnt_;
   ObScheduleStatistics schedule_stats_;
-  ObCompactionScheduleIterator tablet_iter_;
+  ObCompactionScheduleIterator ls_tablet_iter_;
 };
 
 struct ObScheduleNewMediumLoop
 {
   ObScheduleNewMediumLoop(
-    ObArray<ObTabletCheckInfo> &tablet_check_infos)
-    : tablet_check_infos_(tablet_check_infos)
+    ObArray<ObTabletCheckInfo> &tablet_ls_infos)
+    : tablet_ls_infos_(tablet_ls_infos)
   {}
   ~ObScheduleNewMediumLoop() {}
   int loop();
-  int sort_tablet_check_info();
+  int sort_tablet_ls_info();
 private:
-  ObArray<ObTabletCheckInfo> &tablet_check_infos_;
+  ObArray<ObTabletCheckInfo> &tablet_ls_infos_;
 };
 
 } // namespace compaction

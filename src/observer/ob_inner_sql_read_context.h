@@ -44,9 +44,9 @@ public:
 
 private:
   // define order dependent:
-  // %conn_guard_ (session info) need be destructed after %result_
+  // %conn_ref_ (session info) need be destructed after %result_
   // %vt_iter_factory_ need be destructed after %result_
-  common::sqlclient::ObISQLConnectionGuard conn_guard_;
+  ObInnerSQLConnection::RefGuard conn_ref_;
   ObVirtualTableIteratorFactory vt_iter_factory_;
   ObInnerSQLResult result_;
 

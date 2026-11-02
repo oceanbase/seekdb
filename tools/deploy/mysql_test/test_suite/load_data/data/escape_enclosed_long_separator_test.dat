@@ -1,0 +1,9 @@
+1__'Normal'__-1__
+2__'An enclose char ' in middle'__-2__
+3__'An enclose char in tail''__-3__
+4__'missing end enclose char__-4__
+5__missing begin enclose char'__-5__
+6__'an enclose char \' is escaped'__-6__
+7__\'escape the head enclose char__-7__
+8__\\'escaped\\'escape char with enclose char__-8__
+9__asdfa\__-9__

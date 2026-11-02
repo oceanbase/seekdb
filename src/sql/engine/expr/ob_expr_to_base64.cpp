@@ -49,6 +49,7 @@ int ObExprToBase64::calc_result_type1(ObExprResType &type,
   int64_t mbmaxlen = 0;
   int64_t max_result_length = 0;
   if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(str.get_collation_type(), mbmaxlen))) {
+    LOG_WARN("fail to get mbmaxlen", K(str.get_collation_type()), K(ret));
   } else {
     max_result_length = (base64_needed_encoded_length(str.get_length()) - 1) * mbmaxlen;
     max_result_length = MIN(MAX(0, max_result_length), OB_MAX_BLOB_WIDTH);
@@ -79,6 +80,7 @@ int ObExprToBase64::eval_to_base64(const ObExpr &expr,
     ObDatum *arg = nullptr;
 
     if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+      LOG_WARN("eval arg failed", K(ret));
     } else if (OB_UNLIKELY(arg->is_null())) {
       res.set_null();
     } else {
@@ -91,6 +93,7 @@ int ObExprToBase64::eval_to_base64(const ObExpr &expr,
         res.set_string(nullptr, 0);
         if (ob_is_text_tc(expr.datum_meta_.type_) && OB_FAIL(ObExprUtil::set_expr_ascii_result(
             expr, ctx, res, ObString()))) {
+          LOG_WARN("set ASCII result for text failed", K(ret));
         }
       } else {
         int64_t pos = 0;
@@ -98,13 +101,16 @@ int ObExprToBase64::eval_to_base64(const ObExpr &expr,
         output_buf = static_cast<char*>(alloc_guard.get_allocator().alloc(buf_len));
         if (OB_ISNULL(output_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret), K(buf_len), K(in_raw.length()));
         } else if (OB_FAIL(ObBase64Encoder::encode(reinterpret_cast<const uint8_t*>(buf),
                                                    in_raw_len, output_buf, buf_len,
                                                    pos, NUM_OF_CHAR_PER_LINE_QUOTED_PRINTABLE))) {
+          LOG_WARN("failed to encode base64", K(ret));
         } else {
           res.set_string(output_buf, pos);
           if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
             expr, ctx, res, ObString(pos, output_buf)))) {
+            LOG_WARN("set ASCII result failed", K(ret));
           }
         }
       }
@@ -122,6 +128,7 @@ int ObExprToBase64::eval_to_base64_batch(const ObExpr &expr,
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatumVector args = expr.args_[0]->locate_expr_datumvector(ctx);
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
@@ -144,19 +151,23 @@ int ObExprToBase64::eval_to_base64_batch(const ObExpr &expr,
         res[j].set_string(nullptr, 0);
         if (ob_is_text_tc(expr.datum_meta_.type_) && OB_FAIL(ObExprUtil::set_expr_ascii_result(
             expr, ctx, res[j], ObString()))) {
+          LOG_WARN("set ASCII result for text failed", K(ret), K(j));
         }
       } else {
         int64_t pos = 0;
         output_buf = static_cast<char *>(alloc_guard.get_allocator().alloc(buf_len));
         if (OB_ISNULL(output_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory", K(ret), K(buf_len), K(in_raw.length()));
         } else if (OB_FAIL(ObBase64Encoder::encode(reinterpret_cast<const uint8_t *>(buf),
                                                    in_raw_len, output_buf, buf_len,
                                                    pos, NUM_OF_CHAR_PER_LINE_QUOTED_PRINTABLE))) {
+          LOG_WARN("failed to encode base64", K(ret));
         } else {
           res[j].set_string(output_buf, pos);
           if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
             expr, ctx, res[j], ObString(pos, output_buf)))) {
+            LOG_WARN("set ASCII result failed", K(ret));
           }
         }
       }

@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
 #include "ob_mvcc_row.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_row_compactor.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
-#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 
@@ -62,6 +61,7 @@ void ObMvccTransNode::cal_acc_checksum(const uint32_t last_acc_checksum)
 {
   acc_checksum_ = m_cal_acc_checksum(last_acc_checksum);
   if (0 == last_acc_checksum) {
+    TRANS_LOG(DEBUG, "calc first trans node checksum", K(last_acc_checksum), K(*this));
   }
 }
 
@@ -241,7 +241,9 @@ int ObMvccRowFilter::init()
   } else {
     const int64_t column_cnt = mds_filter_.read_info_->get_schema_column_count() + storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     if (OB_FAIL(bitmap_.init(column_cnt, mds_filter_.read_info_->get_rowkey_count()))) {
+      TRANS_LOG(WARN, "failed to init bitmap", KR(ret), K(column_cnt));
     } else if (OB_FAIL(datum_row_.init(column_cnt))) {
+      TRANS_LOG(WARN, "Failed to init datum row", K(ret), K(column_cnt));
     } else {
       is_inited_ = true;
       datum_row_empty_ = true;
@@ -276,14 +278,17 @@ int ObMvccRowFilter::read_row_and_check(
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "invalid argument", KR(ret), K_(mds_filter));
     } else if (OB_FAIL(read_row_(node, final_result))) {
+      TRANS_LOG(WARN, "failed to read datum row", K(ret), K(node), K_(mds_filter));
     } else if (final_result) {
       complete = true;
     } else if (OB_FAIL(mds_filter_.truncate_part_filter_->check_filter_row_complete(datum_row_, complete))) {
+      TRANS_LOG(WARN, "failed to check filter row complete", KR(ret), K_(datum_row), K(complete));
     }
     if (OB_FAIL(ret) || !complete) {
       ObTaskController::get().allow_next_syslog();
-       // DEBUG log, remove later
+      TRANS_LOG(TRACE, "not complete", KR(ret), K_(datum_row), K(filtered), K(complete)); // DEBUG log, remove later
     } else if (OB_FAIL(mds_filter_.truncate_part_filter_->filter(datum_row_, filtered, true/*check_filter*/, true/*check_version*/))) {
+      TRANS_LOG(WARN, "failed to check filtered by truncate_filter", KR(ret), K_(datum_row), K_(mds_filter));
     } else {
       ObTaskController::get().allow_next_syslog();
       TRANS_LOG(INFO, "success to check trans node filtered", KR(ret), K_(datum_row), K(filtered)); // DEBUG log, remove later
@@ -307,6 +312,7 @@ int ObMvccRowFilter::read_row_(
   } else {
     bool read_finished = false;
     if (OB_FAIL(row_reader.read_memtable_row(mtd->buf_, mtd->buf_len_, *mds_filter_.read_info_, datum_row_, bitmap_, read_finished, row_header))) {
+      TRANS_LOG(WARN, "failed to read datum row", K(ret), K(node), K_(mds_filter));
     } else if (!datum_row_empty_) {
       // no need to set trans version
     } else if (OB_UNLIKELY(datum_row_.get_column_count() <= mds_filter_.read_info_->get_schema_column_count())) {
@@ -501,17 +507,22 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
   return ret;
 }
 
-bool ObMvccRow::need_compact(const bool for_read, const bool for_replay)
+bool ObMvccRow::need_compact(const bool for_read, const bool for_replay, const bool is_delete_insert)
 {
+  if (is_delete_insert) {
+    // return false directly when this is a delete-insert table
+    return false;
+  }
+
   bool bool_ret = false;
   const int32_t updates = ATOMIC_LOAD(&update_since_compact_);
   const int32_t compact_trigger = (for_read || for_replay)
-      ? ::oceanbase::config::row_compaction_update_limit() * 3
-      : ::oceanbase::config::row_compaction_update_limit();
+      ? ObServerConfig::get_instance().row_compaction_update_limit * 3
+      : ObServerConfig::get_instance().row_compaction_update_limit;
   // Standby hotspot row compact frequency needs to be reduced
   if (NULL != index_ && for_replay) {
     // Hotline scenario
-    if (updates >= max(2048, ::oceanbase::config::row_compaction_update_limit() * 10)) {
+    if (updates >= max(2048, ObServerConfig::get_instance().row_compaction_update_limit * 10)) {
       bool_ret = ATOMIC_BCAS(&update_since_compact_, updates, 0);
     }
   } else if (updates >= compact_trigger) {
@@ -535,8 +546,10 @@ int ObMvccRow::row_compact(ObMemtable *memtable,
   } else {
     ObMemtableRowCompactor row_compactor;
     if (OB_FAIL(row_compactor.init(this, memtable, node_alloc))) {
+      TRANS_LOG(WARN, "row compactor init error", K(ret));
     } else if (OB_FAIL(row_compactor.compact(snapshot_version,
                                              ObMvccTransNode::COMPACT_READ_BIT))) {
+      TRANS_LOG(WARN, "row compact error", K(ret), K(snapshot_version));
     } else {
       // do nothing
     }
@@ -592,6 +605,7 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
             TRANS_LOG(ERROR, "meet unexpected index_node", KR(ret), K(*prev), K(node), K(*index_node), K(*this));
             abort_unless(0);
           } else if (prev->tx_id_ == node.tx_id_
+                     && prev->seq_no_.support_branch()
                      && OB_UNLIKELY(prev->seq_no_ > node.seq_no_)
                      // exclude the concurrently update uk case, which always in branch 0
                      && !(prev->seq_no_.get_branch() == 0 && node.seq_no_.get_branch() == 0)) {
@@ -636,7 +650,7 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
         }
       }
       if (OB_SUCC(ret) && OB_NOT_NULL(tmp) && tmp->tx_id_ == node.tx_id_) {
-        if (tmp->seq_no_.is_valid()
+        if (tmp->seq_no_.support_branch()
             && OB_UNLIKELY(tmp->seq_no_ > node.seq_no_)
             // exclude the concurrently update uk case, which always in branch 0
             && !(tmp->seq_no_.get_branch() == 0 && node.seq_no_.get_branch() == 0)) {
@@ -711,9 +725,9 @@ int ObMvccRow::elr(const ObTransID &tx_id,
     // TODO shanyan.g
     if (NULL != key) {
       wakeup_waiter(tablet_id, *key);
-      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->reset_hash_holder(tablet_id, *key, tx_id);
+      share::g_mp->lock_wait_mgr()->reset_hash_holder(tablet_id, *key, tx_id);
     } else {
-      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->wakeup(tx_id);
+      share::g_mp->lock_wait_mgr()->wakeup(tx_id);
     }
   }
   return ret;
@@ -797,16 +811,23 @@ int ObMvccRow::remove_callback(ObMvccRowCallback &cb)
   ObMvccTransNode *node = cb.get_trans_node();
   if (OB_NOT_NULL(node)) {
     node->remove_callback();
-    if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+    if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "server LockWaitMgr is null", K(ret), KPC(this));
+      TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
     } else {
-      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->transform_row_lock_to_tx_lock(
-          cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
+      auto tx_ctx = cb.get_trans_ctx();
+      ObAddr tx_scheduler;
+      if (OB_ISNULL(tx_ctx)) {
+        int tmp_ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(ERROR, "trans ctx is null", KR(tmp_ret), K(cb));
+      } else {
+        tx_scheduler = static_cast<transaction::ObPartTransCtx*>(tx_ctx)->get_scheduler();
+      }
+      share::g_mp->lock_wait_mgr()->transform_row_lock_to_tx_lock(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_), tx_scheduler);
       if (cb.is_non_unique_local_index_cb()) {
         // row lock holder is no need to set for non-unique local index, so the reset can be skipped
       } else {
-        ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->reset_hash_holder(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
+        share::g_mp->lock_wait_mgr()->reset_hash_holder(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
       }
     }
   }
@@ -822,9 +843,9 @@ int ObMvccRow::wakeup_waiter(const ObTabletID &tablet_id,
 {
   int ret = OB_SUCCESS;
   ObLockWaitMgr *lwm = NULL;
-  if (OB_ISNULL(lwm = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+  if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "server LockWaitMgr is null", K(ret), KPC(this));
+    TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
   } else {
     lwm->wakeup(tablet_id, key);
   }
@@ -910,6 +931,7 @@ int ObMvccRow::mvcc_write_(ObStoreCtx &ctx,
         // Case 4: the newest node is not decided and locked by itself, so we
         //         can insert into it
         if (OB_FAIL(writer_node.is_lock_node(is_lock_node))) {
+          TRANS_LOG(ERROR, "get is lock node failed", K(ret), K(writer_node));
         } else if (is_lock_node) {
           // Case 4.1: the writer node is lock node, so we do not insert into it
           // bacause it has already been locked
@@ -983,6 +1005,12 @@ int ObMvccRow::mvcc_write_(ObStoreCtx &ctx,
         total_trans_node_cnt_++;
       }
 
+      if (NULL != writer_node.prev_
+          && writer_node.prev_->is_elr()) {
+        if (NULL != ctx.mvcc_acc_ctx_.tx_ctx_) {
+          TX_STAT_READ_ELR_ROW_COUNT_INC;
+        }
+      }
     }
   }
 
@@ -1068,6 +1096,7 @@ int ObMvccRow::mvcc_write(ObStoreCtx &ctx,
   } else if (OB_FAIL(mvcc_write_(ctx,
                                  node,
                                  res))) {
+    TRANS_LOG(WARN, "mvcc write failed", K(ret), K(node), K(ctx));
   } else if (!res.can_insert_) {
     // Case1: Cannot insert because of write-write conflict
     ret = OB_TRY_LOCK_ROW_CONFLICT;
@@ -1098,6 +1127,7 @@ int ObMvccRow::mvcc_write(ObStoreCtx &ctx,
     }
   }
 
+  TRANS_LOG(DEBUG, "mvcc_write end", KPC(this), K(res), K(snapshot), K(node), K(ctx), K(check_exist));
 
   return ret;
 }
@@ -1217,6 +1247,7 @@ void ObMvccRow::print_row()
     const ObMemtableDataHeader *mtd = reinterpret_cast<const ObMemtableDataHeader *>(node->buf_);
     TRANS_LOG(INFO, "qianchen row: ", K(*node), K(mtd));
     if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, datum_row))) {
+      CLOG_LOG(WARN, "Failed to read datum row", K(ret));
     } else {
       TRANS_LOG(INFO, "    qianchen datum row: ", K(datum_row));
     }

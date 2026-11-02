@@ -156,6 +156,7 @@ public:
 public:
   ObDASIndexMergeIter()
     : ObDASIter(ObDASIterType::DAS_ITER_INDEX_MERGE),
+      merge_type_(INDEX_MERGE_INVALID),
       child_iters_(),
       child_stores_(),
       child_scan_rtdefs_(),
@@ -163,6 +164,9 @@ public:
       child_tablet_ids_(),
       rowkey_exprs_(nullptr),
       mem_ctx_(),
+      get_next_row_(nullptr),
+      get_next_rows_(nullptr),
+      ls_id_(),
       merge_ctdef_(nullptr),
       merge_rtdef_(nullptr),
       tx_desc_(nullptr),
@@ -178,7 +182,7 @@ public:
   virtual int do_table_scan() override;
   virtual int rescan() override;
   virtual void clear_evaluated_flag() override;
-  int set_tablet_ids(const ObDASRelatedTabletID &related_tablet_ids);
+  int set_ls_tablet_ids(const ObLSID &ls_id, const ObDASRelatedTabletID &related_tablet_ids);
   ObTableScanParam *get_child_scan_param(int64_t idx) { return child_scan_params_.at(idx); }
 
 protected:
@@ -190,9 +194,12 @@ protected:
 
 private:
   int compare(int64_t cur_idx, int64_t &output_idx, int &cmp_ret);
+  int intersect_get_next_row();
+  int intersect_get_next_rows(int64_t &count, int64_t capacity);
   int union_get_next_row();
   int union_get_next_rows(int64_t &count, int64_t capacity);
-  int init_scan_param(const common::ObTabletID &tablet_id,
+  int init_scan_param(const share::ObLSID &ls_id,
+                      const common::ObTabletID &tablet_id,
                       const sql::ObDASScanCtDef *ctdef,
                       sql::ObDASScanRtDef *rtdef,
                       ObTableScanParam &scan_param);
@@ -203,6 +210,7 @@ private:
   int save_row_to_result_buffer();
 
 private:
+  ObIndexMergeType merge_type_;
   common::ObFixedArray<ObDASIter*, common::ObIAllocator> child_iters_;
   common::ObFixedArray<IndexMergeRowStore, common::ObIAllocator> child_stores_;
   // now child_scan_rtdefs.count() == child_iters.count(), and so do child_scan_params and
@@ -214,6 +222,9 @@ private:
   common::ObFixedArray<ObTabletID, common::ObIAllocator> child_tablet_ids_;
   const ExprFixedArray *rowkey_exprs_;
   lib::MemoryContext mem_ctx_;
+  int (ObDASIndexMergeIter::*get_next_row_)();
+  int (ObDASIndexMergeIter::*get_next_rows_)(int64_t&, int64_t);
+  ObLSID ls_id_;
   const ObDASIndexMergeCtDef *merge_ctdef_;
   ObDASIndexMergeRtDef *merge_rtdef_;
   transaction::ObTxDesc *tx_desc_;

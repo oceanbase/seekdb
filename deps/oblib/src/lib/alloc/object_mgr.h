@@ -1,0 +1,177 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OCEABASE_LIB_ALLOC_OBJECT_MGR_H_
+#define _OCEABASE_LIB_ALLOC_OBJECT_MGR_H_
+
+#include "lib/alloc/ob_ctx_define.h"
+#include "lib/thread_local/ob_tsi_utils.h"
+#include "lib/random/ob_random.h"
+#include "lib/ob_abort.h"
+#include "lib/ob_define.h"
+#include "lib/alloc/alloc_interface.h"
+#ifndef ENABLE_SANITY
+#include "lib/lock/ob_latch.h"
+#else
+#include "lib/alloc/ob_latch_v2.h"
+#endif
+#include "object_set.h"
+
+namespace oceanbase
+{
+namespace lib
+{
+class ObjectMgrV2
+{
+  static const int OBJECT_SET_CNT = 32;
+public:
+  ObjectMgrV2(int parallel, IBlockMgr *blk_mgr);
+  AObject *alloc_object(uint64_t size, const ObMemAttr &attr)
+  {
+    static int64_t global_idx = 0;
+    AObject *obj = NULL;
+    static thread_local int idx = ATOMIC_FAA(&global_idx, 1);
+    for (int64_t i = 0; NULL == obj && i < parallel_; i++) {
+      obj = obj_sets_[(idx + i) % parallel_].alloc_object(size, attr);
+    }
+    return obj;
+  }
+  AObject *realloc_object(
+      AObject *obj, const uint64_t size, const ObMemAttr &attr);
+  void do_cleanup();
+  bool check_has_unfree(char *first_label, char *first_bt);
+
+public:
+  int parallel_;
+  ObjectSetV2 obj_sets_[OBJECT_SET_CNT];
+}; // end of class ObjectMgrV2
+
+// object_set needs to be lightweight, and some large or logically optional members need to be stripped out
+// SubObjectMgr is a combination of object_set and attributes stripped from object_set, such as block_set, mutex, etc.
+class SubObjectMgr : public IBlockMgr
+{
+  friend class ObTenantCtxAllocator;
+public:
+  SubObjectMgr(ObTenantCtxAllocator &ta,
+               const bool enable_no_log,
+               const uint32_t ablock_size,
+               const bool enable_dirty_list,
+               IBlockMgr *blk_mgr);
+  virtual ~SubObjectMgr() {}
+  OB_INLINE int lock(const int64_t abs_timeout_us = INT64_MAX) { return locker_.lock(abs_timeout_us); }
+  OB_INLINE void unlock() { locker_.unlock(); }
+  OB_INLINE bool trylock() { return locker_.trylock(); }
+  OB_INLINE AObject *alloc_object(uint64_t size, const ObMemAttr &attr)
+  {
+    return os_.alloc_object(size, attr);
+  }
+  OB_INLINE AObject *realloc_object(AObject *obj,  const uint64_t size, const ObMemAttr &attr)
+  {
+    return os_.realloc_object(obj, size, attr);
+  }
+  void free_object(AObject *object);
+  OB_INLINE ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override
+  {
+    return bs_.alloc_block(size, attr);
+  }
+  void free_block(ABlock *block) override;
+  int64_t sync_wash(int64_t wash_size) override;
+  OB_INLINE int64_t get_hold() { return bs_.get_total_hold(); }
+  OB_INLINE int64_t get_payload() { return bs_.get_total_payload(); }
+  OB_INLINE int64_t get_used() { return bs_.get_total_used(); }
+  OB_INLINE bool check_has_unfree()
+  {
+    return bs_.check_has_unfree();
+  }
+  OB_INLINE bool check_has_unfree(char *first_label, char *first_bt)
+  {
+    return os_.check_has_unfree(first_label, first_bt);
+  }
+private:
+  ObTenantCtxAllocator &ta_;
+#ifndef ENABLE_SANITY
+  lib::ObMutex mutex_;
+#else
+  lib::ObMutexV2 mutex_;
+#endif
+  SetLocker<decltype(mutex_)> normal_locker_;
+  SetLockerNoLog<decltype(mutex_)> no_log_locker_;
+  ISetLocker &locker_;
+  BlockSet bs_;
+  ObjectSet os_;
+};
+
+class ObjectMgr final : public IBlockMgr
+{
+  static const int N = 32;
+  static const int64_t ALLOC_LOCK_TIMEOUT_US = 1000;
+  friend class SubObjectMgr;
+public:
+  struct Stat
+  {
+    int64_t hold_;
+    int64_t payload_;
+    int64_t used_;
+    int64_t last_washed_size_;
+    int64_t last_wash_ts_;
+  };
+public:
+  ObjectMgr(ObTenantCtxAllocator &ta,
+            bool enable_no_log,
+            uint32_t ablock_size,
+            int parallel,
+            bool enable_dirty_list,
+            IBlockMgr *blk_mgr);
+  ~ObjectMgr();
+  void reset();
+
+  AObject *alloc_object(uint64_t size, const ObMemAttr &attr);
+  AObject *realloc_object(
+      AObject *obj, const uint64_t size, const ObMemAttr &attr);
+  
+  void free_object(AObject *obj);
+
+  ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override;
+  void free_block(ABlock *block) override;
+
+  void print_usage() const;
+  int64_t sync_wash(int64_t wash_size) override;
+  Stat get_stat();
+  bool check_has_unfree();
+  bool check_has_unfree(char *first_label, char *first_bt);
+  void do_cleanup() { obj_mgr_v2_.do_cleanup(); }
+private:
+  SubObjectMgr *create_sub_mgr();
+  void destroy_sub_mgr(SubObjectMgr *sub_mgr);
+
+public:
+  ObTenantCtxAllocator &ta_;
+  bool enable_no_log_;
+  uint32_t ablock_size_;
+  int parallel_;
+  bool enable_dirty_list_;
+  IBlockMgr *blk_mgr_;
+  int sub_cnt_;
+  SubObjectMgr root_mgr_;
+  SubObjectMgr *sub_mgrs_[N];
+  ObjectMgrV2 obj_mgr_v2_;
+  int64_t last_wash_ts_;
+  int64_t last_washed_size_;
+}; // end of class ObjectMgr
+} // end of namespace lib
+} // end of namespace oceanbase
+
+#endif /* _OCEABASE_LIB_ALLOC_OBJECT_MGR_H_ */

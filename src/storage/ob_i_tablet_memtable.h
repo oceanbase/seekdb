@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_I_TABLET_MEMTABLE_H_
 
 #include "lib/utility/ob_print_utils.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "storage/ob_i_memtable_mgr.h"
 #include "storage/memtable/ob_memtable_interface.h"
@@ -214,6 +215,7 @@ public:
     return TabletMemtableFreezeState::READY_FOR_FLUSH == freeze_state_ && share::SCN::max_scn() != get_end_scn();
   }
   virtual bool can_be_minor_merged() override;
+  virtual void set_delete_insert_flag(const bool is_delete_insert) {}
   int inc_unsubmitted_cnt();
   int dec_unsubmitted_cnt();
   int set_freezer(ObFreezer *handler);
@@ -245,7 +247,7 @@ public:
   // *************** pure virtual functions *****************
   virtual bool is_inited() const = 0;
   virtual int init(const ObITable::TableKey &table_key,
-                   ObLS *tenant_ls,
+                   ObLSHandle &ls_handle,
                    ObFreezer *freezer,
                    ObTabletMemtableMgr *memtable_mgr,
                    const int64_t schema_version,
@@ -332,6 +334,7 @@ public:
 
   INHERIT_TO_STRING_KV("ObITable",
                        ObITable,
+                       K(ls_id_),
                        K(allow_freeze_),
                        K(is_flushed_),
                        K(is_tablet_freeze_),

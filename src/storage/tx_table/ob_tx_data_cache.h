@@ -31,31 +31,35 @@ namespace storage {
 
 class ObTxDataCacheKey : public common::ObIKVCacheKey {
 public:
-  ObTxDataCacheKey() : tx_id_(0) {}
-  explicit ObTxDataCacheKey(transaction::ObTransID tx_id) : tx_id_(tx_id) {}
+  ObTxDataCacheKey() : ls_id_(0), tx_id_(0) {}
+  ObTxDataCacheKey(share::ObLSID ls_id, transaction::ObTransID tx_id)
+      : ls_id_(ls_id), tx_id_(tx_id) {}
   ~ObTxDataCacheKey() {}
 
   bool is_valid() const
   {
-    bool is_valid = tx_id_.is_valid();
+    bool is_valid = true && ls_id_.is_valid() && tx_id_.is_valid();
     return is_valid;
   }
 
+  share::ObLSID get_ls_id() const { return ls_id_; }
+
   transaction::ObTransID get_tx_id() const { return tx_id_; }
 
-  TO_STRING_KV(K_(tx_id));
+  TO_STRING_KV(K_(ls_id), K_(tx_id));
 
 public:  // derived from ObIKVCacheKey
   virtual bool operator==(const ObIKVCacheKey &other) const
   {
     const ObTxDataCacheKey &rhs = static_cast<const ObTxDataCacheKey&>(other);
-    bool equal = tx_id_ == rhs.get_tx_id();
+    bool equal = (true && ls_id_ == rhs.get_ls_id() && tx_id_ == rhs.get_tx_id());
     return equal;
   }
 
   virtual uint64_t hash() const
   {
     uint64_t hash_code = 0;
+    hash_code = murmurhash(&ls_id_, sizeof(ls_id_), hash_code);
     hash_code = murmurhash(&tx_id_, sizeof(tx_id_), hash_code);
     return hash_code;
   }
@@ -71,21 +75,26 @@ public:  // derived from ObIKVCacheKey
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "invalid argument", KR(ret), K(buf_len), K(size()));
     } else {
-      ObTxDataCacheKey *new_key = new (buf) ObTxDataCacheKey(tx_id_);
-      OB_ASSERT(new_key != nullptr);
-      key = new_key;
+      ObTxDataCacheKey *new_key = new (buf) ObTxDataCacheKey(ls_id_, tx_id_);
+      if (OB_ISNULL(new_key)) {
+        ret = OB_ERR_UNEXPECTED;
+        STORAGE_LOG(WARN, "new key ptr is null", KR(ret), KPC(this));
+      } else {
+        key = new_key;
+      }
     }
     return ret;
   }
 
 private:
   
+  share::ObLSID ls_id_;
   transaction::ObTransID tx_id_;
 };
 
 class ObTxDataCacheValue : public common::ObIKVCacheValue {
 public:
-  ObTxDataCacheValue() : is_inited_(false), tx_data_(nullptr), undo_node_array_(nullptr), server_alloc_buf_(nullptr) {}
+  ObTxDataCacheValue() : is_inited_(false), tx_data_(nullptr), undo_node_array_(nullptr), mtl_alloc_buf_(nullptr) {}
   ~ObTxDataCacheValue();
 
   int init(const ObTxData &tx_data);
@@ -98,7 +107,7 @@ public:
 
   void destroy();
 
-  TO_STRING_KV(K_(is_inited), KP_(tx_data), KPC_(tx_data), KP_(server_alloc_buf), KP(&reserved_buf_));
+  TO_STRING_KV(K_(is_inited), KP_(tx_data), KPC_(tx_data), KP_(mtl_alloc_buf), KP(&reserved_buf_));
 
 public:  // derived from ObIKVCacheValue
   virtual int64_t size() const { return (IS_INIT && OB_NOT_NULL(tx_data_)) ? sizeof(*this) + tx_data_->size_need_cache() : 0; }
@@ -113,7 +122,7 @@ private:
   bool is_inited_;
   storage::ObTxData *tx_data_;
   storage::ObUndoStatusNode *undo_node_array_;
-  void *server_alloc_buf_;
+  void *mtl_alloc_buf_;
   storage::ObTxData reserved_buf_;
 };
 

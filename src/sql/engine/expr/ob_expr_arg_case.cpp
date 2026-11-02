@@ -28,7 +28,7 @@ namespace sql
 ObExprArgCase::ObExprArgCase(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_ARG_CASE,
                      N_ARG_CASE, MORE_THAN_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                     INTERNAL_IN_MYSQL_MODE), need_cast_(true)
+                     INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE), need_cast_(true)
 {
   disable_operand_auto_cast();
 }
@@ -45,6 +45,7 @@ int ObExprArgCase::deserialize(const char *buf, const int64_t data_len, int64_t 
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(input_types_.count() < 2 || input_types_.count() % 2 != 0)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error. invalid input type count", K(input_types_.count()));
     } else {
       int64_t loop = input_types_.count() / 2;
       bool all_are_numeric = ob_is_accurate_numeric_type(input_types_.at(0).get_calc_type());
@@ -74,8 +75,10 @@ int ObExprArgCase::assign(const ObExprOperator &other)
   const ObExprArgCase *tmp_other = dynamic_cast<const ObExprArgCase *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->need_cast_ = tmp_other->need_cast_;
     }
@@ -115,6 +118,7 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null types", K(ret));
   } else if (OB_UNLIKELY(param_num < 3 || param_num % 2 != 0)) { // an implicit 'else expr' element is added by caller
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param_num is not correct", K(param_num));
@@ -135,6 +139,7 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
                   type_ctx,
                   FALSE, FALSE,
                   is_called_in_sql_))) {
+      LOG_WARN("failed to get result type for cmp", K(ret));
     } else if (OB_FAIL(aggregate_result_type_for_case(
                          type,
                          types_stack + cond_type_count,
@@ -142,6 +147,7 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
                          type_ctx,
                          true, false,
                          is_called_in_sql_))) {
+      LOG_WARN("failed to get result type", K(ret));
     } else {
       // cmp type will be computed dynamically
       type.set_calc_collation_type(tmp_res_type.get_collation_type());
@@ -153,6 +159,7 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
           if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(calc_type,
                                                                     types_stack[0].get_type(),
                                                                     types_stack[i].get_type()))) {
+            LOG_WARN("failed to get_cmp_type", K(types_stack[0]), K(types_stack[i]), K(ret));
           } else {
             types_stack[i].set_calc_type(calc_type);
           }
@@ -177,6 +184,7 @@ int ObExprArgCase::calc_with_cast(ObObj &result,
   ObObj equal_result;
   if (OB_ISNULL(objs_stack) || OB_ISNULL(get_cmp_type_func)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("stack or get_cmp_type_func is null", K(objs_stack), K(get_cmp_type_func));
   } else if (OB_UNLIKELY(param_num < 2) ) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param_num", K(param_num));
@@ -198,6 +206,7 @@ int ObExprArgCase::calc_with_cast(ObObj &result,
                                     objs_stack[0].get_type(),
                                     objs_stack[i].get_type(),
                                     res_type.get_calc_type()))) {
+        LOG_WARN("Get cmp type failed", K(ret));
       } else {
         cast_ctx.dest_collation_ = cmp_ctx.cmp_cs_type_;
         ret = ObExprEqual::calc_cast(equal_result, objs_stack[0], objs_stack[i], cmp_ctx, cast_ctx);
@@ -217,6 +226,7 @@ int ObExprArgCase::calc_with_cast(ObObj &result,
     if (OB_SUCC(ret)) {
       if (!match_when) {
         if (param_num % 2 == 0) {
+          LOG_DEBUG("match else wrong", K(param_num));
           tmp_result = objs_stack[param_num - 1]; // match else (default value)
         } else {
           tmp_result.set_null();
@@ -232,6 +242,7 @@ int ObExprArgCase::calc_with_cast(ObObj &result,
 int ObExprArgCase::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &) const
 {
   int ret = OB_ERR_UNEXPECTED;
+  LOG_WARN("this expr should be rewrote in new engine", K(ret));
   return ret;
 }
 

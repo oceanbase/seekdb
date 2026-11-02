@@ -77,6 +77,7 @@ int ObCartesianPolygon::push_back(const ObLinearring &ring)
     exterior_ = static_cast<const ObCartesianLinearring &>(ring);
   } else {
     if(OB_FAIL(inner_rings_.push_back(static_cast<const ObCartesianLinearring &>(ring)))) {
+      LOG_WARN("fail to push_back to ObCartesianPolygon rings.", K(ret));
     }
   }
   return ret;
@@ -95,6 +96,7 @@ int ObGeographPolygon::push_back(const ObLinearring &ring)
     exterior_ = static_cast<const ObGeographLinearring &>(ring);
   } else {
     if(OB_FAIL(inner_rings_.push_back(static_cast<const ObGeographLinearring &>(ring)))) {
+      LOG_WARN("fail to push_back to ObGeographPolygon rings.", K(ret));
     }
   }
   return ret;
@@ -117,6 +119,7 @@ int ObGeoTreeUtil::create_geometry(ObGeoCRS crs, uint32_t srid,
     void *buf = allocator.alloc(sizeof(CartesianT));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory for ObGeometry", K(ret), K(sizeof(CartesianT)));
     } else {
       CartesianT *node= new (buf) CartesianT(srid, allocator);
       output = node;
@@ -125,6 +128,7 @@ int ObGeoTreeUtil::create_geometry(ObGeoCRS crs, uint32_t srid,
     void *buf = allocator.alloc(sizeof(GeographT));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory for ObGeometry", K(ret), K(sizeof(GeographT)));
     } else {
       GeographT *node= new (buf) GeographT(srid, allocator);
       output = node;
@@ -141,6 +145,7 @@ int ObGeoTreeUtil::create_geometry(uint32_t srid,
   void *buf = allocator.alloc(sizeof(GeometryT));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory for ObGeometry", K(ret), K(sizeof(GeometryT)));
   } else {
     GeometryT *node= new (buf) GeometryT(srid, allocator);
     output = node;
@@ -227,12 +232,14 @@ int ObGeoTreeVisitorImplement::line_do_visit(T_GEO *geo, ObIGeoVisitor &visitor)
   int ret = OB_SUCCESS;
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
+      LOG_WARN("failed to do tree geog line string visit", K(ret));
     } else if (visitor.is_end(geo) || geo->empty()) {
       // do nothing
     } else {
       for (int32_t i = 0; i < geo->size() && OB_SUCC(ret) && !visitor.is_end(geo); i++) {
         T_ITEM item((*geo)[i].template get<0>(), (*geo)[i].template get<1>());
         if (OB_FAIL(item.do_visit(visitor))) {
+          LOG_WARN("failed to do tree geog line string visit", K(ret));
         } else {
           (*geo)[i].template set<0>(item.x());
           (*geo)[i].template set<1>(item.y());
@@ -249,13 +256,16 @@ int ObGeoTreeVisitorImplement::polygon_do_visit(T_GEO *geo, ObIGeoVisitor &visit
   int ret = OB_SUCCESS;
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
+      LOG_WARN("failed to do tree polygon visit", K(ret));
     } else if (visitor.is_end(geo) || geo->empty()) {
       // do nothing
     } else {
       if (OB_FAIL(geo->exterior_ring().do_visit(visitor))) {
+        LOG_WARN("failed to do tree polygon exterior ring visit", K(ret));
       }
       for (uint64_t i = 0; i < geo->inner_ring_size() && OB_SUCC(ret) && !visitor.is_end(geo); i++) {
         if (OB_FAIL(geo->inner_ring(i).do_visit(visitor))) {
+          LOG_WARN("failed to do tree polygon inner ring visit", K(ret));
         }
       }
     }
@@ -269,11 +279,13 @@ int ObGeoTreeVisitorImplement::collection_do_visit(T_GEO *geo, ObIGeoVisitor &vi
   int ret = OB_SUCCESS;
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
+      LOG_WARN("failed to do tree collection geo visit", K(ret));
     } else if (visitor.is_end(geo) || geo->empty()) {
       // do nothing
     } else {
       for (int32_t i = 0; i < geo->size() && OB_SUCC(ret) && !visitor.is_end(geo); i++) {
         if (OB_FAIL((*geo)[i].do_visit(visitor))) {
+          LOG_WARN("failed to do tree item visit", K(ret));
         }
       }
     }
@@ -378,6 +390,7 @@ int ObCartesianGeometrycollection::set(uint32_t index, ObGeometry *geo)
   int ret = OB_SUCCESS;
   if (index >= geoms_.size()) {
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
+    LOG_WARN("index is out of range", K(ret), K(index), K(geoms_.size()));
   } else {
     geoms_[index] = geo;
   }
@@ -389,6 +402,7 @@ int ObGeographGeometrycollection::set(uint32_t index, ObGeometry *geo)
   int ret = OB_SUCCESS;
   if (index >= geoms_.size()) {
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
+    LOG_WARN("index is out of range", K(ret), K(index), K(geoms_.size()));
   } else {
     geoms_[index] = geo;
   }
@@ -399,6 +413,7 @@ int ObCartesianGeometrycollection::resize(int64_t size) {
   int ret = OB_SUCCESS;
   if (size > geoms_.size()) {
     if (OB_FAIL(geoms_.prepare_allocate(size))) {
+      OB_LOG(WARN, "failed to resize ObGeomVector", K(ret), K(size));
     }
   } else {
     while (size != geoms_.size()) {
@@ -412,6 +427,7 @@ int ObGeographGeometrycollection::resize(int64_t size) {
   int ret = OB_SUCCESS;
   if (size > geoms_.size()) {
     if (OB_FAIL(geoms_.prepare_allocate(size))) {
+      OB_LOG(WARN, "failed to resize ObGeomVector", K(ret), K(size));
     }
   } else {
     while (size != geoms_.size()) {

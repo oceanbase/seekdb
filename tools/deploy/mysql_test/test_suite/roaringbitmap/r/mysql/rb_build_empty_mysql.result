@@ -1,0 +1,73 @@
+# ----------------------------------------------------------------------
+# Base test of rb_is_empty/rb_build_empty.
+# ----------------------------------------------------------------------
+drop table if exists t1,t2,t3;
+select hex(rb_build_empty());
+hex(rb_build_empty())
+0100
+select hex(rb_build_empty(1));
+ERROR 42000: Incorrect parameter count in the call to native function 'rb_build_empty'
+select hex(rb_build_empty('a'));
+ERROR 42000: Incorrect parameter count in the call to native function 'rb_build_empty'
+select rb_build_empty(rb_build_empty());
+ERROR 42000: Incorrect parameter count in the call to native function 'rb_build_empty'
+select rb_is_empty(rb_build_empty());
+rb_is_empty(rb_build_empty())
+1
+create table t1 (id int, rb roaringbitmap);
+insert into t1 values(1, rb_build_empty());
+select id, hex(rb) from t1;
+id	hex(rb)
+1	0100
+select rb_is_empty(rb) from t1;
+rb_is_empty(rb)
+1
+alter table t1 add column rb_gen roaringbitmap generated always as (rb_build_empty());
+alter table t1 add column rb_gen_empty int generated always as (rb_is_empty(rb));
+insert into t1(id, rb) values(2, x'010101000000');
+select id, hex(rb), hex(rb_gen), rb_gen_empty from t1;
+id	hex(rb)	hex(rb_gen)	rb_gen_empty
+1	0100	0100	1
+2	010101000000	0100	0
+alter table t1 add column rb_def roaringbitmap default rb_build_empty();
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'rb_build_empty()' at line 1
+create table t2 (id int, rb_gen roaringbitmap generated always as (rb_build_empty()));
+insert into t2(id) values(1);
+select id, hex(rb_gen) from t2;
+id	hex(rb_gen)
+1	0100
+create table t3 (id int, rb_def roaringbitmap default rb_build_empty());
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'rb_build_empty())' at line 1
+select rb_is_empty(null);
+rb_is_empty(null)
+NULL
+select rb_is_empty('');
+ERROR HY000: invalid type given for an argument
+select rb_is_empty(x'');
+ERROR HY000: Invalid data
+select rb_is_empty('aa');
+ERROR HY000: invalid type given for an argument
+select rb_is_empty(2);
+ERROR HY000: invalid type given for an argument
+select rb_is_empty(x'0100');
+rb_is_empty(x'0100')
+1
+select rb_is_empty(x'010101000000');
+rb_is_empty(x'010101000000')
+0
+select rb_is_empty(x'01020100000001000000');
+rb_is_empty(x'01020100000001000000')
+0
+select rb_is_empty(x'01053A30000000000000');
+rb_is_empty(x'01053A30000000000000')
+1
+select rb_is_empty(x'01060000000000000000');
+rb_is_empty(x'01060000000000000000')
+1
+select rb_is_empty(x'01060100000000000000000000003a3000000100000000000000100000000100');
+rb_is_empty(x'01060100000000000000000000003a3000000100000000000000100000000100')
+0
+select rb_is_empty(x'01060200000000000000000000003a3000000100000000000000100000000100010000003a30000001000000000001001000000001000200');
+rb_is_empty(x'01060200000000000000000000003a3000000100000000000000100000000100010000003a30000001000000000001001000000001000200')
+0
+drop table if exists t1,t2,t3;

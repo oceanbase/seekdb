@@ -18,8 +18,7 @@
 #define OCEANBASE_STORAGE_OB_PUSHDOWN_AGGREGATE_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "query/engine/expr/ob_expr.h"
-#include "query/engine/expr/ob_arithmetic_overflow.h"
+#include "sql/engine/expr/ob_expr.h"
 #include "lib/utility/ob_hyperloglog.h"
 #include "storage/ob_i_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
@@ -108,7 +107,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count);
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info);
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false);
   // For group by pushdown
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
@@ -121,6 +120,7 @@ public:
   virtual int copy_single_output_row(sql::ObEvalCtx &ctx);
   virtual int collect_result(sql::ObEvalCtx &ctx);
   virtual int collect_batch_result_in_group_by(const int64_t distinct_cnt);
+  virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg, bool &can_agg);
   virtual bool need_access_data() const { return true; }
   virtual bool finished() const { return false; }
   virtual int reserve_group_by_buf(const int64_t size);
@@ -143,7 +143,7 @@ protected:
   int fill_default_if_need(blocksstable::ObStorageDatum &datum);
   int pad_column_if_need(blocksstable::ObStorageDatum &datum, common::ObIAllocator &padding_allocator, bool alloc_need_reuse = true);
   int deep_copy_datum(const blocksstable::ObStorageDatum &src, common::ObIAllocator &tmp_alloc);
-  int read_agg_datum(const blocksstable::ObMicroIndexInfo &index_info);
+  int read_agg_datum(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg);
   void clear_group_by_info();
   OB_INLINE common::ObDatum &get_group_by_result_datum(const int32_t datum_offset)
   {
@@ -191,7 +191,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override;
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -239,7 +239,6 @@ private:
            (basic_info_.col_param_->get_meta_type().is_numeric_type() || basic_info_.col_param_->get_meta_type().is_temporal_type());
   }
   ObDatumCmpFuncType cmp_fun_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
   uint32_t *group_by_ref_array_;
   common::ObArenaAllocator datum_allocator_;
 };
@@ -273,7 +272,6 @@ private:
            (basic_info_.col_param_->get_meta_type().is_numeric_type() || basic_info_.col_param_->get_meta_type().is_temporal_type());
   }
   ObDatumCmpFuncType cmp_fun_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
   uint32_t *group_by_ref_array_;
   common::ObArenaAllocator datum_allocator_;
 };
@@ -293,7 +291,7 @@ public:
       const int64_t row_count = 1,
       const int64_t agg_row_idx = 0) override;
   virtual int eval_batch(const common::ObDatum *datums, const int64_t count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override
   { return OB_NOT_SUPPORTED; }
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
@@ -313,7 +311,6 @@ public:
 private:
   virtual bool can_use_index_info() const override { return false; } // can not use now.
   sql::ObExprHashFuncType hash_func_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
   ObHyperLogLogCalculator *ndv_calculator_;
   uint64_t def_hash_value_;
 };
@@ -343,7 +340,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info);
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false);
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -398,7 +395,7 @@ public:
       const int64_t row_count = 1,
       const int64_t agg_row_idx = 0) override;
   virtual int eval_batch(const common::ObDatum *datums, const int64_t count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override;
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -425,7 +422,7 @@ private:
   int eval_float(const common::ObDatum &datum, const int32_t datum_offset);
   int eval_double(const common::ObDatum &datum, const int32_t datum_offset);
   int eval_number(const common::ObDatum &datum, const int32_t datum_offset);
-  int eval_collection(const common::ObDatum &datum, const int32_t datum_offset);
+  int eval_vector(const common::ObDatum &datum, const int32_t datum_offset);
   template<typename RES_T>
   int eval_number_decimal_int(const common::ObDatum &datum, const int32_t datum_offset);
   int init_eval_skip_index_func_for_decimal();
@@ -440,7 +437,7 @@ private:
   int eval_float_batch(const common::ObDatum *datums, const int64_t count);
   int eval_double_batch(const common::ObDatum *datums, const int64_t count);
   int eval_number_batch(const common::ObDatum *datums, const int64_t count);
-  int eval_collection_batch(const common::ObDatum *datums, const int64_t count);
+  int eval_vector_batch(const common::ObDatum *datums, const int64_t count);
   template<typename RES_T, typename CALC_T, typename ARG_T>
   int eval_decimal_int_batch(const common::ObDatum *datums, const int64_t count);
   template<typename CALC_T, typename ARG_T>
@@ -492,7 +489,6 @@ private:
   ObSumEvalBatchAggFuncType eval_batch_func_;
   ObSumCopyDatumFuncType copy_datum_func_;
   ObSumEvalAggFuncType eval_skip_index_func_;
-  sql::ObExecContext *exec_ctx_;
   blocksstable::ObStorageDatum cast_datum_;
   char *sum_temp_buffer_;
   char *cast_temp_buffer_;
@@ -525,7 +521,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override;
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -549,6 +545,8 @@ public:
   virtual bool finished() const override { return aggregated_; }
   virtual int reserve_group_by_buf(const int64_t size) override;
   virtual int output_extra_group_by_result(const int64_t start, const int64_t count) override;
+  virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info,
+    const bool is_cg, bool &can_agg) override;
   OB_INLINE void set_determined_value()
   {
     is_determined_value_ = true;
@@ -599,7 +597,7 @@ public:
   // agg_idx: aggregate index in 'agg_cells_'
   // is_group_by_col: true if current column is group by column
   // is_default_datum: true if current column is new added column
-  // ref_offset: start offset when a batch is evaluated in multiple pieces
+  // ref_offset: for column store, may do 'eval_batch' multiple times for one batch
   int eval_batch(
       common::ObDatum *datums,
       const int64_t count,
@@ -618,6 +616,7 @@ public:
   // for micro with bitmap, should extract distinct values according bitmap
   int extract_distinct() override;
   int output_extra_group_by_result(int64_t &count, const ObTableIterParam &iter_param) override;
+  // for column store, assign aggregate cells to column group scanner(ObCGGroupByScanner)
   int assign_agg_cells(const sql::ObExpr *col_expr, common::ObIArray<int32_t> &agg_idxs) override;
   OB_INLINE bool is_exceed_sql_batch() const override { return group_by_col_datum_buf_->is_use_extra_buf(); }
   OB_INLINE common::ObDatum *get_group_by_col_datums_to_fill() override
@@ -692,7 +691,8 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
 
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
-    if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
+    if (sql::ObExprAdd::is_int_int_out_of_range(datum_int, new_int, sum_int)) {
+      LOG_DEBUG("int64_t add overflow, will use decimal int", K(datum_int), K(new_int), K(sum_int));
       if (OB_UNLIKELY(result_datum.is_null())) {
         DATUM_TO_DECIMAL_INT(result_datum, RES_T) = datum_int;
         DATUM_TO_DECIMAL_INT(result_datum, RES_T) += new_int;
@@ -703,6 +703,7 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
       }
       datum_int = 0;
     } else {
+      LOG_DEBUG("int64_t add does not overflow", K(datum_int), K(new_int), K(sum_int));
       datum_int = sum_int;
     }
     sum_use_int_flag = true;
@@ -724,19 +725,22 @@ OB_INLINE int ObSumAggCell::eval_int_inner<number::ObNumber>(const common::ObDat
 
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
-    if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
+    if (sql::ObExprAdd::is_int_int_out_of_range(datum_int, new_int, sum_int)) {
+      LOG_DEBUG("int64_t add overflow, will use number", K(datum_int), K(new_int), K(sum_int));
       common::number::ObNumber result_nmb;
       if (!result_datum.is_null()) {
         common::number::ObCompactNumber &cnum = const_cast<common::number::ObCompactNumber &>(result_datum.get_number());
         result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
       }
       if (OB_FAIL(result_nmb.add(datum_int, new_int, result_nmb, alloc))) {
+        LOG_WARN("number add failed", K(ret));
       } else {
         result_datum.set_number(result_nmb);
         datum_int = 0;
         alloc.free();
       }
     } else {
+      LOG_DEBUG("int64_t add does not overflow", K(datum_int), K(new_int), K(sum_int), K(datum_offset));
       datum_int = sum_int;
     }
     sum_use_int_flag = true;
@@ -757,7 +761,8 @@ OB_INLINE int ObSumAggCell::eval_uint_inner(const common::ObDatum &datum, ObData
 
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
-    if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
+    if (sql::ObExprAdd::is_uint_uint_out_of_range(datum_uint, new_uint, sum_uint)) {
+      LOG_DEBUG("uint64_t add overflow, will use number", K(datum_uint), K(new_uint), K(sum_uint));
       if (OB_UNLIKELY(result_datum_.is_null())) {
         DATUM_TO_DECIMAL_INT(result_datum_, RES_T) = datum_uint;
         DATUM_TO_DECIMAL_INT(result_datum_, RES_T) += new_uint;
@@ -768,6 +773,7 @@ OB_INLINE int ObSumAggCell::eval_uint_inner(const common::ObDatum &datum, ObData
       }
       datum_uint = 0;
     } else {
+      LOG_DEBUG("uint64_t add does not overflow", K(datum_uint), K(new_uint), K(sum_uint), K(datum_offset));
       datum_uint = sum_uint;
     }
     sum_use_int_flag = true;
@@ -789,19 +795,22 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
 
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
-    if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
+    if (sql::ObExprAdd::is_uint_uint_out_of_range(datum_uint, new_uint, sum_uint)) {
+      LOG_DEBUG("uint64_t add overflow, will use number", K(datum_uint), K(new_uint), K(sum_uint));
       common::number::ObNumber result_nmb;
       if (!result_datum.is_null()) {
         common::number::ObCompactNumber &cnum = const_cast<common::number::ObCompactNumber &>(result_datum.get_number());
         result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
       }
       if (OB_FAIL(result_nmb.add(datum_uint, new_uint, result_nmb, alloc))) {
+        LOG_WARN("number add failed", K(ret));
       } else {
         result_datum.set_number(result_nmb);
         datum_uint = 0;
         alloc.free();
       }
     } else {
+      LOG_DEBUG("uint64_t add does not overflow", K(datum_uint), K(new_uint), K(sum_uint));
       datum_uint = sum_uint;
     }
     sum_use_int_flag = true;

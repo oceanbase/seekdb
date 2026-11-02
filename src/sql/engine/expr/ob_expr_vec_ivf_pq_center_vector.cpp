@@ -21,8 +21,9 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
-#include "query/vector/ob_vector_index_util.h"
-#include "data_plane/vector/ob_vector_common_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "storage/vector_type/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -48,8 +49,10 @@ int ObExprVecIVFPQCenterVector::calc_result_typeN(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
+    LOG_WARN("failed to get collection subschema id", K(ret));
   } else {
     type.set_collection(subschema_id);
   } 
@@ -75,8 +78,10 @@ int ObExprVecIVFPQCenterVector::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1) && OB_UNLIKELY(rt_expr.arg_cnt_ != 4)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else if (OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments, null args", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_pq_center_vector;
   }
@@ -92,34 +97,37 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
   ObDatum *datum = nullptr;
   if (1 == expr.arg_cnt_) {
     expr_datum.set_null();
+    LOG_DEBUG("[vec debug] generate empty pq center vector since only one arg", K(ret), K(1 == expr.arg_cnt_));
   } else if (4 == expr.arg_cnt_) {
     // for pq centroid table, return residual vector
     common::ObArenaAllocator tmp_allocator("IVFPQExprPQCVec", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;
     ObTabletID tablet_id;
-    share::ObVectorIndexDistAlgorithm dis_algo = share::VIDA_MAX;
+    ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;
     ObSEArray<float*, 64> centers;
     bool contain_null = false;
     ObIArrayType *arr = NULL;
     uint64_t center_prefix = 0;
-    if (OB_FAIL(share::ObVectorIndexUtil::eval_ivf_centers_common(
+    if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
         tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
+      LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
       expr_datum.set_null();
     } else {
-      share::ObVectorNormalizeInfo norm_info;
+      ObVectorNormalizeInfo norm_info;
       float *residual_vec = nullptr;
       int64_t center_idx = 0;
       if (centers.count() == 0) {
         residual_vec = reinterpret_cast<float*>(arr->get_data());
-      } else if (OB_FAIL(share::ObVectorIndexUtil::calc_residual_vector(
+      } else if (OB_FAIL(ObVectorIndexUtil::calc_residual_vector(
           tmp_allocator,
           arr->size(),
           centers,
           reinterpret_cast<float*>(arr->get_data()),
-          share::VIDA_COS != dis_algo ? nullptr: &norm_info, // cos need norm
+          VIDA_COS != dis_algo ? nullptr: &norm_info, // cos need norm
           residual_vec))) {
+        LOG_WARN("failed to get nearest center", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else {
@@ -131,6 +139,7 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
                                           eval_ctx,
                                           res_str,
                                           data_str.ptr()))) {
+          LOG_WARN("fail to set array res", K(ret), K(data_str));
         } else {
           expr_datum.set_string(res_str);
         }
@@ -138,9 +147,11 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected arg cnt", K(ret), K(expr.arg_cnt_));
   }
   return ret;
 }
 
 }  // namespace sql
 }  // namespace oceanbase
+

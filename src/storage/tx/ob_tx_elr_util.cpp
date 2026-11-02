@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
 #include "ob_tx_elr_util.h"
+#include "share/config/ob_tenant_config_mgr.h"
+#include "ob_trans_event.h"
 
 namespace oceanbase
 {
@@ -24,19 +25,22 @@ namespace transaction
 
 int ObTxELRUtil::check_and_update_tx_elr_info()
 {
-  refresh_elr_runtime_config_();
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  // lite: sys-only -> ELR tenant-config refresh not applicable
+  return ret;
 }
 
-void ObTxELRUtil::refresh_elr_runtime_config_()
+void ObTxELRUtil::refresh_elr_tenant_config_()
 {
   bool need_refresh = ObClockGenerator::getClock() - last_refresh_ts_ > REFRESH_INTERVAL;
 
   if (OB_UNLIKELY(need_refresh)) {
-    can_elr_ = config::enable_early_lock_release();
-    last_refresh_ts_ = ObClockGenerator::getClock();
+    if (OB_LIKELY(true)) {
+      can_tenant_elr_ = GCONF.enable_early_lock_release;
+      last_refresh_ts_ = ObClockGenerator::getClock();
+    }
     if (REACH_TIME_INTERVAL(10000000 /* 10s */)) {
-      TRANS_LOG(INFO, "refreshed ELR runtime configuration", K(*this));
+      TRANS_LOG(INFO, "refresh tenant config success",  K(*this));
     }
   }
 }

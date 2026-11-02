@@ -63,19 +63,22 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObObjType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_LENGTH);
   double res_num = 0;
   ObDatum *gis_unit = NULL;
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(temp_allocator.eval_arg(arg1, ctx, datum1))) {
+    LOG_WARN("fail to eval args", K(ret));
   } else if (datum1->is_null()) {
     is_null_res = true;
   } else if (type1 == ObIntType) {
     // bugfix 53283098, should allow double type in calc_result_type2
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_CROSSES);
+    LOG_WARN("invalid type", K(ret), K(type1));
   } else if (expr.arg_cnt_ == 2 && OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, gis_unit))) {
+    LOG_WARN("eval geo unit arg failed", K(ret));
   } else if (expr.arg_cnt_ == 2 && gis_unit->is_null()) {
     is_null_res = true;
   } else {
@@ -84,25 +87,32 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObGeoType gtype = ObGeoType::GEOTYPEMAX;
     ObGeometry *geo = nullptr;
     const ObSrsItem *srs = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
-            arg1->obj_meta_.has_lob_header(), wkb))) {
+            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_LENGTH))) {
+      LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(
-                   temp_allocator, wkb, geo, srs, N_ST_LENGTH, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+                   temp_allocator, wkb, geo, srs, N_ST_LENGTH, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {  // ObIWkbGeom
+      LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb));
     } else if (geo->type() != ObGeoType::LINESTRING && geo->type() != ObGeoType::MULTILINESTRING) {
       is_null_res = true;
     } else if (OB_FAIL(guard.init())) {
+      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       // cal length
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       if (OB_FAIL(gis_context.append_geo_arg(geo))) {
+        LOG_WARN("build gis context failed", K(ret));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Length>::geo_func::eval(gis_context, res_num))) {
+        LOG_WARN("eval st distance failed", K(ret));
         if (OB_ERR_GIS_INVALID_DATA == ret) {
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_LENGTH);
         } else {
@@ -110,16 +120,22 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         }
       } else if (std::isinf(res_num)) {
         ret = OB_OPERATE_OVERFLOW;
+        LOG_WARN("Length value is out of range in st_length", K(ret));
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Length", N_ST_LENGTH);
       } else if (expr.arg_cnt_ == 2) {
         // transfer to unit
         if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(
                        gis_unit->get_string(), srs, res_num, res_num))) {
+          LOG_WARN("fail to do unit conversion", K(ret), K(res_num));
         } else if (std::isinf(res_num)) {
           ret = OB_OPERATE_OVERFLOW;
+          LOG_WARN("Length value is out of range in st_length", K(ret));
           LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Length", N_ST_LENGTH);
         } 
       }
+    }
+    if (mem_ctx != nullptr) {
+      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
   // set result

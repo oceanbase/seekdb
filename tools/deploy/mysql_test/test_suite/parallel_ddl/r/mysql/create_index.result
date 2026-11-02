@@ -1,0 +1,14 @@
+create table t1(col0 int, col1 int, col2 int, col3 int generated always as (col1+1) virtual, primary key (col0),col4 int, col5 int);
+create index i1 on t1(col1);
+create unique index i2 on t1(col2);
+create index i3 on t1(col3);
+create index i4 on t1((col4+col5<1));
+create index i5 on t1(col5) global;
+create table t2(col0 int, col1 int)
+partition by hash(col1) partitions 2;
+create index i6 on t2(col0);
+create index i7 on t2(col1) global;
+create table t3(col0 int, col1 int, foreign key(col0) references t1(col0));
+create index i8 on t3(col1);
+create table t4(col0 int, col1 int generated always as (col0-1) virtual, foreign key(col0) references t1(col0));
+create index i9 on t4(col1);

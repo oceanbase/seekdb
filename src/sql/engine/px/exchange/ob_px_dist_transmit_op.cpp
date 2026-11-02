@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
 #include "ob_px_dist_transmit_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 
@@ -36,9 +35,14 @@ int ObPxDistTransmitOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxTransmitOp::inner_open())) {
+    LOG_WARN("PX transmit open failed", K(ret));
   } else if (!MY_SPEC.sampling_saving_row_.empty()) {
     if (MY_SPEC.is_vectorized()) {
-      OZ(brs_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
+      if (!get_spec().use_rich_format_) {
+        OZ(brs_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
+      } else {
+        OZ(vec_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
+      }
     } else {
       OZ(last_row_.init(ctx_.get_allocator(), MY_SPEC.sampling_saving_row_.count()));
     }
@@ -77,7 +81,7 @@ int ObPxDistTransmitOp::inner_get_next_row()
 
 int ObPxDistTransmitOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
-  return next_batch(max_row_cnt);
+  return get_spec().use_rich_format_ ? next_vector(max_row_cnt) : next_batch(max_row_cnt);
 }
 
 int ObPxDistTransmitOp::next_batch(const int64_t max_row_cnt)
@@ -116,6 +120,7 @@ int ObPxDistTransmitOp::next_batch(const int64_t max_row_cnt)
     // otherwise data ptr is not reset to frame, table scan may fail.
     if (OB_SUCC(ret) && brs_holder_.is_saved()) {
       if (OB_FAIL(brs_holder_.restore())) {
+        LOG_WARN("store holder failed", K(ret));
       } else {
         brs_holder_.reset();
       }
@@ -130,20 +135,82 @@ int ObPxDistTransmitOp::next_batch(const int64_t max_row_cnt)
   return ret;
 }
 
+int ObPxDistTransmitOp::next_vector(const int64_t max_row_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (sample_done_ && NULL != cur_transmit_sampled_rows_) {
+    clear_evaluated_flag();
+    int64_t size = std::min(std::min(max_row_cnt, MY_SPEC.max_batch_size_),
+                            cur_transmit_sampled_rows_->second - cur_transmit_sampled_rows_->first);
+    for (int64_t i = 0;
+         i < MY_SPEC.sampling_saving_row_.count() && OB_SUCC(ret); i++) {
+      if (OB_FAIL(MY_SPEC.sampling_saving_row_.at(i)->init_vector(
+              eval_ctx_,
+              MY_SPEC.sampling_saving_row_.at(i)->is_batch_result()
+                  ? VEC_UNIFORM
+                  : VEC_UNIFORM_CONST,
+              size))) {
+        LOG_WARN("init vector failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      brs_.size_ = size;
+      brs_.end_ = false;
+      brs_.skip_->reset(brs_.size_);
+      ObEvalCtx::BatchInfoScopeGuard g(eval_ctx_);
+      g.set_batch_size(brs_.size_);
+      sampled_input_rows_it_age_.inc();
+      for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
+        g.set_batch_idx(i);
+        const ObRADatumStore::StoredRow *sr = NULL;
+        OZ(sampled_input_rows_.get_row(cur_transmit_sampled_rows_->first + i, sr));
+        OZ(sr->to_expr(MY_SPEC.sampling_saving_row_, eval_ctx_));
+        if (OB_SUCC(ret)) {
+          LOG_DEBUG("fetch row for transmit", "row", ROWEXPR2STR(eval_ctx_, MY_SPEC.sampling_saving_row_));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      cur_transmit_sampled_rows_->first += brs_.size_;
+      if (cur_transmit_sampled_rows_->first >= cur_transmit_sampled_rows_->second) {
+        if (cur_transmit_sampled_rows_
+            == &sampled_rows2transmit_.at(sampled_rows2transmit_.count() - 1)) {
+          cur_transmit_sampled_rows_ = NULL;
+        } else {
+          cur_transmit_sampled_rows_ += 1;
+        }
+      }
+    }
+  } else {
+    OZ(vec_holder_.restore());
+    vec_holder_.reset();
+    OZ(ObPxTransmitOp::inner_get_next_batch(max_row_cnt));
+  }
+  return ret;
+}
+
 int ObPxDistTransmitOp::do_transmit()
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
+  int64_t use_shared_bcast_msg = ObBcastOptimization::BC_TO_WORKER;
   if (OB_ISNULL(ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx_.get_physical_plan_ctx()->get_phy_plan())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("phy plan is not inited", K(ret), KP(ctx_.get_physical_plan_ctx()));
   } else if (ObPQDistributeMethod::LOCAL == MY_SPEC.dist_method_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid PX distribution method",  K(ret), K(MY_SPEC.dist_method_));
+  } else if (OB_FAIL(ctx_.get_my_session()->get_sys_variable(share::SYS_VAR__OB_PX_BCAST_OPTIMIZATION, use_shared_bcast_msg))) {
+    LOG_WARN("failed to get system variable", K(ret));
   } else if (ObPQDistributeMethod::BROADCAST == MY_SPEC.dist_method_) {
-    if (OB_FAIL(chs_agent_.init(
+    use_bcast_opt_ = (ObBcastOptimization::BC_TO_SERVER == use_shared_bcast_msg);
+    if (use_shared_bcast_msg && OB_FAIL(chs_agent_.init(
         dfc_,
+        task_ch_set_,
         task_channels_,
         phy_plan_ctx->get_timeout_timestamp()))) {
+      LOG_WARN("failed to init chs agent", K(ret));
     }
   }
 
@@ -154,52 +221,62 @@ int ObPxDistTransmitOp::do_transmit()
     switch (MY_SPEC.dist_method_) {
       case ObPQDistributeMethod::HASH: {
         if (OB_FAIL(do_hash_dist())) {
+          LOG_WARN("do hash distribution failed", K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::BC2HOST: {
         if (OB_FAIL(do_bc2host_dist())) {
+          LOG_WARN("do BC2HOST distribution failed", K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::RANDOM: {
         if (OB_FAIL(do_random_dist())) {
+          LOG_WARN("do random distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::BROADCAST: {
         if (OB_FAIL(do_broadcast_dist())) {
+          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::SM_BROADCAST: {
         if (OB_FAIL(do_sm_broadcast_dist())) {
+          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::PARTITION_HASH: {
         if (OB_FAIL(do_sm_pkey_hash_dist())) {
+          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
        case ObPQDistributeMethod::RANGE: {
         if (OB_FAIL(do_range_dist())) {
+          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::HYBRID_HASH_BROADCAST: {
         if (OB_FAIL(do_hybrid_hash_broadcast_dist())) {
+          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::HYBRID_HASH_RANDOM: {
         if (OB_FAIL(do_hybrid_hash_random_dist())) {
+          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       default: {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "this transmit distribution method");
+        LOG_WARN("distribution method not supported right now", K(ret), K(MY_SPEC.dist_method_));
       }
     }
   }
@@ -215,9 +292,12 @@ int ObPxDistTransmitOp::do_hash_dist()
                                              &MY_SPEC.dist_exprs_,
                                              &MY_SPEC.dist_hash_funcs_,
                                              true);
-    if (MY_SPEC.is_wf_hybrid_) {
+    if (MY_SPEC.is_rollup_hybrid_ || MY_SPEC.is_wf_hybrid_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected status: is_rollup_hybrid or MY_SPEC.is_wf_hybrid_ is true",
+               K(ret), K(MY_SPEC.is_rollup_hybrid_), K(MY_SPEC.is_wf_hybrid_));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::NULL_AWARE_HASH>(slice_id_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
     }
   } else if (MY_SPEC.is_wf_hybrid_) {
     ObWfHybridDistSliceIdCalc wf_hybrid_slice_id_calc(
@@ -226,6 +306,7 @@ int ObPxDistTransmitOp::do_hash_dist()
         &MY_SPEC.dist_exprs_, &MY_SPEC.dist_hash_funcs_,
         true);
     if (OB_FAIL(send_rows<ObSliceIdxCalc::WF_HYBRID>(wf_hybrid_slice_id_calc))) {
+      LOG_WARN("row wf hybrid distribution failed", K(ret));
     }
   } else {
     ObHashSliceIdCalc slice_id_calc(
@@ -234,6 +315,7 @@ int ObPxDistTransmitOp::do_hash_dist()
                     &MY_SPEC.dist_exprs_, &MY_SPEC.dist_hash_funcs_,
                     true);
     if (OB_FAIL(send_rows<ObSliceIdxCalc::HASH>(slice_id_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
     }
   }
   return ret;
@@ -244,15 +326,28 @@ int ObPxDistTransmitOp::do_bc2host_dist()
   int ret = OB_SUCCESS;
   ObBc2HostSliceIdCalc::ChannelIdxArray channel_idx;
   ObBc2HostSliceIdCalc::HostIdxArray host_idx;
+  auto &channels = task_channels_;
   for (int64_t i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
     if (OB_FAIL(channel_idx.push_back(i))) {
+      LOG_WARN("array push back failed", K(ret));
     }
   }
-  if (OB_SUCC(ret) && !channel_idx.empty()) {
-    ObBc2HostSliceIdCalc::HostIndex local_host;
-    local_host.begin_ = 0;
-    local_host.end_ = channel_idx.count();
-    if (OB_FAIL(host_idx.push_back(local_host))) {
+  if (OB_SUCC(ret)) {
+    lib::ob_sort(channel_idx.begin(), channel_idx.end(), [&channels](int64_t l, int64_t r) {
+        return channels.at(l)->get_peer() < channels.at(r)->get_peer(); });
+  }
+  ObBc2HostSliceIdCalc::HostIndex hi;
+  uint64_t idx = 0;
+  while (OB_SUCC(ret) && idx < channel_idx.count()) {
+    hi.begin_ = idx;
+    while (idx < channel_idx.count()
+        && task_channels_.at(channel_idx.at(hi.begin_))->get_peer()
+        == task_channels_.at(channel_idx.at(idx))->get_peer()) {
+      idx++;
+    }
+    hi.end_ = idx;
+    if (OB_FAIL(host_idx.push_back(hi))) {
+      LOG_WARN("array push back failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -263,6 +358,7 @@ int ObPxDistTransmitOp::do_bc2host_dist()
                                        host_idx,
                                        MY_SPEC.null_row_dist_method_);
     if (OB_FAIL(send_rows<ObSliceIdxCalc::BC2HOST>(slice_id_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
     }
   }
   return ret;
@@ -273,6 +369,7 @@ int ObPxDistTransmitOp::do_random_dist()
   int ret = OB_SUCCESS;
   ObRandomSliceIdCalc slice_id_calc(ctx_.get_allocator(), task_channels_.count());
   if (OB_FAIL(send_rows<ObSliceIdxCalc::RANDOM>(slice_id_calc))) {
+    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -283,7 +380,18 @@ int ObPxDistTransmitOp::do_broadcast_dist()
   ObBroadcastSliceIdCalc slice_id_calc(ctx_.get_allocator(),
                                        task_channels_.count(),
                                        MY_SPEC.null_row_dist_method_);
-  if (OB_FAIL(broadcast_rows(slice_id_calc))) {
+  if (!use_bcast_opt_) {
+    if (OB_FAIL(send_rows<ObSliceIdxCalc::BROADCAST>(slice_id_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
+    }
+  } else if (get_spec().use_rich_format_) {
+    if (OB_FAIL(broadcast_rows<true>(slice_id_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
+    }
+  } else {
+    if (OB_FAIL(broadcast_rows<false>(slice_id_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
+    }
   }
   return ret;
 }
@@ -298,6 +406,7 @@ int ObPxDistTransmitOp::do_hybrid_hash_random_dist()
       &MY_SPEC.popular_values_hash_,
       true);
   if (OB_FAIL(send_rows<ObSliceIdxCalc::HYBRID_HASH_RANDOM>(slice_id_calc))) {
+    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -312,6 +421,7 @@ int ObPxDistTransmitOp::do_hybrid_hash_broadcast_dist()
       &MY_SPEC.popular_values_hash_,
       true);
   if (OB_FAIL(send_rows<ObSliceIdxCalc::HYBRID_HASH_BROADCAST>(slice_id_calc))) {
+    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -323,7 +433,9 @@ int ObPxDistTransmitOp::do_range_dist()
   if (!sample_done_) {
     ObDynamicSamplePieceMsg piece_msg;
     if (OB_FAIL(build_ds_piece_msg(task_channels_.count(), piece_msg))) {
+      LOG_WARN("fail to buil ds piece msg", K(ret));
     } else if (OB_FAIL(do_datahub_dynamic_sample(MY_SPEC.id_, piece_msg))) {
+      LOG_WARN("fail to do dynamic sample");
     } else {
       sample_done_ = true;
     }
@@ -335,7 +447,9 @@ int ObPxDistTransmitOp::do_range_dist()
       range, &MY_SPEC.dist_exprs_, MY_SPEC.sort_cmp_funs_, MY_SPEC.sort_collations_, MY_SPEC.ddl_slice_id_expr_);
     if (ObPxSampleType::OBJECT_SAMPLE == MY_SPEC.sample_type_) {
       if (OB_FAIL(child_->rescan())) {
+        LOG_WARN("fail to rescan child", K(ret));
       } else if (OB_FAIL(ObOperator::inner_rescan())) {
+        LOG_WARN("fail to inner rescan", K(ret));
       } else {
         iter_end_ = false;
         consume_first_row_ = true;
@@ -356,13 +470,19 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
   
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+    LOG_WARN("input is null", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
       schema_guard))) {
+    LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( repart_ref_table_id, table_schema))) {
+    LOG_WARN("faile to get table schema", K(ret), K(repart_ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
+    LOG_WARN("table schema is null. repart sharding requires a table in dfo",
+             K(repart_ref_table_id), K(ret));
   } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
+    LOG_WARN("fail to get channel affinity map", K(ret));
   } else {
     ObSlaveMapBcastIdxCalc slice_idx_calc(ctx_,
                                           *table_schema,
@@ -373,7 +493,9 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
                                           part_ch_info_,
                                           MY_SPEC.repartition_type_);
     if (OB_FAIL(slice_idx_calc.init())) {
+      LOG_WARN("init slice calc failed", K(ret));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::SM_BROADCAST>(slice_idx_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
     }
   }
   return ret;
@@ -389,14 +511,20 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
   uint64_t repart_ref_table_id = MY_SPEC.repartition_ref_table_id_;
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+    LOG_WARN("input is null", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
       schema_guard))) {
+    LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(
     repart_ref_table_id, table_schema))) {
+    LOG_WARN("faile to get table schema", K(ret), K(repart_ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
+    LOG_WARN("table schema is null. repart sharding requires a table in dfo",
+             K(repart_ref_table_id), K(ret));
   } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
+    LOG_WARN("fail to get channel affinity map", K(ret));
   } else {
     ObSlaveMapPkeyHashIdxCalc slice_idx_calc(ctx_,
                                              *table_schema,
@@ -410,7 +538,9 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
                                              MY_SPEC.repartition_type_,
                                              true);
     if (OB_FAIL(slice_idx_calc.init())) {
+      LOG_WARN("failed to init slice idx calc", K(ret));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::SM_REPART_HASH>(slice_idx_calc))) {
+      LOG_WARN("row distribution failed", K(ret));
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = slice_idx_calc.destroy())) {
@@ -446,6 +576,8 @@ int ObPxDistTransmitOp::build_ds_piece_msg(int64_t expected_range_count,
   int ret = OB_SUCCESS;
   piece_msg.reset();
   if (OB_FAIL(piece_msg.tablet_ids_.push_back(0))) {
+    // just generate one partition
+    LOG_WARN("fail to push back parititon ids", K(ret));
   } else if (FALSE_IT(piece_msg.sample_type_ = MY_SPEC.sample_type_)) {
   } else if (is_row_sample()) {
     OZ(build_row_sample_piece_msg(expected_range_count, piece_msg));
@@ -453,6 +585,7 @@ int ObPxDistTransmitOp::build_ds_piece_msg(int64_t expected_range_count,
     OZ(build_object_sample_piece_msg(expected_range_count, piece_msg));
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected sample type", K(ret));
   }
   return ret;
 }
@@ -499,7 +632,11 @@ int ObPxDistTransmitOp::build_row_sample_piece_msg(int64_t expected_range_count,
           ObCtxIds::WORK_AREA, "PxSampleRow"));
   sampled_input_rows_.set_io_observer(&io_event_observer_);
   if (is_vectorized()) {
-    OZ(add_batch_row_for_piece_msg(*sample_store));
+    if (get_spec().use_rich_format_) {
+      OZ(add_batch_row_for_piece_msg_vec(*sample_store));
+    } else {
+      OZ(add_batch_row_for_piece_msg(*sample_store));
+    }
   } else {
     OZ(add_row_for_piece_msg(*sample_store));
   }
@@ -510,9 +647,11 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxTransmitSpec::register_to_datahub(ctx))) {
+    LOG_WARN("failed to register init channel msg", K(ret));
   } else if (ObPQDistributeMethod::RANGE == dist_method_) {
     if (OB_ISNULL(ctx.get_sqc_handler())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null unexpected", K(ret));
     } else {
       void *buf = ctx.get_allocator().alloc(sizeof(ObDynamicSampleWholeMsg::WholeMsgProvider));
       if (OB_ISNULL(buf)) {
@@ -522,16 +661,20 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
           new (buf)ObDynamicSampleWholeMsg::WholeMsgProvider();
         ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
         if (OB_FAIL(sqc_ctx.add_whole_msg_provider(id_, dtl::DH_DYNAMIC_SAMPLE_WHOLE_MSG, *provider))) {
+          LOG_WARN("fail add whole msg provider", K(ret));
         } else {
           char *chunk_buf = (char *)ctx.get_allocator().alloc(sizeof(ObChunkDatumStore));
           if (OB_ISNULL(chunk_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("allocate memory failed", K(ret));
           } else {
             ObChunkDatumStore *sample_store = new (chunk_buf) ObChunkDatumStore("DYN_SAMPLE_CTX");
             if (OB_FAIL(sample_store->init(0,
                   ObCtxIds::DEFAULT_CTX_ID, "DYN_SAMPLE_CTX", false/*enable dump*/))) {
+              LOG_WARN("init sample chunk store failed", K(ret));
             } else if (OB_FAIL(ctx.get_sqc_handler()->get_sqc_proxy().
                   get_piece_sample_msg().row_stores_.push_back(sample_store))) {
+              LOG_WARN("fail to push back sample store", K(ret));
             }
             if (OB_FAIL(ret) && nullptr != sample_store) {
               sample_store->~ObChunkDatumStore();
@@ -570,7 +713,7 @@ int ObPxDistTransmitOp::add_row_for_piece_msg(ObChunkDatumStore &sample_store)
         if (sampled_input_rows_.get_mem_hold() != mem_hold) {
           mem_hold = sampled_input_rows_.get_mem_hold();
           // try extend memory bound when used memory close to memory bound.
-          if (config::enable_sql_operator_dump()
+          if (GCONF.is_sql_operator_dump_enabled()
               && mem_hold >= sql_mem_processor_.get_mem_bound() - ObRADatumStore::BIG_BLOCK_SIZE) {
             bool dumped = false;
             OZ(sql_mem_processor_.extend_max_memory_size(
@@ -647,7 +790,7 @@ int ObPxDistTransmitOp::add_batch_row_for_piece_msg(ObChunkDatumStore &sample_st
         if (sampled_input_rows_.get_mem_hold() != mem_hold) {
           mem_hold = sampled_input_rows_.get_mem_hold();
           // try extend memory bound when used memory close to memory bound.
-          if (config::enable_sql_operator_dump()
+          if (GCONF.is_sql_operator_dump_enabled()
               && mem_hold >= sql_mem_processor_.get_mem_bound() - ObRADatumStore::BIG_BLOCK_SIZE) {
             bool dumped = false;
             OZ(sql_mem_processor_.extend_max_memory_size(
@@ -719,6 +862,108 @@ int ObPxDistTransmitOp::add_batch_row_for_piece_msg(ObChunkDatumStore &sample_st
   return ret;
 }
 
+int ObPxDistTransmitOp::add_batch_row_for_piece_msg_vec(ObChunkDatumStore &sample_store)
+{
+  int ret = OB_SUCCESS;
+  if (iter_end_) {
+    // do nothing
+  } else {
+    int64_t max_input_rows = HEADER_INPUT_SAMPLE == MY_SPEC.sample_type_
+        ? DYNAMIC_SAMPLE_ROW_COUNT
+        : INT64_MAX;
+    int64_t mem_hold = 0;
+    do {
+      // For auto memory manage, ObRADatumStore can not shrink memory used right now,
+      // no need to update memory statistics after dumped
+      if (!sampled_input_rows_.is_file_open()) {
+        bool updated = false;
+        OZ(sql_mem_processor_.update_max_available_mem_size_periodically(
+                &mem_context_->get_malloc_allocator(),
+                [&](int64_t loop_cnt) { return sampled_input_rows_.get_row_cnt() > loop_cnt; },
+                updated));
+        if (OB_SUCC(ret) && updated) {
+          sampled_input_rows_.set_mem_limit(sql_mem_processor_.get_mem_bound());
+        }
+        if (sampled_input_rows_.get_mem_hold() != mem_hold) {
+          mem_hold = sampled_input_rows_.get_mem_hold();
+          // try extend memory bound when used memory close to memory bound.
+          if (GCONF.is_sql_operator_dump_enabled()
+              && mem_hold >= sql_mem_processor_.get_mem_bound() - ObRADatumStore::BIG_BLOCK_SIZE) {
+            bool dumped = false;
+            OZ(sql_mem_processor_.extend_max_memory_size(
+                &mem_context_->get_malloc_allocator(),
+                [&](int64_t mem_bould) { return mem_hold > mem_bould; },
+                dumped, mem_hold));
+            if (OB_SUCC(ret)) {
+              sampled_input_rows_.set_mem_limit(sql_mem_processor_.get_mem_bound());
+            }
+          }
+        }
+      } else {
+        if (profile_.get_number_pass() == 0) {
+          profile_.set_number_pass(1);
+        }
+      }
+
+      // add batch rows to sampled input row store.
+      {
+        ObEvalCtx::BatchInfoScopeGuard g(eval_ctx_);
+        g.set_batch_size(brs_.size_);
+        for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
+          if (brs_.skip_->at(i)) {
+            continue;
+          }
+          g.set_batch_idx(i);
+          OZ(sampled_input_rows_.add_row(MY_SPEC.sampling_saving_row_, &eval_ctx_));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        int64_t cnt = std::min(max_input_rows - sampled_input_rows_.get_row_cnt(),
+                               MY_SPEC.max_batch_size_);
+        if (cnt > 0) {
+          ret = inner_get_next_batch(cnt);
+          FOREACH_CNT_X(e, MY_SPEC.sampling_saving_row_, OB_SUCC(ret)) {
+            if (OB_FAIL((*e)->cast_to_uniform(brs_.size_, eval_ctx_, brs_.skip_))) {
+              LOG_WARN("cast expr to uniform failed", K(ret), KPC(*e), K_(eval_ctx));
+            }
+          }
+        }
+      }
+    } while (OB_SUCC(ret)
+             && sampled_input_rows_.get_row_cnt() < max_input_rows
+             && !(brs_.end_ && brs_.size_ == 0));
+
+    if (OB_FAIL(ret)) {
+    } else if (!brs_.end_) {
+      OZ(vec_holder_.save(std::min((int64_t)DYNAMIC_SAMPLE_ROW_COUNT, MY_SPEC.max_batch_size_)));
+    } else {
+      brs_.end_ = false;
+    }
+    OZ(setup_sampled_rows_output());
+
+    if (OB_SUCC(ret)) {
+      const int64_t input_rows = sampled_input_rows_.get_row_cnt();
+      int64_t sample_rows = input_rows / DYNAMIC_SAMPLE_INTERVAL;
+      sample_rows = std::max(sample_rows, std::min(input_rows, (int64_t)DYNAMIC_SAMPLE_ROW_COUNT));
+      sample_rows = std::min(sample_rows, (int64_t)MAX_DYNAMIC_SAMPLE_ROW_COUNT);
+      const int64_t step = input_rows / sample_rows;
+
+      ObEvalCtx::BatchInfoScopeGuard g(eval_ctx_);
+      g.set_batch_size(1);
+      g.set_batch_idx(0);
+      for (int64_t i = 0; OB_SUCC(ret) && i < input_rows; i += step) {
+        clear_evaluated_flag();
+        const ObRADatumStore::StoredRow *sr = NULL;
+        OZ(sampled_input_rows_.get_row(i, sr));
+        OZ(sr->to_expr(MY_SPEC.sampling_saving_row_, eval_ctx_));
+        OZ(sample_store.add_row(MY_SPEC.dist_exprs_, &eval_ctx_));
+      }
+      clear_evaluated_flag();
+    }
+  }
+  return ret;
+}
+
 int ObPxDistTransmitOp::setup_sampled_rows_output()
 {
   int ret = OB_SUCCESS;
@@ -755,6 +1000,7 @@ int ObPxDistTransmitOp::setup_sampled_rows_output()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected sample type", K(ret), K(MY_SPEC.sample_type_));
   }
 
   if (OB_SUCC(ret) && !sampled_rows2transmit_.empty()) {

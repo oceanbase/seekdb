@@ -47,8 +47,9 @@ int ObExprCot::calc_cot_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *radian = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
+    LOG_WARN("eval radian arg failed", K(ret), K(expr));
   } else if (radian->is_null()) {
-    /* radian is already cast to number type, no extra null-type handling needed */
+    /* radian is already be cast to number type, no need to is_null_oracle */
     res_datum.set_null();
   } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
     const double arg = radian->get_double();
@@ -56,10 +57,12 @@ int ObExprCot::calc_cot_expr(const ObExpr &expr, ObEvalCtx &ctx,
     // Check if tan(arg) is approaching 0, when it is too small, consider it as 0
     if (0.0 == tan_out) {
       ret = OB_DOUBLE_OVERFLOW;
+      LOG_WARN("tan(x) is zero", K(ret));
     } else {
       double res = 1.0/tan_out;
       if (!std::isfinite(res)) {
         ret = OB_DOUBLE_OVERFLOW;
+        LOG_WARN("tan(x) is zero", K(ret));
       } else {
         res_datum.set_double(res);
       }

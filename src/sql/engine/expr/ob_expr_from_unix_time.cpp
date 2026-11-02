@@ -47,6 +47,7 @@ int ObExprFromUnixTime::calc_result_typeN(ObExprResType &type,
                   params_count <= 0 ||
                   params_count > 2)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument!", K(ret), K(params), K(params_count));
   } else if (1 == params_count) {
     if (type_ctx.enable_mysql_compatible_dates()) {
       type.set_mysql_datetime();
@@ -91,26 +92,27 @@ int ObExprFromUnixTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
-  {
-    OB_ASSERT((rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2) && rt_expr.args_ != nullptr);
-    if (1 == rt_expr.arg_cnt_) {
-      {
-        OB_ASSERT(rt_expr.args_[0] != nullptr);
-        if (ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
-          rt_expr.eval_func_ = &eval_one_temporal_fromtime;
-        } else {
-          rt_expr.eval_func_ = &eval_one_param_fromtime;
-        }
-      }
+  if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2)
+      || OB_ISNULL(rt_expr.args_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
+  } else if (1 == rt_expr.arg_cnt_) {
+    if (OB_ISNULL(rt_expr.args_[0])) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid null arg", K(ret));
+    } else if (ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
+      rt_expr.eval_func_ = &eval_one_temporal_fromtime;
     } else {
-      {
-        OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
-        if (0 == raw_expr.get_from_unixtime_flag()) {
-          rt_expr.eval_func_ = &eval_fromtime_normal;
-        } else {
-          rt_expr.eval_func_ = &eval_fromtime_special;
-        }
-      }
+      rt_expr.eval_func_ = &eval_one_param_fromtime;
+    }
+  } else {
+    if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid null args", K(ret), K(rt_expr.args_[0]), K(rt_expr.args_[1]));
+    } else if (0 == raw_expr.get_from_unixtime_flag()) {
+      rt_expr.eval_func_ = &eval_fromtime_normal;
+    } else {
+      rt_expr.eval_func_ = &eval_fromtime_special;
     }
   }
   return ret;
@@ -154,15 +156,20 @@ int ObExprFromUnixTime::eval_one_param_fromtime(const ObExpr &expr,
       || OB_ISNULL(expr.args_[0])
       || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (param_datum->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else {
     int64_t usec_val;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(get_usec_from_datum(*param_datum, alloc_guard.get_allocator(), usec_val))) {
+      LOG_WARN("failed to get_usec_from_datum", K(ret));
       // if warn on failed
       ObCastMode cast_mode = CM_NONE;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
@@ -177,6 +184,7 @@ int ObExprFromUnixTime::eval_one_param_fromtime(const ObExpr &expr,
     } else if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
       ObMySQLDateTime res_datetime = 0;
       if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(usec_val, tz_info, res_datetime))) {
+        LOG_WARN("failed to convert timestamp to mdatetime", K(ret));
       } else if (OB_UNLIKELY(ObTimeConverter::is_valid_mdatetime(res_datetime))) {
         expr_datum.set_mysql_datetime(res_datetime);
       } else {
@@ -187,6 +195,7 @@ int ObExprFromUnixTime::eval_one_param_fromtime(const ObExpr &expr,
                                             usec_val,
                                             tz_info,
                                             usec_val))) {
+        LOG_WARN("failed to convert timestamp to datetime", K(ret));
       } else if (OB_UNLIKELY(ObTimeConverter::is_valid_datetime(usec_val))) {
         expr_datum.set_datetime(usec_val);
       } else {
@@ -212,18 +221,25 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
   ObString locale_name;
   if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (OB_ISNULL(param1)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null param1", K(ret), K(param1));
   } else if (param1->is_null()) { // mysql mode from_unixtime has short-circuit logic
     expr_datum.set_null();
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param2))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null param2", K(ret));
   } else if (param2->is_null() || param2->get_string().empty()) { // need runtime cast
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else {
     int64_t usec_val;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
@@ -231,6 +247,7 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
                         *param1,
                         alloc_guard.get_allocator(),
                         usec_val))) {
+      LOG_WARN("failed to get_usec_from_datum", K(ret));
       // warn on fail mode
       ObCastMode cast_mode = CM_NONE;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
@@ -252,12 +269,15 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
         expr_datum.set_null();
       } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, BUF_LEN))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
+        LOG_WARN("no more memory to alloc for buf", K(ret));
+      } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
                            expr_datum, ObTimestampType, NUMBER_SCALE_UNKNOWN_YET,
                            tz_info,
                            ob_time,
                            get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), 0, false))) {
+        LOG_WARN("failed to cast datum to obtime with date", K(ret));
       } else if (OB_FAIL(session->get_locale_name(locale_name))) {
+          LOG_WARN("failed to get locale time name", K(expr), K(expr_datum));
       } else if (OB_FAIL(ObTimeConverter::ob_time_to_str_format(ob_time,
                                                                 param2->get_string(),
                                                                 buf,
@@ -265,6 +285,7 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
                                                                 pos,
                                                                 res_null,
                                                                 locale_name))) {
+        LOG_WARN("failed to convert ob time to str with format");
       } else if (res_null) {
         expr_datum.set_null();
       } else {
@@ -283,9 +304,11 @@ int ObExprFromUnixTime::eval_fromtime_special(const ObExpr &expr,
   ObDatum *param1 = NULL;
   ObDatum *param2 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (param1->is_null()) { // mysql mode from_unixtime has short-circuit logic
     expr_datum.set_null();
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param2))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (param2->is_null()) {
     expr_datum.set_null();
   } else {
@@ -308,7 +331,9 @@ int ObExprFromUnixTime::get_usec_from_datum(const common::ObDatum &param_datum,
   int64_t tmp = 0;
   if (OB_FAIL(param1.from(usecs_per_sec, alloc))
       || OB_FAIL(param2.from(param2_tmp, alloc))) {
+    LOG_WARN("failed to get number", K(ret));
   } else if (OB_FAIL(param1.mul(param2, res, alloc))) {
+    LOG_WARN("failed to mul", K(ret));
   } else if (OB_FAIL(res.extract_valid_int64_with_round(tmp))) {
     if (OB_DATA_OUT_OF_RANGE == ret) {
       ret = OB_ERR_TRUNCATED_WRONG_VALUE;
@@ -317,6 +342,7 @@ int ObExprFromUnixTime::get_usec_from_datum(const common::ObDatum &param_datum,
       LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE, dec.length(), dec.ptr(),
                      static_cast<int>(strlen(num_str)), num_str);
     }
+    LOG_WARN("extract valid int64 with round failed", K(ret), K(res));
   } else {
     usec_val = tmp;
   }

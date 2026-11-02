@@ -16,7 +16,9 @@
 #ifndef SRC_STORAGE_MEMTABLE_OB_ROW_CONFLICT_INFO_H
 #define SRC_STORAGE_MEMTABLE_OB_ROW_CONFLICT_INFO_H
 #include "lib/net/ob_addr.h"
+#include "meta_programming/ob_mover.h"
 #include "ob_tablet_id.h"
+#include "share/ob_ls_id.h"
 #include "storage/tx/ob_trans_define.h"
 #include "lib/string/ob_string_holder.h"
 #include "lib/utility/ob_unify_serialize.h"
@@ -32,6 +34,7 @@ struct ObRowConflictInfo
 public:
   ObRowConflictInfo()
   : conflict_happened_addr_(),
+  conflict_ls_(),
   conflict_tablet_(),
   conflict_row_key_str_(),
   conflict_sess_id_pair_(),
@@ -44,6 +47,7 @@ public:
   lock_mode_(0),
   last_compact_cnt_(0),
   total_update_cnt_(0),
+  assoc_sess_id_(0),
   holder_sess_id_(0),
   holder_tx_start_time_(0) {}
   ~ObRowConflictInfo() = default;
@@ -52,6 +56,7 @@ public:
   ObRowConflictInfo &operator=(meta::ObMover<ObRowConflictInfo> rhs_mover) {// support move assignment
     ObRowConflictInfo &rhs = rhs_mover.get_object();
     init(rhs.conflict_happened_addr_,
+         rhs.conflict_ls_,
          rhs.conflict_tablet_,
          meta::ObMover<ObStringHolder>(rhs.conflict_row_key_str_),
          rhs.conflict_sess_id_pair_,
@@ -60,8 +65,8 @@ public:
          rhs.conflict_tx_hold_seq_);
     return *this;
   }
-  int init(const common::ObAddr &, const common::ObTabletID &,
-           meta::ObMover<ObStringHolder>,
+  int init(const common::ObAddr &, const share::ObLSID &,
+           const common::ObTabletID &, meta::ObMover<ObStringHolder>,
            const transaction::SessionIDPair, const common::ObAddr &,
            const transaction::ObTransID &, const transaction::ObTxSEQ &) {
     int ret = OB_SUCCESS;
@@ -74,6 +79,7 @@ public:
   int assign(meta::ObMover<ObRowConflictInfo> rhs_rvalue) {// support move assign
     ObRowConflictInfo &rhs = rhs_rvalue.get_object();
     return init(rhs.conflict_happened_addr_,
+                rhs.conflict_ls_,
                 rhs.conflict_tablet_,
                 meta::ObMover<ObStringHolder>(rhs.conflict_row_key_str_),
                 rhs.conflict_sess_id_pair_,
@@ -84,12 +90,13 @@ public:
   bool is_valid() const {
     return conflict_tx_scheduler_.is_valid() && conflict_tx_id_.is_valid();
   }
-  TO_STRING_KV(K_(conflict_happened_addr), K_(conflict_tablet),
+  TO_STRING_KV(K_(conflict_happened_addr), K_(conflict_ls), K_(conflict_tablet),
                K_(conflict_row_key_str), K_(conflict_sess_id_pair), K_(conflict_tx_scheduler),
                K_(conflict_tx_id), K_(conflict_tx_hold_seq), K_(conflict_hash), K_(lock_seq),
                K_(abs_timeout), K_(self_tx_id), K_(lock_mode), K_(last_compact_cnt), K_(total_update_cnt),
-               K_(holder_sess_id), K_(holder_tx_start_time));
+               K_(assoc_sess_id), K_(holder_sess_id), K_(holder_tx_start_time));
   common::ObAddr conflict_happened_addr_;// distributed info
+  share::ObLSID conflict_ls_;// resource related
   common::ObTabletID conflict_tablet_;// resource related
   common::ObStringHolder conflict_row_key_str_;// resource related
   transaction::SessionIDPair conflict_sess_id_pair_;// holder related
@@ -103,14 +110,15 @@ public:
   uint8_t lock_mode_; // used for table lock conflict
   int64_t last_compact_cnt_; // row compact cnt
   int64_t total_update_cnt_; // row update cnt
+  uint32_t assoc_sess_id_; // trx's associate session id who acquires lock
   uint32_t holder_sess_id_; // lock holder session id
   int64_t holder_tx_start_time_; // lock holder trans start time
 };
-OB_SERIALIZE_MEMBER_TEMP(inline, ObRowConflictInfo, conflict_happened_addr_, conflict_tablet_,
-                         conflict_row_key_str_, conflict_sess_id_pair_,
+OB_SERIALIZE_MEMBER_TEMP(inline, ObRowConflictInfo, conflict_happened_addr_, conflict_ls_,
+                         conflict_tablet_, conflict_row_key_str_, conflict_sess_id_pair_,
                          conflict_tx_scheduler_, conflict_tx_id_, conflict_tx_hold_seq_, conflict_hash_,
                          lock_seq_, abs_timeout_, self_tx_id_, lock_mode_, last_compact_cnt_,
-                         total_update_cnt_, holder_sess_id_, holder_tx_start_time_);
+                         total_update_cnt_, assoc_sess_id_, holder_sess_id_, holder_tx_start_time_);
 }
 }
 #endif

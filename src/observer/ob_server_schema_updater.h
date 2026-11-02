@@ -18,6 +18,7 @@
 #define OB_SERVER_SCHEMA_UPDATER_H
 
 #include "share/ob_define.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/net/ob_addr.h"
 #include "share/schema/ob_schema_struct.h"
 #include "ob_uniq_task_queue.h"
@@ -44,10 +45,18 @@ public:
   friend class ObServerSchemaUpdater;
   enum TYPE {
     ASYNC_REFRESH,  // async schema refresh task caused by sql
+    REFRESH,        // schema refresh task caused by heartbeat
     RELEASE,        // schema memory release task
     INVALID
   };
   ObServerSchemaTask();
+  // for refresh
+  explicit ObServerSchemaTask(TYPE type,
+                              bool did_retry);
+  // for refresh
+  explicit ObServerSchemaTask(TYPE type,
+                              bool did_retry,
+                              const share::schema::ObRefreshSchemaInfo &schema_info);
   // for release
   explicit ObServerSchemaTask(TYPE type);
   // for async refresh
@@ -68,13 +77,14 @@ public:
   virtual uint64_t get_group_id() const;
   virtual bool is_barrier() const;
 
-
+  
   uint64_t get_schema_version() const { return schema_info_.get_schema_version(); }
 
-  TO_STRING_KV(K_(type), K_(schema_info));
+  TO_STRING_KV(K_(type), K_(did_retry), K_(schema_info));
 
 private:
   TYPE type_;
+  bool did_retry_;
   share::schema::ObRefreshSchemaInfo schema_info_;
 };
 
@@ -89,16 +99,27 @@ public:
   void stop();
   void wait();
 
+  int try_reload_schema(const share::schema::ObRefreshSchemaInfo &schema_info,
+                        const bool set_received_schema_version);
   int try_release_schema();
   int async_refresh_schema(const int64_t schema_version);
   int process_barrier(const ObServerSchemaTask &task, bool &stopped);
   int batch_process_tasks(const common::ObIArray<ObServerSchemaTask> &batch_tasks, bool &stopped);
 private:
+  int process_refresh_task(const ObServerSchemaTask &task);
+  int construct_tenants_to_refresh_schema_(
+      const share::schema::ObRefreshSchemaInfo &local_schema_info,
+      const share::schema::ObRefreshSchemaInfo &new_schema_info,
+      ObIArray<uint64_t> &batch_ids,
+      bool &skip_refresh);
   int process_release_task();
   int process_async_refresh_tasks(const common::ObIArray<ObServerSchemaTask> &tasks);
+
+  int try_load_baseline_schema_version_();
 private:
   static const int32_t SSU_MAX_THREAD_NUM = 1;
   static const int64_t SSU_TASK_QUEUE_SIZE = 1024;
+  static const int64_t SSU_TASK_MAP_SIZE = 1024;
   common::ObAddr host_;
   share::schema::ObMultiVersionSchemaService *schema_mgr_;
   ObServerSchemaTaskQueue task_queue_;

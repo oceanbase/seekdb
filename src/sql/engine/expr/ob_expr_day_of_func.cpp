@@ -52,6 +52,7 @@ int ObExprDayOfWeek::calc_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprTimeBase::calc(expr, ctx, expr_datum, DT_WDAY, true))) {
+    LOG_WARN("calc day of week failed", K(ret));
   } else if (!expr_datum.is_null()) {
     expr_datum.set_int32(expr_datum.get_int32() % 7 + 1);
   }
@@ -80,10 +81,14 @@ int ObExprToSeconds::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 1);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
-    rt_expr.eval_func_ = ObExprToSeconds::calc_toseconds;
+  if (rt_expr.arg_cnt_ != 1) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("to_seconds expr should have one param", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of to_seconds expr is null", K(ret), K(rt_expr.args_));
+  } else {
+      rt_expr.eval_func_ = ObExprToSeconds::calc_toseconds;
   }
   return ret;
 }
@@ -98,21 +103,26 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else {
     ObTime ot;
     ObDateSqlMode date_sql_mode;
     date_sql_mode.init(sql_mode);
-    if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *param_datum, expr.args_[0]->datum_meta_.type_,
+    if (OB_FAIL(ob_datum_to_ob_time_with_date(*param_datum, expr.args_[0]->datum_meta_.type_,
                                               expr.args_[0]->datum_meta_.scale_,
                                               tz_info, ot,
                                               get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                                               date_sql_mode,
                                               expr.args_[0]->obj_meta_.has_lob_header()))) {
+      LOG_WARN("cast to ob time failed", K(ret));
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                         session->is_ignore_stmt(),
@@ -157,11 +167,15 @@ int ObExprSecToTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 1);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
-    CK(ObNumberType == rt_expr.args_[0]->datum_meta_.type_);
-    rt_expr.eval_func_ = ObExprSecToTime::calc_sectotime;
+  if (rt_expr.arg_cnt_ != 1) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sectotime expr should have one param", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of sectotime expr is null", K(ret), K(rt_expr.args_));
+  } else {
+      CK(ObNumberType == rt_expr.args_[0]->datum_meta_.type_);
+      rt_expr.eval_func_ = ObExprSecToTime::calc_sectotime;
   }
   return ret;
 }
@@ -175,10 +189,13 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   ObSQLMode sql_mode = 0;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else {
     number::ObNumber num_usec;
     number::ObNumber num_sec;
@@ -187,9 +204,13 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     char local_buff[number::ObNumber::MAX_BYTE_LEN * 3];
     ObDataBuffer local_alloc(local_buff, number::ObNumber::MAX_BYTE_LEN * 3);
     if (OB_FAIL(num_sec.from(param_datum->get_number(), local_alloc))) {
+      LOG_WARN("failed to create number", K(ret), K(number::ObNumber(param_datum->get_number())));
     } else if (OB_FAIL(million.from(static_cast<int64_t>(1000000), local_alloc))) {
+      LOG_WARN("failed to create number million", K(ret));
     } else if (OB_FAIL(num_sec.mul(million, num_usec, local_alloc))) {
+      LOG_WARN("failed to mul number", K(ret), K(num_sec), K(million));
     } else if (OB_FAIL(num_usec.round(0))) {
+      LOG_WARN("failed to round number", K(ret), K(num_usec));
     } else if (!num_usec.is_valid_int64(int_usec)) {
       int_usec = num_usec.is_negative() ? -INT64_MAX : INT64_MAX;
     }
@@ -206,6 +227,7 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
           ret = OB_SUCCESS;
           expr_datum.set_null();
         } else {
+          LOG_WARN("time value is out of range", K(ret), K(int_usec));
         }
       }
     }
@@ -239,11 +261,15 @@ int ObExprTimeToSec::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 1);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
-    CK(ObTimeType == rt_expr.args_[0]->datum_meta_.type_);
-    rt_expr.eval_func_ = ObExprTimeToSec::calc_timetosec;
+  if (rt_expr.arg_cnt_ != 1) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("timetosec expr should have one param", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of timetosec expr is null", K(ret), K(rt_expr.args_));
+  } else {
+      CK(ObTimeType == rt_expr.args_[0]->datum_meta_.type_);
+      rt_expr.eval_func_ = ObExprTimeToSec::calc_timetosec;
   }
   return ret;
 }
@@ -255,7 +281,9 @@ int ObExprTimeToSec::calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   const ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else {
@@ -346,10 +374,12 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
     result.set_null();
   } else if (OB_ISNULL(expr_ctx.calc_buf_) || OB_ISNULL(session = expr_ctx.my_session_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("allocator or session is null", K(ret), K(expr_ctx.calc_buf_));
   } else {
     if (ObVarcharType == result_type) {
       if (OB_FAIL(ob_obj_to_ob_time_without_date(date_arg,
             get_timezone_info(session), ot1))) {
+        LOG_WARN("obj to ob time without date failed", K(ret), K(date_arg));
       } else {
         if (0 == ot1.parts_[DT_YEAR] && 0 == ot1.parts_[DT_MON] && 0 == ot1.parts_[DT_MDAY]) {
           param_with_date = false;
@@ -363,6 +393,7 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
       } else {
         ObTime ot2(DT_TYPE_TIME);
         if (OB_FAIL(ob_obj_to_ob_time_without_date(time_arg, get_timezone_info(session), ot2))) {
+          LOG_WARN("cast the second param failed", K(ret));
         } else {
           t_val2 = ObTimeConverter::ob_time_to_time(ot2);
         }
@@ -385,6 +416,7 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
               ret = OB_SUCCESS;
               result.set_time(int_usec);
             } else {
+              LOG_WARN("time value is out of range", K(ret), K(int_usec));
             }
           } else {
             result.set_time(int_usec);
@@ -394,13 +426,16 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
         const ObTimeZoneInfo *tz_info = NULL;
         if (OB_ISNULL(tz_info = get_timezone_info(expr_ctx.my_session_))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("tz info is null", K(ret));
         } else if (ObVarcharType == result_type) {
           ObTimeConvertCtx cvrt_ctx(tz_info, false);
           if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot1, cvrt_ctx, t_val1))) {
+            LOG_WARN("ob_time_to_datetime failed", K(ret));
           }
         } else {
           if (ObDateTimeType != date_arg.get_type() && ObTimestampType != date_arg.get_type()) {
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid date arg type", K(ret));
           } else {
             int64_t offset = ObTimestampType == date_arg.get_type() ? tz_info->get_offset() : 0;
             t_val1 = date_arg.get_datetime() + offset * USECS_PER_SEC;
@@ -417,6 +452,7 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
       }
       if (OB_SUCC(ret) && ObVarcharType == result_type) {
         if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, result, result))) {
+          LOG_WARN("failed to cast object to ObVarcharType ", K(result), K(ret));
         }
       }
     }
@@ -441,13 +477,18 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("subaddtime expr should have two params", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
+             || OB_ISNULL(rt_expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of subaddtime expr is null", K(ret), K(rt_expr.args_));
   } else {
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     const ObObjType result_type = rt_expr.datum_meta_.type_;
     const ObObjType param1_type = rt_expr.args_[0]->datum_meta_.type_;
     const ObObjType param2_type = rt_expr.args_[1]->datum_meta_.type_;
     if (ObTimeType != param2_type && ObVarcharType != param2_type) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("second param of subaddtime expr is not time type", K(ret), K(param2_type));
     } else {
       switch (result_type) {
         case ObDateTimeType :
@@ -455,6 +496,7 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
           if (ObNullType != param1_type && ObDateTimeType != param1_type
               && ObMySQLDateTimeType != param1_type && ObTimestampType != param1_type) {
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid type of first argument", K(ret), K(result_type), K(param1_type));
           } else {
             rt_expr.eval_func_ = ObExprSubAddtime::subaddtime_datetime;
           }
@@ -462,6 +504,7 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
         case ObTimeType :
           if (ObTimeType != param1_type) {
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid type of first argument", K(ret), K(result_type), K(param1_type));
           } else {
             // Here although the parameter type, result type is TimeType, and it is different from above, but the meaning of get/set_time/datetime is the same,
             // The essence of the two calculation functions is to subtract the second parameter from the int64_t value of the first parameter, and then put the result into expr_datum
@@ -496,8 +539,11 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_arg))) {
+    LOG_WARN("eval the first param value failed");
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, time_arg))) {
+    LOG_WARN("eval the second param value failed");
   } else if (OB_UNLIKELY(date_arg->is_null() || time_arg->is_null())) {
     expr_datum.set_null();
     null_res = true;
@@ -505,10 +551,11 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
     ObTime ot2(DT_TYPE_TIME);
     if (ObTimeType == expr.args_[1]->datum_meta_.type_) {
       time_val = time_arg->get_time();
-    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
+    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(
                  *time_arg, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
                  tz_info, ot2,
                  expr.args_[1]->obj_meta_.has_lob_header()))) {
+      LOG_WARN("cast the second param failed", K(ret));
       expr_datum.set_null();
       null_res = true;
       uint64_t cast_mode = 0;
@@ -538,15 +585,20 @@ int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Ob
   const ObTimeZoneInfo *tz_info = NULL;
   ObSQLMode sql_mode = 0;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get time zone failed", K(ret));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("failed to get time zone info", K(ret));
   } else if (OB_FAIL(subaddtime_common(expr, ctx, expr_datum, null_res, date_arg, time_arg, t_val2, tz_info, sql_mode))) {
+    LOG_WARN("calc subaddtime failed", K(ret));
   } else if (!null_res) {
     int64_t offset = ObTimestampType == expr.args_[0]->datum_meta_.type_
                                         ? tz_info->get_offset() : 0;
     int64_t dt_value;
     if (ObMySQLDateTimeType == expr.args_[0]->datum_meta_.type_) {
       if (OB_FAIL(ObTimeConverter::mdatetime_to_datetime_without_check(date_arg->get_mysql_datetime(), dt_value))) {
+        LOG_WARN("cast mdatetime to datetime fail", K(ret));
       }
     } else {
       dt_value = date_arg->get_datetime();
@@ -557,6 +609,7 @@ int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Ob
       if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
         ObMySQLDateTime mdt_value;
         if (OB_FAIL(ObTimeConverter::datetime_to_mdatetime(int_usec, mdt_value))) {
+          LOG_WARN("cast datetime to mdatetime fail", K(ret));
         } else {
           expr_datum.set_mysql_datetime(mdt_value);
         }
@@ -583,13 +636,17 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
   const ObTimeZoneInfo *tz_info = NULL;
   ObSQLMode sql_mode = 0;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get time zone failed", K(ret));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(subaddtime_common(expr, ctx, expr_datum, null_res, date_arg, time_arg, t_val2, tz_info, sql_mode))) {
+    LOG_WARN("calc subaddtime failed", K(ret));
   } else if (!null_res) {
     ObTime ot1(DT_TYPE_TIME);
-    if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_, *date_arg, expr.args_[0]->datum_meta_.type_,
+    if (OB_FAIL(ob_datum_to_ob_time_without_date(*date_arg, expr.args_[0]->datum_meta_.type_,
                                                  expr.args_[0]->datum_meta_.scale_, tz_info, ot1,
                                                  expr.args_[0]->obj_meta_.has_lob_header()))) {
+      LOG_WARN("cast the first param failed", K(ret));
       expr_datum.set_null();
     } else {
       bool param_with_date = true;
@@ -600,6 +657,7 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
       if (param_with_date) {
         ObTimeConvertCtx cvrt_ctx(tz_info, false);
         if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot1, cvrt_ctx, t_val1))) {
+          LOG_WARN("ob_time_to_datetime failed", K(ret));
         }
       } else {
         t_val1 = ObTimeConverter::ob_time_to_time(ot1);
@@ -613,13 +671,17 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
         char *buf = expr.get_str_res_mem(ctx, datetime_buf_len);
         int64_t pos = 0;
 				// Compatible with MySQL behavior, display 6 decimal places if there are milliseconds, otherwise do not display
+        ObString format;
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("allocate memory failed", K(ret));
         } else if (param_with_date && OB_FAIL(ObTimeConverter::datetime_to_str(int_usec, NULL,
-                                                -1, buf,
+                                                format, -1, buf,
                                                 datetime_buf_len, pos, true))) {
+          LOG_WARN("datetime to str failed", K(ret));
         } else if (!param_with_date && OB_FAIL(ObTimeConverter::time_to_str(int_usec, -1, buf,
                                                                 datetime_buf_len, pos, true))) {
+          LOG_WARN("time to str failed", K(ret));
         } else {
           expr_datum.ptr_ = buf;
           expr_datum.pack_ = static_cast<uint32_t>(pos);
@@ -659,6 +721,7 @@ int ObExprDayName::calc_dayname(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprTimeBase::calc(expr, ctx, expr_datum, DT_WDAY, true))) {
+    LOG_WARN("dayname calc day of dayweek failed", K(ret));
   }
   return ret;
 }
@@ -683,6 +746,382 @@ int ObExprDayName::calc_result_type1(ObExprResType &type,
   return OB_SUCCESS;
 }
 
+#define EPOCH_WDAY    4       // 1970-1-1 is thursday.
+#define CHECK_SKIP_NULL(idx) {                    \
+  if (skip.at(idx) || eval_flags.at(idx)) {    \
+    continue;                                  \
+  } else if (arg_vec->is_null(idx)) {          \
+    res_vec->set_null(idx);                    \
+    eval_flags.set(idx);                       \
+    continue;                                  \
+  }                                            \
+}
+
+#define BATCH_CALC(BODY) {                                                 \
+  if (OB_LIKELY(no_skip_no_null)) {                                               \
+    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) { \
+      BODY;                                                                       \
+    }                                                                             \
+  } else {                                                                        \
+    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) { \
+      CHECK_SKIP_NULL(idx);                                                       \
+      BODY;                                                                       \
+    }                                                                             \
+  }                                                                               \
+}
+
+
+template <typename ArgVec, typename ResVec, typename IN_TYPE>
+int vector_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  int64_t tz_offset = 0;
+  const common::ObTimeZoneInfo *tz_info = NULL;
+  ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
+  if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
+  } else {
+    ObSQLMode sql_mode = 0;
+    const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
+    if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
+      LOG_WARN("get tz_info offset fail", K(ret));
+    } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+      LOG_WARN("get sql mode failed", K(ret));
+    } else {
+      DateType date = 0;
+      DateType dt_yday = 0;
+      YearType year = 0;
+      UsecType usec = 0;
+      bool no_skip_no_null = bound.get_all_rows_active() && !arg_vec->has_null()
+                             && eval_flags.accumulate_bit_cnt(bound) == 0;
+      ObTime ob_time;
+      ObDateSqlMode date_sql_mode;
+      date_sql_mode.init(sql_mode);
+      BATCH_CALC({
+        IN_TYPE in_val = *reinterpret_cast<const IN_TYPE*>(arg_vec->get_payload(idx));
+        if (std::is_same<IN_TYPE, ObMySQLDate>::value || std::is_same<IN_TYPE, ObMySQLDateTime>::value) {
+          if (OB_FAIL(ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time))) {
+            LOG_WARN("parse_ob_time fail", K(ret));
+          } else if (OB_FAIL(ObTimeConverter::validate_datetime(ob_time, date_sql_mode))) {
+            ret = OB_SUCCESS;
+            res_vec->set_null(idx);
+          } else {
+            dt_yday = ObTimeConverter::calc_yday(ob_time);
+            (dt_yday == 0) ? res_vec->set_null(idx) : res_vec->set_int(idx, dt_yday);
+          }
+        } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
+          LOG_WARN("get date and usec from vec failed", K(ret));
+        } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
+          res_vec->set_null(idx);
+        } else {
+          ObTimeConverter::days_to_year_ydays(date, year, dt_yday);
+          res_vec->set_int(idx, dt_yday);
+        }
+        eval_flags.set(idx);
+      });
+    }
+  }
+  return ret;
+}
+
+#define DISPATCH_DAY_OF_EXPR_VECTOR(FUNC, TYPE) \
+  if (VEC_FIXED == arg_format && VEC_FIXED == res_format) {\
+    ret = FUNC<CONCAT(TYPE, FixedVec), IntegerFixedVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_FIXED == arg_format && VEC_UNIFORM == res_format) {\
+    ret = FUNC<CONCAT(TYPE, FixedVec), IntegerUniVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_FIXED == arg_format && VEC_UNIFORM_CONST == res_format) {\
+    ret = FUNC<CONCAT(TYPE, FixedVec), IntegerUniCVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_UNIFORM == arg_format && VEC_FIXED == res_format) {\
+    ret = FUNC<CONCAT(TYPE, UniVec), IntegerFixedVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_UNIFORM == arg_format && VEC_UNIFORM == res_format) {\
+    ret = FUNC<CONCAT(TYPE, UniVec), IntegerUniVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_UNIFORM == arg_format && VEC_UNIFORM_CONST == res_format) {\
+    ret = FUNC<CONCAT(TYPE, UniVec), IntegerUniCVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_UNIFORM_CONST == arg_format && VEC_FIXED == res_format) {\
+    ret = FUNC<CONCAT(TYPE, UniCVec), IntegerFixedVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_UNIFORM_CONST == arg_format && VEC_UNIFORM == res_format) {\
+    ret = FUNC<CONCAT(TYPE, UniCVec), IntegerUniVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else if (VEC_UNIFORM_CONST == arg_format && VEC_UNIFORM_CONST == res_format) {\
+    ret = FUNC<CONCAT(TYPE, UniCVec), IntegerUniCVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  } else {\
+    ret = FUNC<ObVectorBase, ObVectorBase, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+  }
+
+int ObExprDayOfYear::calc_dayofyear_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound) {
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("fail to eval date_format param", K(ret));
+  } else {
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+    if (ObMySQLDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofyear, MySQLDate);
+    } else if (ObMySQLDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofyear, MySQLDateTime);
+    } else if (ObDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofyear, Date);
+    } else if (ObDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofyear, DateTime);
+    }
+
+    if (OB_FAIL(ret)) {
+      LOG_WARN("expr calculation failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+template <typename ArgVec, typename ResVec, typename IN_TYPE>
+int vector_dayofmonth(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  int64_t tz_offset = 0;
+  const common::ObTimeZoneInfo *tz_info = NULL;
+  ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
+  if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
+  } else {
+    const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
+    if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
+      LOG_WARN("get tz_info offset fail", K(ret));
+    } else {
+      DateType date = 0;
+      DateType dt_yday = 0;
+      DateType dt_mday = 0;
+      YearType year = 0;
+      UsecType usec = 0;
+      MonthType month = 0;
+      bool no_skip_no_null = bound.get_all_rows_active() && !arg_vec->has_null()
+                             && eval_flags.accumulate_bit_cnt(bound) == 0;
+      ObTime ob_time;
+      BATCH_CALC({
+        IN_TYPE in_val = *reinterpret_cast<const IN_TYPE*>(arg_vec->get_payload(idx));
+        if (std::is_same<IN_TYPE, ObMySQLDate>::value || std::is_same<IN_TYPE, ObMySQLDateTime>::value) {
+          ret = ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time);
+          dt_mday = ob_time.parts_[DT_MDAY];
+        } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
+          LOG_WARN("get date and usec from vec failed", K(ret));
+        } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
+          dt_mday = 0;
+        } else {
+          ObTimeConverter::days_to_year_ydays(date, year, dt_yday);
+          ObTimeConverter::ydays_to_month_mdays(year, dt_yday, month, dt_mday);
+        }
+        res_vec->set_int(idx, dt_mday);
+        eval_flags.set(idx);
+      });
+    }
+  }
+  return ret;
+}
+int ObExprDayOfMonth::calc_dayofmonth_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("fail to eval date_format param", K(ret));
+  } else {
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+    if (ObMySQLDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofmonth, MySQLDate);
+    } else if (ObMySQLDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofmonth, MySQLDateTime);
+    } else if (ObDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofmonth, Date);
+    } else if (ObDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofmonth, DateTime);
+    }
+
+    if (OB_FAIL(ret)) {
+      LOG_WARN("expr calculation failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+template <typename ArgVec, typename ResVec, typename IN_TYPE>
+int vector_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  int64_t tz_offset = 0;
+  const common::ObTimeZoneInfo *tz_info = NULL;
+  ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
+  if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
+  } else {
+    const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
+    if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
+      LOG_WARN("get tz_info offset fail", K(ret));
+    } else {
+      DateType days = 0;
+      YearType year = 0;
+      UsecType usec = 0;
+      MonthType month = 0;
+      bool no_skip_no_null = bound.get_all_rows_active() && !arg_vec->has_null()
+                             && eval_flags.accumulate_bit_cnt(bound) == 0;
+      BATCH_CALC({
+        IN_TYPE in_val = *reinterpret_cast<const IN_TYPE*>(arg_vec->get_payload(idx));
+        if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, days, usec))) {
+          LOG_WARN("get date and usec from vec failed", K(ret));
+        } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == days)) {
+          res_vec->set_null(idx);
+        } else {
+          days = WDAY_OFFSET[days % DAYS_PER_WEEK][EPOCH_WDAY];
+          int64_t dayofweek = days % 7 + 1;  // start from sun. copy from calc_dayofweek
+          res_vec->set_int(idx, dayofweek);
+        }
+        eval_flags.set(idx);
+      });
+    }
+  }
+  return ret;
+}
+int ObExprDayOfWeek::calc_dayofweek_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("fail to eval date_format param", K(ret));
+  } else {
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+    if (ObMySQLDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofweek, MySQLDate);
+    } else if (ObMySQLDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofweek, MySQLDateTime);
+    } else if (ObDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofweek, Date);
+    } else if (ObDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAY_OF_EXPR_VECTOR(vector_dayofweek, DateTime);
+    }
+
+    if (OB_FAIL(ret)) {
+      LOG_WARN("expr calculation failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+
+template <typename ArgVec, typename ResVec, typename IN_TYPE>
+int vector_dayname(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  int64_t tz_offset = 0;
+  ObString locale_name;
+  const ObSQLSessionInfo *session = NULL;
+  const common::ObTimeZoneInfo *tz_info = NULL;
+  ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
+  if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("session is null", K(ret), K(session));
+  } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
+  } else if (OB_FAIL(session->get_locale_name(locale_name))) {
+    LOG_WARN("failed to get locale time name", K(expr));
+  } else {
+    const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
+    if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
+      LOG_WARN("get tz_info offset fail", K(ret));
+    } else {
+      DateType days = 0;
+      UsecType usec = 0;
+      bool no_skip_no_null = bound.get_all_rows_active() && !arg_vec->has_null()
+                             && eval_flags.accumulate_bit_cnt(bound) == 0;
+      OB_LOCALE *ob_cur_locale = ob_locale_by_name(locale_name);
+      OB_LOCALE_TYPE *locale_type_day = ob_cur_locale->day_names_;
+      const char ** locale_daynames = locale_type_day->type_names_;
+      const char *const *day_name = nullptr;
+      day_name = locale_daynames;
+      BATCH_CALC({
+        IN_TYPE in_val = *reinterpret_cast<const IN_TYPE*>(arg_vec->get_payload(idx));
+        if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, days, usec))) {
+          LOG_WARN("get date and usec from vec failed", K(ret));
+        } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == days)) {
+          res_vec->set_null(idx);
+        } else {
+          DateType dt_wday = WDAY_OFFSET[days % DAYS_PER_WEEK][EPOCH_WDAY];
+          size_t len = strlen(day_name[dt_wday-1]);
+          res_vec->set_string(idx, ObString(len, day_name[dt_wday-1]));
+        }
+        eval_flags.set(idx);
+      });
+    }
+  }
+  return ret;
+}
+#define DISPATCH_DAYNAME_EXPR_VECTOR(TYPE)\
+if (VEC_FIXED == arg_format && VEC_DISCRETE == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,FixedVec), StrDiscVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_FIXED == arg_format && VEC_UNIFORM == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,FixedVec), StrUniVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_FIXED == arg_format && VEC_CONTINUOUS == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,FixedVec), StrContVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_FIXED == arg_format && VEC_UNIFORM_CONST == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,FixedVec), StrUniCVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM == arg_format && VEC_DISCRETE == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniVec), StrDiscVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM == arg_format && VEC_UNIFORM == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniVec), StrUniVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM == arg_format && VEC_UNIFORM_CONST == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniVec), StrUniCVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM == arg_format && VEC_CONTINUOUS == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniVec), StrContVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM_CONST == arg_format && VEC_DISCRETE == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniCVec), StrDiscVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM_CONST == arg_format && VEC_UNIFORM == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniCVec), StrUniVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM_CONST == arg_format && VEC_CONTINUOUS == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniCVec), StrContVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else if (VEC_UNIFORM_CONST == arg_format && VEC_UNIFORM_CONST == res_format) {\
+  ret = vector_dayname<CONCAT(TYPE,UniCVec), StrUniCVec, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+} else {\
+  ret = vector_dayname<ObVectorBase, ObVectorBase, CONCAT(TYPE, Type)>(expr, ctx, skip, bound);\
+}
+int ObExprDayName::calc_dayname_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("fail to eval date_format param", K(ret));
+  } else {
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+    if (ObMySQLDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAYNAME_EXPR_VECTOR(MySQLDate);
+    } else if (ObMySQLDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAYNAME_EXPR_VECTOR(MySQLDateTime);
+    } else if (ObDateTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAYNAME_EXPR_VECTOR(Date);
+    } else if (ObDateTimeTC == ob_obj_type_class(arg_type)) {
+      DISPATCH_DAYNAME_EXPR_VECTOR(DateTime);
+    }
+
+    if (OB_FAIL(ret)) {
+      LOG_WARN("expr calculation failed", K(ret));
+    }
+  }
+  return ret;
+}
+#undef DISPATCH_DAYNAME_EXPR_VECTOR
+#undef DISPATCH_DAY_OF_EXPR_VECTOR
+#undef EPOCH_WDAY
+#undef CHECK_SKIP_NULL
+#undef BATCH_CALC
 
 
 } //namespace sql

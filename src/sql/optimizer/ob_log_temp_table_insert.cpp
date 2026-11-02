@@ -42,6 +42,7 @@ int ObLogTempTableInsert::compute_sharding_info()
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(child), K(get_plan()), K(ret));
   } else if (child->is_match_all()) {
     //temp table insert is a data-shared operator, can not be match all 
     strong_sharding_ = get_plan()->get_optimizer_context().get_local_sharding();
@@ -60,8 +61,10 @@ int ObLogTempTableInsert::compute_op_ordering()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (child->is_single()) {
     if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
+      LOG_WARN("failed to compute op ordering", K(ret));
     } else { /*do nothing*/ }
   } else { /*do nothing*/ }
   return ret;
@@ -76,6 +79,7 @@ int ObLogTempTableInsert::est_cost()
   EstimateCostInfo param;
   param.need_parallel_ = get_parallel();
   if (OB_FAIL(do_re_est_cost(param, card, op_cost, cost))) {
+    LOG_WARN("failed to do re est cost", K(ret));
   } else {
     set_op_cost(op_cost);
     set_cost(cost);
@@ -92,9 +96,12 @@ int ObLogTempTableInsert::do_re_est_cost(EstimateCostInfo &param, double &card, 
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_UNLIKELY(param.need_parallel_ < 1)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected parallel degree", K(param.need_parallel_), K(ret));
   } else if (OB_FAIL(child->re_est_cost(param, card, cost))) {
+    LOG_WARN("failed to do re est cost", K(ret));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     op_cost = ObOptEstCost::cost_material(card / param.need_parallel_,
@@ -111,6 +118,7 @@ int ObLogTempTableInsert::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
+    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     ObString &name = get_table_name();
     BUF_PRINT_OB_STR(name.ptr(), 

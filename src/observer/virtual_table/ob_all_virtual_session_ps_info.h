@@ -20,7 +20,7 @@
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "sql/session/ob_sql_session_mgr.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 
 namespace oceanbase {
 namespace sql {
@@ -32,18 +32,18 @@ class ObAllVirtualSessionPsInfo : public ObAllPlanCacheBase {
 public:
   static const int64_t BUCKET_COUNT = 128;
   using SessionID = uint32_t;
-  class ObSessionInfoIterator {
+  class ObTenantSessionInfoIterator {
   public:
-    ObSessionInfoIterator(
-        common::ObArray<SessionID> &session_ids)
+    ObTenantSessionInfoIterator(
+        common::ObArray<SessionID> &tenant_session_list)
         : last_attach_session_info_(nullptr),
-          session_ids_(session_ids), cur_session_id_list_(nullptr) {}
+          tenant_session_list_(tenant_session_list), cur_session_id_list_(nullptr) {}
     bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
     int next(sql::ObSQLSessionInfo *&sess_info);
     void reset();
   private:
     sql::ObSQLSessionInfo *last_attach_session_info_;
-    common::ObArray<SessionID> &session_ids_;
+    common::ObArray<SessionID> &tenant_session_list_;
     
     common::ObArray<SessionID> *cur_session_id_list_;
   };
@@ -95,8 +95,8 @@ public:
   ObAllVirtualSessionPsInfo()
       : ObAllPlanCacheBase(),
         fetcher_(),
-        session_ids_(),
-        all_sql_session_iterator_(session_ids_),
+        tenant_session_list_(),
+        all_sql_session_iterator_(tenant_session_list_),
         cur_session_info_(nullptr),
         ps_client_stmt_ids_(),
         is_iter_end_(false) {}
@@ -108,12 +108,12 @@ public:
 private:
   int fill_cells(ObPsStmtId ps_client_stmt_id,
                  bool &is_filled);
-  int get_next_row_from_sessions(bool &is_filled);
+  int get_next_row_from_specified_tenant(bool &is_filled);
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSessionPsInfo);
 private:
   ObPsSessionInfoFetcher fetcher_;
-  common::ObArray<SessionID> session_ids_;
-  ObSessionInfoIterator all_sql_session_iterator_;
+  common::ObArray<SessionID> tenant_session_list_;
+  ObTenantSessionInfoIterator all_sql_session_iterator_;
   sql::ObSQLSessionInfo *cur_session_info_;
   common::ObArray<ObPsStmtId> ps_client_stmt_ids_;
   bool is_iter_end_;

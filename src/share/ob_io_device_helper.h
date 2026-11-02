@@ -19,14 +19,13 @@
 
 #include <stdint.h>
 #include "lib/restore/ob_io_device.h"
+#include "share/ob_local_device.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
 namespace share
 {
-class ObLocalDevice;
-class ObILocalDeviceSpaceProvider;
-
 class ObGetFileIdRangeFunctor : public common::ObBaseDirEntryOperator
 {
 public:
@@ -93,13 +92,12 @@ public:
       const char *sstable_dir,
       const int64_t block_size,
       const int64_t data_disk_percentage,
-      const int64_t data_disk_size,
-      const ObILocalDeviceSpaceProvider &space_provider);
+      const int64_t data_disk_size);
   void destroy();
 
-  ObIODevice &get_local_device();
+  ObIODevice &get_local_device() { abort_unless(NULL != local_device_); return *local_device_; }
 
-  // Used only by the runtime module environment test fixture.
+  // just for unittest (mock_tenant_module_env)
   void set_local_device(ObLocalDevice *local_device)
   {
     local_device_ = local_device;
@@ -162,9 +160,11 @@ public:
   static int rmdir(const char *pathname);
   static int unlink(const char *pathname);
   static int rename(const char *oldpath, const char *newpath);
+  static int seal_file(const common::ObIOFd &fd);
   static int scan_dir(const char *dir_name, int (*func)(const dirent *entry));
   static int scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op);
   static int scan_dir_rec(const char *dir_name, ObScanDirOp &reg_op, ObScanDirOp &dir_op);
+  static int is_tagging(const char *pathname, bool &is_tagging);
   static int fsync(const common::ObIOFd &fd);
   static int fdatasync(const common::ObIOFd &fd);
   static int fallocate(const common::ObIOFd &fd,

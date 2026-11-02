@@ -1,0 +1,283 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE_SCHEMA
+#include "ob_context_sql_service.h"
+
+#include "lib/ob_define.h"
+#include "lib/ob_errno.h"
+#include "lib/oblog/ob_log.h"
+#include "lib/oblog/ob_log_level.h"
+#include "lib/oblog/ob_log_print_kv.h"
+#include "lib/string/ob_sql_string.h"
+#include "lib/string/ob_string.h"
+#include "lib/utility/alloc_assist.h"
+#include "mysqlclient/ob_isql_client.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/schema/ob_schema_service.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_schema_utils.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace share
+{
+namespace schema
+{
+
+int ObContextSqlService::insert_context(const ObContextSchema &context_schema,
+                                        common::ObISQLClient *sql_client,
+                                        const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sql_client is NULL", K(ret));
+  } else if (!context_schema.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    SHARE_SCHEMA_LOG(WARN, "context_schema is invalid", K(context_schema.get_namespace()), K(ret));
+  } else {
+    if (OB_FAIL(add_context(*sql_client, context_schema))) {
+      LOG_WARN("failed to add context", K(ret));
+    } else {
+      ObSchemaOperation opt;
+      
+      opt.context_id_ = context_schema.get_context_id();
+      opt.context_name_ = context_schema.get_namespace();
+      opt.op_type_ = OB_DDL_CREATE_CONTEXT;
+      opt.schema_version_ = context_schema.get_schema_version();
+      opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
+      if (OB_FAIL(log_operation(opt, *sql_client))) {
+        LOG_WARN("Failed to log operation", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
+                                           common::ObISQLClient *sql_client,
+                                           const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sql_client is NULL", K(ret));
+  } else {
+    
+    
+    // modify __all_context table
+    if (OB_SUCC(ret)) {
+      ObDMLExecHelper exec(*sql_client);
+      ObDMLSqlSplicer dml;
+      bool is_history = false;
+      // udpate __all_context table
+      int64_t affected_rows = 0;
+      if (OB_FAIL(format_dml_sql(context_schema, dml, is_history))) {
+        LOG_WARN("failed to get dml sql", K(ret));
+      } else if (FAILEDx(exec.exec_update(OB_ALL_CONTEXT_TNAME, dml, affected_rows))) {
+        LOG_WARN("execute update sql fail", K(ret));
+      } else if (!is_single_row(affected_rows)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
+      } else {/*do nothing*/}
+    }
+
+    // add to __all_context_object_history table
+    if (OB_SUCC(ret)) {
+      const bool only_history = true;
+      if (OB_FAIL(add_context(*sql_client, context_schema, only_history))) {
+        LOG_WARN("add_context failed",
+                 K(context_schema.get_namespace()),
+                 K(only_history),
+                 K(ret));
+      }
+    }
+
+    // log operation
+    if (OB_SUCC(ret)) {
+      ObSchemaOperation opt;
+      
+      opt.context_id_ = context_schema.get_context_id();
+      opt.context_name_ = context_schema.get_namespace();
+      opt.op_type_ = OB_DDL_ALTER_CONTEXT;
+      opt.schema_version_ = context_schema.get_schema_version();
+      opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
+      if (OB_FAIL(log_operation(opt, *sql_client))) {
+        LOG_WARN("Failed to log operation", K(opt), K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObContextSqlService::delete_context(const uint64_t context_id,
+                                        const ObString &ctx_namespace,
+                                        const int64_t new_schema_version,
+                                        const ObContextType &type,
+                                        common::ObISQLClient *sql_client,
+                                        const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  
+  const int64_t IS_DELETED = 1;
+
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid sql client is NULL", K(ret));
+  } else {
+    // insert into __all_context_history
+    if (FAILEDx(sql.assign_fmt(
+                "INSERT INTO %s(context_id, namespace, schema_version, is_deleted)"
+                " VALUES(%lu,\'%s\',%ld,%ld)",
+                OB_ALL_CONTEXT_HISTORY_TNAME,
+                ObSchemaUtils::get_extract_schema_id(context_id),
+                ctx_namespace.ptr(),
+                new_schema_version, IS_DELETED))) {
+      LOG_WARN("assign insert into all tenant context history fail",
+               K(context_id), K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("execute sql fail", K(sql), K(ret));
+    } else if (1 != affected_rows) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("no row has inserted", K(ret));
+    }
+
+    // delete from __all_context
+    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE context_id=%lu",
+                               OB_ALL_CONTEXT_TNAME,
+                               ObSchemaUtils::get_extract_schema_id(context_id)))) {
+      LOG_WARN("append_fmt failed", K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", K(sql), K(ret));
+    } else if (1 != affected_rows) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
+    } else {
+      LOG_INFO("success delete context schema",
+               
+               K(context_id),
+               K(ctx_namespace),
+               K(OB_ALL_CONTEXT_TNAME));
+    }
+
+    // log operation
+    if (OB_SUCC(ret)) {
+      ObSchemaOperation opt;
+      
+      opt.context_id_ = context_id;
+      opt.op_type_ = OB_DDL_DROP_CONTEXT;
+      opt.context_name_ = ctx_namespace;
+      opt.schema_version_ = new_schema_version;
+      opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
+      if (OB_FAIL(log_operation(opt, *sql_client))) {
+        LOG_WARN("Failed to log operation", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+
+int ObContextSqlService::drop_context(const ObContextSchema &context_schema,
+                                      const int64_t new_schema_version,
+                                      common::ObISQLClient *sql_client,
+                                      bool &need_clean,
+                                      const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  
+  const uint64_t context_id = context_schema.get_context_id();
+  const ObString &ctx_namespace = context_schema.get_namespace();
+  need_clean = false;
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid sql client is NULL", K(ret));
+  } else if (OB_UNLIKELY(OB_INVALID_ID == context_id
+                         || ctx_namespace.length() <= 0
+                         || new_schema_version < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid context info in drop context",
+             K(context_schema.get_namespace()), K(ret));
+  } else if (OB_FAIL(delete_context(context_id, ctx_namespace,
+                                    new_schema_version, context_schema.get_context_type(),
+                                    sql_client, ddl_stmt_str))) {
+    LOG_WARN("failed to delete context", K(context_schema.get_namespace()), K(ret));
+  } else {
+    need_clean = (ACCESSED_GLOBALLY == context_schema.get_context_type());
+  }
+  return ret;
+}
+
+
+int ObContextSqlService::add_context(common::ObISQLClient &sql_client,
+                                     const ObContextSchema &context_schema,
+                                     const bool only_history)
+{
+  int ret = OB_SUCCESS;
+  const char *tname[] = {OB_ALL_CONTEXT_TNAME, OB_ALL_CONTEXT_HISTORY_TNAME};
+  
+  
+  for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); i++) {
+    ObDMLSqlSplicer dml;
+    bool is_history = (0 == STRCMP(tname[i], OB_ALL_CONTEXT_HISTORY_TNAME));
+    int64_t affected_rows = 0;
+    ObDMLExecHelper exec(sql_client);
+    if (only_history && 0 == STRCMP(tname[i], OB_ALL_CONTEXT_TNAME)) {
+      continue;
+    } else if (OB_FAIL(format_dml_sql(context_schema, dml, is_history))) {
+      LOG_WARN("failed to format dml sql", K(ret));
+    } else if (OB_FAIL(exec.exec_insert(tname[i], dml, affected_rows))) {
+      LOG_WARN("failed to exec insert", K(ret));
+    } else if (!is_single_row(affected_rows)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected value", K(affected_rows), K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObContextSqlService::format_dml_sql(const ObContextSchema &context_schema,
+                                        ObDMLSqlSplicer &dml,
+                                        bool &is_history)
+{
+  int ret = OB_SUCCESS;
+  
+  
+  if (OB_FAIL(dml.add_pk_column("context_id", ObSchemaUtils::get_extract_schema_id(context_schema.get_context_id())))
+      || OB_FAIL(dml.add_column("namespace", context_schema.get_namespace()))
+      || OB_FAIL(dml.add_column("schema_version", context_schema.get_schema_version()))
+      || OB_FAIL(dml.add_column("database_name", context_schema.get_schema_name()))
+      || OB_FAIL(dml.add_column("package", context_schema.get_trusted_package()))
+      || OB_FAIL(dml.add_column("type", static_cast<int64_t> (context_schema.get_context_type())))
+      || OB_FAIL(dml.add_column("origin_con_id", context_schema.get_origin_con_id()))
+      || OB_FAIL(dml.add_column("tracking", static_cast<int64_t> (context_schema.get_tracking())))
+      || OB_FAIL(dml.add_gmt_modified())
+      || (is_history && OB_FAIL(dml.add_column("is_deleted", 0)))) {
+    LOG_WARN("add column failed", K(ret));
+  }
+  return ret;
+}
+
+
+} //end of schema
+} //end of share
+} //end of oceanbase

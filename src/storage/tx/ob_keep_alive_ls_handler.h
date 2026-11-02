@@ -18,9 +18,10 @@
 #define OCEANBASE_TRANSACTION_KEEP_ALIVE_LS_HANDLER
 
 #include "logservice/palf/palf_callback.h"
-#include "share/log/ob_log_base_header.h"
-#include "share/log/ob_log_base_type.h"
+#include "logservice/ob_log_base_header.h"
+#include "logservice/ob_log_base_type.h"
 #include "logservice/ob_append_callback.h"
+#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -49,12 +50,14 @@ public:
 
 public:
   ObKeepAliveLogBody()
-    : min_start_scn_(),
+    : compat_bit_(1), min_start_scn_(),
     min_start_status_(MinStartScnStatus::UNKOWN)
   {}
-  ObKeepAliveLogBody(const share::SCN &min_start_scn,
+  ObKeepAliveLogBody(int64_t compat_bit,
+                     const share::SCN &min_start_scn,
                      MinStartScnStatus min_status)
-    : min_start_scn_(min_start_scn),
+    : compat_bit_(compat_bit),
+    min_start_scn_(min_start_scn),
     min_start_status_(min_status)
   {}
 
@@ -62,9 +65,10 @@ public:
   const share::SCN &get_min_start_scn() const { return min_start_scn_; };
   MinStartScnStatus get_min_start_status() { return min_start_status_; }
 
-  TO_STRING_KV(K_(min_start_scn), K_(min_start_status));
+  TO_STRING_KV(K_(compat_bit), K_(min_start_scn), K_(min_start_status));
 
 private:
+  int64_t compat_bit_; // not used, only for compatibility
   share::SCN min_start_scn_;
   MinStartScnStatus min_start_status_;
 };
@@ -107,6 +111,7 @@ public:
   void reset()
   {
     cb_busy_cnt = 0;
+    not_master_cnt = 0;
     near_to_gts_cnt = 0;
     other_error_cnt = 0;
     submit_succ_cnt = 0;
@@ -116,12 +121,14 @@ public:
   void clear_cnt()
   {
     cb_busy_cnt = 0;
+    not_master_cnt = 0;
     near_to_gts_cnt = 0;
     other_error_cnt = 0;
     submit_succ_cnt = 0;
   }
 
   int64_t cb_busy_cnt;
+  int64_t not_master_cnt;
   int64_t near_to_gts_cnt;
   int64_t other_error_cnt;
   int64_t submit_succ_cnt;
@@ -134,14 +141,14 @@ private:
 // after init , we should register in logservice
 class ObKeepAliveLSHandler : public logservice::ObIReplaySubHandler,
                              public logservice::ObICheckpointSubHandler,
-                             public logservice::ObILocalLogHandler,
+                             public logservice::ObIRoleChangeSubHandler,
                              public logservice::AppendCb
 {
 public:
   const int64_t KEEP_ALIVE_GTS_INTERVAL = 100 * 1000;
 public:
   ObKeepAliveLSHandler() : submit_buf_(nullptr) { reset(); }
-  int init(logservice::ObLogHandler *log_handler_ptr);
+  int init(const share::ObLSID &ls_id,logservice::ObLogHandler * log_handler_ptr);
 
   void stop();
   // false - can not safe destroy
@@ -160,23 +167,33 @@ public:
   int on_failure();
 
   int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn);
-  void deactivate() override {}
-  int activate() override { return OB_SUCCESS; }
+  void switch_to_follower_forcedly()
+  {
+   ATOMIC_STORE(&is_master_, false);
+  }
+  int switch_to_leader() { ATOMIC_STORE(&is_master_,true); return OB_SUCCESS;}
+  int switch_to_follower_gracefully() { ATOMIC_STORE(&is_master_,false); return OB_SUCCESS;}
+  int resume_leader() { ATOMIC_STORE(&is_master_,true);return OB_SUCCESS; }
   share::SCN get_rec_scn() { return share::SCN::max_scn(); }
   int flush(share::SCN &rec_scn) { return OB_SUCCESS;}
 
   void get_min_start_scn(share::SCN &min_start_scn,
                          share::SCN &keep_alive_scn,
                          MinStartScnStatus &status);
+  void set_sys_ls_end_scn(const share::SCN &sys_ls_end_scn) { sys_ls_end_scn_.inc_update(sys_ls_end_scn);}
+
 private:
   bool check_gts_();
   int serialize_keep_alive_log_(const share::SCN &min_start_scn, MinStartScnStatus status);
+  share::SCN get_ref_scn_();
 private :
   SpinRWLock lock_;
 
   bool is_busy_;
+  bool is_master_;
   bool is_stopped_;
 
+  share::ObLSID ls_id_;
   logservice::ObLogHandler * log_handler_ptr_;
 
   char *submit_buf_;
@@ -184,6 +201,7 @@ private :
   int64_t submit_buf_pos_;
 
   share::SCN last_gts_;
+  share::SCN sys_ls_end_scn_;
 
   KeepAliveLsInfo tmp_keep_alive_info_;
   KeepAliveLsInfo durable_keep_alive_info_;

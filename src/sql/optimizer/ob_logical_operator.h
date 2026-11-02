@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 #define OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 
-#include <limits>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_iterator.h"
@@ -42,8 +41,6 @@ namespace oceanbase
 {
 namespace sql
 {
-static constexpr int64_t SLAVE_MAPPING_DOP_TO_PARTITION_RATIO = 2;
-
 struct JoinFilterInfo;
 struct EstimateCostInfo;
 struct ObSqlPlanItem;
@@ -289,26 +286,14 @@ struct FilterCompare
   common::ObIArray<ObExprSelPair> &predicate_selectivities_;
 };
 
-struct ObExprRankPair
-{
-  ObExprRankPair() : rank_(0), original_pos_(0), expr_(NULL) {}
-  ObExprRankPair(double rank, int64_t original_pos, ObRawExpr *expr)
-      : rank_(rank), original_pos_(original_pos), expr_(expr)
-  {}
-
-  double rank_;
-  int64_t original_pos_;
-  ObRawExpr *expr_;
-  TO_STRING_KV(K_(rank), K_(original_pos), KP_(expr));
-};
+typedef std::pair<double, ObRawExpr *> ObExprRankPair;
 
 struct ObExprRankPairCompare
 {
   ObExprRankPairCompare() {};
-  bool operator()(const ObExprRankPair &left, const ObExprRankPair &right)
+  bool operator()(ObExprRankPair &left, ObExprRankPair &right)
   {
-    return left.rank_ < right.rank_
-        || (left.rank_ == right.rank_ && left.original_pos_ < right.original_pos_);
+    return left.first < right.first;
   }
 };
 
@@ -459,7 +444,8 @@ struct ObExchangeInfo
     ObRawExpr *expr_;
   };
   ObExchangeInfo()
-  : is_task_order_(false),
+  : is_remote_(false),
+    is_task_order_(false),
     is_merge_sort_(false),
     is_sort_local_order_(false),
     sort_keys_(),
@@ -481,11 +467,15 @@ struct ObExchangeInfo
     strong_sharding_(NULL),
     weak_sharding_(),
     need_null_aware_shuffle_(false),
+    is_rollup_hybrid_(false),
     is_wf_hybrid_(false),
     wf_hybrid_aggr_status_expr_(NULL),
     wf_hybrid_pby_exprs_cnt_array_(),
+    may_add_interval_part_(MayAddIntervalPart::NO),
     sample_type_(NOT_INIT_SAMPLE_TYPE),
-    parallel_(ObGlobalHint::UNSET_PARALLEL)
+    parallel_(ObGlobalHint::UNSET_PARALLEL),
+    server_cnt_(0),
+    server_list_()
   {
     repartition_table_id_ = 0;
   }
@@ -505,6 +495,7 @@ struct ObExchangeInfo
   int append_hash_dist_expr(const common::ObIArray<ObRawExpr *> &exprs);
   int assign(const ObExchangeInfo &other);
 
+  bool is_remote_;
   bool is_task_order_;
   bool is_merge_sort_;
   bool is_sort_local_order_;
@@ -536,15 +527,20 @@ struct ObExchangeInfo
   ObSEArray<ObShardingInfo*, 4> weak_sharding_;
   // for null aware anti join
   bool need_null_aware_shuffle_;
+  bool is_rollup_hybrid_;
   bool is_wf_hybrid_;
   ObRawExpr *wf_hybrid_aggr_status_expr_;
   // pby exprs cnt of every wf for wf hybrid dist
   common::ObSEArray<int64_t, 4> wf_hybrid_pby_exprs_cnt_array_;
+  MayAddIntervalPart may_add_interval_part_;
   // sample type for range distribution or partition range distribution
   ObPxSampleType sample_type_;
   int64_t parallel_;
+  int64_t server_cnt_;
+  common::ObSEArray<common::ObAddr, 4> server_list_;
 
-  TO_STRING_KV(K_(is_task_order),
+  TO_STRING_KV(K_(is_remote),
+               K_(is_task_order),
                K_(is_merge_sort),
                K_(is_sort_local_order),
                K_(sort_keys),
@@ -561,10 +557,14 @@ struct ObExchangeInfo
                K_(repart_all_tablet_ids),
                K_(slave_mapping_type),
                K_(need_null_aware_shuffle),
+               K_(is_rollup_hybrid),
                K_(is_wf_hybrid),
                K_(wf_hybrid_pby_exprs_cnt_array),
+               K_(may_add_interval_part),
                K_(sample_type),
-               K_(parallel));
+               K_(parallel),
+               K_(server_cnt),
+               K_(server_list));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExchangeInfo);
 };
@@ -750,6 +750,27 @@ struct ObBatchExecParamCtx
   };
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> params_idx_;
   common::ObSEArray<ExecParam, 8, common::ModulePageAllocator, true> exec_params_;
+};
+
+struct ObErrLogDefine
+{
+  ObErrLogDefine() :
+    is_err_log_(false),
+    err_log_database_name_(),
+    err_log_table_name_(),
+    reject_limit_(0),
+    err_log_value_exprs_(),
+    err_log_column_names_()
+  {
+  }
+  bool is_err_log_;
+  ObString err_log_database_name_;
+  ObString err_log_table_name_; // now not support insert all
+  uint64_t reject_limit_;
+  // error logging the value expr of the column to be inserted
+  ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> err_log_value_exprs_;
+  //  the name of error logging table column which will be inserted
+  ObSEArray<ObString, 4, common::ModulePageAllocator, true> err_log_column_names_;
 };
 
 class Path;
@@ -1082,6 +1103,15 @@ public:
     return op_ordering_;
   }
 
+  inline common::ObIArray<common::ObAddr> &get_server_list()
+  {
+    return server_list_;
+  }
+  inline const common::ObIArray<common::ObAddr> &get_server_list() const
+  {
+    return server_list_;
+  }
+
   inline const ObFdItemSet& get_fd_item_set() const
   {
     return NULL == fd_item_set_ ? empty_fd_item_set_ : *fd_item_set_;
@@ -1260,7 +1290,7 @@ public:
 
   virtual int compute_op_interesting_order_info();
 
-  virtual int compute_op_parallel_info();
+  virtual int compute_op_parallel_and_server_info();
 
   virtual int compute_table_set();
 
@@ -1301,8 +1331,8 @@ public:
   virtual int compute_property();
 
   int check_property_valid() const;
-  int compute_normal_multi_child_parallel_info();
-  int set_parallel_info_for_match_all();
+  int compute_normal_multi_child_parallel_and_server_info();
+  int set_parallel_and_server_info_for_match_all();
   int get_limit_offset_value(ObRawExpr *percent_expr,
                              ObRawExpr *limit_expr,
                              ObRawExpr *offset_expr,
@@ -1351,6 +1381,8 @@ public:
    * Generate a table's location constraint for table scan op
    */
   int get_tbl_loc_cons_for_scan(LocationConstraint &loc_cons);
+  // generate a table location constraint for duplicate table's replica selection
+  int get_dup_replica_cons_for_scan(ObDupTabConstraint &dup_rep_cons, bool &found_dup_con);
   /**
    * @brief Generate a table's location constraint for insert op
    */
@@ -1480,6 +1512,11 @@ public:
   {
     contain_pw_merge_op_ = contain_pw_merge_op;
   }
+  inline bool get_contains_match_all_fake_cte() const { return contain_match_all_fake_cte_; }
+  inline void set_contains_match_all_fake_cte(bool contain_match_all_fake_cte)
+  {
+    contain_match_all_fake_cte_ = contain_match_all_fake_cte;
+  }
   inline bool get_contains_das_op() const { return contain_das_op_; }
   inline void set_contains_das_op(bool contain_das_op)
   {
@@ -1544,6 +1581,10 @@ public:
   {
     return (NULL != strong_sharding_ && strong_sharding_->is_local());
   }
+  inline bool is_remote() const
+  {
+    return (NULL != strong_sharding_ && strong_sharding_->is_remote());
+  }
   inline bool is_match_all() const
   {
     return (NULL != strong_sharding_ && strong_sharding_->is_match_all());
@@ -1555,11 +1596,11 @@ public:
   }
   inline bool is_sharding() const
   {
-    return is_distributed();
+    return is_remote() || is_distributed();
   }
   inline bool is_single() const
   {
-    return is_local() || is_match_all();
+    return is_local() || is_remote() || is_match_all();
   }
   inline ObShardingInfo* get_sharding() const
   {
@@ -1582,6 +1623,9 @@ public:
   inline OpParallelRule get_op_parallel_rule() const { return op_parallel_rule_; }
   inline int64_t get_available_parallel() const { return available_parallel_; }
   inline void set_available_parallel(int64_t available_parallel) { available_parallel_ = available_parallel; }
+  inline void set_server_cnt(int64_t count) { server_cnt_ = count; }
+  inline int64_t get_server_cnt() const { return server_cnt_; }
+
   void set_late_materialization(bool need_mater) { need_late_materialization_ = need_mater; }
   bool need_late_materialization() const { return need_late_materialization_; }
   /**
@@ -1653,8 +1697,8 @@ public:
   // 2. If this operator is single-child and block, then open and close its child.
   // 3. If this operator has multiple children, open all children by default and
   //    operators should override this function according to their unique execution logic.
-  // update_max = false means a parent is comparing alternative child branches
-  // for the largest running thread/group count without updating the plan-wide peaks.
+  // append_map = false means it's in the progress of LogSet searching for child
+  //   with max running thread/group count, and we will not modify max_count or max_map.
   virtual int open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG);
   // Make the operator in state that all data has been outputted already.
   virtual int close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG);
@@ -1665,6 +1709,9 @@ public:
   int pre_check_can_px_batch_rescan(bool &find_nested_rescan,
                                     bool &find_rescan_px,
                                     bool nested) const;
+  int check_contain_dist_das(const ObIArray<ObAddr> &exec_server_list,
+                             bool &contain_dist_das) const;
+
   inline bool can_re_parallel() { return !is_distributed() && !is_match_all() && 1 < get_available_parallel() && !get_is_at_most_one_row(); }
   int check_op_orderding_used_by_parent(bool &used);
 
@@ -1889,6 +1936,7 @@ protected:
   bool contain_fake_cte_;
   bool contain_pw_merge_op_;
   bool contain_das_op_;
+  bool contain_match_all_fake_cte_;
   ObShardingInfo *strong_sharding_;
   common::ObSEArray<ObShardingInfo*, 8, common::ModulePageAllocator, true> weak_sharding_;
   bool is_pipelined_plan_;
@@ -1904,6 +1952,8 @@ protected:
   int64_t parallel_;
   OpParallelRule op_parallel_rule_;
   int64_t available_parallel_;  // parallel degree used by serial op to enable parallel again
+  int64_t server_cnt_;
+  ObSEArray<common::ObAddr, 8, common::ModulePageAllocator, true> server_list_;
   bool need_late_materialization_;
   // all non_const exprs for this op, generated by allocate_expr_pre and used by project pruning
   ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> op_exprs_;
@@ -1927,6 +1977,7 @@ int ObLogicalOperator::init_all_traverse_ctx(Allocator &alloc)
       ret = OB_ERR_UNEXPECTED;
       SQL_OPT_LOG(WARN, "NULL child", K(ret));
     } else if (OB_FAIL(get_child(i)->init_all_traverse_ctx(alloc))) {
+      SQL_OPT_LOG(WARN, "init all traverse ctx failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

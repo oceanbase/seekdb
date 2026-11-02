@@ -16,18 +16,17 @@
 
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
-#include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "sql/das/ob_das_define.h"
-#include "sql/das/ob_das_tablet_mapper.h"
+#include "sql/das/ob_das_location_router.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/das/ob_das_factory.h"
+#include "storage/tx/ob_trans_define.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
 namespace oceanbase
 {
 namespace sql
 {
 class ObDASTabletMapper;
-class ObQueryRetryInfo;
 
 struct DmlRowkeyDistCtx
 {
@@ -67,9 +66,7 @@ public:
   ObDASCtx(common::ObIAllocator &allocator)
     : table_locs_(allocator),
       sql_ctx_(nullptr),
-      last_location_errno_(OB_SUCCESS),
-      history_retry_cnt_(0),
-      cur_retry_cnt_(0),
+      location_router_(allocator),
       das_factory_(allocator),
       related_tablet_map_(allocator),
       allocator_(allocator),
@@ -78,14 +75,16 @@ public:
       write_branch_id_(0),
       del_ctx_list_(allocator),
       group_params_(nullptr),
-      current_group_id_(-1),
+      skip_scan_group_id_(-1),
       group_rescan_cnt_(-1),
-      use_snapshot_opt_(false),
+      use_gts_opt_(false),
       parent_table_set_(allocator),
       real_das_dop_(0),
       flags_(0)
   {
     is_fk_cascading_ = 0;
+    need_check_server_ = 1;
+    same_server_ = 1;
     iter_uncommitted_row_ = 0;
   }
   ~ObDASCtx()
@@ -128,6 +127,7 @@ public:
   int get_das_tablet_mapper(const uint64_t ref_table_id,
                             ObDASTabletMapper &tablet_mapper,
                             const DASTableIDArrayWrap *related_table_ids = nullptr);
+  int get_all_lsid(share::ObLSArray &ls_ids);
   int64_t get_related_tablet_cnt() const;
   int set_snapshot(const transaction::ObTxReadSnapshot &snapshot) { return snapshot_.assign(snapshot); }
   transaction::ObTxReadSnapshot &get_snapshot() { return snapshot_; }
@@ -135,64 +135,47 @@ public:
   void set_savepoint(const transaction::ObTxSEQ savepoint) { savepoint_ = savepoint; }
   void set_write_branch_id(const int16_t branch_id) { write_branch_id_ = branch_id; }
   int16_t get_write_branch_id() const { return write_branch_id_; }
-  int build_local_tablet_loc(uint64_t ref_table_id,
-                             const common::ObTabletID &tablet_id,
-                             ObDASTabletLoc &tablet_loc);
-  void refresh_location_cache_by_errno(bool is_nonblock, int err_no);
-  void force_refresh_location_cache(bool is_nonblock, int err_no);
-  bool is_refresh_location_error(int err_no) const;
-  void set_last_errno(int err_no) { last_location_errno_ = err_no; }
-  int get_last_errno() const { return last_location_errno_; }
-  void set_history_retry_cnt(int64_t history_retry_cnt) { history_retry_cnt_ = history_retry_cnt; }
-  void accumulate_retry_count()
-  {
-    history_retry_cnt_ += cur_retry_cnt_;
-    cur_retry_cnt_ = 0;
-  }
-  int64_t get_total_retry_cnt() const { return history_retry_cnt_ + cur_retry_cnt_; }
-  int64_t get_cur_retry_cnt() const { return cur_retry_cnt_; }
-  void reset_cur_retry_cnt() { cur_retry_cnt_ = 0; }
-  void inc_cur_retry_cnt() { ++cur_retry_cnt_; }
-  void set_retry_info(const ObQueryRetryInfo *retry_info);
-  void save_cur_exec_status(int err_no);
+  ObDASLocationRouter &get_location_router() { return location_router_; }
   int build_related_tablet_loc(ObDASTabletLoc &tablet_loc);
   int build_related_table_loc(ObDASTableLoc &table_loc);
   int rebuild_tablet_loc_reference();
   const GroupParamArray* get_group_params() { return group_params_; }
-  int64_t get_current_group_id() const { return current_group_id_; }
+  int64_t get_skip_scan_group_id() const { return skip_scan_group_id_; }
   int64_t get_group_rescan_cnt() const { return group_rescan_cnt_; }
   void clear_all_location_info()
   {
     table_locs_.clear();
     related_tablet_map_.clear();
+    same_server_ = 1;
   }
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
   void set_sql_ctx(ObSqlCtx *sql_ctx) { sql_ctx_ = sql_ctx; }
   DASRelatedTabletMap &get_related_tablet_map() { return related_tablet_map_; }
+  bool is_partition_hit();
+  void unmark_need_check_server();
+
   int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);
+  const common::ObAddr &same_tablet_addr() const { return GCTX.self_addr(); }
 
   int find_group_param_by_param_idx(int64_t param_idx,
                                     bool &exist, uint64_t &array_idx);
   int64_t get_real_das_dop() { return real_das_dop_; }
   void set_real_das_dop(int64_t v) { real_das_dop_ = v; }
-  void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
-  bool get_use_snapshot_opt() { return use_snapshot_opt_; }
+  void set_use_gts_opt(bool v) { use_gts_opt_ = v; }
+  bool get_use_gts_opt() { return use_gts_opt_; }
 
   TO_STRING_KV(K_(table_locs),
-               K_(last_location_errno),
-               K_(history_retry_cnt),
-               K_(cur_retry_cnt),
                K_(is_fk_cascading),
                K_(snapshot),
                K_(savepoint),
                K_(write_branch_id),
                K_(real_das_dop));
 private:
+  int check_same_server(const ObDASTabletLoc *tablet_loc);
+private:
   DASTableLocList table_locs_;
   ObSqlCtx *sql_ctx_;
-  int last_location_errno_;
-  int64_t history_retry_cnt_; // Total retries before the current retry round.
-  int64_t cur_retry_cnt_; // Continuous retries in the current round.
+  ObDASLocationRouter location_router_;
   ObDASTaskFactory das_factory_;
   DASRelatedTabletMap related_tablet_map_;
   common::ObIAllocator &allocator_;
@@ -206,9 +189,9 @@ private:
   //@todo: save snapshot version
   DASDelCtxList del_ctx_list_;
   const GroupParamArray *group_params_; //only allowed to be modified by GroupParamBackupGuard
-  int64_t current_group_id_; //only allowed to be modified by GroupParamBackupGuard
+  int64_t skip_scan_group_id_; //only allowed to be modified by GroupParamBackupGuard
   int64_t group_rescan_cnt_; //only allowed to be modified by GroupParamBackupGuard
-  bool use_snapshot_opt_;
+  bool use_gts_opt_; // without get gts
   DASTableIdList parent_table_set_; // The list of parent table, for inner sql.
   int64_t real_das_dop_;
 public:
@@ -216,10 +199,12 @@ public:
     uint64_t flags_;
     struct {
       uint64_t is_fk_cascading_                 : 1; //fk starts to trigger nested sql
+      uint64_t need_check_server_               : 1; //need to check if partitions hit the same server
+      uint64_t same_server_                     : 1; //if partitions hit the same server, could be local or remote
       uint64_t iter_uncommitted_row_            : 1; //iter uncommitted row in fk_checker
       uint64_t in_das_group_scan_               : 1; //the current execution in das group scan
       uint64_t in_ignore_cascading_             : 1; //is an ignore stmt when cascading
-      uint64_t reserved_                        : 60;
+      uint64_t reserved_                        : 58;
     };
   };
 };
@@ -230,7 +215,7 @@ public:
   GroupParamBackupGuard(ObDASCtx &ctx)
   : ctx_(ctx)
   {
-    current_group_ = ctx.current_group_id_;
+    current_group_ = ctx.skip_scan_group_id_;
     group_rescan_cnt_ = ctx.group_rescan_cnt_;
     group_params_ = ctx.get_group_params();
   }
@@ -239,13 +224,13 @@ public:
                                 int64_t group_rescan_cnt,
                                 const GroupParamArray *group_params)
   {
-    ctx_.current_group_id_ = current_group;
+    ctx_.skip_scan_group_id_ = current_group;
     ctx_.group_rescan_cnt_ = group_rescan_cnt;
     ctx_.group_params_ = group_params;
   }
 
   ~GroupParamBackupGuard() {
-    ctx_.current_group_id_ = current_group_;
+    ctx_.skip_scan_group_id_ = current_group_;
     ctx_.group_rescan_cnt_ = group_rescan_cnt_;
     ctx_.group_params_ = group_params_;
   }

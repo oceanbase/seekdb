@@ -22,10 +22,11 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/string/ob_fixed_length_string.h"
+#include "observer/virtual_table/ob_virtual_table_projector.h"
 #include "lib/task/ob_timer.h"
 #include "lib/thread/ob_async_task_queue.h"
 #include "share/ob_schema_status_proxy.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -46,19 +47,19 @@ class ObMultiVersionSchemaService;
 
 namespace rootserver
 {
-class ObLocalManagementService;
+class ObRootService;
 
 ////////////////////////////////////////////////////////////////
 // Class I: purge recyclebin in the background
 class ObPurgeRecyclebinTask: public common::ObTimerTask
 {
 public:
-  explicit ObPurgeRecyclebinTask(ObLocalManagementService &local_management_service);
+  explicit ObPurgeRecyclebinTask(ObRootService &rs);
   virtual ~ObPurgeRecyclebinTask() {}
 
   virtual void runTimerTask() override;
 private:
-  ObLocalManagementService &local_management_service_;
+  ObRootService &root_service_;
 };
 
 }//end namespace rootserver

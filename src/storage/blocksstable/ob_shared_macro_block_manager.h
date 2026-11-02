@@ -26,6 +26,10 @@
 
 namespace oceanbase
 {
+namespace share
+{
+class ObLSID;
+}
 namespace blocksstable
 {
 struct ObMacroBlocksWriteCtx;
@@ -71,7 +75,7 @@ public:
 
   TO_STRING_KV(K_(macro_handle), K_(offset), K_(header_size));
 
-  static int module_init(ObSharedMacroBlockMgr* &shared_block_mgr);
+  static int mtl_init(ObSharedMacroBlockMgr* &shared_block_mgr);
 
 private:
   class ObBlockDefragmentationTask : public common::ObTimerTask
@@ -103,13 +107,16 @@ private:
         bool_ret = false;
         execution_ret_ = OB_ITER_END;
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.check_macro_block_free(id, is_free))) {
+        STORAGE_LOG(WARN, "fail to check macro block free", K(ret), K(id));
       } else if (is_free && unused_block_ids.count() < MAX_RECYCLABLE_BLOCK_CNT) {
         if (OB_FAIL(unused_block_ids.push_back(id))) {
+          STORAGE_LOG(WARN, "fail to push unused block id", K(ret), K(id));
         } else {
           bool_ret = true;
         }
       } else if (shared_mgr_.is_recyclable(id, used_size)) {
         if (OB_FAIL(block_ids.push_back(id))) {
+          STORAGE_LOG(WARN, "fail to get small block", K(ret), K(id));
         } else {
           bool_ret = true;
         }
@@ -148,8 +155,9 @@ private:
       const ObTablet &tablet,
       const ObSSTableBasicMeta &basic_meta,
       const compaction::ObMergeType &merge_type,
+      const storage::ObITable::TableKey &table_key,
       const int64_t snapshot_version,
-      const int64_t major_data_version,
+      const int64_t cluster_version,
       const share::SCN &end_scn,
       ObWholeDataStoreDesc &data_desc) const;
   int alloc_for_tools(
@@ -194,7 +202,7 @@ private:
   lib::ObMutex blocks_mutex_; // protect block_used_size_
   ObLinearHashMap<MacroBlockId, int32_t> block_used_size_;
   ObBlockDefragmentationTask defragmentation_task_;
-  common::ObTimer defragment_timer_;
+  int tg_id_;
   bool need_defragment_;
   bool is_inited_;
 };

@@ -28,6 +28,7 @@
 #include "ob_datum_range.h"
 #include "ob_micro_block_hash_index.h"
 #include "ob_micro_block_header.h"
+#include "sql/engine/expr/ob_expr_add.h"
 
 namespace oceanbase
 {
@@ -43,8 +44,10 @@ namespace storage
 class ObAggDatumBuf;
 class ObAggCellBase;
 class ObAggCell;
+class ObAggCellVec;
 class ObGroupByCellBase;
 class ObGroupByCell;
+class ObGroupByCellVec;
 struct ObPushdownRowIdCtx;
 };
 namespace memtable {
@@ -279,6 +282,7 @@ public:
     Reader,
     Decoder,
     CSDecoder,
+    MemtableReader,
     MaxReaderType
   };
   ObIMicroBlockReader()
@@ -322,6 +326,7 @@ public:
     return OB_NOT_SUPPORTED;
   }
   virtual int64_t get_column_count() const { return OB_NOT_SUPPORTED; }
+  // For column store
   virtual int find_bound(const ObDatumRowkey &key,
                  const bool lower_bound,
                  const int64_t begin_idx,
@@ -342,17 +347,6 @@ public:
     UNUSEDx(iter_param, context, col_param, col_offset, row_index, datum);
     return OB_NOT_SUPPORTED;
   }
-  // Decode one projected column for either a dense range or selected row ids.
-  // This storage-owned value interface deliberately knows nothing about SQL
-  // aggregates.  Non-local payloads in `datums` are owned by `allocator` and
-  // remain valid until that allocator is reused.
-  virtual int read_column_values(
-      const int32_t col_offset,
-      const int64_t dense_begin,
-      const int32_t *row_ids,
-      const int64_t row_count,
-      common::ObIAllocator &allocator,
-      common::ObDatum *datums);
   virtual bool can_pushdown_decoder(
       const share::schema::ObColumnParam &col_param,
       const int32_t col_offset,
@@ -375,6 +369,14 @@ public:
       storage::ObAggCell &agg_cell)
   {
     UNUSEDx(col_offset, col_param, row_ids, row_cap, datum_buf, agg_cell);
+    return OB_NOT_SUPPORTED;
+  }
+  virtual int get_aggregate_result(
+      const int32_t col_offset,
+      const ObPushdownRowIdCtx &pd_row_id_ctx,
+      storage::ObAggCellVec &agg_cell)
+  {
+    UNUSEDx(col_offset, pd_row_id_ctx, agg_cell);
     return OB_NOT_SUPPORTED;
   }
   // for normal group by pushdown
@@ -412,6 +414,21 @@ public:
     UNUSEDx(iter_param, context, row_ids, cell_datas, row_cap, group_by_cell);
     return OB_NOT_SUPPORTED;
   }
+  virtual int get_group_by_aggregate_result(
+      const ObTableIterParam &iter_param,
+      const ObTableAccessContext &context,
+      const int32_t *row_ids,
+      const char **cell_datas,
+      const int64_t row_cap,
+      const int64_t vec_offset,
+      const common::ObIArray<blocksstable::ObStorageDatum> &default_datums,
+      uint32_t *len_array,
+      sql::ObEvalCtx &eval_ctx,
+      storage::ObGroupByCellVec &group_by_cell)
+  {
+    UNUSEDx(row_ids, cell_datas, row_cap, vec_offset, len_array, eval_ctx, group_by_cell);
+    return OB_NOT_SUPPORTED;
+  }
   virtual void reserve_reader_memory(bool reserve) { UNUSED(reserve); }
   virtual int find_bound_through_linear_search(
       const ObDatumRowkey &rowkey,
@@ -443,6 +460,7 @@ public:
       bool &filtered);
   virtual bool has_lob_out_row() const = 0;
   OB_INLINE ObReaderType get_type() const { return reader_type_; }
+  OB_INLINE bool is_memtable_reader() const { return MemtableReader == reader_type_; }
   int locate_border_row_id(
       const ObDatumRowkey &rowkey,
       const int64_t begin_idx,

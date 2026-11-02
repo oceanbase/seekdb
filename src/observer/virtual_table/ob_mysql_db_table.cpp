@@ -56,16 +56,20 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
       } else {
         ObArray<const ObDBPriv *> db_array;
         if (OB_FAIL(schema_guard_->get_db_priv_by_id(db_array))) {
+          SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
         } else {
           ObString user_name;
           const ObUserInfo *user_info = NULL;
           for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < db_array.count(); ++row_idx) {
             const ObDBPriv *&db_priv = db_array.at(row_idx);
-            if (ObString(ObString(OB_EXTENDED_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str()) {
-              // internal schemas do not need to be displayed
+            if ((ObString(ObString(OB_ORA_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
+                || (ObString(ObString(OB_ORA_LBACSYS_NAME)) == db_priv->get_database_name_str())
+                || (ObString(ObString(OB_ORA_AUDITOR_NAME)) == db_priv->get_database_name_str())) {
+              // oracle db does not need to be displayed
               continue;
             }
             if (OB_FAIL(get_user_info(db_priv->get_user_id(), user_info))) {
+              SERVER_LOG(WARN, "Failed to get user_info", K(ret));
             } else {
               for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < output_column_ids_.count(); ++col_idx) {
                 const uint64_t col_id = output_column_ids_.at(col_idx);
@@ -115,6 +119,7 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
                   EXIST_PRIV_CASE(CREATE_ROUTINE);
                   EXIST_PRIV_CASE(ALTER_ROUTINE);
                   EXIST_PRIV_CASE(EXECUTE);
+                  EXIST_PRIV_CASE(EVENT);
                   EXIST_PRIV_CASE(TRIGGER);
 
 #undef EXIST_PRIV_CASE
@@ -129,6 +134,7 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
             }
             if (OB_SUCC(ret)) {
               if (OB_FAIL(scanner_.add_row(cur_row_))) {
+                SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
               }
             }
           } //end of for user array count

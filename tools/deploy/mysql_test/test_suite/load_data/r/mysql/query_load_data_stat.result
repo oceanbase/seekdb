@@ -1,0 +1,27 @@
+use test;
+drop table if exists lineitem;
+create table lineitem(
+l_orderkey           bigint NOT NULL ,
+l_partkey            bigint NOT NULL ,
+l_suppkey            bigint NOT NULL ,
+l_linenumber         bigint NOT NULL ,
+l_quantity           bigint NOT NULL ,
+l_extendedprice      decimal(10,2) NOT NULL ,
+l_discount           decimal(10,2) NOT NULL ,
+l_tax                decimal(10,2) NOT NULL ,
+l_returnflag         char(1) ,
+l_linestatus         char(1) ,
+l_shipdate           date ,
+l_commitdate         date ,
+l_receiptdate        date ,
+l_shipinstruct       char(25) ,
+l_shipmode           char(10) ,
+l_comment            varchar(44),
+primary key(L_ORDERKEY, L_LINENUMBER)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+load data /*+ parallel(1) load_batch_size(100) */ infile 'data_for_mysqltest_loaddata/tpch_data_template/lineitem-100k.tbl' into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+select table_name,file_path,table_column,file_column,batch_size,parallel,load_mode,total_bytes from __all_virtual_load_data_stat;
+table_name	file_path	table_column	file_column	batch_size	parallel	load_mode	total_bytes
+`test`.`lineitem`	data_for_mysqltest_loaddata/tpch_data_template/lineitem-100k.tbl	16	16	100	1	0	12378586
+drop table lineitem;

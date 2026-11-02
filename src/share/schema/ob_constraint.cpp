@@ -64,13 +64,16 @@ int ObConstraint::assign(const ObConstraint &src_schema)
     name_generated_type_ = src_schema.name_generated_type_;
     int ret = OB_SUCCESS;
     if (OB_FAIL(deep_copy_str(src_schema.constraint_name_, constraint_name_))) {
+      LOG_WARN("Fail to deep copy constraint_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.check_expr_, check_expr_))) {
+      LOG_WARN("Fail to deep copy check_expr", K(ret));
     } else {
       column_cnt_ = src_schema.column_cnt_;
       if (column_cnt_ > 0) {
         column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt_));
         if (NULL == column_id_array_) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
         } else {
           int64_t i = 0;
           MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt_);
@@ -117,6 +120,7 @@ int ObConstraint::get_not_null_column_name(ObString &cst_col_name) const
   if (OB_UNLIKELY(CONSTRAINT_TYPE_NOT_NULL != constraint_type_
           || check_expr_.length() <= NOT_NULL_STR_EXTRA_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("only not null constraint supported", K(ret));
   } else {
     cst_col_name.assign_ptr(check_expr_.ptr() + 1, check_expr_.length() - NOT_NULL_STR_EXTRA_SIZE);
   }
@@ -166,9 +170,11 @@ OB_DEF_SERIALIZE(ObConstraint)
   //serialize column count and column ids
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, column_cnt_))) {
+      LOG_WARN("Fail to encode column_cnt_", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
       if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, column_id_array_[i]))) {
+        LOG_WARN("Fail to encode column_ids_", K(ret), K(i), K(column_id_array_[i]));
       }
     }
   }
@@ -203,14 +209,17 @@ OB_DEF_DESERIALIZE(ObConstraint)
   if (OB_SUCC(ret) && pos < data_len) {
     int64_t column_id = 0;
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &column_cnt_))) {
+      LOG_WARN("Fail to decode index table count", K(ret));
     } else if (column_cnt_ > 0) {
       column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt_));
       if (NULL == column_id_array_) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
       } else {
         MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt_);
         for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
           if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &column_id))) {
+            LOG_WARN("Fail to deserialize column id", K(ret));
           } else {
             column_id_array_[i] = column_id;
           }
@@ -222,8 +231,11 @@ OB_DEF_DESERIALIZE(ObConstraint)
     LST_DO_CODE(OB_UNIS_DECODE, need_validate_data_, name_generated_type_);
   }
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(constraint_name, constraint_name_))) {
+    LOG_WARN("Fail to deep copy constraint_name, ", K(ret), K_(constraint_name));
   } else if (OB_FAIL(deep_copy_str(check_expr, check_expr_))) {
+    LOG_WARN("Fail to deep copy check_expr, ", K(ret), K_(check_expr));
   } else {/*do nothing*/}
 
   return ret;
@@ -290,6 +302,7 @@ int ObConstraint::assign_column_ids(const common::ObIArray<uint64_t> &column_ids
     column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt));
     if (NULL == column_id_array_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
     } else {
       MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt);
     }
@@ -308,6 +321,7 @@ int ObConstraint::assign_not_null_cst_column_id(const uint64_t column_id)
   column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt));
   if (NULL == column_id_array_) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
   } else {
     MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt);
     column_id_array_[0] = column_id;

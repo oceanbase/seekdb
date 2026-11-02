@@ -35,6 +35,16 @@ ObMallocSampleInfo::~ObMallocSampleInfo()
   reset();
 }
 
+int ObMallocSampleInfo::inner_open()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))
+              == false)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "ip_to_string() fail", K(ret));
+  }
+  return ret;
+}
 void ObMallocSampleInfo::reset()
 {
   col_count_ = 0;
@@ -46,6 +56,7 @@ int ObMallocSampleInfo::inner_get_next_row(ObNewRow *&row)
   if (!opened_) {
     col_count_ = output_column_ids_.count();
     if (OB_FAIL(malloc_sample_map_.create(1000, "MallocInfoMap", "MallocInfoMap"))) {
+      SERVER_LOG(WARN, "create memory info map failed", K(ret));
     } else {
       ret = ObMemoryDump::get_instance().load_malloc_sample_map(malloc_sample_map_);
       if (OB_SUCC(ret)) {
@@ -55,12 +66,20 @@ int ObMallocSampleInfo::inner_get_next_row(ObNewRow *&row)
     }
   }
 
+  for (; OB_SUCC(ret) && it_ != malloc_sample_map_.end(); ++it_) {
+    if (true || true) {
+      if (OB_FAIL(fill_row(row))) {
+        SERVER_LOG(WARN, "failed to fill row", K(ret));
+      }
+      break;
+    }
+  }
+
   if (OB_SUCC(ret)) {
-    if (it_ == malloc_sample_map_.end()) {
-      ret = OB_ITER_END;
-    } else if (OB_FAIL(fill_row(row))) {
-    } else {
+    if (it_ != malloc_sample_map_.end()) {
       ++it_;
+    } else {
+      ret = OB_ITER_END;
     }
   }
   return ret;

@@ -40,8 +40,10 @@ int ObExprInterval::assign(const ObExprOperator &other)
   const ObExprInterval *tmp_other = static_cast<const ObExprInterval *>(&other);
   if (other.get_type() != T_FUN_SYS_INTERVAL) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (this != tmp_other) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->use_binary_search_ = tmp_other->use_binary_search_;
     }
@@ -59,6 +61,7 @@ int ObExprInterval::calc_result_typeN(ObExprResType &type,
 
   if (OB_ISNULL(types) || param_num < 2) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(types), K(param_num), K(ret));
   } else if (OB_LIKELY(NOT_ROW_DIMENSION == row_dimension_)) {
     type.set_int();
     type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].precision_);
@@ -90,12 +93,12 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   ObDatum *arg0 = NULL;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_UNLIKELY(2 > expr.arg_cnt_ || 1 != expr.inner_func_cnt_) ||
       OB_ISNULL(expr.inner_functions_) || OB_ISNULL(expr.inner_functions_[0])) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg0))) {
+    LOG_WARN("eval param failed", K(ret));
   } else if (arg0->is_null()) {
     res.set_int(-1);
   } else {
@@ -109,8 +112,8 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
         const ObDatum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(i));
         if (arg_i.is_null()) {
           continue;
-        } else if (OB_FAIL(cmp_func(
-                       arg_i, *arg0, cmp_ret, datum_access_ctx))) {
+        } else if (OB_FAIL(cmp_func(arg_i, *arg0, cmp_ret))) {
+          LOG_WARN("faile to compare", K(ret));
         } else if (cmp_ret > 0) {
           // if arg_i > *arg0 break
           break;
@@ -125,7 +128,8 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
       while (low <= high && OB_SUCC(ret)) {
         int64_t mid = (low + high) / 2;
         const ObDatum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(mid));
-        if (OB_FAIL(cmp_func(arg_i, *arg0, cmp_ret, datum_access_ctx))) {
+        if (OB_FAIL(cmp_func(arg_i, *arg0, cmp_ret))) {
+          LOG_WARN("faile to compare", K(ret));
         } else if (cmp_ret <= 0) {
           low = mid + 1;
         } else if (low == high) {
@@ -149,9 +153,12 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(2 > rt_expr.arg_cnt_) || OB_ISNULL(expr_cg_ctx.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected arg cnt or allocator is NULL", K(ret), K(rt_expr.arg_cnt_),
+                                                        KP(expr_cg_ctx.allocator_));
   } else if (OB_ISNULL(rt_expr.inner_functions_ =
         reinterpret_cast<void**>(expr_cg_ctx.allocator_->alloc(sizeof(void*))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc mem for inner func failed", K(ret));
   } else {
     // make sure all arg type is same
     for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr.arg_cnt_; ++i) {
@@ -161,6 +168,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
             || ObDecimalIntType == arg_type
             || ObDoubleType == arg_type)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("all type must be number type or double type", K(ret), K(arg_type), K(i));
       }
     }
     // checking input parameters:
@@ -178,6 +186,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
       for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr.arg_cnt_; ++i) {
         if (OB_ISNULL(sys_fun_expr->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("param expr is NULL", K(ret), K(i), K(*sys_fun_expr));
         } else if (!sys_fun_expr->get_param_expr(i)->is_const_expr() ||
                    !sys_fun_expr->get_param_expr(i)->is_not_null_for_read()) {
           use_binary_search = false;
@@ -200,6 +209,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                               rt_expr.args_[0]->datum_meta_.precision_));
       if (OB_ISNULL(rt_expr.inner_functions_[0])) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("cmp_func is NULL", K(ret), K(arg_type));
       } else {
         rt_expr.inner_func_cnt_ = 1;
         rt_expr.eval_func_ = calc_interval_expr;
@@ -212,3 +222,4 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 
 } // namespace sql
 } // namespace oceanbase
+

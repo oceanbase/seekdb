@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "data_plane/lob/ob_lob_access_context.h"
 #include "ob_lob_persistent_reader.h"
 #include "storage/lob/ob_lob_persistent_iterator.h"
 
@@ -42,11 +41,14 @@ int ObPersistLobReaderCache::get(ObPersistLobReaderCacheKey key, ObLobMetaIterat
   DLIST_FOREACH_X(curr, list_, OB_SUCC(ret) && nullptr == reader) {
     if (OB_ISNULL(curr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("curr is null", K(ret));
     } else if (! (curr->key_ == key)) { // next
     } else if (false  == list_.move_to_last(curr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("move_to_last fail", K(ret), K(key));
     } else if (OB_ISNULL(reader = curr->reader_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("reader is null", K(ret), K(key));
     }
   }
   return ret;
@@ -58,14 +60,18 @@ int ObPersistLobReaderCache::put(ObPersistLobReaderCacheKey key, ObLobMetaIterat
   ObPersistLobReaderCacheNode *node = nullptr;
   if (OB_ISNULL(reader)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("reader is null", K(ret), K(key));
   } else if (OB_ISNULL(node = OB_NEWx(ObPersistLobReaderCacheNode, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc fail", K(ret));
   } else {
     node->key_ = key;
     node->reader_ = reader;
     if (list_.get_size() >= cap_ && OB_FAIL(remove_first())) {
+      LOG_WARN("remove_first fail", K(ret), K(list_), K(cap_));
     } else if (false == list_.add_last(node)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("add_last fail", K(ret), K(key));
     }
   }
 
@@ -83,6 +89,7 @@ int ObPersistLobReaderCache::remove_first()
   ObPersistLobReaderCacheNode *node = list_.remove_first();
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("node is null", K(ret), K(list_));
   } else {
     node->reader_->~ObLobMetaIterator();
     allocator_.free(node->reader_);
@@ -98,33 +105,4 @@ ObLobMetaIterator* ObPersistLobReaderCache::alloc_reader(const ObLobAccessCtx *a
 }
 
 } // storage
-
-namespace data_plane
-{
-
-int create_lob_access_context(
-    common::ObIAllocator &allocator,
-    common::ObILobAccessContext *&context)
-{
-  int ret = OB_SUCCESS;
-  storage::ObLobAccessCtx *storage_context = nullptr;
-  if (OB_ISNULL(storage_context = OB_NEWx(storage::ObLobAccessCtx, &allocator))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    context = storage_context;
-  }
-  return ret;
-}
-
-void destroy_lob_access_context(common::ObILobAccessContext *&context)
-{
-  if (OB_NOT_NULL(context)) {
-    storage::ObLobAccessCtx *storage_context =
-        static_cast<storage::ObLobAccessCtx *>(context);
-    storage_context->~ObLobAccessCtx();
-    context = nullptr;
-  }
-}
-
-} // namespace data_plane
 } // oceanbase

@@ -64,6 +64,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
     ParseNode *role = role_list->children_[i];
     if (NULL == role) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("role node is null", K(ret));
     } else {
       ObString role_name;
       ObString host_name(OB_DEFAULT_HOST_NAME);
@@ -86,6 +87,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
             //ignored
             ret = OB_SUCCESS;
           } else {
+            LOG_WARN("failed to add role", K(ret));
           }
         } else {
           OZ (role_id_array.push_back(role_id));
@@ -101,6 +103,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
     if (OB_ISNULL(params_.session_info_->get_cur_exec_ctx())
         || OB_ISNULL(sql_ctx = params_.session_info_->get_cur_exec_ctx()->get_sql_ctx())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected ctx", K(ret), KP(params_.session_info_->get_cur_exec_ctx()));
     }
     OZ (params_.schema_checker_->check_mysql_grant_role_priv(*sql_ctx, role_id_array));
   }
@@ -127,9 +130,12 @@ int ObRevokeResolver::resolve_revoke_role_inner(
                   user_name.length(), user_name.ptr(),
                   host_name.length(), host_name.ptr());
       }
+      LOG_WARN("fail to get user id", K(ret), K(user_name), K(host_name));
     } else if (OB_FAIL(check_dcl_on_inner_user(revoke_role->type_,
                                                params_.session_info_->get_priv_user_id(),
                                                user_id))) {
+      LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user", K(ret),
+               K(session_info_->get_priv_user_id()), K(user_name));
     }
     OZ (revoke_stmt->add_grantee(user_name));
     OZ (params_.schema_checker_->get_user_info(user_id, user_info), user_id);
@@ -144,6 +150,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
     // roles_: must be greater than or equal to 0
     if ((revoke_stmt->get_roles()).count() < 1) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("role argument is invalid", K(ret));
     } else {
       // role as user processing
       revoke_stmt->set_grant_level(OB_PRIV_USER_LEVEL);
@@ -161,6 +168,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
 int ObRevokeResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
+  CHECK_COMPATIBILITY_MODE(session_info_);
   ret = resolve_mysql(parse_tree);
   return ret;
 }
@@ -175,6 +183,8 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
   ObRevokeStmt *revoke_stmt = NULL;
   if (OB_ISNULL(params_.schema_checker_) || OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("schema_checker or session info not inited",
+        K(ret), "schema checker", params_.schema_checker_, "session info", params_.session_info_);
   } else if (node != NULL 
       && ((T_REVOKE == node->type_ && REVOKE_NUM_CHILD == node->num_child_)
         || (T_REVOKE_ALL == node->type_ && REVOKE_ALL_NUM_CHILD == node->num_child_)
@@ -191,7 +201,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
       ParseNode *privs_node = NULL;
       ObPrivLevel grant_level = OB_PRIV_INVALID_LEVEL;
       if (T_SYSTEM_REVOKE == node->type_ && REVOKE_ROLE_NUM_CHILD == node->num_child_) {
-        // resolve role revoke
+        // resolve oracle revoke
         // 0: role_list; 1: grantee
         ParseNode *revoke_role = node->children_[0];
         if (NULL == revoke_role) {
@@ -219,13 +229,16 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
           //resolve priv_level
           if (OB_ISNULL(priv_level_node) || OB_ISNULL(allocator_)) {
             ret = OB_ERR_PARSE_SQL;
+            LOG_WARN("Priv level node should not be NULL", K(ret));
           } else {
             ObString db = ObString::make_string("");
             ObString table = ObString::make_string("");
+            ObString catalog = ObString::make_string("");
             if (priv_object_node != NULL
                 && OB_FAIL(ObGrantResolver::resolve_priv_level_with_object_type(session_info_,
                                                                                 priv_object_node,
                                                                                 grant_level))) {
+              LOG_WARN("failed to resolve priv level with object", K(ret));
             } else if (OB_FAIL(ObGrantResolver::resolve_priv_level(
                         params_.schema_checker_->get_schema_guard(),
                         session_info_,
@@ -234,15 +247,20 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                         db,
                         table,
                         grant_level,
-                        *allocator_))) {
+                        *allocator_,
+                        catalog))) {
+              LOG_WARN("Resolve priv_level node error", K(ret));
             } else {
               revoke_stmt->set_grant_level(grant_level);
             }
 
-            if (OB_SUCC(ret)) {
+            if (OB_SUCC(ret) && grant_level != OB_PRIV_CATALOG_LEVEL) {
               if (OB_FAIL(check_and_convert_name(db, table))) {
+                LOG_WARN("Check and convert name error", K(db), K(table), K(ret));
               } else if (OB_FAIL(revoke_stmt->set_database_name(db))) {
+                LOG_WARN("Failed to set database_name to revoke_stmt", K(ret));
               } else if (OB_FAIL(revoke_stmt->set_table_name(table))) {
+                LOG_WARN("Failed to set table_name to revoke_stmt", K(ret));
               }
             }
 
@@ -251,8 +269,10 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                                              params_.schema_checker_,
                                                                              db,
                                                                              table,
+                                                                             catalog,
                                                                              allocator_,
                                                                              false))) {
+              LOG_WARN("failed to resolve priv object", K(ret));
             }
           }
 
@@ -276,6 +296,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
               stmt_need_privs.need_privs_.at(0) =
                   ObNeedPriv("", "", OB_PRIV_USER_LEVEL, OB_PRIV_CREATE_USER, false);
               if (OB_FAIL(schema_checker_->check_priv(session_priv, enable_role_id_array, stmt_need_privs))) {
+                LOG_WARN("no priv", K(ret));
               }
             }
           }
@@ -286,9 +307,11 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
             
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected error", K(ret));
           } else if (OB_FAIL(ObGrantResolver::resolve_priv_set(privs_node, grant_level, priv_set, revoke_stmt, 
                                                         params_.schema_checker_, params_.session_info_,
                                                         *allocator_))) {
+            LOG_WARN("Resolve priv set error", K(ret));
           }
           if (OB_FAIL(ret)) {
           } else {
@@ -300,16 +323,20 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           if (OB_ISNULL(users_node)) {
             ret = OB_ERR_PARSE_SQL;
+            LOG_WARN("Users node should not be NULL", K(ret));
           } else {
             for (int i = 0; OB_SUCC(ret) && i < users_node->num_child_; ++i) {
               ParseNode *user_hostname_node = users_node->children_[i];
               if (OB_ISNULL(user_hostname_node)) {
                 ret = OB_ERR_PARSE_SQL;
+                LOG_WARN("the child of users should not be NULL", K(ret), K(i));
               } else if (2 != user_hostname_node->num_child_) {
                 ret = OB_INVALID_ARGUMENT;
+                LOG_WARN("sql_parser parse user error", K(ret));
               } else if (OB_ISNULL(user_hostname_node->children_[0])) {
                 // 0: user, 1: hostname
                 ret = OB_ERR_PARSE_SQL;
+                LOG_WARN("The child of user node should not be NULL", K(ret), K(i));
               } else {
                 uint64_t user_id = OB_INVALID_ID;
                 //0: user name; 1: host name
@@ -336,6 +363,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                   ret = OB_WRONG_USER_NAME_LENGTH;
                   LOG_USER_ERROR(OB_WRONG_USER_NAME_LENGTH, user_name.length(), user_name.ptr());
                 } else if (OB_FAIL(revoke_stmt->add_grantee(user_name))) {
+                  SQL_RESV_LOG(WARN, "fail to add grantee", K(ret), K(user_name), K(host_name));
                 } else if (OB_FAIL(
                     params_.schema_checker_->get_user_id(user_name, 
                                                          host_name, user_id))) {
@@ -354,7 +382,10 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                 } else if (OB_FAIL(check_dcl_on_inner_user(node->type_,
                                                           params_.session_info_->get_priv_user_id(),
                                                           user_id))) {
+                  LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user",
+                           K(ret), K(session_info_->get_priv_user_id()), K(user_name));
                 } else if (OB_FAIL(revoke_stmt->add_user(user_id))) {
+                  LOG_WARN("Add user to grant_stmt error", K(ret), K(user_id));
                 } else {
                   //do nothing
                 }

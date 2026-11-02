@@ -44,6 +44,7 @@ data_type	data_type_str	data_type_class
 40	ARRAY	26
 41	MYSQL_DATE	27
 42	MYSQL_DATETIME	28
+43	ROARINGBITMAP	29
 select data_type, data_type_str, data_type_class from __all_virtual_data_type order by data_type;
 data_type	data_type_str	data_type_class
 0	NULL	0
@@ -89,6 +90,7 @@ data_type	data_type_str	data_type_class
 40	ARRAY	26
 41	MYSQL_DATE	27
 42	MYSQL_DATETIME	28
+43	ROARINGBITMAP	29
 select * from __all_virtual_data_type where data_type = 22;
 data_type	data_type_str	data_type_class
 22	VARCHAR	10
@@ -135,6 +137,7 @@ DECIMAL_INT	DECIMAL_INT
 ARRAY	COLLECTION
 MYSQL_DATE	MYSQL_DATE
 MYSQL_DATETIME	MYSQL_DATETIME
+ROARINGBITMAP	ROARINGBITMAP
 show create table __all_virtual_data_type;
 Table	Create Table
 __all_virtual_data_type	CREATE TABLE `__all_virtual_data_type` (
@@ -142,7 +145,7 @@ __all_virtual_data_type	CREATE TABLE `__all_virtual_data_type` (
   `data_type_str` varchar(128) NOT NULL,
   `data_type_class` bigint(20) NOT NULL,
   PRIMARY KEY (`data_type`)
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'none' BLOCK_SIZE = SIZE TABLET_SIZE = SIZE PCTFREE = 10
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'none' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
 desc __all_virtual_data_type;
 Field	Type	Null	Key	Default	Extra
 data_type	bigint(20)	NO	PRI	NULL	

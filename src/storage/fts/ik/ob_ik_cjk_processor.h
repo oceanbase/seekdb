@@ -18,8 +18,6 @@
 #define _OCEANBASE_STORAGE_FTS_IK_OB_IK_CJK_PROCESSOR_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "lib/container/ob_array.h"
-#include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 
@@ -31,23 +29,30 @@ class ObFTDictHub;
 class ObIKCJKProcessor : public ObIIKProcessor
 {
 public:
-  ObIKCJKProcessor(const ObIFTDict &dict_main, ObIAllocator &alloc)
-      : dict_main_(dict_main), cjk_start_(-1), cjk_end_(-1)
+  ObIKCJKProcessor(const ObIFTDict &dict_main)
+      : hit_allocator_(lib::ObMemAttr("IKCJKHit")), hits_(hit_allocator_),
+        dict_main_(dict_main), cjk_start_(-1), cjk_end_(-1)
   {
-    UNUSED(alloc);
   }
-  ~ObIKCJKProcessor() override {}
+  ~ObIKCJKProcessor() override { hits_.reset(); }
 
 public:
+  void reuse() override
+  {
+    hits_.reset();
+    hit_allocator_.reuse();
+    cjk_start_ = -1;
+    cjk_end_ = -1;
+  }
+
   int do_process(TokenizeContext &ctx,
                  const char *ch,
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
 private:
-  // Active trie hit for the current position. Keep it inline: a container that
-  // allocates nodes would do one allocate/free pair per character.
-  ObSEArray<ObDATrieHit, 16> hits_;
+  ObArenaAllocator hit_allocator_;
+  ObList<ObDATrieHit, ObIAllocator> hits_;
   const ObIFTDict &dict_main_;
   int64_t cjk_start_;
   int64_t cjk_end_;

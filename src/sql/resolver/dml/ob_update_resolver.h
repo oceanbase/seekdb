@@ -37,6 +37,8 @@ public:
   static const int64_t WHEN = 6;                /* 5. when node */
   static const int64_t HINT = 7;                /* 6. hint node */
   static const int64_t IGNORE = 8;               /*7. ignore node */
+  static const int64_t RETURNING = 9;           /*8. returning node */
+  static const int64_t ERRORLOGGING = 10;           /*9. error_logging node */
   
 public:
   explicit ObUpdateResolver(ObResolverParams &params);
@@ -47,14 +49,11 @@ public:
 private:
   int resolve_table_list(const ParseNode &parse_tree);
   int generate_update_table_info(ObTableAssignment &table_assign);
-  int add_ai_column_invalidation_assignments(
-      const share::schema::ObTableSchema &table_schema,
-      const TableItem &table_item,
-      common::ObIArray<ObAssignment> &assignments);
   int check_multi_update_table_conflict();
   int check_join_update_conflict();
   int is_join_table_update(const ObDMLStmt *stmt, bool &is_multi_table);
   int check_view_updatable();
+  int try_expand_returning_exprs();
   int try_add_remove_const_expr_for_assignments();
   bool is_parent_col_self_ref_fk(uint64_t parent_col_id,
                                  const common::ObIArray<share::schema::ObForeignKeyInfo> &fk_infos);

@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _MEMORY_SANITY_H_
+#define _MEMORY_SANITY_H_
+
+#ifndef ENABLE_SANITY
+#define SANITY_DISABLE_CHECK_RANGE()
+#define SANITY_POISON(args...)
+#define SANITY_UNPOISON(args...)
+#define SANITY_BOOL_EXPR(expr) false
+#define SANITY_ADDR_IN_RANGE(args...) false
+#define SANITY_TO_SHADOW(args...) 0x0
+#define SANITY_TO_SHADOW_SIZE(args...) 0x0
+#define SANITY_CHECK_RANGE(args...)
+#define SANITY_MMAP(args...) NULL
+#define SANITY_MUNMAP(args...)
+#else
+#include "sanity/sanity.h"
+#define _DEFINE_SANITY_GUARD(var_name) SanityDisableCheckRangeGuard var_name;
+#define SANITY_DISABLE_CHECK_RANGE() _DEFINE_SANITY_GUARD(CONCAT(sanity_guard, __COUNTER__))
+#define SANITY_POISON(args...) sanity_poison(args)
+#define SANITY_UNPOISON(args...) sanity_unpoison(args)
+#define SANITY_BOOL_EXPR(expr) ({expr;})
+#define SANITY_ADDR_IN_RANGE(args...) sanity_addr_in_range(args)
+#define SANITY_TO_SHADOW(args...) sanity_to_shadow(args)
+#define SANITY_TO_SHADOW_SIZE(size) sanity_to_shadow_size(size)
+#define SANITY_CHECK_RANGE(args...) sanity_check_range(args)
+#define SANITY_MMAP(args...) sanity_mmap(args)
+#define SANITY_MUNMAP(args...) sanity_munmap(args)
+
+extern int64_t get_global_addr();
+extern bool init_sanity();
+extern void *sanity_mmap(void *ptr, size_t size);
+extern void sanity_munmap(void *ptr, size_t size);
+extern void sanity_set_whitelist(const char *str);
+using SymbolizeCb = std::function<void(void *, const char *, const char *, uint32_t)>;
+typedef int (*BacktraceSymbolizeFunc)(void **addrs, int32_t n_addr, SymbolizeCb cb);
+extern BacktraceSymbolizeFunc backtrace_symbolize_func;
+
+#endif /* ENABLE_SANITY */
+#endif /* _MEMORY_SANITY_H_ */

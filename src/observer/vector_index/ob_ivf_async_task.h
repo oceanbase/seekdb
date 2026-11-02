@@ -17,9 +17,10 @@
 #ifndef OCEANBASE_SHARE_OB_IVF_ASYNC_TASK_H_
 #define OCEANBASE_SHARE_OB_IVF_ASYNC_TASK_H_
 
+#include "share/ob_ls_id.h"
 #include "share/scn.h"
-#include "share/rc/ob_server_runtime.h"
-#include "query/vector/ob_vector_index_cache.h"
+#include "share/rc/ob_tenant_base.h"
+#include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 
 namespace oceanbase

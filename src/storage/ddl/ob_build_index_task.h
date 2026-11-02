@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_BUILD_INDEX_TASK_H_
 #define OCEANBASE_STORAGE_OB_BUILD_INDEX_TASK_H_
 
-#include "data_plane/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/ob_store_row_comparer.h"
 #include "storage/ob_parallel_external_sort.h"
@@ -142,14 +142,15 @@ struct ObUniqueCheckingParam final
 {
 public:
   ObUniqueCheckingParam():
-    is_inited_(false), tablet_id_(),
-    is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK),
+    is_inited_(false), ls_id_(share::ObLSID::INVALID_LS_ID), tablet_id_(),
+    is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK), 
     index_schema_(nullptr), data_table_schema_(nullptr), callback_(nullptr), execution_id_(0),
-    snapshot_version_(0), task_id_(0), user_parallelism_(0),
+    snapshot_version_(0), task_id_(0), compat_mode_(lib::Worker::CompatMode::INVALID), user_parallelism_(0), 
     concurrent_cnt_(0), ranges_(), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE)
     {}
   ~ObUniqueCheckingParam() { destroy(); }
-  int init(const ObTabletID &tablet_id,
+  int init(const ObLSID &ls_id,
+          const ObTabletID &tablet_id,
           const bool is_scan_index,
           const uint64_t index_table_id,
           const int64_t schema_version,
@@ -160,8 +161,8 @@ public:
   int prepare_task_ranges();
   bool is_valid() const
   {
-    return tablet_id_.is_valid() && snapshot_version_ > 0
-    && schema_service_ != nullptr && execution_id_ >= 0 && task_id_ > 0
+    return true && ls_id_.is_valid() && tablet_id_.is_valid() && snapshot_version_ > 0
+    && schema_service_ != nullptr && compat_mode_ != lib::Worker::CompatMode::INVALID && execution_id_ >= 0 && task_id_ > 0 
     && user_parallelism_ > 0;
   }
 
@@ -171,6 +172,7 @@ public:
   void destroy()
   {
     is_inited_ = false;
+    ls_id_.reset();
     tablet_id_.reset();
     is_scan_index_ = false;
     schema_service_ = nullptr;
@@ -189,11 +191,12 @@ public:
     concurrent_cnt_ = 0;
     ranges_.reset();
   }
-  TO_STRING_KV(K_(is_inited), K_(tablet_id), K_(is_scan_index), KP_(index_schema),
-    KP_(data_table_schema), K_(execution_id), K_(snapshot_version), K_(task_id),
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(tablet_id), K_(is_scan_index), KP_(index_schema),
+    KP_(data_table_schema), K_(execution_id), K_(snapshot_version), K_(task_id), K_(compat_mode),
     K_(user_parallelism), K_(concurrent_cnt), K_(ranges));
 public:
   bool is_inited_;
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   bool is_scan_index_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
@@ -204,8 +207,9 @@ public:
   int64_t execution_id_;
   int64_t snapshot_version_;
   int64_t task_id_;
+  lib::Worker::CompatMode compat_mode_;
   int64_t user_parallelism_;
-  int64_t concurrent_cnt_;
+  int64_t concurrent_cnt_;							
   ObArray<blocksstable::ObDatumRange> ranges_;
   common::ObArenaAllocator allocator_;
 };
@@ -246,6 +250,7 @@ public:
   ObUniqueCheckingDag();
   virtual ~ObUniqueCheckingDag() = default;
   int init(
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const bool is_scan_index,
       const uint64_t index_table_id, const int64_t schema_version,
@@ -269,9 +274,16 @@ public:
   virtual uint64_t hash() const override;
   virtual bool operator ==(const share::ObIDag &other) const;
   common::ObTabletID get_tablet_id() const { return param_.tablet_id_; }
+  
+  share::ObLSID get_ls_id() const { return param_.ls_id_; }
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual bool ignore_warning() override;
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
+  virtual lib::Worker::CompatMode get_compat_mode() const override
+  { return param_.compat_mode_; }
+  virtual uint64_t get_consumer_group_id() const override 
+  { return consumer_group_id_; }
+  virtual bool is_ha_dag() const override { return false; }
   ObUniqueCheckingParam &get_param() { return param_; }
   ObUniqueCheckingContext &get_context() { return context_; }
   int prepare_context();

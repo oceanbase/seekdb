@@ -15,9 +15,8 @@
  */
 
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
-#include "share/rc/ob_server_runtime.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_tenant_base.h"
 #define USING_LOG_PREFIX SERVER
 
 namespace oceanbase
@@ -27,34 +26,26 @@ using namespace oceanbase::share;
 namespace rootserver
 {
 
-int ObDBMSSchedService::server_module_init(ObDBMSSchedService *&dbms_sched_service)
+int ObDBMSSchedService::mtl_init(ObDBMSSchedService *&dbms_sched_service)
 {
   return dbms_sched_service->init();
-}
-
-int ObDBMSSchedService::allocate_job_id(int64_t &job_id)
-{
-  return dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id);
-}
-
-int ObDBMSSchedService::create_job(
-    common::ObISQLClient &sql_client,
-    int64_t job_id,
-    const dbms_scheduler::ObDBMSSchedJobInfo &job_info)
-{
-  return dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(
-      sql_client, job_id, job_info);
 }
 
 int ObDBMSSchedService::init()
 {
   int ret = OB_SUCCESS;
-  if (job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (job_master_.is_inited()) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("has inited", KR(ret));
   } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
-  } else if (OB_FAIL(ObServerThreadHelper::create(
+    LOG_WARN("[DBMS_SCHED_SERVICE] job master init failed");
+  } else if (OB_FAIL(ObTenantThreadHelper::create(
       "DBMSSched",
-      1))) {
+      lib::TGDefIDs::DBMSSchedService,
+      *this))) {
+    LOG_WARN("[DBMS_SCHED_SERVICE] fail to create thread", KR(ret));
   } else {
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService init success");
   }
@@ -64,10 +55,15 @@ int ObDBMSSchedService::init()
 int ObDBMSSchedService::start()
 {
   int ret = OB_SUCCESS;
-  if (!job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.start())) {
-  } else if (OB_FAIL(ObServerThreadHelper::start())) {
+    LOG_WARN("[DBMS_SCHED_SERVICE] job master start failed", K(ret));
+  } else if (OB_FAIL(ObTenantThreadHelper::start())) {
+    LOG_WARN("[DBMS_SCHED_SERVICE] failed to start thread", KR(ret));
   } else {
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService start success");
   }
@@ -77,20 +73,28 @@ int ObDBMSSchedService::start()
 void ObDBMSSchedService::do_work()
 {
   int ret = OB_SUCCESS;
-  if (!job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.scheduler())) {
+    LOG_WARN("[DBMS_SCHED_SERVICE] job master sched failed", K(ret));
   }
 }
 
 void ObDBMSSchedService::stop()
 {
   int ret = OB_SUCCESS;
-  if (!job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.stop())) {
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop failure");
   } else {
-    ObServerThreadHelper::stop();
+    ObTenantThreadHelper::stop();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop success");
   }
 }
@@ -98,10 +102,13 @@ void ObDBMSSchedService::stop()
 void ObDBMSSchedService::wait()
 {
   int ret = OB_SUCCESS;
-  if (!job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else {
-    ObServerThreadHelper::wait();
+    ObTenantThreadHelper::wait();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success");
   }
 }
@@ -109,40 +116,63 @@ void ObDBMSSchedService::wait()
 void ObDBMSSchedService::destroy()
 {
   int ret = OB_SUCCESS;
-  if (job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (job_master_.is_inited()) {
     if (OB_FAIL(job_master_.destroy())) {
+      LOG_WARN("[DBMS_SCHED_SERVICE] job master destroy failed", K(ret));
     } else {
       LOG_INFO("[DBMS_SCHED_SERVICE] job master destroy success");
     }
-    ObServerThreadHelper::destroy();
+    ObTenantThreadHelper::destroy();
   }
   LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService destroy success");
 }
 
-void ObDBMSSchedService::deactivate()
+void ObDBMSSchedService::switch_to_follower_forcedly()
 {
-  if (job_master_.is_inited()) {
-    job_master_.switch_to_follower();
-    ObServerThreadHelper::switch_to_follower_gracefully();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
-  }
+  switch_to_follower_gracefully();
 }
-int ObDBMSSchedService::activate()
+int ObDBMSSchedService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  if (job_master_.is_inited()) {
+  if (false) {
+    // do nothing
+  } else if (job_master_.is_inited()) {
     job_master_.switch_to_leader();
-    if (OB_FAIL(ObServerThreadHelper::switch_to_leader())) {
-    }
+    ObTenantThreadHelper::switch_to_leader();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader");
   }
   return ret;
 }
+int ObDBMSSchedService::switch_to_follower_gracefully()
+{
+  int ret = OB_SUCCESS;
+  if (false) {
+    // do nothing
+  } else if (job_master_.is_inited()) {
+    job_master_.switch_to_follower();
+    ObTenantThreadHelper::switch_to_follower_gracefully();
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
+  }
+  return ret;
+}
+int ObDBMSSchedService::resume_leader()
+{
+  int ret = OB_SUCCESS;
+  if (!is_leader()) {
+    if (OB_FAIL(switch_to_leader())) {
+       LOG_INFO("[DBMS_SCHED_SERVICE] resume leader failed");
+    }
+  }
+  return ret;
+}
+
 void ObDBMSSchedService::wakeup_scheduler()
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
-    rootserver::ObDBMSSchedService *svc = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDBMSSchedService>();
+  MOD_SCOPE {
+    rootserver::ObDBMSSchedService *svc = share::g_mp->dbms_sched_service();
     if (OB_NOT_NULL(svc)) {
       svc->job_master_.wakeup();
     }

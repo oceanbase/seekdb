@@ -35,7 +35,9 @@ enum ObDASIterType : uint32_t
   DAS_ITER_TEXT_RETRIEVAL,
   DAS_ITER_SORT,
   DAS_ITER_TEXT_RETRIEVAL_MERGE,
+  DAS_ITER_VEC_VID_MERGE, /* abandoned */
   DAS_ITER_INDEX_MERGE,
+  DAS_ITER_DOC_ID_MERGE, /* abandoned */
   DAS_ITER_FUNC_LOOKUP,
   DAS_ITER_FUNC_DATA,
   DAS_ITER_MVI_LOOKUP,
@@ -70,6 +72,7 @@ enum ObDASIterTreeType : uint32_t
   ITER_TREE_PARTITION_SCAN,
   ITER_TREE_LOCAL_LOOKUP,
   ITER_TREE_GIS_LOOKUP,
+  ITER_TREE_DOMAIN_LOOKUP,  // discarded
   ITER_TREE_TEXT_RETRIEVAL,
   ITER_TREE_INDEX_MERGE,
   ITER_TREE_FUNC_LOOKUP,
@@ -85,17 +88,20 @@ struct ObDASFTSTabletID
 public:
   ObDASFTSTabletID()
     : inv_idx_tablet_id_(),
+      fwd_idx_tablet_id_(),
       domain_id_idx_tablet_id_()
   {}
   common::ObTabletID inv_idx_tablet_id_;
+  common::ObTabletID fwd_idx_tablet_id_;
   common::ObTabletID domain_id_idx_tablet_id_;
 
   void reset()
   {
     inv_idx_tablet_id_.reset();
+    fwd_idx_tablet_id_.reset();
     domain_id_idx_tablet_id_.reset();
   }
-  TO_STRING_KV(K_(inv_idx_tablet_id), K_(domain_id_idx_tablet_id));
+  TO_STRING_KV(K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id), K_(domain_id_idx_tablet_id));
 };
 
 #define SUPPORTED_DAS_ITER_TREE(_type)                    \
@@ -126,6 +132,7 @@ public:
 
   /* used by basic fulltext index */
   common::ObTabletID inv_idx_tablet_id_;
+  common::ObTabletID fwd_idx_tablet_id_;
   common::ObTabletID domain_id_idx_tablet_id_;
   /* used by basic fulltext index */
 
@@ -163,6 +170,7 @@ public:
     rowkey_doc_tablet_id_.reset();
     rowkey_vid_tablet_id_.reset();
     inv_idx_tablet_id_.reset();
+    fwd_idx_tablet_id_.reset();
     domain_id_idx_tablet_id_.reset();
     index_merge_tablet_ids_.reset();
     fts_tablet_ids_.reset();

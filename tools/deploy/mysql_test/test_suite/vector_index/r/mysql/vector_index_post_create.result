@@ -9,7 +9,7 @@ drop table if exists vec_table;
 CREATE TABLE vec_table (
 id int primary key,
 c2 vector(10));
-alter system set vector_memory_limit = 0;
+alter system set ob_vector_memory_limit_percentage = 20;
 CREATE VECTOR INDEX VEC_IDX1 ON vec_table(c2) with (distance=l2, type=hnsw, lib=vsag);
 select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation 
 where database_id = (select database_id from oceanbase.__all_database where database_name='post_create_vec') 
@@ -205,7 +205,7 @@ c1	c2
 64	[0.446449,0.664273,0.737888,0.496109,0.181823,0.114143,0.166578,0.700609,0.400623,0.073666]
 42	[0.793831,0.950869,0.548484,0.340717,0.20023,0.135982,0.069892,0.116858,0.313396,0.221127]
 81	[0.129771,0.439212,0.480978,0.655767,0.94398,0.047421,0.629647,0.178263,0.102858,0.005922]
-select  * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
+select /*+ opt_param('rowsets_enabled', 'false') */ * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
 c1	c2
 82	[0.195321,0.44484,0.408559,0.214516,0.042632,0.087678,0.487899,0.636996,0.412904,0.406731]
 24	[0.240333,0.126798,0.810217,0.020918,0.026532,0.342625,0.184299,0.8071,0.101946,0.325436]
@@ -341,7 +341,7 @@ c1	c2
 42	[0.793831,0.950869,0.548484,0.340717,0.20023,0.135982,0.069892,0.116858,0.313396,0.221127]
 95	[0.411477,0.409965,0.108774,0.743443,0.651615,0.041827,0.183932,0.535781,0.223155,0.708496]
 81	[0.129771,0.439212,0.480978,0.655767,0.94398,0.047421,0.629647,0.178263,0.102858,0.005922]
-select  * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
+select /*+ opt_param('rowsets_enabled', 'false') */ * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
 c1	c2
 82	[0.195321,0.44484,0.408559,0.214516,0.042632,0.087678,0.487899,0.636996,0.412904,0.406731]
 24	[0.240333,0.126798,0.810217,0.020918,0.026532,0.342625,0.184299,0.8071,0.101946,0.325436]
@@ -372,7 +372,7 @@ CREATE VECTOR INDEX vector_idx_c4  ON t1 (c4)  WITH (distance=l2, lib=vsag, type
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
-insert /*+ enable_parallel_dml parallel(2) */ into t1 select c1+1, c2, c3, c4 from t1;
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into t1 select c1+1, c2, c3, c4 from t1;
 create VECTOR index vector_idx1 on t1(c3) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
 drop table t1;
 create table t1(c1 int, c2 vector(3), c3 vector(5), 
@@ -395,9 +395,89 @@ call dbms_vector.refresh_index('idx1', 't1', 'c2', 1, 'FAST');
 call dbms_vector.rebuild_index('idx1','t1','c2');
 set @@binlog_row_image = 'FULL';
 drop table t1;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, c4 sparsevector,primary key(c1));
+insert into t_vec values(1, '[1,2,1]', 'a', '{"key":[7,932,22]}', '{1:0.1,2:0.2, 3:0.3}');
+create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw) with column group(each column);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw) with column group(all columns);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_flat) with column group(each column);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_pq, m=1) with column group(each column);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_sq8) with column group(each column);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create fulltext index idx1 on t_vec(c3) with column group(each column);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create fulltext index idx1 on t_vec(c3) with column group(all columns);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+create vector index idx1 on t_vec(c4) with (distance=inner_product) with column group(each column);
+ERROR 0A000: the vector index params of distance or type not set is not supported
+create vector index idx1 on t_vec(c4) with (distance=inner_product) with column group(all columns);
+ERROR 0A000: the vector index params of distance or type not set is not supported
+create index idx1 on t_vec((CAST(j->'$.key' AS UNSIGNED ARRAY))) with column group(each column);
+ERROR 0A000: build multivalue index afterward not supported
+create index idx1 on t_vec((CAST(j->'$.key' AS UNSIGNED ARRAY))) with column group(all columns);
+ERROR 0A000: build multivalue index afterward not supported
+drop table t_vec;
+CREATE TABLE t_vec (
+id BIGINT not null,
+modified  BIGINT not null,
+custinfo JSON,
+data JSON,
+primary key(id),
+INDEX zips1( (CAST(custinfo->'$.zipcode' AS UNSIGNED ARRAY)) ) with column group(each column),
+INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY)) )
+);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+CREATE TABLE t_vec (
+id BIGINT not null,
+modified  BIGINT not null,
+custinfo JSON,
+data JSON,
+primary key(id),
+INDEX zips1( (CAST(custinfo->'$.zipcode' AS UNSIGNED ARRAY)) ) with column group(all columns),
+INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY)) )
+);
+ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
+CREATE TABLE t_vec (
+c1 int primary key,
+c2 sparsevector,
+vector index idx1(c2) with (distance=inner_product) with column group(all columns)
+);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'with column group(all columns)
+)' at line 4
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_flat)) with column group(each column);
+ERROR 0A000: create ivf index on table with column store is not supported
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_pq, m=3)) with column group(each column);
+ERROR 0A000: create ivf index on table with column store is not supported
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_sq8)) with column group(each column);
+ERROR 0A000: create ivf index on table with column store is not supported
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_flat)) with column group(all columns, each column);
+ERROR 0A000: create ivf index on table with column store is not supported
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_pq, m=3)) with column group(all columns, each column);
+ERROR 0A000: create ivf index on table with column store is not supported
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_sq8)) with column group(all columns, each column);
+ERROR 0A000: create ivf index on table with column store is not supported
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1)) with column group(each column);
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_flat);
+ERROR 0A000: create ivf index on table with column store is not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_pq, m=1);
+ERROR 0A000: create ivf index on table with column store is not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_sq8);
+ERROR 0A000: create ivf index on table with column store is not supported
+drop table t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1));
+create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_flat);
+alter table t_vec add column group(each column);
+ERROR 0A000: Not supported feature or function
+alter table t_vec add column group(each column) delayed;
+ERROR 0A000: create ivf index on table with column store is not supported
+drop table t_vec;
 PURGE RECYCLEBIN;
 drop table if exists t1;
 drop database if exists post_create_vec;
-alter system set vector_memory_limit = 0;
+alter system set ob_vector_memory_limit_percentage = 0;
 PURGE RECYCLEBIN;
 alter system set _enable_add_fulltext_index_to_existing_table = false;

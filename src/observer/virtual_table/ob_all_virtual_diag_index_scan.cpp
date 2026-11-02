@@ -48,6 +48,7 @@ int ObAllVirtualDiagIndexScan::set_index_ids(const common::ObIArray<common::ObNe
           if (ObIntType == start_key_obj_ptr[0].get_type()) {
             index_id = start_key_obj_ptr[0].get_int();
             if (OB_FAIL(add_var_to_array_no_dup(index_ids_, index_id))) {
+              SERVER_LOG(WARN, "index id invalid", K(index_id), K(ret));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
@@ -65,6 +66,22 @@ int ObAllVirtualDiagIndexScan::set_index_ids(const common::ObIArray<common::ObNe
   }
   return ret;
 }
+
+int ObAllVirtualDiagIndexScan::get_server_sid_by_client_sid(sql::ObSQLSessionMgr* mgr, uint64_t &sid)
+{
+  int ret = OB_SUCCESS;
+  uint32_t client_sid = static_cast<uint32_t>(sid);
+  uint32_t server_sid = 0;
+  if (OB_ISNULL(mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "session manager is NULL", K(ret));
+  } else if (OB_SUCCESS == mgr->get_client_sess_map().get_refactored(client_sid, server_sid)) {
+    sid = server_sid;
+  }
+  // If not found in client_sess_map, keep sid as-is (it is already the server sessid)
+  return ret;
+}
+
 
 } /* namespace observer */
 } /* namespace oceanbase */

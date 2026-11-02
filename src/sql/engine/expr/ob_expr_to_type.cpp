@@ -31,7 +31,8 @@ ObExprToType::ObExprToType(ObIAllocator &alloc)
                                              1,
                                              VALID_FOR_GENERATED_COL,
                                              NOT_ROW_DIMENSION,
-                                             INTERNAL_IN_MYSQL_MODE),
+                                             INTERNAL_IN_MYSQL_MODE,
+                                             INTERNAL_IN_ORACLE_MODE),
       expect_type_(ObMaxType),
       cast_mode_(CM_NONE)
 {
@@ -51,6 +52,7 @@ int ObExprToType::calc_result_type1(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMaxType == expect_type_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("expect type is not inited.", K(ret));
   } else if (OB_UNLIKELY(type1.is_null())) {
     type.set_null();
   } else if (type1.is_literal()) {
@@ -72,6 +74,7 @@ int ObExprToType::assign(const ObExprOperator &other)
     expect_type_ = other_op.expect_type_;
     cast_mode_ = other_op.cast_mode_;
     if (OB_FAIL(ObFuncExprOperator::assign(other_op))) {
+      LOG_WARN("assign other op failed", K(ret));
     }
   }
   return ret;
@@ -88,6 +91,7 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
   int ret = OB_SUCCESS;
   if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument.", K(ret), K(type_ctx.get_session()));
   } else {
     ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
     const ObObj &in = type1.get_param();
@@ -95,6 +99,7 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
     bool nonstring_to_string = false;
     ObCastMode cast_mode = CM_NONE;
     if (FALSE_IT(ObSQLUtils::get_default_cast_mode(type_ctx.get_sql_mode(), cast_mode))) {
+      LOG_WARN("failed to get default cast mode", K(ret));
     } else if ((!ob_is_string_type(type1.get_type())) && ob_is_string_or_lob_type(expect_type_)) {
       nonstring_to_string = true;
       if (CS_TYPE_INVALID == type_ctx.get_coll_type()) {
@@ -121,6 +126,7 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
                        &res_accuracy);
     ObObj out;
     if (OB_FAIL(ObObjCaster::to_type(expect_type_, cast_ctx, in, out))) {
+      LOG_WARN("failed to cast obj", K(ret), K(in), K(expect_type_));
     } else {
       type.set_type(expect_type_);
       type.set_accuracy(res_accuracy);
@@ -145,8 +151,15 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   type.set_type(expect_type_);
+  //deduce collation now.
+  //get_compatibility_mode will not return OCEANBASE_MODE forever, so remove it.
+//if (OCEANBASE_MODE == get_compatibility_mode()) {
+//  ret = OB_INVALID_ARGUMENT;
+//  LOG_WARN("compatibility mode should not be oceanbase", K(ret));
+//} else {
   if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument.", K(ret), K(type_ctx.get_session()));
   } else {
     if ((!ob_is_string_or_lob_type(type1.get_type())) && ob_is_string_or_lob_type(expect_type_)) {
       ObCollationType collation_connection = type_ctx.get_coll_type();
@@ -163,7 +176,7 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
       type.set_collation_level(CS_LEVEL_NUMERIC);
     }
 
-    type.set_accuracy(ObAccuracy::MAX_ACCURACY2[0][expect_type_]);
+    type.set_accuracy(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expect_type_]);
 
     if (ob_is_enumset_tc(type1.get_type())) {
       // There is no need to check whether it is enumset with subschema
@@ -190,6 +203,7 @@ int ObExprToType::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   // Pre-calculation, if the expression parameter type is inconsistent with calc_type, it will add a to_type expression
   // But in the new framework, cast expressions will be added, so type inconsistency should not occur
   int ret = OB_ERR_UNEXPECTED;
+  LOG_WARN("unexpected, new engine should not use to_type expr", K(ret));
   return  ret;
 }
 

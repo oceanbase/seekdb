@@ -16,87 +16,43 @@
 
 #ifndef OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_MGR_
 #define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_MGR_
-#include "config_bridge.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "ob_deadlock_detector_common_define.h"
 #include "ob_deadlock_parameters.h"
+#include "lib/hash/ob_linear_hash_map.h"
 #include "lib/hash/ob_link_hashmap.h"
-#include "lib/thread/ob_simple_thread_pool.h"
-#include "share/ob_time_wheel.h"
+#include "storage/tx/ob_time_wheel.h"
 #include "lib/utility/utility.h"
 #include "lib/allocator/ob_malloc.h"
 #include "ob_deadlock_arg_checker.h"
+#include "ob_deadlock_message.h"
 #include "lib/function/ob_function.h"
-#include "share/config/ob_server_config.h"
-#include "share/rc/ob_server_runtime.h"
-#include "ob_lcl_scheme/ob_lcl_utils.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_tenant_base.h"
+#include "ob_lcl_scheme/ob_lcl_batch_sender_thread.h"
 #include <type_traits>
 
 namespace oceanbase
 {
+namespace unittest
+{
+class TestObDeadLockDetector;
+}
+namespace rpc
+{
+namespace frame
+{
+class ObReqTransport;
+}// namespace frame
+}// namespace rpc
 namespace share
 {
 namespace detector
 {
-class ObDeadLockDetectorMgr;
-
-class ObDeadLockLocalTaskQueue : public common::ObLinkQueueThreadPool
-{
-public:
-  ObDeadLockLocalTaskQueue();
-  ~ObDeadLockLocalTaskQueue();
-  int init(ObDeadLockDetectorMgr *mgr);
-  int start();
-  void stop();
-  void wait();
-  void destroy();
-  int push_lcl_state(const UserBinaryKey &dest_key,
-                     const int64_t lclv,
-                     const ObLCLLabel &label,
-                     const int64_t send_ts);
-  int push_cycle_info(const ObDeadLockCycleInfo &cycle_info);
-  int push_parent_notification(const UserBinaryKey &parent_key,
-                               const UserBinaryKey &child_key);
-protected:
-  void handle(common::LinkTask *task) override;
-  void handle_drop(common::LinkTask *task) override;
-private:
-  enum class TaskType
-  {
-    LCL_STATE,
-    CYCLE_INFO,
-    PARENT_NOTIFICATION
-  };
-  class Task : public common::LinkTask
-  {
-  public:
-    explicit Task(const TaskType type);
-    int set_lcl_state(const UserBinaryKey &dest_key,
-                      const int64_t lclv,
-                      const ObLCLLabel &label,
-                      const int64_t send_ts);
-    int set_cycle_info(const ObDeadLockCycleInfo &cycle_info);
-    int set_parent_notification(const UserBinaryKey &parent_key,
-                                const UserBinaryKey &child_key);
-    TO_STRING_KV(K_(type), K_(dest_key), K_(child_key), K_(lclv),
-                 K_(label), K_(send_ts), K_(cycle_info));
-    TaskType type_;
-    UserBinaryKey dest_key_;
-    UserBinaryKey child_key_;
-    int64_t lclv_;
-    ObLCLLabel label_;
-    int64_t send_ts_;
-    ObDeadLockCycleInfo cycle_info_;
-  };
-  int push_task_(Task *task);
-  static void destroy_task_(Task *task);
-private:
-  bool is_inited_;
-  bool is_running_;
-  ObDeadLockDetectorMgr *mgr_;
-};
-
-// ObDeadLockDetectorMgr is the process-local manager for all detector instances.
+class ObDeadLockDetectorRpc;
+class ObLCLBatchSenderThread;
+// ObDeadLockDetectorMgr is the unique global manager(within observer),
+// who manages all operations of all detector instances(within observer also)
 // Operations including register, unregister, block, and activate,
 // specified by variable types of user key, no need of building a user adapter layer
 //
@@ -112,15 +68,17 @@ class ObDeadLockDetectorMgr
   friend class DetectorRefGuard;
   friend class ActivateFn;
   friend class ObLCLNode;
-  friend class ObDeadLockLocalTaskQueue;
+  friend class ObLCLBatchSenderThread;
+  friend class unittest::TestObDeadLockDetector;
+  friend class ObLCLBatchSenderThread;
 public:
-  static bool is_deadlock_enabled() { return ::oceanbase::config::_lcl_op_interval() != 0; }
+  static bool is_deadlock_enabled() { return ObServerConfig::get_instance()._lcl_op_interval != 0; }
 public:
   ObDeadLockDetectorMgr();
   // all inner object centralized initialization interface,
   // should be callde from partition_service's init()
   int init();
-  static int server_module_init(ObDeadLockDetectorMgr *&p_deadlock_detector_mgr);
+  static int mtl_init(ObDeadLockDetectorMgr *&p_deadlock_detector_mgr);
   int start();
   void stop();
   void wait();
@@ -141,6 +99,10 @@ public:
                    const bool auto_activate_when_detected = true);
   template<typename KeyType1, typename KeyType2>
   int add_parent(const KeyType1 &key, const KeyType2 &parent_key);
+  template<typename KeyType1, typename KeyType2>
+  int add_parent(const KeyType1 &key,
+                 const common::ObAddr &dest_addr,
+                 const KeyType2 &parent_key);
   template<typename KeyType>
   int set_timeout(const KeyType &key, const int64_t timeout);
   template<typename KeyType>
@@ -154,6 +116,8 @@ public:
   int block(const T1 &src_key, const T2 &dest_key);
   template<typename T1>
   int block(const T1 &src_key, const common::ObIArray<ObDependencyResource> &new_list);
+  template<typename T1, typename T2, typename std::enable_if<!std::is_base_of<common::ObIArray<ObDependencyResource>, T2>::value, bool>::type = true>
+  int block(const T1 &src_key, const common::ObAddr &dest_addr, const T2 &dest_key);
   // func is a callback method to get DependencyResource dynamically
   // func input args: ObDependencyResource& - the resource will blocked on
   //                  bool& - remove this callback from block list if true, setted false by default
@@ -171,30 +135,22 @@ public:
   // remove directed dependency relationship between two detector
   template<typename T1, typename T2>
   int activate(const T1 &src_key, const T2 &dest_key);
+  template<typename T1, typename T2>
+  int activate(const T1 &src_key, const common::ObAddr &dest_addr, const T2 &dest_key);
   template<typename T1>
   int activate_all(const T1 &src_key);
+  // exposed to detector RPC, shouldn't called from others
+  int process_lcl_message(const ObLCLMessage &lcl_msg);
+  int process_collect_info_message(const ObDeadLockCollectInfoMessage &collect_info_msg);
+  int process_notify_parent_message(const ObDeadLockNotifyParentMessage &collect_info_msg);
 
 private:
-  // exposed to local detector scheduling only
+  // exposed to deadlock detector, shouldn't called from others
   common::ObTimeWheel& get_time_wheel() { return time_wheel_; }
-  int post_lcl_state_(const UserBinaryKey &dest_key,
-                      const int64_t lclv,
-                      const ObLCLLabel &label,
-                      const int64_t send_ts);
-  int post_cycle_info_(const ObDeadLockCycleInfo &cycle_info);
-  int post_parent_notification_(const UserBinaryKey &parent_key,
-                                const UserBinaryKey &child_key);
-  int process_lcl_state_(const UserBinaryKey &dest_key,
-                         const int64_t lclv,
-                         const ObLCLLabel &label,
-                         const int64_t send_ts);
-  int process_cycle_info_(const ObDeadLockCycleInfo &cycle_info);
-  int process_parent_notification_(const UserBinaryKey &parent_key,
-                                   const UserBinaryKey &child_key);
-  int check_and_report_cycle_(const ObDeadLockCycleInfo &cycle_info);
-  uint64_t calculate_cycle_hash_(const ObDeadLockCycleInfo &cycle_info);
+  ObDeadLockDetectorRpc& get_rpc() { return (*rpc_); }
+  int check_and_report_cycle_(const ObDeadLockCollectInfoMessage &collect_info_msg);
+  uint64_t calculate_cycle_hash_(const ObDeadLockCollectInfoMessage &collect_info_msg);
   int check_and_record_cycle_hash_(const uint64_t hash);
-  bool is_stopping_() const { return ATOMIC_LOAD(&stop_ts_) > 0; }
 
   // define for ObLinkHashMap
   class InnerAllocHandle
@@ -243,13 +199,16 @@ private:
     bool operator()(const UserBinaryKey &key, ObIDeadLockDetector *p_detector);
   };
 
+  template <typename KeyType>
+  int try_create_inner_detector_(const KeyType &key);
   int get_detector_(const UserBinaryKey &user_key, DetectorRefGuard &detector_guard);
 
   bool is_inited_;// marked ObDeadLockDetectorMgr hash been inited or not
-  int64_t stop_ts_;// nonzero after stop() begins
-  // one timer per manager for periodic detector propagation
+  int64_t stop_ts_;// the timestamp of stop() called
+  // global single instance timer for detector period tansmit operation
   common::ObTimeWheel time_wheel_;
-  ObDeadLockLocalTaskQueue local_task_queue_;
+  ObDeadLockDetectorRpc *rpc_;// message sender/receiver (in-process dispatch)
+  ObLCLBatchSenderThread sender_thread_;// inner thread to cache, batch message and send them
   common::ObLinkHashMap<UserBinaryKey,
                         ObIDeadLockDetector,
                         InnerAllocHandle,
@@ -282,9 +241,6 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
                                         const bool auto_activate_when_detected)
 {
   CHECK_INIT();
-  if (is_stopping_()) {
-    return common::OB_IN_STOP_STATE;
-  }
   CHECK_ENABLED();
   CHECK_ARGS(key, on_detect_operation, on_collect_operation, priority, start_delay);
   #define PRINT_WRAPPER KR(ret), K(key), K(on_detect_operation), K(on_collect_operation),\
@@ -294,6 +250,7 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
   UserBinaryKey binary_key;
 
   if (OB_FAIL(binary_key.set_user_key(key))) {
+    DETECT_LOG(WARN, "user key seialized to binary code failed", PRINT_WRAPPER);
   } else if (common::OB_SUCCESS == (ret = detector_map_.get(binary_key, p_detector))) {
     ret = common::OB_ENTRY_EXIST;
     detector_map_.revert(p_detector);
@@ -307,13 +264,10 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
                                                           count_down_allow_detect,
                                                           auto_activate_when_detected,
                                                           p_detector))) {
+      DETECT_LOG(WARN, "create new detector instance failed", PRINT_WRAPPER, KP(p_detector));
     } else if (OB_FAIL(detector_map_.insert_and_get(binary_key, p_detector))) {
       DETECT_LOG(WARN, "detector_map_ insert key and value failed", PRINT_WRAPPER, KP(p_detector));
       inner_alloc_handle_.inner_factory_.release(p_detector);
-    } else if (is_stopping_()) {
-      ret = common::OB_IN_STOP_STATE;
-      (void)detector_map_.del(binary_key);
-      detector_map_.revert(p_detector);
     } else if (OB_FAIL(p_detector->register_timer_task())) {
       if (common::OB_ENTRY_NOT_EXIST == ret) {
         ret = common::OB_EAGAIN;// telling user there is a concurrent problem, need retry
@@ -323,6 +277,7 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
       detector_map_.revert(p_detector);
     } else {
       detector_map_.revert(p_detector);
+      DETECT_LOG(TRACE, "register key success", PRINT_WRAPPER);
     }
   } else {
     DETECT_LOG(ERROR, "get key error, couldn't handle", PRINT_WRAPPER);
@@ -341,6 +296,7 @@ int ObDeadLockDetectorMgr::check_detector_exist(const KeyType &key, bool &exist)
   UserBinaryKey user_key;
   DetectorRefGuard ref_guard;
   if (OB_FAIL(user_key.set_user_key(key))) {
+    DETECT_LOG(WARN, "user key serialization failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(user_key, ref_guard))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       exist = false;
@@ -372,6 +328,7 @@ int ObDeadLockDetectorMgr::unregister_key(const KeyType &key)
   UserBinaryKey user_key;
 
   if (OB_FAIL(user_key.set_user_key(key))) {
+    DETECT_LOG(WARN, "user key serialization failed", PRINT_WRAPPER);
   } else {
     ret = unregister_key_(user_key);
   }
@@ -388,35 +345,14 @@ int ObDeadLockDetectorMgr::unregister_key(const KeyType &key)
 template<typename T1, typename T2, typename std::enable_if<!std::is_base_of<common::ObIArray<ObDependencyResource>, T2>::value, bool>::type>
 int ObDeadLockDetectorMgr::block(const T1 &src_key, const T2 &dest_key)
 {
-  CHECK_INIT();
-  CHECK_ENABLED();
-  CHECK_ARGS(src_key, dest_key);
-  #define PRINT_WRAPPER KR(ret), K(src_key), K(dest_key)
-  int ret = common::OB_SUCCESS;
-  DetectorRefGuard ref_guard;
-  UserBinaryKey src_user_key;
-  UserBinaryKey dest_user_key;
-
-  if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-  } else if (OB_FAIL(dest_user_key.set_user_key(dest_key))) {
-  } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-  } else {
-    ObDependencyResource resource(dest_user_key);
-    if (OB_FAIL(ref_guard.get_detector()->block(resource))) {
-    } else {
-      DETECT_LOG(INFO, "detector block op success", PRINT_WRAPPER);
-    }
-  }
-
-  return ret;
-  #undef PRINT_WRAPPER
+  return block(src_key, GCTX.self_addr(), dest_key);
 }
 
-// call for building directed dependency relationships between local detectors
+// call for building directed dependency relationship between two detector(local to remote)
 // thread-safe guaranteed
 //
 // @param [in] src_key the source key resource specified by user
-// @param [in] appened_list the destination resources specified by user
+// @param [in] appened_list the destination network address specified by user
 // @return error code
 template<typename T1>
 int ObDeadLockDetectorMgr::block(const T1 &src_key,
@@ -430,7 +366,9 @@ int ObDeadLockDetectorMgr::block(const T1 &src_key,
   DetectorRefGuard ref_guard;
   UserBinaryKey src_user_key;
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
     for (int64_t idx = 0; idx < appened_list.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ref_guard.get_detector()->block(appened_list.at(idx)))) {
@@ -442,6 +380,46 @@ int ObDeadLockDetectorMgr::block(const T1 &src_key,
       }
     }
   }
+  return ret;
+  #undef PRINT_WRAPPER
+}
+
+// call for building directed dependency relationship between two detector(local to remote)
+// thread-safe guaranteed
+//
+// @param [in] src_key the source key resource specified by user
+// @param [in] dest_addr the destination network address specified by user
+// @param [in] dest_key the destination key resource specified by user
+// @return error code
+template<typename T1, typename T2, typename std::enable_if<!std::is_base_of<common::ObIArray<ObDependencyResource>, T2>::value, bool>::type>
+int ObDeadLockDetectorMgr::block(const T1 &src_key,
+                                 const common::ObAddr &dest_addr,
+                                 const T2 &dest_key)
+{
+  CHECK_INIT();
+  CHECK_ENABLED();
+  CHECK_ARGS(src_key, dest_addr, dest_key);
+  #define PRINT_WRAPPER KR(ret), K(src_key), K(dest_addr), K(dest_key)
+  int ret = common::OB_SUCCESS;
+  DetectorRefGuard ref_guard;
+  UserBinaryKey src_user_key;
+  UserBinaryKey dest_user_key;
+
+  if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
+  } else if (OB_FAIL(dest_user_key.set_user_key(dest_key))) {
+    DETECT_LOG(WARN, "dest_key serialzation failed", PRINT_WRAPPER);
+  } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
+  } else {
+    ObDependencyResource resource(dest_addr, dest_user_key);
+    if (OB_FAIL(ref_guard.get_detector()->block(resource))) {
+      DETECT_LOG(WARN, "detector block op failed", PRINT_WRAPPER);
+    } else {
+      DETECT_LOG(INFO, "detector block op success", PRINT_WRAPPER);
+    }
+  }
+
   return ret;
   #undef PRINT_WRAPPER
 }
@@ -459,8 +437,11 @@ int ObDeadLockDetectorMgr::block(const T &src_key,
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->block(func))) {
+    DETECT_LOG(WARN, "block on callback failed", PRINT_WRAPPER);
   } else {}
 
   return ret;
@@ -485,7 +466,9 @@ int ObDeadLockDetectorMgr::replace_block_list(const T &src_key,
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->replace_block_list(new_list))) {
     // DETECT_LOG(WARN, "replace block list failed", PRINT_WRAPPER);
   } else {
@@ -507,8 +490,11 @@ int ObDeadLockDetectorMgr::get_block_list(const T &src_key,
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->get_block_list(cur_list))) {
+    DETECT_LOG(WARN, "get block list failed", PRINT_WRAPPER);
   } else {
     // DETECT_LOG(INFO, "replace block list success", PRINT_WRAPPER);
   }
@@ -528,7 +514,9 @@ int ObDeadLockDetectorMgr::dec_count_down_allow_detect(const T &src_key)
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
     ref_guard.get_detector()->dec_count_down_allow_detect();
   }
@@ -545,21 +533,39 @@ int ObDeadLockDetectorMgr::dec_count_down_allow_detect(const T &src_key)
 template<typename T1, typename T2>
 int ObDeadLockDetectorMgr::activate(const T1 &src_key, const T2 &dest_key)
 {
+  return activate(src_key, GCTX.self_addr(), dest_key);
+}
+// call for removing directed dependency relationship between two detector(local to remote)
+// thread-safe guaranteed
+//
+// @param [in] src_key the source resource key specified by user
+// @param [in] dest_addr the destination network address specified by user
+// @param [in] dest_key the destination resource key specified by user
+// @return error code
+template<typename T1, typename T2>
+int ObDeadLockDetectorMgr::activate(const T1 &src_key,
+                                    const common::ObAddr &dest_addr,
+                                    const T2 &dest_key)
+{
   CHECK_INIT();
   CHECK_ENABLED();
-  CHECK_ARGS(src_key, dest_key);
-  #define PRINT_WRAPPER KR(ret), K(src_key), K(dest_key)
+  CHECK_ARGS(src_key, dest_addr, dest_key);
+  #define PRINT_WRAPPER KR(ret), K(src_key), K(dest_addr), K(dest_key)
   int ret = common::OB_SUCCESS;
   DetectorRefGuard ref_guard;
   UserBinaryKey src_user_key;
   UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(dest_user_key.set_user_key(dest_key))) {
+    DETECT_LOG(WARN, "dest_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
-    ObDependencyResource resource(dest_user_key);
+    ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->activate(resource))) {
+      DETECT_LOG(WARN, "detector activate op failed", PRINT_WRAPPER, K(resource));
     } else {
       DETECT_LOG(INFO, "detector activate op success", PRINT_WRAPPER, K(resource));
     }
@@ -579,10 +585,14 @@ int ObDeadLockDetectorMgr::activate_all(const T1 &src_key)
   int ret = common::OB_SUCCESS;
   DetectorRefGuard ref_guard;
   UserBinaryKey src_user_key;
+  UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
+    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
+    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->activate_all())) {
+    DETECT_LOG(WARN, "activate all failed", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -592,20 +602,31 @@ template<typename KeyType1, typename KeyType2>
 int ObDeadLockDetectorMgr::add_parent(const KeyType1 &key,
                                       const KeyType2 &parent_key)
 {
+  return add_parent(key, GCTX.self_addr(), parent_key);
+}
+
+template<typename KeyType1, typename KeyType2>
+int ObDeadLockDetectorMgr::add_parent(const KeyType1 &key,
+                                      const common::ObAddr &dest_addr,
+                                      const KeyType2 &parent_key)
+{
   CHECK_INIT();
   CHECK_ENABLED();
-  CHECK_ARGS(key, parent_key);
-  #define PRINT_WRAPPER KR(ret), K(src_user_key), K(dest_user_key)
+  CHECK_ARGS(key, dest_addr, parent_key);
+  #define PRINT_WRAPPER KR(ret), K(src_user_key), K(dest_addr), K(dest_user_key)
   int ret = common::OB_SUCCESS;
   DetectorRefGuard ref_guard;
   UserBinaryKey src_user_key;
   UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(key))) {
+    DETECT_LOG(WARN, "src_user_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(dest_user_key.set_user_key(parent_key))) {
+    DETECT_LOG(WARN, "dest_user_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_SUCC(get_detector_(src_user_key, ref_guard))) {
-    ObDependencyResource resource(dest_user_key);
+    ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->add_parent(resource))) {
+      DETECT_LOG(WARN, "detector add parent failed", PRINT_WRAPPER, K(resource));
     } else {
       DETECT_LOG(INFO, "detector add parent success", PRINT_WRAPPER, K(resource));
     }
@@ -626,7 +647,9 @@ int ObDeadLockDetectorMgr::set_timeout(const KeyType &key, const int64_t timeout
   UserBinaryKey user_key;
 
   if (OB_FAIL(user_key.set_user_key(key))) {
+    DETECT_LOG(WARN, "dest_user_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(user_key, ref_guard))) {
+    DETECT_LOG(WARN, "con not get obj", PRINT_WRAPPER);
   } else {
     if (timeout > 1_hour && REACH_TIME_INTERVAL(1_s)) {
       DETECT_LOG(INFO, "timeout value more than 1 hour", PRINT_WRAPPER);

@@ -25,7 +25,7 @@
 #include "sql/parser/parse_node.h"
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
-#include "sql/pl/pl_cache/ob_pl_cache_object.h"
+#include "pl/pl_cache/ob_pl_cache_object.h"
 
 namespace oceanbase
 {
@@ -50,6 +50,7 @@ public:
         out_client_params_(),
         out_param_id_(),
         db_name_(),
+        is_udt_routine_(false),
         enum_set_ctx_(allocator_) {
   }
 
@@ -96,6 +97,8 @@ public:
   void set_param_cnt(int64_t v) { param_cnt_ = v; }
   int64_t get_param_cnt() const { return param_cnt_; }
 
+  void set_is_udt_routine(bool v) { is_udt_routine_ = v; }
+  bool is_udt_routine() const { return is_udt_routine_; }
   pl::ObPLEnumSetCtx& get_enum_set_ctx() { return enum_set_ctx_; };
 
   int prepare_expression(const common::ObIArray<sql::ObRawExpr*> &params);
@@ -117,7 +120,8 @@ public:
                K_(out_type_name),
                K_(out_type_owner),
                K_(out_client_params),
-               K_(out_param_id));
+               K_(out_param_id),
+               K_(is_udt_routine));
 private:
   bool can_direct_use_param_;
   uint64_t package_id_;
@@ -133,14 +137,14 @@ private:
   ObSEArray<pl::ObPLDataType, 32> out_type_;
   ObSEArray<ObString, 32> out_type_name_;
   ObSEArray<ObString, 32> out_type_owner_;
-  /* MySQL protocol exposes procedure OUT values to the client only for protocol-bound
-   * output parameters. User/system variable OUT parameters are written back into
-   * the variables and can be read by a following SELECT. */
+  /* MySQL mode does not return out parameters to non-standard drivers (obclient, opensource MySQL
+   * driver) unless the parameter is bound with "?" */
   ObBitSet<> out_client_params_;
   ObSEArray<int64_t, 32> out_param_id_;
 
   ParamTypeInfoArray in_type_infos_;
   ObString db_name_;
+  bool is_udt_routine_;
   pl::ObPLEnumSetCtx enum_set_ctx_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCallProcedureInfo);
@@ -152,7 +156,7 @@ public:
   explicit ObCallProcedureStmt()
       : ObCMDStmt(NULL, stmt::T_CALL_PROCEDURE),
         call_proc_info_(NULL),
-        cache_call_info_guard_()
+        cache_call_info_guard_(MAX_HANDLE)
   {
   }
 

@@ -29,13 +29,11 @@
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "query/vector/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 using oceanbase::common::ObString;
-using oceanbase::share::ObVecIdxAdaTryPath;
 using oceanbase::share::ObVecIdxExtraInfo;
-using oceanbase::share::ObVecIndexType;
-using oceanbase::share::VecIndexAccessInfo;
 namespace test
 {
 class TestJoinOrder_ob_join_order_param_check_Test;
@@ -179,6 +177,7 @@ namespace sql
     pushdown_filter_table_(),
     in_current_dfo_(true),
     skip_subpart_(false),
+    use_column_store_(false),
     is_right_contain_pk_(false),
     is_right_union_pk_(false),
     right_origin_rows_(1.0) {}
@@ -201,6 +200,7 @@ namespace sql
     K_(force_part_filter),
     K_(in_current_dfo),
     K_(skip_subpart),
+    K_(use_column_store),
     K_(is_right_contain_pk),
     K_(is_right_union_pk),
     K_(right_origin_rows)
@@ -230,6 +230,7 @@ namespace sql
   // Indicates that part bf is only generated for the 1-level partition in the 2-level partition
   // If the table is a 1-level partition, this value is false.
   bool skip_subpart_;
+  bool use_column_store_;
   bool is_right_contain_pk_;
   bool is_right_union_pk_;
   double right_origin_rows_;
@@ -242,6 +243,7 @@ struct EstimateCostInfo {
     need_row_count_(-1),  //no need to refine row count
     need_parallel_(ObGlobalHint::UNSET_PARALLEL),  //no need to refine parallel
     need_batch_rescan_(false),
+    rescan_left_server_list_(NULL),
     override_(false) {}
 
   void reset() {
@@ -249,12 +251,14 @@ struct EstimateCostInfo {
     need_row_count_ = -1;
     need_parallel_ = ObGlobalHint::UNSET_PARALLEL;
     need_batch_rescan_ = false;
+    rescan_left_server_list_ = NULL;
     override_ = false;
   }
   int assign(const EstimateCostInfo& other) {
     need_row_count_ = other.need_row_count_;
     need_parallel_ = other.need_parallel_;
     need_batch_rescan_ = other.need_batch_rescan_;
+    rescan_left_server_list_ = other.rescan_left_server_list_;
     override_ = other.override_;
     return join_filter_infos_.assign(other.join_filter_infos_);
   }
@@ -262,7 +266,7 @@ struct EstimateCostInfo {
     return override_ || !join_filter_infos_.empty()
         || (ObGlobalHint::UNSET_PARALLEL != need_parallel_ && need_parallel_ != cur_parallel)
         || (need_row_count_ >= 0 && need_row_count_ < cur_row_count)
-        || need_batch_rescan_;
+        || (need_batch_rescan_ || NULL != rescan_left_server_list_);
   }
 
   TO_STRING_KV(
@@ -270,6 +274,7 @@ struct EstimateCostInfo {
     K_(need_row_count),
     K_(need_parallel),
     K_(need_batch_rescan),
+    K_(rescan_left_server_list),
     K_(override)
   );
 
@@ -277,6 +282,7 @@ struct EstimateCostInfo {
   double need_row_count_;
   int64_t need_parallel_;
   bool need_batch_rescan_;
+  const common::ObIArray<common::ObAddr> *rescan_left_server_list_;
   bool override_;
 };
 
@@ -352,10 +358,12 @@ class Path
       location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
       contain_fake_cte_(false),
       contain_pw_merge_op_(false),
+      contain_match_all_fake_cte_(false),
       contain_das_op_(false),
       parallel_(ObGlobalHint::UNSET_PARALLEL),
       op_parallel_rule_(OpParallelRule::OP_DOP_RULE_MAX),
       available_parallel_(ObGlobalHint::DEFAULT_PARALLEL),
+      server_cnt_(1),
       inherit_sharding_index_(-1)
     {  }
     Path(ObJoinOrder* parent)
@@ -379,10 +387,13 @@ class Path
         location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
         contain_fake_cte_(false),
         contain_pw_merge_op_(false),
+        contain_match_all_fake_cte_(false),
         contain_das_op_(false),
         parallel_(ObGlobalHint::UNSET_PARALLEL),
         op_parallel_rule_(OpParallelRule::OP_DOP_RULE_MAX),
         available_parallel_(ObGlobalHint::DEFAULT_PARALLEL),
+        server_cnt_(1),
+        server_list_(),
         is_pipelined_path_(false),
         is_nl_style_pipelined_path_(false),
         inherit_sharding_index_(-1)
@@ -400,6 +411,8 @@ class Path
     int check_is_base_table(bool &is_base_table);
     inline const common::ObIArray<OrderItem> &get_ordering() const { return ordering_; }
     inline common::ObIArray<OrderItem> &get_ordering() { return ordering_; }
+    inline const common::ObIArray<ObAddr> &get_server_list() const { return server_list_; }
+    inline common::ObIArray<ObAddr> &get_server_list() { return server_list_; }
     inline int64_t get_interesting_order_info() const { return interesting_order_info_; }
     inline void set_interesting_order_info(int64_t info) { interesting_order_info_ = info; }
     inline void add_interesting_order_flag(OrderingFlag flag) { interesting_order_info_ |= flag; }
@@ -441,6 +454,10 @@ class Path
       return (NULL != strong_sharding_ && strong_sharding_->is_local());
     }
     bool is_valid() const;
+    inline bool is_remote() const
+    {
+      return (NULL != strong_sharding_ && strong_sharding_->is_remote());
+    }
     inline bool is_match_all() const
     {
       return (NULL != strong_sharding_ && strong_sharding_->is_match_all());
@@ -452,17 +469,18 @@ class Path
     }
     inline bool is_sharding() const
     {
-      return is_distributed();
+      return is_remote() || is_distributed();
     }
     inline bool is_single() const
     {
-      return is_local() || is_match_all();
+      return is_local() || is_remote() || is_match_all();
     }
     virtual int estimate_cost()=0;
     virtual int re_estimate_cost(EstimateCostInfo &info, double &card, double &cost);
     double get_path_output_rows() const;
     bool contain_fake_cte() const { return contain_fake_cte_; }
     bool contain_pw_merge_op() const { return contain_pw_merge_op_; }
+    bool contain_match_all_fake_cte() const { return contain_match_all_fake_cte_; }
     bool is_pipelined_path() const { return is_pipelined_path_; }
     bool is_nl_style_pipelined_path() const { return is_nl_style_pipelined_path_; }
     virtual int compute_pipeline_info();
@@ -490,7 +508,7 @@ class Path
       return NULL != sharding && parallel_ > sharding->get_part_cnt() * ratio;
     }
     int compute_path_property_from_log_op();
-    int set_parallel_info_for_match_all();
+    int set_parallel_and_server_info_for_match_all();
     ObIArray<double> &get_ambient_card() { return ambient_card_; }
     const ObIArray<double> &get_ambient_card() const { return ambient_card_; }
     TO_STRING_KV(K_(is_local_order),
@@ -540,11 +558,14 @@ class Path
     ObPhyPlanType location_type_;
     bool contain_fake_cte_;
     bool contain_pw_merge_op_;
+    bool contain_match_all_fake_cte_;
     bool contain_das_op_;
     // remember the parallel info to get this sharding
     int64_t parallel_;
     OpParallelRule op_parallel_rule_;
     int64_t available_parallel_; // parallel degree used by serial path to enable parallel again 
+    int64_t server_cnt_;
+    common::ObSEArray<common::ObAddr, 8, common::ModulePageAllocator, true> server_list_;
     bool is_pipelined_path_;
     bool is_nl_style_pipelined_path_;
     common::ObSEArray<double, 8, common::ModulePageAllocator, true> ambient_card_;
@@ -556,6 +577,19 @@ class Path
   };
 
 
+  enum OptSkipScanState
+  {
+#if defined(__APPLE__) || defined(__ANDROID__)
+    // macOS/Android define SS_DISABLE in signal headers, undefine it first
+    #ifdef SS_DISABLE
+    #undef SS_DISABLE
+    #endif
+#endif
+    SS_DISABLE = 0,
+    SS_UNSET,
+    SS_HINT_ENABLE,
+    SS_NDV_SEL_ENABLE
+  };
   class AccessPath : public Path
   {
   public:
@@ -585,6 +619,8 @@ class Path
         table_opt_info_(),
         domain_idx_info_(),
         for_update_(false),
+        use_skip_scan_(OptSkipScanState::SS_UNSET),
+        use_column_store_(false),
         is_valid_inner_path_(false),
         index_prefix_(-1),
         can_batch_rescan_(false),
@@ -620,12 +656,16 @@ class Path
     int compute_parallel_degree(const int64_t cur_min_parallel_degree,
                                 int64_t &parallel);
     int check_and_prepare_estimate_parallel_params(const int64_t cur_min_parallel_degree,
+                                                   int64_t &px_part_gi_min_part_per_dop,
                                                    double &cost_threshold_us,
+                                                   int64_t &server_cnt,
                                                    int64_t &cur_parallel_degree_limit) const;
     int get_dop_limit_by_pushdown_limit(int64_t &dop_limit) const;
     int prepare_estimate_parallel(const int64_t pre_parallel,
                                   const int64_t parallel_degree_limit,
                                   const double cost_threshold_us,
+                                  const int64_t server_cnt,
+                                  const int64_t px_part_gi_min_part_per_dop,
                                   const double px_cost,
                                   const double cost,
                                   int64_t &cur_parallel,
@@ -647,6 +687,11 @@ class Path
                                    double &stats_logical_query_range_row_count,
                                    int64_t &opt_stats_cost_percent,
                                    bool &is_valid) const;
+    inline bool can_use_remote_estimate()
+    {
+      return NULL == table_opt_info_ ? false :
+            OptimizationMethod::RULE_BASED != table_opt_info_->optimization_method_;
+    }
     const ObIArray<ObNewRange> &get_query_ranges() const;
     virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos) const
     {
@@ -681,6 +726,9 @@ class Path
       return  can_das_dynamic_part_pruning() && NULL != table_partition_info_
               ? table_partition_info_->get_phy_tbl_location_info().get_partition_cnt() : 1;
     }
+    static int get_candidate_server_cnt(const ObOptimizerContext &opt_ctx,
+                                  const ObIArray<ObAddr> &server_list,
+                                  int64_t &server_cnt);
     virtual bool is_index_merge_path() const { return false; }
     TO_STRING_KV(K_(table_id),
                  K_(ref_table_id),
@@ -698,6 +746,8 @@ class Path
                  K_(domain_idx_info),
                  K_(for_update),
                  K_(use_das),
+                 K_(use_skip_scan),
+                 K_(use_column_store),
                  K_(is_valid_inner_path),
                  K_(can_batch_rescan),
                  K_(can_das_dynamic_part_pruning),
@@ -725,6 +775,8 @@ class Path
     DomainIndexAccessInfo domain_idx_info_;
     VecIndexAccessInfo vec_idx_info_;
     bool for_update_;
+    OptSkipScanState use_skip_scan_;
+    bool use_column_store_;
     // mark this access path is inner path and contribute query range
     bool is_valid_inner_path_;
     int64_t index_prefix_;
@@ -739,11 +791,9 @@ class Path
   {
     INDEX_MERGE_INVALID = 0,
     INDEX_MERGE_UNION,
+    INDEX_MERGE_INTERSECT,
     INDEX_MERGE_SCAN,
-    INDEX_MERGE_FTS_INDEX,
-    // Optimizer-only node used to choose one usable branch from a conjunction.
-    // It must be collapsed before an index merge access path is constructed.
-    INDEX_MERGE_ALTERNATIVES
+    INDEX_MERGE_FTS_INDEX
   };
 
   /**
@@ -762,11 +812,7 @@ class Path
 
     int formalize_index_merge_tree();
     int set_scan_direction(const ObOrderDirection &direction);
-    inline bool is_merge_node() const { return INDEX_MERGE_UNION == node_type_; }
-    inline bool is_candidate_merge_node() const
-    {
-      return is_merge_node() || INDEX_MERGE_ALTERNATIVES == node_type_;
-    }
+    inline bool is_merge_node() const {return INDEX_MERGE_UNION == node_type_ || INDEX_MERGE_INTERSECT == node_type_; }
     inline bool is_scan_node() const {return INDEX_MERGE_SCAN == node_type_ || INDEX_MERGE_FTS_INDEX == node_type_; }
     int get_all_index_ids(ObIArray<uint64_t> &index_ids) const;
 
@@ -1013,14 +1059,21 @@ class Path
       }
       return ret;
     }
-    static int compute_join_path_parallel_info(const Path *left_path,
-                                               const Path *right_path,
-                                               const DistAlgo join_dist_algo,
-                                               int64_t &parallel,
-                                               int64_t &available_parallel);
+    static int compute_join_path_parallel_and_server_info(ObOptimizerContext *opt_ctx,
+                                                         const Path *left_path,
+                                                         const Path *right_path,
+                                                         const DistAlgo join_dist_algo,
+                                                         const JoinAlgo join_algo,
+                                                         int64_t &parallel,
+                                                         int64_t &available_parallel,
+                                                         int64_t &server_cnt,
+                                                         ObIArray<common::ObAddr> &server_list);
     inline bool is_nlj_with_param_down() const
     { return NULL != right_path_ && right_path_->is_inner_path() && !right_path_->nl_params_.empty(); }
     int check_right_is_local_scan(int64_t &local_scan_type) const;
+    int check_contain_dist_das(const ObIArray<ObAddr> &exec_server_list,
+                               const Path *cur_path,
+                               bool &contain_dist_das) const;
     int pre_check_nlj_can_px_batch_rescan(bool &can_px_batch_rescan) const;
   private:
     int compute_hash_hash_sharding_info();
@@ -1028,7 +1081,7 @@ class Path
     int compute_join_path_info();
     int compute_join_path_sharding();
     int compute_join_path_plan_type();
-    int compute_join_path_parallel_info();
+    int compute_join_path_parallel_and_server_info();
     int re_adjust_sharding_ordering_info();
     int compute_nlj_batch_rescan();
     int check_right_has_gi_or_exchange(bool &right_has_gi_or_exchange);
@@ -1258,6 +1311,19 @@ class Path
     ObValuesTableDef *table_def_;
   private:
       DISALLOW_COPY_AND_ASSIGN(ValuesTablePath);
+  };
+
+  struct ObRowCountEstTask
+  {
+    ObRowCountEstTask() : est_arg_(NULL)
+    {}
+
+    ObAddr addr_;
+    ObBitSet<> path_id_set_;
+    obcall::ObEstPartArg *est_arg_;
+
+    TO_STRING_KV(K_(addr),
+                 K_(path_id_set));
   };
 
 struct InnerPathInfo {
@@ -1710,7 +1776,9 @@ struct NullAwareAntiJoinInfo {
                                const ObIndexInfoCache &index_info_cache,
                                PathHelper &helper,
                                AccessPath *&ap,
-                               bool use_das);
+                               bool use_das,
+                               bool use_column_store,
+                               OptSkipScanState use_skip_scan);
 
     int create_index_merge_access_paths(const uint64_t table_id,
                                         const uint64_t ref_table_id,
@@ -1767,11 +1835,6 @@ struct NullAwareAntiJoinInfo {
                                     ObIArray<ObIndexMergeNode*> &candi_index_trees,
                                     ObIArray<AccessPath*> &access_paths);
 
-    int choose_best_index_merge_branch(ObIndexMergeNode* &candi_node);
-
-    int calc_index_merge_candidate_selectivity(ObIndexMergeNode* node,
-                                                double &selectivity);
-
     int build_access_path_for_scan_node(const uint64_t table_id,
                                         const uint64_t ref_table_id,
                                         const PathHelper &helper,
@@ -1779,6 +1842,11 @@ struct NullAwareAntiJoinInfo {
                                         ObIArray<ObExprConstraint> &range_expr_constraint,
                                         ObIndexMergeNode* node,
                                         int64_t &scan_node_count);
+
+    int choose_best_selectivity_branch(ObIndexMergeNode* &candi_node);
+
+    int calc_selectivity_for_index_merge_node(ObIndexMergeNode* node,
+                                              double &child_selectivity);
 
     int create_one_index_merge_path(const uint64_t table_id,
                                     const uint64_t ref_table_id,
@@ -1797,6 +1865,24 @@ struct NullAwareAntiJoinInfo {
                                          const TableItem *table_item);
 
     int init_filter_selectivity(ObCostTableScanInfo &est_cot_info);
+
+    int init_column_store_est_info(const uint64_t table_id, 
+                                   const uint64_t ref_id, 
+                                   ObCostTableScanInfo &est_cost_info);
+
+    int init_column_store_est_info_with_filter(const uint64_t table_id, 
+                                                    ObCostTableScanInfo &est_cost_info, 
+                                                    const OptTableMetas& table_opt_meta, 
+                                                    ObIArray<ObRawExpr*> &filters,
+                                                    ObIArray<ObCostColumnGroupInfo> &column_group_infos,
+                                                    ObSqlBitSet<> &used_column_ids,
+                                                    FilterCompare &filter_compare,
+                                                    const bool use_filter_sel);
+
+    int init_column_store_est_info_with_other_column(const uint64_t table_id, 
+                                                    ObCostTableScanInfo &est_cost_info, 
+                                                    const OptTableMetas& table_opt_meta, 
+                                                    ObSqlBitSet<> &used_column_ids);
 
     int will_use_das(const uint64_t table_id,
                      const uint64_t index_id,
@@ -1818,6 +1904,14 @@ struct NullAwareAntiJoinInfo {
     int check_use_das_by_false_startup_filter(const IndexInfoEntry &index_info_entry,
                                               const ObIArray<ObRawExpr*> &filters,
                                               bool &use_das);
+    int will_use_skip_scan(const uint64_t table_id,
+                           const uint64_t ref_id,
+                           const uint64_t index_id,
+                           const ObIndexInfoCache &index_info_cache,
+                           PathHelper &helper,
+                           ObSQLSessionInfo *session_info,
+                           OptSkipScanState &use_skip_scan);
+
     int get_access_path_ordering(const uint64_t table_id,
                                  const uint64_t ref_table_id,
                                  const uint64_t index_id,
@@ -2063,15 +2157,15 @@ struct NullAwareAntiJoinInfo {
                                                             ObTablePartitionInfo *&table_part_info);
     int compute_base_table_path_plan_type(AccessPath *access_path);
     int compute_base_table_path_ordering(AccessPath *access_path);
-    int compute_parallel_info_for_base_paths(ObIArray<AccessPath *> &access_paths);
+    int compute_parallel_and_server_info_for_base_paths(ObIArray<AccessPath *> &access_paths);
     int get_base_path_table_dop(uint64_t index_id, int64_t &parallel);
     int compute_access_path_parallel(ObIArray<AccessPath *> &access_paths,
                                      int64_t &parallel);
     int get_random_parallel(const int64_t parallel_degree_limit, int64_t &parallel);
     int get_parallel_from_available_access_paths(int64_t &parallel) const;
-    int compute_base_table_parallel_info(const OpParallelRule op_parallel_rule,
-                                         const int64_t parallel,
-                                         AccessPath *path);
+    int compute_base_table_parallel_and_server_info(const OpParallelRule op_parallel_rule,
+                                                    const int64_t parallel,
+                                                    AccessPath *path);
     int get_explicit_dop_for_path(const uint64_t index_id, int64_t &parallel);
     int prune_paths_due_to_parallel(ObIArray<AccessPath *> &access_paths);
     /**
@@ -2461,7 +2555,8 @@ struct NullAwareAntiJoinInfo {
                        const common::ObIArray<ObRawExpr*> &where_conditions);
 
     int fill_query_range_info(const QueryRangeInfo &range_info,
-                              ObCostTableScanInfo &est_cost_info);
+                              ObCostTableScanInfo &est_cost_info,
+                              bool use_skip_scan);
 
     int get_query_range_count(const QueryRangeInfo &range_info,
                               int64_t &range_cnt);
@@ -2618,6 +2713,7 @@ struct NullAwareAntiJoinInfo {
                      const DomainIndexAccessInfo &tr_idx_info,
                      bool &is_nl_with_extended_range,
                      bool is_link,
+                     bool use_skip_scan,
                      const int64_t index_prefix);
 
     int can_extract_unprecise_range(const uint64_t table_id,
@@ -2639,6 +2735,11 @@ struct NullAwareAntiJoinInfo {
                                           const bool is_inner_path,
                                           common::ObIArray<ObRawExpr*> &filter_exprs,
                                           ObBaseTableEstMethod &method);
+
+    inline bool can_use_remote_estimate(OptimizationMethod method)
+    {
+      return OptimizationMethod::RULE_BASED != method;
+    }
 
     int compute_table_rowcount_info();
 

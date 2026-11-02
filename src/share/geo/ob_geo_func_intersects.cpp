@@ -39,6 +39,7 @@ int eval_intersects_by_disjoint(const ObGeometry *g1, const ObGeometry *g2, cons
   if (OB_SUCC(ObGeoFuncDisjoint::eval(disjoint_context, result))) {
     result = !result;
   } else {
+    LOG_WARN("eval disjoint for intersects failed", K(ret));
   }
   return ret;
 }
@@ -60,19 +61,51 @@ int eval_intersects_without_strategy(const ObGeometry *g1, const ObGeometry *g2,
 }
 
 template <typename GeoType1, typename GeoType2>
-int eval_intersects_geog(const ObGeometry *g1,
-                         const ObGeometry *g2,
-                         const ObGeoEvalCtx &context,
-                         bool &result)
+int eval_intersects_with_point_strategy(const ObGeometry *g1, 
+                                        const ObGeometry *g2,
+                                        const ObGeoEvalCtx &context,
+                                        bool &result) 
 {
   INIT_SUCC(ret);
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
+    bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
+    bg::strategy::within::geographic_winding<ObWkbGeogPoint> point_strategy(geog_sphere);
     const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
     const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
+#ifdef USE_SPHERE_GEO
+    result = bg::intersects(*geo1, *geo2, point_strategy);
+#else
     result = bg::intersects(*geo1, *geo2);
+#endif
+  }
+  return ret;
+}
+
+template <typename GeoType1, typename GeoType2>
+int eval_intersects_with_nonpoint_strategy(const ObGeometry *g1,
+                                          const ObGeometry *g2,
+                                          const ObGeoEvalCtx &context,
+                                          bool &result) 
+{
+  INIT_SUCC(ret);
+  const ObSrsItem *srs = context.get_srs();
+  if (OB_ISNULL(srs)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
+  } else {
+    bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
+    bg::strategy::intersection::geographic_segments<> nonpoint_strategy(geog_sphere);
+    const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
+    const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
+#ifdef USE_SPHERE_GEO
+    result = bg::intersects(*geo1, *geo2, nonpoint_strategy);
+#else
+    result = bg::intersects(*geo1, *geo2);
+#endif
   }
   return ret;
 }
@@ -102,13 +135,13 @@ public:
     }
   };
 
-  // default case for geography
+  // default case for geography (calc using nonpoint_strategy)
   template <typename GeoType1, typename GeoType2>
   struct EvalWkbBiGeog
   {
     static int eval(const ObGeometry *g1, const ObGeometry *g2, const ObGeoEvalCtx &context, bool &result)
     {
-      return eval_intersects_geog<GeoType1, GeoType2>(g1, g2, context, result);
+      return eval_intersects_with_nonpoint_strategy<GeoType1, GeoType2>(g1, g2, context, result);
     }
   };
 
@@ -126,6 +159,7 @@ private:
     typename CollectonType::iterator iter;
     if (OB_ISNULL(allocator)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Null allocator", K(ret));
     } else if (g1->type() == ObGeoType::GEOMETRYCOLLECTION) {
       const CollectonType *geo1 = reinterpret_cast<const CollectonType *>(g1->val());
       iter = geo1->begin();
@@ -136,6 +170,7 @@ private:
         ObGeometry *sub_g1 = NULL;
         bool is_geog = (g1->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g1))) {
+          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
@@ -154,6 +189,7 @@ private:
         ObGeometry *sub_g2 = NULL;
         bool is_geog = (g2->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g2))) {
+          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
@@ -273,33 +309,33 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogMultiPoint, ObWk
 // geograpyic cases using point strategy (point and nonpoint types)
 OB_GEO_GEOG_BINARY_FUNC_GEO2_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogPoint, bool)  
 {
-  return eval_intersects_geog<GeoType1, ObWkbGeogPoint>(g1, g2, context, result);
+  return eval_intersects_with_point_strategy<GeoType1, ObWkbGeogPoint>(g1, g2, context, result);
 } OB_GEO_FUNC_END;
 
 OB_GEO_GEOG_BINARY_FUNC_GEO1_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogPoint, bool) 
 {
-  return eval_intersects_geog<ObWkbGeogPoint, GeoType2>(g1, g2, context, result);
+  return eval_intersects_with_point_strategy<ObWkbGeogPoint, GeoType2>(g1, g2, context, result);
 } OB_GEO_FUNC_END;
 
 // geograpyic cases using point strategy (multipoints and line types)
 OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogMultiPoint, ObWkbGeogLineString, bool)
 {
-  return eval_intersects_geog<ObWkbGeogMultiPoint, ObWkbGeogLineString>(g1, g2, context, result);
+  return eval_intersects_with_point_strategy<ObWkbGeogMultiPoint, ObWkbGeogLineString>(g1, g2, context, result);
 } OB_GEO_FUNC_END;
 
 OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogLineString, ObWkbGeogMultiPoint, bool)
 {
-  return eval_intersects_geog<ObWkbGeogLineString, ObWkbGeogMultiPoint>(g1, g2, context, result);
+  return eval_intersects_with_point_strategy<ObWkbGeogLineString, ObWkbGeogMultiPoint>(g1, g2, context, result);
 } OB_GEO_FUNC_END;
 
 OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogMultiPoint, ObWkbGeogMultiLineString, bool)
 {
-  return eval_intersects_geog<ObWkbGeogMultiPoint, ObWkbGeogMultiLineString>(g1, g2, context, result);
+  return eval_intersects_with_point_strategy<ObWkbGeogMultiPoint, ObWkbGeogMultiLineString>(g1, g2, context, result);
 } OB_GEO_FUNC_END;
 
 OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncIntersectsImpl, ObWkbGeogMultiLineString, ObWkbGeogMultiPoint, bool)
 {
-  return eval_intersects_geog<ObWkbGeogMultiLineString, ObWkbGeogMultiPoint>(g1, g2, context, result);
+  return eval_intersects_with_point_strategy<ObWkbGeogMultiLineString, ObWkbGeogMultiPoint>(g1, g2, context, result);
 } OB_GEO_FUNC_END;
 
 // handle ambiguous partial specializations

@@ -42,6 +42,7 @@ int ObExprPrivSTNumInteriorRings::calc_result_type1(
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_NUMINTERIORRINGS);
+    LOG_WARN("invalid type", K(ret), K(obj_type1));
   } else {
     ObCastMode cast_mode = type_ctx.get_cast_mode();
     cast_mode &= ~CM_WARN_ON_FAIL;      // make cast return error when fail
@@ -62,12 +63,13 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
   ObObjType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_NUMINTERIORRINGS);
   uint32_t res_num = 0;
 
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(temp_allocator.eval_arg(arg1, ctx, datum1))) {
+    LOG_WARN("fail to eval args", K(ret));
   } else if (datum1->is_null()) {
     is_null_res = true;
   } else {
@@ -76,14 +78,16 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
     ObGeometry *geo = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
-            arg1->obj_meta_.has_lob_header(), wkb))) {
+            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                    wkb,
                    geo,
                    nullptr,
                    N_PRIV_ST_NUMINTERIORRINGS,
-                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {  // ObIWkbGeom
+      LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb));
     } else if (geo->type() != ObGeoType::POLYGON) {
       is_null_res = true;
     } else {

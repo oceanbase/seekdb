@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_inner_sql_result.h"
-#include "share/rc/ob_server_runtime.h"
 
-#include "omt/ob_server_runtime.h"
+#include "omt/ob_tenant.h"
 #include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
@@ -45,31 +44,30 @@ inline int ObInnerSQLResult::check_extend_value(const common::ObObj &obj)
   return ret;
 }
 
-ObInnerSQLResult::ObInnerSQLResult(
-    ObSQLSessionInfo &session,
-    query::ObIPlanCacheAccessService &plan_cache_access_service,
-    bool is_inner_session)
+ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_session, ObDiagnosticInfo *di)
     : column_map_created_(false), column_indexed_(false), column_map_(),
       mem_context_(nullptr),
       mem_context_destroy_guard_(mem_context_),
       sql_ctx_(), schema_guard_(share::schema::ObSchemaMgrItem::MOD_INNER_SQL_RESULT),
       opened_(false), session_(session),
-      plan_cache_access_service_(plan_cache_access_service),
       result_set_(nullptr), row_(NULL),
       execute_start_ts_(0), execute_end_ts_(0),
+      compat_mode_(lib::Worker::CompatMode::MYSQL),
       is_inited_(false),
       store_first_row_(false),
       iter_end_(false),
       is_read_(true),
-      runtime_(nullptr),
+      has_tenant_resource_(true),
+      tenant_(nullptr),
       is_inner_session_(is_inner_session),
+      inner_sql_di_(di),
       interrupt_checker_()
 
 {
   sql_ctx_.exec_type_ = InnerSql;
 }
 
-int ObInnerSQLResult::init()
+int ObInnerSQLResult::init(bool has_tenant_resource)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
@@ -79,18 +77,21 @@ int ObInnerSQLResult::init()
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->lock_runtime(runtime_))) {
-    if (OB_IN_STOP_STATE == ret) {
-      ret = OB_SERVER_RUNTIME_NOT_READY;
+    LOG_WARN("create memory entity failed", K(ret));
+  } else if (has_tenant_resource) {
+    if (OB_FAIL(GCTX.omt_->get_tenant_with_tenant_lock(tenant_))) {
+      if (OB_IN_STOP_STATE == ret) {
+        ret = OB_TENANT_NOT_IN_SERVER;
+      }
+      LOG_WARN("get tenant lock fail", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
+    set_has_tenant_resource(has_tenant_resource);
     {
-      // Inner SQL executes in the server runtime that owns this result.
-      SERVER_MODULE_SCOPE {
-        result_set_ = new (buf_) ObResultSet(
-            session_, mem_context_->get_arena_allocator(),
-            plan_cache_access_service_);
+      // single-replica: inner sql always executes locally (resource RPC removed).
+      MOD_SCOPE {
+        result_set_ = new (buf_) ObResultSet(session_, mem_context_->get_arena_allocator());
         result_set_->set_is_inner_result_set(true);
       }
     }
@@ -99,15 +100,26 @@ int ObInnerSQLResult::init()
   return ret;
 }
 
+int ObInnerSQLResult::init()
+{
+  return init(true);
+}
+
 ObInnerSQLResult::~ObInnerSQLResult()
 {
   close();
   if (result_set_ != nullptr) {
-    result_set_->~ObResultSet();
+    int ret = OB_SUCCESS;
+    MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
+    if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
+      LOG_WARN("switch tenant fail", K(ret));
+    } else {
+      result_set_->~ObResultSet();
+    }
   }
-  if (runtime_ != nullptr) {
-    runtime_->unlock();
-    runtime_ = nullptr;
+  if (tenant_ != nullptr) {
+    tenant_->unlock();
+    tenant_ = nullptr;
   }
 }
 
@@ -115,21 +127,29 @@ int ObInnerSQLResult::open()
 {
   int ret = OB_SUCCESS;
   execute_start_ts_ = ObTimeUtility::current_time();
-  ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
+  MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
+  ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
 
+  if (has_tenant_resource()) {
+    result_set().get_exec_context().set_plan_start_time(execute_start_ts_);
+  }
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
+    LOG_WARN("switch tenant failed", K(ret));
   } else {
-    result_set().get_exec_context().set_plan_start_time(execute_start_ts_);
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     bool is_select = ObStmt::is_select_stmt(result_set_->get_stmt_type());
     WITH_CONTEXT(mem_context_) {
       if (opened_) {
         ret = OB_INIT_TWICE;
-      } else if (OB_FAIL(result_set_->open())) {
+        LOG_WARN("result set already open", K(ret));
+      } else if (has_tenant_resource() && OB_FAIL(result_set_->open())) {
         result_set_->refresh_location_cache_by_errno(true, ret);
+        LOG_WARN("open result set failed", K(ret));
         // move after precess_retry().
 //        result_set_->close();
       } else if (is_read_&& is_select) {
@@ -141,6 +161,7 @@ int ObInnerSQLResult::open()
             ret = OB_SUCCESS;
           } else {
             result_set_->refresh_location_cache_by_errno(true, ret);
+            LOG_WARN("get_next_row failed", K(ret), K(has_tenant_resource()));
           }
         } else {
           store_first_row_ = true;
@@ -161,6 +182,7 @@ int ObInnerSQLResult::close()
   if (opened_) {
     // opened=true imply is_inited=true
     if (OB_FAIL(inner_close())) {
+      LOG_WARN("result set close failed", K(ret));
     }
   }
   column_map_.clear();
@@ -172,6 +194,7 @@ int ObInnerSQLResult::force_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_close())) {
+    LOG_WARN("result set close failed", K(ret));
   }
   column_map_.clear();
   column_indexed_ = false;
@@ -183,12 +206,19 @@ int ObInnerSQLResult::inner_close()
   SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
   ObInnerSQLSessionGuard sess_guard(&session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
+  LOG_DEBUG("compat_mode_", K(ret), K(compat_mode_), K(lbt()));
 
-  ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
+  MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
+  ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
 
-  WITH_CONTEXT(mem_context_) {
-    if (OB_FAIL(result_set_->close())) {
-      result_set_->refresh_location_cache_by_errno(true, ret);
+  if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
+    LOG_WARN("switch tenant failed", K(ret));
+  } else {
+    WITH_CONTEXT(mem_context_) {
+      if (has_tenant_resource() && OB_FAIL(result_set_->close())) {
+        result_set_->refresh_location_cache_by_errno(true, ret);
+        LOG_WARN("result set close failed", K(ret));
+      }
     }
   }
   opened_ = false;
@@ -200,12 +230,18 @@ int ObInnerSQLResult::inner_close()
 int ObInnerSQLResult::next()
 {
   int ret = OB_SUCCESS;
-  ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
+  MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
+  ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
+  LOG_DEBUG("compat_mode_", K(ret), K(compat_mode_), K(lbt()));
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (iter_end_) {
     ret = OB_ITER_END;
+  } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
+    LOG_WARN("switch tenant failed", K(ret));
   } else if (store_first_row_) {
     store_first_row_ = false;
   } else {
@@ -213,9 +249,10 @@ int ObInnerSQLResult::next()
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     WITH_CONTEXT(mem_context_) {
-      if (OB_FAIL(result_set_->get_next_row(row_))) {
+      if (has_tenant_resource() && OB_FAIL(result_set_->get_next_row(row_))) {
         if (OB_ITER_END != ret) {
           result_set_->refresh_location_cache_by_errno(true, ret);
+          LOG_WARN("get next row failed", K(ret));
         }
       }
 
@@ -229,9 +266,11 @@ int ObInnerSQLResult::build_column_map() const
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (!column_map_created_) {
     if (OB_FAIL(column_map_.create(COLUMN_MAP_BUCKET_NUM,
         ObModIds::OB_HASH_BUCKET_SQL_COLUMN_MAP, ObModIds::OB_HASH_NODE_SQL_COLUMN_MAP))) {
+      LOG_WARN("create hash table failed", K(ret), LITERAL_K(COLUMN_MAP_BUCKET_NUM));
     } else {
       column_map_created_ = true;
     }
@@ -241,16 +280,19 @@ int ObInnerSQLResult::build_column_map() const
     const ColumnsFieldIArray *fields = result_set_->get_field_columns();
     if (OB_ISNULL(fields)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(fields));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < fields->count(); ++i) {
       if (nullptr == fields->at(i).cname_) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("null field name", K(ret), "field", fields->at(i));
       } else {
         if (OB_FAIL(column_map_.set_refactored(fields->at(i).cname_, i))) {
           // ignore duplicate column name
           if (OB_HASH_EXIST == ret) {
             ret = OB_SUCCESS;
           } else {
+            LOG_WARN("add column name to column map failed", K(ret));
           }
         }
       }
@@ -270,20 +312,25 @@ int ObInnerSQLResult::find_idx(const char *col_name, int64_t &idx) const
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (nullptr == col_name) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(col_name));
   } else {
     if (OB_UNLIKELY(!column_indexed_)) {
       if (OB_FAIL(build_column_map())) {
+        LOG_WARN("build column map failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ret = column_map_.get_refactored(ObString::make_string(col_name), idx);
       if (OB_SUCCESS != ret && OB_HASH_NOT_EXIST != ret) {
+        LOG_WARN("get index from hash failed", K(ret), K(col_name));
       } else if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_ENTRY_NOT_EXIST;
       } else if (OB_INVALID_INDEX == idx) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid index", K(ret), K(idx));
       }
     }
   }
@@ -337,17 +384,22 @@ int ObInnerSQLResult::get_timestamp(const int64_t col_idx, const common::ObTimeZ
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!opened_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (OB_UNLIKELY(NULL == row_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("row is null", K(ret));
   } else if (OB_UNLIKELY(col_idx >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_))) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("column index overflow", K(ret), K(col_idx), "row", *row_);
   } else {
     const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
     if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= row_->count_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid index", K(ret), K(idx), "cell count", row_->count_);
     } else {
       const ObObj &obj = row_->cells_[idx];
       if (OB_FAIL(check_extend_value(obj))) {
+        LOG_DEBUG("check extend value failed", K(ret));
       } else {
         val = obj.get_timestamp();
       }
@@ -362,9 +414,12 @@ int ObInnerSQLResult::get_bool(const int64_t col_idx, bool &bool_val) const
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (OB_INVALID_INDEX == col_idx) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(col_idx));
   } else if (OB_FAIL(get_int(col_idx, v))) {
+    LOG_WARN("get int value failed", K(ret), K(col_idx));
   } else {
     bool_val = v;
   }
@@ -380,10 +435,13 @@ int ObInnerSQLResult::get_int(const int64_t col_idx, int64_t &int_val) const
   int ret = OB_SUCCESS;
   const ObObj *obj = NULL;
   if (OB_FAIL(get_obj(col_idx, obj))) {
+    LOG_WARN("get obj error", K(ret));
   } else if (OB_ISNULL(obj)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get a invalud obj", K(col_idx), K(obj), K(ret));
   } else if (OB_UNLIKELY(ObIntTC != obj->get_type_class())) {
     ret = OB_OBJ_TYPE_ERROR;
+    LOG_WARN("invalid input type", K(ret), K(*obj));
   } else {
     int_val = obj->get_int();
   }
@@ -395,22 +453,29 @@ int ObInnerSQLResult::get_number_impl(const int64_t col_idx, number::ObNumber &r
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (NULL == row_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("row is null", K(ret));
   } else if (col_idx >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("column index overflow", K(ret), K(col_idx), "row", *row_);
   } else {
     const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
     if (idx < 0 || idx >= row_->count_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid index", K(ret), K(idx), "cell count", row_->count_);
     } else {
       const ObObj &obj = row_->cells_[idx];
       if (OB_FAIL(check_extend_value(obj))) {
+        LOG_DEBUG("check extend value failed", K(ret));
       } else if (obj.is_decimal_int()) {
         if (OB_FAIL(wide::to_number(obj.get_decimal_int(), obj.get_int_bytes(), obj.get_scale(),
                                     mem_context_->get_arena_allocator(), ret_nmb))) {
+          LOG_WARN("to_number failed", K(ret));
         }
       } else if (OB_FAIL(obj.get_number(ret_nmb))) {
+        LOG_WARN("get number failed", K(ret));
       }
     }
   }
@@ -425,15 +490,19 @@ int ObInnerSQLResult::get_type(const int64_t col_idx, ObObjMeta &type) const
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (NULL == row_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("row is null", K(ret));
   } else if (col_idx
       >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("column index overflow", K(ret), K(col_idx), "row", *row_);
   } else {
     const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
     if (idx < 0 || idx >= row_->count_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid index", K(ret), K(idx), "cell count", row_->count_);
     } else {
       const ObObj &obj = row_->cells_[idx];
       type = obj.get_meta();
@@ -462,15 +531,19 @@ int ObInnerSQLResult::get_obj(const int64_t col_idx, ObObj &obj,
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (NULL == row_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("row is null", K(ret));
   } else if (col_idx
       >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("column index overflow", K(ret), K(col_idx), "row", *row_);
   } else {
     const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
     if (idx < 0 || idx >= row_->count_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid index", K(ret), K(idx), "cell count", row_->count_);
     } else {
       obj = row_->cells_[idx];
     }
@@ -529,17 +602,22 @@ int ObInnerSQLResult::get_timestamp(const char *col_name,  const common::ObTimeZ
   int64_t idx = OB_INVALID_INDEX;
   if (OB_UNLIKELY(!opened_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (OB_UNLIKELY(NULL == col_name)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("column name can not be NULL", K(ret));
   } else if (OB_FAIL(find_idx(col_name, idx))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_ERR_COLUMN_NOT_FOUND;
     } else {
+      LOG_WARN("find column index failed", K(ret), K(col_name));
     }
   } else if (OB_UNLIKELY(OB_INVALID_INDEX == idx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid index returned", K(ret), K(idx));
   } else if (OB_FAIL(get_timestamp(idx, tz_info, val))) {
     if (OB_ERR_NULL_VALUE != ret) {
+      LOG_WARN("get_timestamp failed", K(ret), K(idx));
     }
   }
   return ret;
@@ -551,9 +629,12 @@ int ObInnerSQLResult::get_number(const int64_t col_idx,
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (OB_INVALID_INDEX == col_idx) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(col_idx));
   } else if (OB_FAIL(get_number_impl(col_idx, nmb_val))) {
+    LOG_WARN("get number impl failed", K(ret), K(col_idx));
   }
   return ret;
 }
@@ -563,9 +644,12 @@ int ObInnerSQLResult::get_number(const char *col_name, common::number::ObNumber 
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (NULL == col_name) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(col_name));
   } else if (OB_FAIL(get_number_impl(col_name, nmb_val))) {
+    LOG_WARN("get number impl failed", K(ret), K(col_name));
   }
   return ret;
 }
@@ -577,9 +661,12 @@ int ObInnerSQLResult::inner_get_number(const int64_t col_idx, number::ObNumber &
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (OB_INVALID_INDEX == col_idx) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(col_idx));
   } else if (OB_FAIL(get_number_impl(col_idx, nmb_val))) {
+    LOG_WARN("get number impl failed", K(ret), K(col_idx));
   }
   return ret;
 }
@@ -591,9 +678,12 @@ int ObInnerSQLResult::inner_get_number(const char *col_name, number::ObNumber &n
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (NULL == col_name) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(col_name));
   } else if (OB_FAIL(get_number_impl(col_name, nmb_val))) {
+    LOG_WARN("get number impl failed", K(ret), K(col_name));
   }
   return ret;
 }
@@ -603,18 +693,23 @@ int ObInnerSQLResult::get_obj(const int64_t col_idx, const common::ObObj *&resul
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else if (NULL == row_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("row is null", K(ret));
   } else if (col_idx
       >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("column index overflow", K(ret), K(col_idx), "row", *row_);
   } else {
     const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
     if (idx < 0 || idx >= row_->count_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid index", K(ret), K(idx), "cell count", row_->count_);
     } else {
       const ObObj &obj = row_->cells_[idx];
       if (OB_FAIL(check_extend_value(obj))) {
+        LOG_DEBUG("check extend value failed", K(ret));
       } else {
         result = &obj;
       }
@@ -628,6 +723,7 @@ int ObInnerSQLResult::print_info() const
   int ret = OB_SUCCESS;
   if (!opened_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not opened", K(ret));
   } else {
     LOG_INFO("result", K_(result_set));
   }

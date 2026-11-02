@@ -15,7 +15,7 @@
  */
 
 #include "log_group_buffer.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "log_writer_utils.h"
 
 namespace oceanbase
@@ -52,14 +52,15 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments", K(ret), K(start_lsn));
   } else {
-    int64_t group_buffer_size = DEFAULT_GROUP_BUFFER_SIZE;
+    int64_t group_buffer_size = FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE;
+    // omt::ObTenantConfigGuard tenant_config(&GCONF);
     // if (!tenant_config.is_valid()) {
     //  PALF_LOG(WARN, "get tenant config failed", K(ret));
     //  // TODO: add tenant config
-    //  // group_buffer_size = database_config->_log_groupgation_buffer_size;
+    //  // group_buffer_size = tenant_config->_log_groupgation_buffer_size;
     //}
     ObMemAttr mem_attr("LogGroupBuffer");
-    if (NULL == (data_buf_ = static_cast<char *>(server_malloc(group_buffer_size, mem_attr)))) {
+    if (NULL == (data_buf_ = static_cast<char *>(mtl_malloc(group_buffer_size, mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       PALF_LOG(ERROR, "alloc memory failed", K(ret));
     } else {
@@ -72,7 +73,7 @@ int LogGroupBuffer::init(const LSN &start_lsn)
       is_inited_ = true;
     }
     if (OB_FAIL(ret) && NULL != data_buf_) {
-      server_free(data_buf_);
+      mtl_free(data_buf_);
       data_buf_ = NULL;
     }
     PALF_LOG(INFO, "LogGroupBuffer init finished", K(ret), K_(start_lsn), KP(data_buf_),
@@ -89,7 +90,7 @@ void LogGroupBuffer::destroy()
   readable_begin_lsn_.reset();
   reuse_lsn_.reset();
   if (NULL != data_buf_) {
-    server_free(data_buf_);
+    mtl_free(data_buf_);
     data_buf_ = NULL;
   }
   ATOMIC_STORE(&reserved_buffer_size_, 0);
@@ -178,16 +179,20 @@ int LogGroupBuffer::get_log_buf(const LSN &lsn, const int64_t total_len, LogWrit
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "lsn is less than start_lsn", K(ret), K(lsn), K_(start_lsn));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
+    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
   } else {
     const int64_t group_buf_tail_len = get_reserved_buffer_size() - start_pos;
     const int64_t first_part_len = min(group_buf_tail_len, total_len);
     if (OB_FAIL(log_buf.push_back(data_buf_ + start_pos, first_part_len))) {
+      PALF_LOG(WARN, "log_buf push_back failed", K(ret), K(lsn));
     } else if (total_len > first_part_len
                && OB_FAIL(log_buf.push_back(data_buf_, total_len - first_part_len))) {
       PALF_LOG(WARN, "log_buf push_back failed", K(ret), K(lsn));
     } else {
       // do nothing
     }
+    PALF_LOG(TRACE, "get_log_buf finished", K(ret), K(lsn), K(start_pos), K(total_len), K(group_buf_tail_len), K(first_part_len),
+        "second_part_len", total_len - first_part_len, K(log_buf));
   }
   return ret;
 }
@@ -220,11 +225,15 @@ int LogGroupBuffer::fill(const LSN &lsn,
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "end_lsn is greater than reuse end pos", K(ret), K(lsn), K(end_lsn), K(reuse_lsn), K(available_buf_size));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
+    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
+  // update readable_begin_lsn_ before filling buffer
   } else if (FALSE_IT(gen_readable_begin_lsn_for_filling_(end_lsn, new_readable_begin_lsn))) {
   } else if (FALSE_IT(inc_update_readable_begin_lsn_(new_readable_begin_lsn))) {
     PALF_LOG(WARN, "inc_update_readable_begin_lsn_ failed", K(ret), K(lsn), K(end_lsn), K(new_readable_begin_lsn));
   } else if (OB_FAIL(fill_(lsn, start_pos, data, data_len))) {
+    PALF_LOG(WARN, "fill data failed", K(lsn), K(data_len), KP(data_buf_));
   } else {
+    PALF_LOG(TRACE, "fill group buffer success", K(ret), K(lsn), K(data_len), KP(data_buf_));
   }
   return ret;
 }
@@ -260,6 +269,8 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "end_lsn is greater than reuse end pos", K(ret), K(lsn), K(end_lsn), K(reuse_lsn), K(available_buf_size));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
+    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
+  // update readable_begin_lsn_ before filling buffer
   } else if (FALSE_IT(gen_readable_begin_lsn_for_filling_(end_lsn, new_readable_begin_lsn))) {
   } else if (FALSE_IT(inc_update_readable_begin_lsn_(new_readable_begin_lsn))) {
     PALF_LOG(WARN, "inc_update_readable_begin_lsn_ failed", K(ret), K(lsn), K(end_lsn), K(new_readable_begin_lsn));
@@ -274,11 +285,13 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
     }
     // fill valid padding data.
     if (OB_FAIL(fill_(lsn, start_pos, data, data_len))) {
+      PALF_LOG(WARN, "fill padding data filled", K(ret), K(lsn), K(log_body_size), K(start_pos), K(data_len),
+          K(group_buf_tail_len), K(first_part_len), "second_part_len", data_len - first_part_len);
     } else {
       PALF_LOG(INFO, "fill padding log success", K(ret), K(lsn), K(log_body_size), K(start_pos), K(data_len),
           K(group_buf_tail_len), K(first_part_len), "second_part_len", data_len - first_part_len);
     }
-
+    
   }
   return ret;
 }
@@ -318,6 +331,7 @@ int LogGroupBuffer::check_log_buf_wrapped(const LSN &lsn, const int64_t log_len,
   } else if (lsn < start_lsn) {
     PALF_LOG(WARN, "lsn is less than start_lsn", K(ret), K(lsn), K_(start_lsn));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
+    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
   } else if (start_pos + log_len > get_reserved_buffer_size()) {
     is_buf_wrapped = true;
     PALF_LOG(INFO, "this log buf is wrapped", K(ret), K(lsn), K(log_len), K(start_pos), K_(reserved_buffer_size));
@@ -327,17 +341,40 @@ int LogGroupBuffer::check_log_buf_wrapped(const LSN &lsn, const int64_t log_len,
   return ret;
 }
 // Depend on the write lock of palf_handle_impl to ensure no concurrent updates to group_buffer during the call to this interface
-int LogGroupBuffer::activate()
+int LogGroupBuffer::to_leader()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+#if LEADER_DEFAULT_GROUP_BUFFER_SIZE != FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE
+  } else if (LEADER_DEFAULT_GROUP_BUFFER_SIZE == get_available_buffer_size()) {
+    ret = OB_STATE_NOT_MATCH;
+    PALF_LOG(WARN, "available_buffer_size_ is already for leader", K(ret), K_(available_buffer_size));
+#endif
   } else {
-    ATOMIC_STORE(&available_buffer_size_, DEFAULT_GROUP_BUFFER_SIZE);
+    ATOMIC_STORE(&available_buffer_size_, LEADER_DEFAULT_GROUP_BUFFER_SIZE);
   }
-  PALF_LOG(INFO, "activate group buffer finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
+  PALF_LOG(INFO, "to_leader finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
   return ret;
 }
+// Depend on the write lock of palf_handle_impl to ensure no concurrent updates to group_buffer during the call to this interface
+int LogGroupBuffer::to_follower()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE == get_available_buffer_size()) {
+  // The case is maybe : pending -> reconfirm fail -> pending.
+  PALF_LOG(INFO, "current buffer_size is already for follower, no need execute again", K(ret),
+      K_(available_buffer_size));
+  } else {
+    // Here we cannot reset buffer, because some data may be waiting to flush.
+    ATOMIC_STORE(&available_buffer_size_, FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE);
+  }
+  PALF_LOG(INFO, "to_follower finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
+  return ret;
+}
+
 int64_t LogGroupBuffer::get_available_buffer_size() const
 {
   // This available_buffer_size_ will change according to role.
@@ -368,6 +405,7 @@ void LogGroupBuffer::inc_update_readable_begin_lsn_(const LSN &new_readable_begi
   LSN old_readable_begin_lsn;
   get_readable_begin_lsn_(old_readable_begin_lsn);
   inc_update(&readable_begin_lsn_.val_, new_readable_begin_lsn.val_);
+  PALF_LOG(TRACE, "inc_update_readable_begin_lsn_ success", K(old_readable_begin_lsn), K(new_readable_begin_lsn));
 }
 
 int LogGroupBuffer::inc_update_readable_begin_lsn(const LSN &new_lsn)
@@ -398,6 +436,7 @@ int LogGroupBuffer::inc_update_reuse_lsn(const LSN &new_reuse_lsn)
         get_reuse_lsn_(curr_reuse_lsn);
       }
     }
+    PALF_LOG(TRACE, "inc_update_reuse_lsn success", K(curr_reuse_lsn), K(new_reuse_lsn));
   }
   return ret;
 }
@@ -446,6 +485,7 @@ int LogGroupBuffer::read_data(const LSN &read_begin_lsn,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid argumetns", K(read_begin_lsn), K(in_read_size), KP(buf));
   } else if (OB_FAIL(get_buffer_pos_(read_begin_lsn, start_pos))) {
+    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(read_begin_lsn));
   } else {
     LSN curr_reuse_lsn;
     get_reuse_lsn_(curr_reuse_lsn);
@@ -476,6 +516,8 @@ int LogGroupBuffer::read_data(const LSN &read_begin_lsn,
             K(in_read_size), K(out_read_size));
       }
     }
+    PALF_LOG(TRACE, "read_data finished", K(ret), K(read_begin_lsn), K(in_read_size),
+        K(out_read_size), K(readable_begin_lsn), K(curr_reuse_lsn));
   }
   return ret;
 }
@@ -494,6 +536,8 @@ int LogGroupBuffer::fill_(const LSN &lsn,
     // seeking to buffer's beginning
     memcpy(data_buf_, data+first_part_len, data_len - first_part_len);
   }
+  PALF_LOG(TRACE, "fill data success", K(ret), K(lsn), K(data_len), K(start_pos), K(group_buf_tail_len),
+      K(first_part_len), "second_part_len", data_len - first_part_len);
   return ret;
 }
 }  // namespace palf

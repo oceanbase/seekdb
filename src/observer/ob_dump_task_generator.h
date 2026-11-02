@@ -31,6 +31,9 @@ class ObDumpTaskGenerator
        dump entity p_entity='0xffffffffff',slot_idx=1000
        dump chunk all
        dump chunk p_chunk='0xfffffffff'
+       set option leak_mod = 'xxx'
+       set option leak_rate = xxx
+       dump memory leak
     2. kill -62 pid
     3. See the results in log/memory_meta file
   */
@@ -43,7 +46,11 @@ class ObDumpTaskGenerator
     CONTEXT_ALL          = 0,
     CONTEXT              = 1,
     CHUNK_ALL           = 2,
+    CHUNK_OF_TENANT_CTX = 3,
     CHUNK               = 4,
+    SET_LEAK_MOD        = 5,
+    SET_LEAK_RATE       = 6,
+    MEMORY_LEAK         = 7,
   };
 #ifdef _WIN32
 #pragma pop_macro("CONTEXT_ALL")
@@ -52,6 +59,7 @@ public:
   static int generate_task_from_file();
 private:
   static int read_cmd(char *buf, int64_t len, int64_t &real_size);
+  static void  dump_memory_leak();
 };
 
 }

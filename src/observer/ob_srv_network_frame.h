@@ -17,10 +17,13 @@
 #ifndef _OCEABASE_OBSERVER_OB_SRV_NETWORK_FRAME_H_
 #define _OCEABASE_OBSERVER_OB_SRV_NETWORK_FRAME_H_
 
+#include "rpc/frame/ob_net_easy.h"
+#include "rpc/frame/ob_req_handler.h"
 #include "rpc/frame/ob_req_translator.h"
 #include "observer/ob_srv_xlator.h"
 #include "observer/ob_srv_deliver.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
+#include "observer/net/ob_ingress_bw_alloc_service.h"
 
 namespace oceanbase {
 namespace rpc {
@@ -36,19 +39,32 @@ namespace observer
 class ObSrvNetworkFrame
 {
 public:
+  enum { NET_IO_NORMAL_GID = 0, NET_IO_HP_GID = 64, NET_IO_BATCH_GID = 72 };
   explicit ObSrvNetworkFrame(ObGlobalContext &gctx);
 
   virtual ~ObSrvNetworkFrame();
 
   int init();
   void destroy();
-  int start();
+  int start(bool disable_tcp = false);
   void sql_nio_stop();
   void wait();
+  int stop();
 
   int reload_config();
+  int reload_ssl_config();
+  static int extract_expired_time(const char *const cert_file, int64_t &expired_time);
+  static uint64_t get_ssl_file_hash(const char *intl_file[3], const char *sm_file[5], bool &file_exist);
   ObSrvDeliver& get_deliver() { return deliver_; }
   inline rpc::frame::ObReqTranslator &get_xlator();
+  int reload_sql_thread_config();
+
+  static int reload_rpc_auth_method();
+
+  rootserver::ObIngressBWAllocService *get_ingress_service();
+  int net_endpoint_register(const ObNetEndpointKey &endpoint_key, int64_t expire_time);
+  int net_endpoint_predict_ingress(const ObNetEndpointKey &endpoint_key, int64_t &predicted_bw);
+  int net_endpoint_set_ingress(const ObNetEndpointKey &endpoint_key, int64_t assigned_bw);
 
 private:
   ObGlobalContext &gctx_;
@@ -58,6 +74,13 @@ private:
 
   // generic deliver
   ObSrvDeliver deliver_;
+  rootserver::ObIngressBWAllocService ingress_service_;
+
+  uint64_t last_ssl_info_hash_;
+  ObSpinLock lock_;
+  int64_t standby_fetchlog_bw_limit_;
+  uint64_t standby_fetchlog_bytes_;
+  int64_t standby_fetchlog_time_;
 
   DISALLOW_COPY_AND_ASSIGN(ObSrvNetworkFrame);
 }; // end of class ObSrvNetworkFrame

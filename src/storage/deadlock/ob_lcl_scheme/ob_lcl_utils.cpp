@@ -15,6 +15,7 @@
  */
 
 #include "ob_lcl_utils.h"
+#include "storage/deadlock/ob_deadlock_detector_mgr.h"
 
 namespace oceanbase
 {
@@ -23,16 +24,20 @@ namespace share
 namespace detector
 {
 
+OB_SERIALIZE_MEMBER(ObLCLLabel, addr_, id_, priority_);
+
 ObLCLLabel::ObLCLLabel(const uint64_t id,
                        const ObDetectorPriority &priority)
-  :id_(id),
+  :addr_(GCTX.self_addr()),
+  id_(id),
   priority_(priority)
 {
   // do nothing
 }
 
 ObLCLLabel::ObLCLLabel(const ObLCLLabel &rhs)
-  :id_(rhs.id_),
+  :addr_(rhs.addr_),
+  id_(rhs.id_),
   priority_(rhs.priority_)
 {
   // do nothing
@@ -40,11 +45,12 @@ ObLCLLabel::ObLCLLabel(const ObLCLLabel &rhs)
 
 bool ObLCLLabel::is_valid() const
 {
-  return priority_.is_valid() && INVALID_VALUE != id_;
+  return addr_.is_valid() && priority_.is_valid() && INVALID_VALUE != id_;
 }
 
 ObLCLLabel &ObLCLLabel::operator=(const ObLCLLabel &rhs)
 {
+  addr_ = rhs.addr_;
   id_ = rhs.id_;
   priority_ = rhs.priority_;
   return *this;
@@ -52,7 +58,7 @@ ObLCLLabel &ObLCLLabel::operator=(const ObLCLLabel &rhs)
 
 bool ObLCLLabel::operator==(const ObLCLLabel &rhs) const
 {
-  return priority_ == rhs.priority_ && id_ == rhs.id_;
+  return priority_ == rhs.priority_ && addr_ == rhs.addr_ && id_ == rhs.id_;
 }
 
 bool ObLCLLabel::operator<(const ObLCLLabel &rhs) const
@@ -61,8 +67,12 @@ bool ObLCLLabel::operator<(const ObLCLLabel &rhs) const
   if (priority_ < rhs.priority_) {
     ret = true;
   } else if (priority_ == rhs.priority_) {
-    if (id_ < rhs.id_) {
+    if (addr_ < rhs.addr_) {
       ret = true;
+    } else if (addr_ == rhs.addr_) {
+      if (id_ < rhs.id_) {
+        ret = true;
+      }
     }
   }
   return ret;

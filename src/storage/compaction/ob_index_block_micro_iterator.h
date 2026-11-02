@@ -98,6 +98,7 @@ private:
   blocksstable::ObDatumRange range_;
   blocksstable::ObMicroBlock micro_block_;
   blocksstable::ObStorageObjectHandle macro_handle_;
+  blocksstable::ObCGRowKeyTransHelper rowkey_helper_;
   common::ObArenaAllocator allocator_;
   bool is_inited_;
 

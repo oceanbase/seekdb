@@ -15,8 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_medium_list_checker.h"
-#include "storage/compaction/ob_extra_medium_info.h"
-#include "storage/compaction/ob_medium_compaction_info.h"
+#include "storage/compaction/ob_medium_compaction_mgr.h"
 
 namespace oceanbase
 {
@@ -44,6 +43,7 @@ int ObMediumListChecker::validate_medium_info_list(
   if (skip_validate) {
     // do nothing
   } else if (OB_FAIL(inner_check_medium_list(extra_info, medium_info_array, last_major_snapshot))) {
+    LOG_WARN("failed to inner check medium info list", K(ret));
   }
   return ret;
 }
@@ -57,13 +57,17 @@ int ObMediumListChecker::inner_check_medium_list(
   int64_t next_medium_info_idx = 0;
 
   if (OB_FAIL(check_extra_info(extra_info, last_major_snapshot))) {
+    LOG_WARN("failed to check extra info", KR(ret), K(last_major_snapshot), K(extra_info));
   } else if (nullptr == medium_info_array || medium_info_array->empty()) {
     // do nothing
   } else if (OB_FAIL(filter_finish_medium_info(*medium_info_array, last_major_snapshot, next_medium_info_idx))) {
+    LOG_WARN("failed to filter finish medium info", KR(ret), K(last_major_snapshot), K(next_medium_info_idx));
   } else if (next_medium_info_idx >= medium_info_array->count()) {
     // do nothing
   } else if (OB_FAIL(check_continue(*medium_info_array, next_medium_info_idx))) {
-  } else if (OB_FAIL(check_next_schedule_medium(*medium_info_array->at(next_medium_info_idx), last_major_snapshot))) {
+    LOG_WARN("failed to check medium list continue", KR(ret), K(last_major_snapshot), KPC(medium_info_array));
+  } else if (OB_FAIL(check_next_schedule_medium(*medium_info_array->at(next_medium_info_idx), last_major_snapshot, false/*force_check*/))) {
+    LOG_WARN("failed to check next schedule medium info", KR(ret), K(last_major_snapshot), KPC(medium_info_array), K(next_medium_info_idx));
   }
   return ret;
 }
@@ -79,6 +83,10 @@ int ObMediumListChecker::check_continue(
   } else if (OB_UNLIKELY(start_check_idx >= medium_info_array.count()
       || nullptr == (first_info = medium_info_array.at(start_check_idx)))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(start_check_idx), K(medium_info_array), KPC(first_info));
+  } else if (!first_info->from_cur_cluster()) {
+    // not from current cluster, maybe standby cluster,
+    // no need to check medium info continuity
   } else {
     int64_t prev_medium_snapshot = first_info->medium_snapshot_;
     const ObMediumCompactionInfo *info = nullptr;
@@ -86,8 +94,12 @@ int ObMediumListChecker::check_continue(
       info = medium_info_array.at(idx);
       if (OB_ISNULL(info)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("medium info ist null", K(ret), KPC(info), K(idx), K(medium_info_array));
       } else if (OB_UNLIKELY(prev_medium_snapshot != info->last_medium_snapshot_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("medium info list is not continuous", K(ret), K(prev_medium_snapshot),
+            "last_medium_snapshot", info->last_medium_snapshot_,
+            K(medium_info_array));
       } else {
         prev_medium_snapshot = info->medium_snapshot_;
       }
@@ -110,6 +122,7 @@ int ObMediumListChecker::filter_finish_medium_info(
     info = medium_info_array.at(idx);
     if (OB_ISNULL(info)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("medium info ist null", K(ret), KPC(info), K(idx), K(medium_info_array));
     } else if (info->medium_snapshot_ > last_major_snapshot) {
       break;
     }
@@ -128,6 +141,7 @@ int ObMediumListChecker::check_extra_info(
   if (last_major_snapshot > 0 && extra_info.last_medium_scn_ > 0) {
     if (OB_UNLIKELY(extra_info.last_medium_scn_ != last_major_snapshot)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("medium list is invalid for last major sstable", K(ret), K(extra_info), K(last_major_snapshot));
     }
   }
   return ret;
@@ -135,16 +149,49 @@ int ObMediumListChecker::check_extra_info(
 
 int ObMediumListChecker::check_next_schedule_medium(
     const ObMediumCompactionInfo &next_medium_info,
-    const int64_t last_major_snapshot)
+    const int64_t last_major_snapshot,
+    const bool force_check)
 {
   int ret = OB_SUCCESS;
   if (last_major_snapshot > 0 &&
+      ObMediumCompactionInfo::MEDIUM_COMPAT_VERSION_V2 <= next_medium_info.medium_compat_version_ &&
       next_medium_info.medium_snapshot_ > last_major_snapshot) {
-    if (OB_UNLIKELY(next_medium_info.last_medium_snapshot_ != last_major_snapshot)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("last medium snapshot in medium info is not equal to last "
-                "major sstable, medium info may lost",
-                KR(ret), K(next_medium_info), K(last_major_snapshot));
+    if (next_medium_info.from_cur_cluster()) { // same cluster_id
+      if (OB_UNLIKELY(next_medium_info.last_medium_snapshot_ != last_major_snapshot)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("last medium snapshot in medium info is not equal to last "
+                 "major sstable, medium info may lost",
+                 KR(ret), K(next_medium_info), K(last_major_snapshot));
+      }
+    } else if (next_medium_info.is_major_compaction()) { // check next freeze info in inner_table & medium_info
+      ObSEArray<share::ObFreezeInfo, 4> freeze_infos;
+
+      if (OB_FAIL(MTL_CALL_FREEZE_INFO_MGR(get_freeze_info_behind_major_snapshot,
+                                           last_major_snapshot,
+                                           false/*include_equal*/,
+                                           freeze_infos))) {
+        if (OB_ENTRY_NOT_EXIST != ret) {
+          LOG_WARN("failed to get freeze info", K(ret), K(last_major_snapshot));
+        } else if (force_check) {
+          ret = OB_EAGAIN;
+          LOG_WARN("next freeze info is not exist yet, need to check after refresh freeze info",
+                   KR(ret), K(next_medium_info), K(last_major_snapshot));
+        } else { // if force_check = false, not return errno; check next time
+          ret = OB_SUCCESS;
+        }
+      } else if (OB_UNLIKELY(freeze_infos.at(0).frozen_scn_.get_val_for_tx() < next_medium_info.medium_snapshot_)) {
+        if (next_medium_info.is_skip_tenant_major_) {
+          // ATTENTION! Critical diagnostic log, DO NOT CHANGE!!!
+          FLOG_INFO("medium info have marked skip tenant major, may have schema issue when schedule tenant major", KR(ret), K(next_medium_info), K(freeze_infos));
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("next major medium info may lost",
+            KR(ret), "freeze_version", freeze_infos.at(0).frozen_scn_.get_val_for_tx(), K(next_medium_info), K(last_major_snapshot));
+        }
+      }
+    } else {
+      // medium info from same cluster_id, can't make sure all medium info exists, so not check medium & last_major_snapshot
+      // like primary-standby relations: cluster1(A) -> cluster2(B) -> cluster1(C), medium info is dropped by B for different cluster_id
     }
   }
   return ret;

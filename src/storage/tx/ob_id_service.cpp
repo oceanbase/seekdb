@@ -15,10 +15,11 @@
  */
 
 #include "ob_id_service.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_timestamp_service.h"
 #include "ob_trans_id_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "sql/das/ob_das_id_service.h"
 
 namespace oceanbase
 {
@@ -53,7 +54,7 @@ int ObIDService::submit_log_with_lock_(const int64_t last_id, const int64_t limi
       }
     } else {
       if (REACH_TIME_INTERVAL(100 * 1000)) {
-        TRANS_LOG(ERROR, "submit log fail", K(ret), K(service_type_), K(last_id), K(limited_id));
+        TRANS_LOG(WARN, "submit log fail", K(ret), K(service_type_), K(last_id), K(limited_id));
       }
     }
   } else {
@@ -69,15 +70,30 @@ int ObIDService::check_and_fill_ls()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ls_)) {
+    ObLSService *ls_svr =  share::g_mp->ls_service();
+    ObLSHandle handle;
     ObLS *ls = nullptr;
 
-    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+    if (OB_ISNULL(ls_svr)) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(WARN, "log stream service is NULL", K(ret), K(IDS_LS));
+    } else if (OB_FAIL(ls_svr->get_ls(IDS_LS, handle, ObLSGetMod::TRANS_MOD))) {
+      TRANS_LOG(WARN, "get id service log stream failed", K(ret), K(IDS_LS));
+    } else if (OB_ISNULL(ls = handle.get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(WARN, "id service log stream not exist", K(ret), K(IDS_LS));
     } else {
       ls_ = ls;
-      TRANS_LOG(INFO, "ls set success", KP(ls_));
+      TRANS_LOG(INFO, "ls set success", K(IDS_LS), KP(ls_));
     }
   }
   return ret;
+}
+
+void ObIDService::reset_ls()
+{
+  WLockGuard guard(rwlock_);
+  ls_ = NULL;
 }
 
 int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
@@ -90,11 +106,11 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     }
     if (submit_log_ts_ == OB_INVALID_TIMESTAMP) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "invalid argument", K(ret), K_(service_type), K_(latest_log_ts));
+      TRANS_LOG(WARN, "invalid argument", K(ret), K_(service_type), K_(latest_log_ts), K_(self));
     } else if (ObTimeUtility::current_time() - submit_log_ts_ > SUBMIT_LOG_ALARM_INTERVAL) {
       if (log_interval_.reach()) {
         // ignore ret
-        TRANS_LOG(ERROR, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts));
+        TRANS_LOG(WARN, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts), K_(self));
       }
     }
   } else if (last_id < 0 || limited_id < 0) {
@@ -105,6 +121,7 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
       TRANS_LOG(INFO, "no log required", K(limited_id), K(ATOMIC_LOAD(&limited_id_)));
     }
   } else if (OB_FAIL(check_and_fill_ls())) {
+    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else {
     ObPresistIDLog ls_log(last_id, limited_id);
     palf::LSN lsn;
@@ -118,11 +135,13 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
       }
     }
     if (OB_FAIL(base_scn.convert_for_gts(base_ts))) {
+      TRANS_LOG(ERROR, "failed to convert scn", KR(ret), K(base_ts));
     } else if (OB_FAIL(cb_.serialize_ls_log(ls_log, service_type_))) {
+      TRANS_LOG(WARN, "serialize ls log error", KR(ret), K(cb_));
     } else {
       cb_.set_srv_type(service_type_);
       if (OB_FAIL(ls_->get_log_handler()->append(cb_.get_log_buf(), cb_.get_log_pos(), base_scn,
-                                                 false, &cb_, lsn, log_ts))) {
+                                                 false, false/*allow_compression*/, &cb_, lsn, log_ts))) {
         cb_.reset();
         if (REACH_TIME_INTERVAL(100 * 1000)) {
           TRANS_LOG(WARN, "submit ls log failed", KR(ret), K(service_type_));
@@ -154,7 +173,8 @@ int ObIDService::handle_submit_callback(const bool success, const int64_t limite
     (void)inc_update(&limited_id_, limited_id);
     rec_log_ts_.atomic_set(log_ts);
     latest_log_ts_.atomic_set(log_ts);
-    if (OB_FAIL(update_id_meta(false))) {
+    if (OB_FAIL(update_ls_id_meta(false))) {
+      TRANS_LOG(WARN, "update id meta of ls meta fail", K(ret), K(service_type_), K(limited_id), K(log_ts));
     }
   } else {
     // do nothing
@@ -177,8 +197,11 @@ int ObIDService::replay(const void *buffer, const int64_t buf_size,
   const char *log_buf = static_cast<const char *>(buffer);
   ObPresistIDLog ls_log;
   if (OB_FAIL(base_header.deserialize(log_buf, buf_size, tmp_pos))) {
+   TRANS_LOG(WARN, "log base header deserialize error", K(ret), KP(buffer), K(buf_size), K(lsn), K(log_scn));
   } else if (OB_FAIL(ls_log.deserialize((char *)buffer, buf_size, tmp_pos))) {
+    TRANS_LOG(WARN, "desrialize tx_log_body error", K(ret), KP(buffer), K(buf_size), K(lsn), K(log_scn));
   } else if (OB_FAIL(handle_replay_result(ls_log.get_last_id(), ls_log.get_limit_id(), log_scn))) {
+    TRANS_LOG(WARN, "handle replay result fail", K(ret), K(ls_log), K(log_scn));
   } else {
     // do nothing
   }
@@ -204,7 +227,8 @@ int ObIDService::handle_replay_result(const int64_t last_id, const int64_t limit
     if (log_ts > latest_log_ts_.atomic_get()) {
       rec_log_ts_.atomic_set(log_ts);
       latest_log_ts_.atomic_set(log_ts);
-      if (OB_FAIL(update_id_meta(false))) {
+      if (OB_FAIL(update_ls_id_meta(false))) {
+        TRANS_LOG(WARN, "update id meta of ls meta fail", K(ret), K(service_type_), K(last_id), K(limited_id), K(log_ts));
       }
     }
   }
@@ -212,11 +236,12 @@ int ObIDService::handle_replay_result(const int64_t last_id, const int64_t limit
   return ret;
 }
 
-int ObIDService::update_id_meta(const bool write_slog)
+int ObIDService::update_ls_id_meta(const bool write_slog)
 {
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_and_fill_ls())) {
+    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else if (write_slog) {
     ret = ls_->update_id_meta(service_type_,
                               ATOMIC_LOAD(&limited_id_),
@@ -230,6 +255,7 @@ int ObIDService::update_id_meta(const bool write_slog)
   }
 
   if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "update id meta fail", K(ret), K_(service_type));
   }
 
   return ret;
@@ -242,11 +268,31 @@ int ObIDService::flush(SCN &rec_scn)
   SCN latest_rec_log_ts = rec_log_ts_.atomic_get();
   if (latest_rec_log_ts <= rec_scn) {
     latest_rec_log_ts = rec_log_ts_.atomic_get();
-    if (OB_FAIL(update_id_meta(true))) {
+    if (OB_FAIL(update_ls_id_meta(true))) {
+      TRANS_LOG(WARN, "update id meta of ls meta fail", K(ret), K(service_type_));
     } else {
       rec_log_ts_.atomic_bcas(latest_rec_log_ts, SCN::max_scn());
     }
     TRANS_LOG(INFO, "flush", K(ret), K(service_type_), K(rec_log_ts_), K(limited_id_));
+  }
+
+  return ret;
+}
+
+int ObIDService::check_leader(bool &leader)
+{
+  int ret = OB_SUCCESS;
+  common::ObRole role = common::ObRole::INVALID_ROLE;
+  int64_t proposal_id = 0;
+
+  if (OB_FAIL(check_and_fill_ls())) {
+    TRANS_LOG(WARN, "ls set fail", K(ret));
+  } else if (OB_FAIL(ls_->get_log_handler()->get_role(role, proposal_id))) {
+    TRANS_LOG(WARN, "get ls role fail", K(ret));
+  } else if (common::ObRole::LEADER == role) {
+    leader = true;
+  } else {
+    leader = false;
   }
 
   return ret;
@@ -259,104 +305,90 @@ SCN ObIDService::get_rec_scn()
   return rec_log_ts;
 }
 
+int ObIDService::switch_to_follower_gracefully()
+{
+  // int ret = OB_SUCCESS;
+  // const int64_t expire_time = ObTimeUtility::current_time() + 100000;
+  // int locked = false;
+  // if (OB_SUCC(rwlock_.wrlock(expire_time))) {
+  //   locked = true;
+  // }
+  // while (is_logging_ && locked) {
+  //   rwlock_.unlock();
+  //   locked = false;
+  //   ObClockGenerator::usleep(1000);
+  //   if (ObTimeUtility::current_time() > expire_time) {
+  //     break;
+  //   }
+  //   if (OB_SUCC(rwlock_.wrlock(expire_time))) {
+  //     locked = true;
+  //   }
+  // }
+  // if (locked) {
+  //   const int64_t last_id = ATOMIC_LOAD(&last_id_);
+  //   const int64_t limited_id = ATOMIC_LOAD(&limited_id_);
+  //   // Caution: set limit id before submit log, make sure limit id <= last id
+  //   ATOMIC_STORE(&limited_id_, last_id);
+  //   //Submit log but do not require success to prevent blocking role switch
+  //   submit_log_(ATOMIC_LOAD(&last_id_), limited_id);
+  //   rwlock_.unlock();
+  //   locked = false;
+  // }
+  // TRANS_LOG(INFO, "switch to follower gracefully", K(ret), K(service_type_), K(locked));
+  TRANS_LOG(INFO, "switch to follower gracefully", K(last_id_), K(limited_id_), K(service_type_));
+  // There is no failure scenario for ObIDService to switch the follower,
+  // so return OB_SUCCESS directly.
+  return OB_SUCCESS;
+}
+
 int ObIDService::get_number(const int64_t range, const int64_t base_id, int64_t &start_id, int64_t &end_id)
 {
   int ret = OB_SUCCESS;
-  int64_t tmp_id = 0;
-  const int64_t last_id = ATOMIC_LOAD(&last_id_);
-  int64_t limit_id = ATOMIC_LOAD(&limited_id_);
-  const int64_t allocated_range = min(min(limit_id - base_id, limit_id - last_id), range);
-  if (allocated_range <= 0) {
-    ret = OB_EAGAIN;
+  bool leader = false;
+  if (OB_FAIL(check_leader(leader))) {
+    TRANS_LOG(WARN, "check leader fail", K(ret));
+  } else if (!leader) {
+    ret = OB_NOT_MASTER;
+    if (EXECUTE_COUNT_PER_SEC(10)) {
+      TRANS_LOG(WARN, "id service is not leader", K(ret), K_(service_type));
+    }
   } else {
-    if (base_id > last_id) {
-      if (ATOMIC_BCAS(&last_id_, last_id, base_id + allocated_range)) {
-        tmp_id = base_id;
+    int64_t tmp_id = 0;
+    const int64_t last_id = ATOMIC_LOAD(&last_id_);
+    int64_t limit_id = ATOMIC_LOAD(&limited_id_);
+    const int64_t allocated_range = min(min(limit_id - base_id, limit_id - last_id), range);
+    if (allocated_range <= 0) {
+      ret = OB_EAGAIN;
+    } else {
+      if (base_id > last_id) {
+        if (ATOMIC_BCAS(&last_id_, last_id, base_id + allocated_range)) {
+          tmp_id = base_id;
+        } else {
+          tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
+        }
       } else {
         tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
       }
-    } else {
-      tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
+      // Caution: get limit id again, compete with switch_to_follower_gracefully
+      limit_id = ATOMIC_LOAD(&limited_id_);
+      if (tmp_id >= limit_id) {
+        ret = OB_EAGAIN;
+      } else {
+        start_id = tmp_id;
+        end_id = min(start_id + allocated_range, limit_id);
+      }
     }
-    limit_id = ATOMIC_LOAD(&limited_id_);
-    if (tmp_id >= limit_id) {
-      ret = OB_EAGAIN;
-    } else {
-      start_id = tmp_id;
-      end_id = min(start_id + allocated_range, limit_id);
+    if (OB_EAGAIN == ret || (limited_id_ - last_id_) < (pre_allocated_range_ * 2 / 3)) {
+      const int64_t pre_allocated_id = min(max_pre_allocated_id_(base_id), max(base_id, limited_id_) + max(range * 10, pre_allocated_range_));
+      submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
     }
-  }
-  if (OB_EAGAIN == ret || (limited_id_ - last_id_) < (pre_allocated_range_ * 2 / 3)) {
-    const int64_t pre_allocated_id = min(max_pre_allocated_id_(base_id), max(base_id, limited_id_) + max(range * 10, pre_allocated_range_));
-    submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
   }
   // thread local, 4 seconds
-  // Rate-limit this process-wide diagnostic.
+  // TODO, tenant level
   if (TC_REACH_TIME_INTERVAL(4000000)) {
     TRANS_LOG(INFO, "get number", K(ret), K(service_type_), K(range), K(base_id), K(start_id), K(end_id));
   }
 	return ret;
-}
-
-int ObIDService::prepare_next_number(const int64_t base_id)
-{
-  int ret = OB_SUCCESS;
-  if (base_id < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid number preparation request", K(ret), K_(service_type), K(base_id));
-  } else {
-    const int64_t last_id = ATOMIC_LOAD(&last_id_);
-    const int64_t limited_id = ATOMIC_LOAD(&limited_id_);
-    const int64_t next_id = max(base_id, last_id);
-    if (limited_id > next_id) {
-      return OB_SUCCESS;
-    }
-    const int64_t max_pre_allocated_id = max_pre_allocated_id_(base_id);
-    const int64_t pre_allocated_step = max(static_cast<int64_t>(10), pre_allocated_range_);
-    const int64_t pre_allocated_id = max_pre_allocated_id <= next_id
-        || pre_allocated_step >= max_pre_allocated_id - next_id
-        ? max_pre_allocated_id
-        : next_id + pre_allocated_step;
-    const int submit_ret = submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
-    ret = OB_SUCCESS == submit_ret ? OB_EAGAIN : submit_ret;
-  }
-  return ret;
-}
-
-int ObIDService::allocate_number_(const int64_t range, const int64_t base_id,
-                                  int64_t &start_id, int64_t &end_id)
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_id = 0;
-  const int64_t last_id = ATOMIC_LOAD(&last_id_);
-  int64_t limit_id = ATOMIC_LOAD(&limited_id_);
-  const int64_t allocated_range = min(min(limit_id - base_id, limit_id - last_id), range);
-  if (allocated_range <= 0) {
-    ret = OB_EAGAIN;
-  } else {
-    if (base_id > last_id) {
-      if (ATOMIC_BCAS(&last_id_, last_id, base_id + allocated_range)) {
-        tmp_id = base_id;
-      } else {
-        tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
-      }
-    } else {
-      tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
-    }
-    // Caution: get limit id again, compete with switch_to_follower_gracefully
-    limit_id = ATOMIC_LOAD(&limited_id_);
-    if (tmp_id >= limit_id) {
-      ret = OB_EAGAIN;
-    } else {
-      start_id = tmp_id;
-      end_id = min(start_id + allocated_range, limit_id);
-    }
-  }
-  if (OB_EAGAIN == ret || (limited_id_ - last_id_) < (pre_allocated_range_ * 2 / 3)) {
-    const int64_t pre_allocated_id = min(max_pre_allocated_id_(base_id), max(base_id, limited_id_) + max(range * 10, pre_allocated_range_));
-    submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
-  }
-  return ret;
 }
 
 
@@ -374,8 +406,9 @@ int64_t ObIDService::max_pre_allocated_id_(const int64_t base_id)
 
 void ObIDService::get_virtual_info(int64_t &last_id, int64_t &limited_id, SCN &rec_scn,
                                    SCN &latest_log_ts, int64_t &pre_allocated_range,
-                                   int64_t &submit_log_ts)
+                                   int64_t &submit_log_ts, bool &is_master)
 {
+  int ret = OB_SUCCESS;
   RLockGuard guard(rwlock_);
   last_id = last_id_;
   limited_id = limited_id_;
@@ -383,8 +416,11 @@ void ObIDService::get_virtual_info(int64_t &last_id, int64_t &limited_id, SCN &r
   latest_log_ts = latest_log_ts_;
   pre_allocated_range = pre_allocated_range_;
   submit_log_ts = submit_log_ts_;
+  if (OB_FAIL(check_leader(is_master))) {
+    is_master = false;
+  }
   TRANS_LOG(INFO, "id service get virtual info", K_(last_id), K_(limited_id), K_(rec_log_ts),
-            K_(latest_log_ts), K_(pre_allocated_range), K_(submit_log_ts));
+            K_(latest_log_ts), K_(pre_allocated_range), K_(submit_log_ts), K(is_master), K(ret));
 }
 
 void ObIDService::get_all_id_service_type(int64_t *service_type)
@@ -399,10 +435,13 @@ int ObIDService::get_id_service(const int64_t id_service_type, ObIDService *&id_
   int ret = OB_SUCCESS;
   switch (id_service_type) {
   case transaction::ObIDService::TimestampService:
-    id_service = (ObIDService *)::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>();
+    id_service = (ObIDService *)share::g_mp->timestamp_service();
     break;
   case transaction::ObIDService::TransIDService:
-    id_service = (ObIDService *)::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>();
+    id_service = (ObIDService *)share::g_mp->trans_id_service();
+    break;
+  case transaction::ObIDService::DASIDService:
+    id_service = (ObIDService *)share::g_mp->dasid_service();
     break;
   default:
     ret = OB_ERR_UNEXPECTED;
@@ -421,7 +460,9 @@ int ObIDService::update_id_service(const ObAllIDMeta &id_meta)
     int64_t limited_id = 0;
     SCN latest_log_ts = SCN::min_scn();
     if (OB_FAIL(id_meta.get_id_meta(i, limited_id, latest_log_ts))) {
+      TRANS_LOG(WARN, "get id meta fail", K(ret), K(id_meta));
     } else if (OB_FAIL(get_id_service(i, id_service))) {
+      TRANS_LOG(WARN, "get id service fail", K(ret), K(i));
     } else if (OB_ISNULL(id_service)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "id service is null", K(ret));
@@ -463,6 +504,7 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
                     logservice::ObReplayBarrierType::NO_NEED_BARRIER,
                     service_type);
       if (OB_FAIL(base_header.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+        TRANS_LOG(WARN, "ObPresistIDLogCb serialize base header error", KR(ret), KP(log_buf_), K(pos_));
       }
       break;
     }
@@ -472,6 +514,17 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
                     logservice::ObReplayBarrierType::NO_NEED_BARRIER,
                     service_type);
       if (OB_FAIL(base_header.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+        TRANS_LOG(WARN, "ObPresistIDLogCb serialize base header error", KR(ret), KP(log_buf_), K(pos_));
+      }
+      break;
+    }
+    case ObIDService::ServiceType::DASIDService: {
+      logservice::ObLogBaseHeader
+              base_header(logservice::ObLogBaseType::DAS_ID_LOG_BASE_TYPE,
+                          logservice::ObReplayBarrierType::NO_NEED_BARRIER,
+                          service_type);
+      if (OB_FAIL(base_header.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+        TRANS_LOG(WARN, "ObPresistIDLogCb serialize base header error", KR(ret), KP(log_buf_), K(pos_));
       }
       break;
     }
@@ -483,6 +536,7 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ls_log.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+      TRANS_LOG(WARN, "ObPresistIDLogCb serialize ls_log error", KR(ret), KP(log_buf_), K(pos_));
     }
   }
   return ret;
@@ -495,12 +549,13 @@ int ObPresistIDLogCb::on_success()
   switch (id_srv_type_) {
     case ObIDService::ServiceType::TimestampService: {
       transaction::ObTimestampService *timestamp_service = nullptr;
-      if (OB_ISNULL(timestamp_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>())) {
+      if (OB_ISNULL(timestamp_service = share::g_mp->timestamp_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
         timestamp_service->test_lock();
         if (OB_FAIL(timestamp_service->handle_submit_callback(true, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "timestamp service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "timestamp service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
@@ -508,14 +563,29 @@ int ObPresistIDLogCb::on_success()
     }
     case ObIDService::ServiceType::TransIDService: {
       transaction::ObTransIDService *trans_id_service = nullptr;
-      if (OB_ISNULL(trans_id_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>())) {
+      if (OB_ISNULL(trans_id_service = share::g_mp->trans_id_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {
         trans_id_service->test_lock();
         if (OB_FAIL(trans_id_service->handle_submit_callback(true, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "trans id  service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "trans id service handle log callback", K(ret), K_(limited_id), K_(log_ts));
+      }
+      break;
+    }
+    case ObIDService::ServiceType::DASIDService: {
+      sql::ObDASIDService *das_id_service = nullptr;
+      if (OB_ISNULL(das_id_service = share::g_mp->dasid_service())) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "das id service is null", K(ret));
+      } else {
+        das_id_service->test_lock();
+        if (OB_FAIL(das_id_service->handle_submit_callback(true, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "das id service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
+        }
+        TRANS_LOG(INFO, "das id service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
       break;
     }
@@ -536,11 +606,12 @@ int ObPresistIDLogCb::on_failure()
   switch (id_srv_type_) {
     case ObIDService::ServiceType::TimestampService: {
       transaction::ObTimestampService *timestamp_service = nullptr;
-      if (OB_ISNULL(timestamp_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>())) {
+      if (OB_ISNULL(timestamp_service = share::g_mp->timestamp_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
         if (OB_FAIL(timestamp_service->handle_submit_callback(false, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "timestamp service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "timestamp service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
@@ -548,13 +619,27 @@ int ObPresistIDLogCb::on_failure()
     }
     case ObIDService::ServiceType::TransIDService: {
       transaction::ObTransIDService *trans_id_service = nullptr;
-      if (OB_ISNULL(trans_id_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>())) {
+      if (OB_ISNULL(trans_id_service = share::g_mp->trans_id_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {
         if (OB_FAIL(trans_id_service->handle_submit_callback(false, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "trans id  service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "trans id service handle log callback", K(ret), K_(limited_id), K_(log_ts));
+      }
+      break;
+    }
+    case ObIDService::ServiceType::DASIDService: {
+      sql::ObDASIDService *das_id_service = nullptr;
+      if (OB_ISNULL(das_id_service = share::g_mp->dasid_service())) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "das id service is null", K(ret));
+      } else {
+       if (OB_FAIL(das_id_service->handle_submit_callback(false, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "das id service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
+        }
+        TRANS_LOG(INFO, "das id service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
       break;
     }

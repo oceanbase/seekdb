@@ -60,14 +60,15 @@ double ObOptCostModelParameter::get_micro_block_rnd_cost(const OptSystemStat& st
 
 double ObOptCostModelParameter::get_project_column_cost(const OptSystemStat& stat,
                                                         int64_t type,
-                                                        bool is_rnd) const
+                                                        bool is_rnd,        
+                                                        bool use_column_store) const
 {
     if (stat.get_cpu_speed() <= 0) {
-        return project_params_[is_rnd][type];
+        return project_params_[use_column_store][is_rnd][type];
     } else if (type >=0 && type <= ObMaxTC) {
-        return project_params_[is_rnd][type] / stat.get_cpu_speed();
+        return project_params_[use_column_store][is_rnd][type] / stat.get_cpu_speed();
     } else {
-        return project_params_[is_rnd][0] / stat.get_cpu_speed();
+        return project_params_[use_column_store][is_rnd][0] / stat.get_cpu_speed();
     }
 }
 
@@ -212,6 +213,24 @@ double ObOptCostModelParameter::get_px_batch_rescan_per_row_cost(const OptSystem
         return PX_BATCH_RESCAN_PER_ROW_COST;
     } else {
         return PX_BATCH_RESCAN_PER_ROW_COST / stat.get_cpu_speed();
+    }
+}
+
+double ObOptCostModelParameter::get_das_rescan_per_row_rpc_cost(const OptSystemStat& stat) const
+{
+    if (stat.get_network_speed() <= 0) {
+        return DAS_RESCAN_PER_ROW_RPC_COST;
+    } else {
+        return DAS_RESCAN_PER_ROW_RPC_COST / stat.get_network_speed();
+    }
+}
+
+double ObOptCostModelParameter::get_das_batch_rescan_per_row_rpc_cost(const OptSystemStat& stat) const
+{
+    if (stat.get_network_speed() <= 0) {
+        return DAS_BATCH_RESCAN_PER_ROW_RPC_COST;
+    } else {
+        return DAS_BATCH_RESCAN_PER_ROW_RPC_COST / stat.get_network_speed();
     }
 }
 

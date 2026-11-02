@@ -18,7 +18,7 @@
 
 #include "ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "sql/pl/ob_pl.h"
+#include "pl/ob_pl.h"
 
 namespace oceanbase
 {
@@ -31,7 +31,8 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObExprPLSQLVariable, ObFuncExprOperator), plsql_line_, plsql_variable_);
 
 ObExprPLSQLVariable::ObExprPLSQLVariable(ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc, T_FUN_PLSQL_VARIABLE, N_PLSQL_VARIABLE, 0, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
+    : ObFuncExprOperator(alloc, T_FUN_PLSQL_VARIABLE, N_PLSQL_VARIABLE, 0, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
+                         false, INTERNAL_IN_ORACLE_MODE),
       plsql_line_(OB_INVALID_INDEX),
       plsql_variable_(),
       allocator_(alloc)
@@ -43,8 +44,10 @@ int ObExprPLSQLVariable::assign(const ObExprOperator &other)
   const ObExprPLSQLVariable *tmp = dynamic_cast<const ObExprPLSQLVariable *>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       OX (this->plsql_line_ = tmp->plsql_line_);
       OZ (deep_copy_plsql_variable(tmp->plsql_variable_));
@@ -69,15 +72,21 @@ int ObExprPLSQLVariable::calc_result_type0(
     type.set_length_semantics(LS_BYTE);
   } else {
     const sql::ObSQLSessionInfo *session_info = type_ctx.get_session();
+    ObString plsql_ccflags;
     ObObj value;
     CK (OB_NOT_NULL(session_info));
     // may plsql relative system variables, try it.
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(session_info->get_sys_variable_by_name(plsql_variable_, value))) {
+    } else if (0 == plsql_variable_.case_compare("PLSQL_CCFLAGS")
+        || OB_FAIL(session_info->get_sys_variable_by_name(plsql_variable_, value))) {
       // not system variable
-      if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
+      if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret
+          // plsql_ccflags may rewrite by itself.
+          || 0 == plsql_variable_.case_compare("PLSQL_CCFLAGS")) {
+        // then may plsql_ccflags, try it.
         ret = OB_SUCCESS;
-        value.set_null();
+        OX (plsql_ccflags = session_info->get_plsql_ccflags());
+        OZ (get_key_value(plsql_ccflags, plsql_variable_, value));
         OX (type.set_meta(value.get_meta()));
         OX (type.set_collation_type(ObCharset::get_system_collation()));
         if (OB_SUCC(ret) && value.is_string_type()) {
@@ -85,6 +94,7 @@ int ObExprPLSQLVariable::calc_result_type0(
           type.set_length_semantics(LS_BYTE);
         }
       } else {
+        LOG_WARN("failed to get system variable by name", K(ret), K(plsql_variable_));
       }
     } else {
       type.set_meta(value.get_meta());
@@ -135,6 +145,140 @@ int ObExprPLSQLVariable::get_plsql_unit(common::ObObj &result,
   return ret;
 }
 
+// check valid identifiled
+int ObExprPLSQLVariable::check_key(const common::ObString &v)
+{
+  int ret = OB_SUCCESS;
+  ObString key = v;
+  bool valid = true;
+  key = key.trim();
+  if (!key.empty()
+      && ((key.ptr()[0] >= 'a' && key.ptr()[0] <= 'z')
+           || (key.ptr()[0] >= 'A' && key.ptr()[0] <= 'Z'))) {
+    for (int64_t i = 1; valid && i < key.length(); ++i) {
+      if (key.ptr()[i] == '_'
+          || key.ptr()[i] == '$'
+          || key.ptr()[i] == '#'
+          || (key.ptr()[i] >= '0' && key.ptr()[i] <= '9')
+          || ((key.ptr()[i] >= 'a' && key.ptr()[i] <= 'z')
+               || (key.ptr()[i] >= 'A' && key.ptr()[i] <= 'Z'))) {
+        // do nothing ...
+      } else {
+        valid = false;
+      }
+    }
+  } else {
+    valid = false;
+  }
+  if (!valid) {
+    ret = OB_ERR_INVALID_PLSQL_CCFLAGS;
+    LOG_WARN("OBE-39962: invalid parameter for PLSQL_CCFLAGS", K(ret), K(v));
+  }
+  return ret;
+}
+
+int ObExprPLSQLVariable::check_value(
+  const common::ObString &v, ObObj &val_obj)
+{
+  int ret = OB_SUCCESS;
+  ObString val = v;
+  val = val.trim();
+  if (0 == val.case_compare("NULL")) {
+    val_obj.set_null();
+  } else if (0 == val.case_compare("TRUE")) {
+    val_obj.set_tinyint(1);
+  } else if (0 == val.case_compare("FALSE")) {
+    val_obj.set_tinyint(0);
+  } else {
+    char buf[OB_TMP_BUF_SIZE_256 + 1];
+    int64_t int_val = 0;
+    STRNCPY(buf, val.ptr(), val.length());
+    OX (buf[val.length()] = '\0');
+    OZ (ob_atoll(buf, int_val));
+    CK (int_val > -2147483647 && int_val <= 2147483647);
+    OX (val_obj.set_int32(int_val));
+    if (OB_FAIL(ret)) {
+      ret = OB_ERR_INVALID_PLSQL_CCFLAGS;
+      LOG_WARN("OBE-39962: invalid parameter for PLSQL_CCFLAGS", K(ret), K(v));
+    }
+  }
+  return ret;
+}
+
+int ObExprPLSQLVariable::add_to_array(
+  const common::ObString &key, ObObj &val, ObIArray<std::pair<ObString, ObObj> > &result)
+{
+  int ret = OB_SUCCESS;
+  int64_t i = 0;
+  for (; i < result.count(); ++i) {
+    if (0 == key.case_compare(result.at(i).first)) {
+      result.at(i).second = val;
+      break;
+    }
+  }
+  if (i == result.count()) {
+    OZ (result.push_back(std::make_pair(key, val)));
+  }
+  return ret;
+}
+
+int ObExprPLSQLVariable::check_plsql_ccflags(
+  const common::ObString &v, ObIArray<std::pair<ObString, ObObj> > *result)
+{
+  int ret = OB_SUCCESS;
+  ObString v1 = v;
+  if (0 == v1.length()) {
+    // do nothing ...
+  } else if (v1.length() > OB_TMP_BUF_SIZE_256) {
+    ret = OB_ERR_PARAMETER_TOO_LONG;
+    LOG_WARN("OBE-32021: parameter value longer than string characters", K(ret), K(v));
+    LOG_USER_ERROR(OB_ERR_PARAMETER_TOO_LONG, static_cast<int32_t>(OB_TMP_BUF_SIZE_256));
+  } else {
+    while (OB_SUCC(ret) && v1.length() > 0) {
+      ObString value = v1.split_on(',');
+      ObString key;
+      ObObj val_obj;
+      if (value.empty()) {
+        value = v1;
+        v1.reset();
+      }
+      key = value.split_on(':');
+      key = key.trim();
+      OZ (check_key(key));
+      OZ (check_value(value, val_obj));
+      if (OB_SUCC(ret) && OB_NOT_NULL(result)) {
+        OZ (add_to_array(key, val_obj, *result));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprPLSQLVariable::get_key_value(
+  const common::ObString &plsql_ccflags, const common::ObString &key, ObObj &value)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<std::pair<common::ObString, ObObj>, 4> result;
+  bool found = false;
+  OZ (check_plsql_ccflags(plsql_ccflags, &result));
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; !found && i < result.count(); ++i) {
+      if (0 == key.case_compare(result.at(i).first)) {
+        value = result.at(i).second;
+        found = true;
+      }
+    }
+    if (!found) {
+      if (0 == key.case_compare("PLSQL_CCFLAGS")) {
+        value.set_varchar(plsql_ccflags);
+      } else {
+        value.set_null();
+      }
+    }
+  }
+  return ret;
+}
+
 int ObExprPLSQLVariable::cg_expr(ObExprCGCtx &op_cg_ctx,
                                  const ObRawExpr &raw_expr,
                                  ObExpr &rt_expr) const
@@ -145,6 +289,7 @@ int ObExprPLSQLVariable::cg_expr(ObExprCGCtx &op_cg_ctx,
   ObPLSQLVariableInfo *info = OB_NEWx(ObPLSQLVariableInfo, (&alloc), alloc, T_FUN_PLSQL_VARIABLE);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys, alloc));
     info->result_type_ = result_type_;
@@ -160,6 +305,7 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
   ObObj result;
   if (OB_ISNULL(info) || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get expr info", K(ret));
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_LINE")) {
     result.set_int32(info->plsql_line_);
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_UNIT")
@@ -168,23 +314,29 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
                        *ctx.exec_ctx_.get_my_session(), info->result_type_,
                        info->plsql_variable_));
   } else {
+    ObString plsql_ccflags;
     // may plsql relative system variables, try it.
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_sys_variable_by_name(info->plsql_variable_,
-                                                                                result))) {
+    } else if (0 == info->plsql_variable_.case_compare("PLSQL_CCFLAGS")
+        || OB_FAIL(ctx.exec_ctx_.get_my_session()->get_sys_variable_by_name(info->plsql_variable_,
+                                                                            result))) {
       // not system variable
-      if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
+      if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret
+          // plsql_ccflags may rewrite by itself.
+          || 0 == info->plsql_variable_.case_compare("PLSQL_CCFLAGS")) {
+        // then may plsql_ccflags, try it.
         ret = OB_SUCCESS;
-        result.set_null();
+        OX (plsql_ccflags = ctx.exec_ctx_.get_my_session()->get_plsql_ccflags());
+        OZ (get_key_value(plsql_ccflags, info->plsql_variable_, result));
         OX (result.set_collation_type(ObCharset::get_system_collation()));
       } else {
+        LOG_WARN("failed to get system variable by name", K(ret), K(info->plsql_variable_));
       }
     }
   }
   OZ(res.from_obj(result, expr.obj_datum_map_));
   if (is_lob_storage(result.get_type())) {
-    OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
-                           ctx.exec_ctx_.get_allocator(), res));
+    OZ(ob_adjust_lob_datum(result, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), res));
   }
   OZ(expr.deep_copy_datum(ctx, res));
   return ret;

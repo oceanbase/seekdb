@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/obmp_auth_response.h"
+#include "src/sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 namespace oceanbase
 {
@@ -34,21 +35,37 @@ int ObMPAuthResponse::process()
   ObSMConnection *conn = NULL;
   sql::ObSQLSessionInfo *session = NULL;
   int64_t query_timeout = 0;
+  const ObMySQLRawPacket &mysql_pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
-  if (OB_ISNULL(conn = get_conn())) {
+  if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
+    LOG_WARN("failed to alloc easy buf", K(ret));
+  } else if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
+    LOG_WARN("failed to update last packet pos", K(ret));
+  } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get connection fail", K(conn), K(ret));
   } else if (OB_FAIL(get_session(session))) {
+    LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql session info is null", K(ret));
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
+    LOG_WARN("fail to get query timeout", K(ret));
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
+  } else if (OB_FAIL(process_extra_info(*session, mysql_pkt, need_response_error))) {
+    LOG_WARN("fail get process extra info", K(ret));
+  } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
+    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
+    LOG_WARN("failed to set login auth data", K(ret));
   } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
+      OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
   } else {
     conn->set_auth_phase();
     ObOKPParam ok_param; // use default values
     ok_param.is_on_change_user_ = true;
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+      LOG_WARN("fail to send ok pakcet in statistic response", K(ok_param), K(ret));
     }
   }
   if (OB_LIKELY(NULL != session)) {
@@ -59,6 +76,7 @@ int ObMPAuthResponse::process()
   }
   if (OB_FAIL(ret) && need_disconnect) {
     force_disconnect();
+    LOG_WARN("disconnect connection", KR(ret));
   }
   return ret;
 }
@@ -73,6 +91,7 @@ int ObMPAuthResponse::deserialize()
     sql::ObSQLSessionInfo *session = NULL;
     ObMySQLCapabilityFlags capability;
     if (OB_FAIL(get_session(session))) {
+      LOG_WARN("get session  fail", K(ret));
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("fail to get session info", K(ret), K(session));

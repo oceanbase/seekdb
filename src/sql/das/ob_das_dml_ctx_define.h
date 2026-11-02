@@ -21,15 +21,17 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_define.h"
-#include "data_plane/access/ob_dml_table_plan.h"
+#include "storage/ob_table_dml_param.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/resolver/dml/ob_hint.h"
-#include "data_plane/fts/ob_fts_parser_helper.h"
-#include "data_plane/fts/ob_fts_parser_helper.h"
-#include "data_plane/blocksstable/ob_datum_row_iterator.h"
-#include "data_plane/access/ob_lock_flag.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/blocksstable/ob_datum_row_iterator.h"
 namespace oceanbase
 {
+namespace storage
+{
+class ObDMLBaseParam;
+}
 namespace sql
 {
 typedef common::ObFixedArray<common::ObObjMeta, common::ObIAllocator> ObjMetaFixedArray;
@@ -75,7 +77,7 @@ public:
   IntFixedArray old_row_projector_;
   IntFixedArray new_row_projector_;
   common::ObTimeZoneInfo tz_info_;
-  data_plane::ObDmlTablePlan table_param_;
+  share::schema::ObTableDMLParam table_param_;
   union {
     uint64_t flags_;
     struct {
@@ -84,7 +86,7 @@ public:
       uint64_t is_batch_stmt_                   : 1;
       uint64_t is_insert_up_                    : 1;
       uint64_t reserved_compat_flag_0_          : 1;
-      uint64_t is_access_main_table_            : 1;
+      uint64_t is_access_mlog_as_master_table_  : 1;
       uint64_t is_access_vidx_as_master_table_  : 1; // FARM COMPAT WHITELIST for 4_2_1_release compatibility
       uint64_t is_update_partition_key_         : 1; // FARM COMPAT WHITELIST for 4_2_1_release compatibility
       uint64_t is_update_uk_                    : 1;
@@ -93,7 +95,8 @@ public:
       uint64_t is_update_pk_                    : 1;
       uint64_t is_vec_hnsw_index_vid_opt_       : 1;  // hnsw index vid opt for tables without pk
       uint64_t skip_check_schema_version_       : 1;  // skip storage schema_version validation for special internal writes
-      uint64_t reserved_                        : 51; //add new flag before reserved_
+      uint64_t reserved_                        : 46; //add new flag before reserved_
+      uint64_t compat_version_                  : 4; //prohibited to insert new flags between compat_version_ and reserved_
     };
   };
 protected:
@@ -112,7 +115,9 @@ protected:
       tz_info_(),
       table_param_(alloc),
       flags_(0)
-  {}
+  {
+    compat_version_ = 1; //notify observer to use new flags after 4.2.5.2
+  }
 };
 
 typedef common::ObFixedArray<ObDASDMLBaseCtDef*, common::ObIAllocator> DASDMLCtDefArray;
@@ -125,14 +130,14 @@ public:
                        K_(timeout_ts),
                        K_(sql_mode),
                        K_(prelock),
-                       K_(runtime_schema_version),
+                       K_(tenant_schema_version),
                        K_(is_for_foreign_key_check),
                        K_(affected_rows),
                        K_(is_immediate_row_conflict_check));
   int64_t timeout_ts_;
   ObSQLMode sql_mode_;
   bool prelock_;
-  int64_t runtime_schema_version_;
+  int64_t tenant_schema_version_;
   bool is_for_foreign_key_check_;
   int64_t affected_rows_;
   const DASDMLCtDefArray *related_ctdefs_;
@@ -142,9 +147,9 @@ protected:
   ObDASDMLBaseRtDef(ObDASOpType op_type)
     : ObDASBaseRtDef(op_type),
       timeout_ts_(-1),
-      sql_mode_(DEFAULT_MYSQL_MODE),
+      sql_mode_(DEFAULT_OCEANBASE_MODE),
       prelock_(false),
-      runtime_schema_version_(0),
+      tenant_schema_version_(0),
       is_for_foreign_key_check_(false),
       affected_rows_(0),
       related_ctdefs_(nullptr),
@@ -181,6 +186,7 @@ public:
     : ObDASDMLBaseRtDef(DAS_OP_TABLE_INSERT),
       need_fetch_conflict_(false),
       is_duplicated_(false),
+      direct_insert_task_id_(0),
       use_put_(false),
       ddl_task_id_(0)
   { }
@@ -188,6 +194,7 @@ public:
   INHERIT_TO_STRING_KV("ObDASBaseRtDef", ObDASDMLBaseRtDef,
                        K_(need_fetch_conflict),
                        K_(is_duplicated),
+                       K_(direct_insert_task_id),
                        K_(use_put),
                        K_(ddl_task_id));
 
@@ -196,6 +203,8 @@ public:
   // used to check whether duplicate_key error occurred, will be set in das_insert_op
   // not need to serialize
   bool is_duplicated_;
+  // used in direct-insert mode
+  int64_t direct_insert_task_id_;
   // use put semantics for overlay writing.
   bool use_put_;
   int64_t ddl_task_id_;
@@ -246,12 +255,12 @@ struct ObDASLockCtDef : ObDASDMLBaseCtDef
 public:
   ObDASLockCtDef(common::ObIAllocator &alloc)
     : ObDASDMLBaseCtDef(alloc, DAS_OP_TABLE_LOCK),
-      lock_flag_(data_plane::LF_NONE)
+      lock_flag_(storage::LF_NONE)
   { }
 
   INHERIT_TO_STRING_KV("ObDASDMLBaseCtDef", ObDASDMLBaseCtDef,
                        K_(lock_flag));
-  data_plane::ObLockFlag lock_flag_;
+  storage::ObLockFlag lock_flag_;
 };
 
 struct ObDASLockRtDef : ObDASDMLBaseRtDef
@@ -471,9 +480,7 @@ public:
 public:
   ObDASDMLIterator(const ObDASDMLBaseCtDef *das_ctdef,
                    ObDASWriteBuffer &write_buffer,
-                   common::ObIAllocator &alloc,
-                   common::ObISrsProvider *srs_provider,
-                   const common::ObLobReadOptions *lob_read_options)
+                   common::ObIAllocator &alloc)
     : write_buffer_(write_buffer),
       das_ctdef_(das_ctdef),
       row_projector_(nullptr),
@@ -482,9 +489,7 @@ public:
       cur_datum_rows_(nullptr),
       main_ctdef_(das_ctdef),
       domain_iter_(nullptr),
-      ft_doc_word_info_(nullptr),
-      srs_provider_(srs_provider),
-      lob_read_options_(lob_read_options)
+      ft_doc_word_info_(nullptr)
   {
     set_ctdef(das_ctdef);
     batch_size_ = MIN(write_buffer_.get_row_cnt(), DEFAULT_BATCH_SIZE);
@@ -493,11 +498,6 @@ public:
   virtual int get_next_row(blocksstable::ObDatumRow *&datum_row) override;
   virtual int get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &row_count);
   ObDASWriteBuffer &get_write_buffer() { return write_buffer_; }
-  common::ObISrsProvider *get_srs_provider() const { return srs_provider_; }
-  const common::ObLobReadOptions *get_lob_read_options() const
-  {
-    return lob_read_options_;
-  }
   virtual void reset() override { }
   int rewind(const ObDASDMLBaseCtDef *das_ctdef, const ObFTDocWordInfo *ft_doc_word_info);
 
@@ -516,11 +516,42 @@ private:
   const ObDASDMLBaseCtDef *main_ctdef_;
   ObDomainDMLIterator *domain_iter_;
   const ObFTDocWordInfo *ft_doc_word_info_;
-  common::ObISrsProvider *srs_provider_;
-  const common::ObLobReadOptions *lob_read_options_;
   int64_t batch_size_;
 };
 
+class ObDASMLogDMLIterator : public blocksstable::ObDatumRowIterator
+{
+public:
+  // support get next datum row
+  ObDASMLogDMLIterator(
+      const share::ObLSID &ls_id,
+      const ObTabletID &tablet_id,
+      const storage::ObDMLBaseParam &dml_param,
+      ObDatumRowIterator *iter,
+      ObDASOpType op_type)
+    : ls_id_(ls_id),
+      tablet_id_(tablet_id),
+      dml_param_(dml_param),
+      row_iter_(iter),
+      op_type_(op_type),
+      is_old_row_(false)
+  {
+    if ((DAS_OP_TABLE_UPDATE == op_type_)
+        || (DAS_OP_TABLE_INSERT == op_type_)) {
+      is_old_row_ = true;
+    }
+  }
+  virtual ~ObDASMLogDMLIterator() {}
+  virtual int get_next_row(blocksstable::ObDatumRow *&datum_row) override;
+
+private:
+  const share::ObLSID &ls_id_;
+  const ObTabletID &tablet_id_;
+  const storage::ObDMLBaseParam &dml_param_;
+  ObDatumRowIterator *row_iter_;
+  ObDASOpType op_type_;
+  bool is_old_row_;
+};
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* DEV_SRC_SQL_DAS_OB_DAS_DML_CTX_DEFINE_H_ */

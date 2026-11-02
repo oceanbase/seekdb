@@ -17,8 +17,6 @@
 #ifndef OCEANBASE_STORAGE_OB_STORAGE_LOG_WRITER_H_
 #define OCEANBASE_STORAGE_OB_STORAGE_LOG_WRITER_H_
 
-#include <mutex>
-
 #include "lib/oblog/ob_base_log_writer.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/queue/ob_fixed_queue.h"
@@ -30,8 +28,7 @@
 #include "storage/slog/ob_storage_log_write_buffer.h"
 #include "storage/slog/ob_storage_log_nop_log.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
-#include "lib/lock/ob_scond.h"
-#include "lib/thread/thread_pool.h"
+#include "lib/thread/thread_mgr_interface.h"
 
 namespace oceanbase
 {
@@ -51,7 +48,6 @@ public:
       const int64_t max_log_size,
       const blocksstable::ObLogFileSpec &log_file_spec);
   virtual int start() override;
-  virtual void stop() override;
   virtual void wait() override;
   void destroy();
   common::ObLogCursor get_cur_cursor();
@@ -60,7 +56,6 @@ public:
   int get_using_disk_space(int64_t &using_space) const;
 
   int start_log(const common::ObLogCursor &start_cursor);
-  int append_log(common::ObIBaseLogItem &log_item, const uint64_t timeout_us);
 
 private:
   static const int64_t FLUSH_THREAD_IDLE_INTERVAL_US = 1000 * 1000; // 1s
@@ -112,38 +107,29 @@ private:
 			const ObStorageLogItem &log_item,
 			const int64_t used_len);
 
+  static int check_server_lease();
+
 private:
-  class ObSLogWriteRunner : public lib::ThreadPool
+  class ObSLogWriteRunner : public lib::TGRunnable
   {
   public:
     ObSLogWriteRunner();
     ~ObSLogWriteRunner();
 
-    static ObSLogWriteRunner &get_instance();
-    int register_writer(ObStorageLogWriter *log_writer);
-    void unregister_writer(ObStorageLogWriter *log_writer);
+    int init(ObStorageLogWriter *log_writer);
     int start();
-    void notify();
-    void stop_and_wait_if_idle();
-
-  private:
-    static const int64_t MAX_LOG_WRITER_COUNT = 2;
-    void run();
-    void stop_and_wait();
+    void destroy();
+    void stop();
+    void wait();
     virtual void run1() override;
 
-    ObStorageLogWriter *log_writers_[MAX_LOG_WRITER_COUNT];
-    int64_t next_writer_idx_;
+  private:
+    ObStorageLogWriter *log_writer_;
+    int tg_id_;
     bool is_inited_;
-    bool is_started_;
-    std::mutex writer_mutex_;
-    common::SimpleCond wakeup_cond_;
   };
 
-  void flush_log_once() { ObBaseLogWriter::flush_log_once(); }
-
 private:
-  bool is_registered_;
   bool is_inited_;
   int64_t flush_seq_;
   int64_t write_align_size_;
@@ -161,6 +147,7 @@ private:
 
   common::ObLogFileHandler file_handler_;
   ObStorageLogWriteBuffer batch_write_buf_;
+  ObSLogWriteRunner slog_write_runner_;
 };
 
 

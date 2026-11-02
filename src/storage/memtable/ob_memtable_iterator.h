@@ -20,6 +20,9 @@
 #include "share/ob_define.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
+#include "lib/statistic_event/ob_stat_event.h"
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/memtable/ob_memtable_key.h"
 #include "storage/memtable/ob_memtable_single_row_reader.h"
@@ -40,6 +43,8 @@ struct ObTransNodeDMLStat;
 
 namespace memtable
 {
+class ObMemtableBlockRowScanner;
+
 class ObIMemtableIterator : public storage::ObStoreRowIterator
 {
 public:
@@ -48,6 +53,7 @@ public:
   virtual int get_next_row(const blocksstable::ObDatumRow *&row) {
     int ret = common::OB_SUCCESS;
     if (OB_SUCC(inner_get_next_row(row))) {
+      EVENT_INC(ObStatEventIds::MEMSTORE_READ_ROW_COUNT);
     }
     return ret;
   }
@@ -100,6 +106,7 @@ private:
 
 class ObMemtableScanIterator : public ObIMemtableIterator {
 public:
+  friend class ObMemtableBlockReader;
   ObMemtableScanIterator();
   virtual ~ObMemtableScanIterator();
   int set_range(const blocksstable::ObDatumRange &range);
@@ -117,6 +124,9 @@ protected:
                  storage::ObITable *table,
                  const void *query_range);
 
+private:
+  int enable_block_scan_(const storage::ObTableIterParam &param, storage::ObTableAccessContext &context);
+
 public:
   static const int64_t ROW_ALLOCATOR_PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
   static const int64_t CELL_ALLOCATOR_PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
@@ -127,6 +137,7 @@ protected:
   bool is_scan_start_;
   const storage::ObTableIterParam *param_;
   storage::ObTableAccessContext *context_;
+  ObMemtableBlockRowScanner *mt_blk_scanner_;
   ObMemtableSingleRowReader single_row_reader_;
   blocksstable::ObDatumRange cur_range_;
   ObMemtable *memtable_;
@@ -223,7 +234,7 @@ public:
     SCAN_MULTI_VERSION_ROW,
     SCAN_END
   };
-  TO_STRING_KV(KPC_(context), K_(row), KPC_(key), KPC_(value_iter), K_(scan_state));
+  TO_STRING_KV(KPC_(context), K_(row), KPC_(key), KPC_(value_iter), K_(scan_state), K_(enable_delete_insert));
 protected:
   virtual int inner_get_next_row(const blocksstable::ObDatumRow *&row);
   virtual void row_reset();
@@ -245,6 +256,7 @@ protected:
   int iterate_compacted_row_value_(blocksstable::ObDatumRow &row);
   int iterate_uncommitted_row_value_(blocksstable::ObDatumRow &row);
   int iterate_multi_version_row_value_(blocksstable::ObDatumRow &row);
+  int iterate_delete_insert_compacted_row_value_(blocksstable::ObDatumRow &row);
 
 protected:
   struct ObOuputRowValidateChecker
@@ -263,6 +275,7 @@ protected:
 protected:
   const uint64_t MAGIC_;
   bool is_inited_;
+  bool enable_delete_insert_;
   const storage::ObITableReadInfo *read_info_;
   ObMemtableKey *start_key_;
   ObMemtableKey *end_key_;

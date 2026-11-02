@@ -27,18 +27,10 @@
 #include "storage/lob/ob_lob_iterator.h"
 #include "storage/lob/ob_lob_meta_manager.h"
 #include "share/ob_i_lob_read_service.h"  // implements the lob-read domain port(dependency inversion)
+#include "storage/ob_storage_rpc.h"
 
 namespace oceanbase
 {
-namespace blocksstable
-{
-struct ObStorageDatum;
-}
-namespace common
-{
-struct ObLobDiffHeader;
-}
-
 namespace storage
 {
 
@@ -71,8 +63,8 @@ private:
   {}
 public:
   ~ObLobManager() { destroy(); }
-  static int server_module_new(ObLobManager *&m);
-  // Server module lifecycle.
+  static int mtl_new(ObLobManager *&m);
+  // MTL 
   int init();
   int start();
   int stop();
@@ -81,9 +73,7 @@ public:
 
   // Only use for default lob col val
   static int fill_lob_header(ObIAllocator &allocator, ObString &data, ObString &out);
-  static int fill_lob_header(
-      ObIAllocator &allocator,
-      blocksstable::ObStorageDatum &datum);
+  static int fill_lob_header(ObIAllocator &allocator, ObStorageDatum &datum);
   static int fill_lob_header(ObIAllocator &allocator,
                              const ObIArray<share::schema::ObColDesc> &column_ids,
                              blocksstable::ObDatumRow &datum_row);
@@ -151,7 +141,7 @@ public:
                       int64_t timeout,
                       ObLobLocatorV2 &lob);
 
-  // ===== common::ObILobReadService port implementation (injected by the server module provider) =====
+  // ===== common::ObILobReadService port implementation(lob-read domain, called through share injection via MTL)=====
   virtual int get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
                                        common::ObCollationType cs_type,
                                        bool has_lob_header,
@@ -230,9 +220,7 @@ private:
 
   int query_outrow(ObLobAccessParam& param, ObLobQueryIter *&result);
   int query_outrow(ObLobAccessParam& param, ObString &data);
-  int process_diff(ObLobAccessParam& param,
-                   ObLobLocatorV2& lob_locator,
-                   common::ObLobDiffHeader *diff_header);
+  int process_diff(ObLobAccessParam& param, ObLobLocatorV2& lob_locator, ObLobDiffHeader *diff_header);
   int prepare_outrow_locator(ObLobAccessParam& param, ObLobDataInsertTask &task);
   int prepare_char_len(ObLobAccessParam& param, ObLobDiskLocatorBuilder &locator_builder, ObLobDataInsertTask &task);
   int prepare_lob_id(ObLobAccessParam& param, ObLobDiskLocatorBuilder &locator_builder);

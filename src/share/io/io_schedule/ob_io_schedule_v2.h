@@ -23,17 +23,17 @@ namespace oceanbase
 namespace common
 {
 
-class ObIOScheduler
+class ObTenantIOSchedulerV2
 {
 public:
-  ObIOScheduler() {}
-  ~ObIOScheduler() {}
-  int init(const ObIOServiceConfig &io_config) {
+  ObTenantIOSchedulerV2() {}
+  ~ObTenantIOSchedulerV2() {}
+  int init(const ObTenantIOConfig &io_config) {
     UNUSED(io_config);
     return OB_SUCCESS;
   }
   void destroy() {}
-  int update_config(const ObIOServiceConfig &io_config) {
+  int update_config(const ObTenantIOConfig &io_config) {
     UNUSED(io_config);
     return OB_SUCCESS;
   }

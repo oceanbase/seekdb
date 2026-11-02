@@ -74,33 +74,46 @@ void ObKVCacheHazardSlot::delete_node(ObKVCacheHazardNode &node)
 
 void ObKVCacheHazardSlot::retire(const uint64_t version)
 {
-  while(!ATOMIC_BCAS(&is_retiring_, false, true)) {
-    // wait until get retiring
-    PAUSE();
-  }
-
-  ObKVCacheHazardNode *head = ATOMIC_LOAD(&delete_list_);
-  if (nullptr != head) {
-    if (version > last_retire_version_) {
-      (void) ATOMIC_SET(&last_retire_version_, version);
-    }
-    ObKVCacheHazardNode *temp_node = head;
-    while (temp_node != (head = ATOMIC_VCAS(&delete_list_, temp_node, nullptr))) {
-      temp_node = head;
+  if (version > ATOMIC_LOAD(&last_retire_version_) || true) {
+    while(!ATOMIC_BCAS(&is_retiring_, false, true)) {
+      // wait until get retiring
+      PAUSE();
     }
 
-    int64_t retire_count = 0;
-    while (head != nullptr) {
-      temp_node = head;
-      head = head->get_next();
-      temp_node->retire();
-      ++retire_count;
+    ObKVCacheHazardNode *head = ATOMIC_LOAD(&delete_list_);
+    if (nullptr != head) {
+      if (version > last_retire_version_) {
+        (void) ATOMIC_SET(&last_retire_version_, version);
+      }
+      ObKVCacheHazardNode *temp_node = head;
+      while (temp_node != (head = ATOMIC_VCAS(&delete_list_, temp_node, nullptr))) {
+        temp_node = head;
+      }
+
+      int64_t retire_count = 0;
+      ObKVCacheHazardNode *remain_list = nullptr;
+      while (head != nullptr) {
+        temp_node = head;
+        head = head->get_next();
+        if (temp_node->get_version() < version ||
+            (true && true)) {
+          temp_node->retire();
+          temp_node = nullptr;
+          ++retire_count;
+        } else {
+          temp_node->set_next(remain_list);
+          remain_list = temp_node;
+        }
+      }
+      if (remain_list != nullptr) {
+        add_nodes(*remain_list);
+      }
+      if (retire_count > 0) {
+        ATOMIC_SAF(&waiting_nodes_count_, retire_count);
+      }
     }
-    if (retire_count > 0) {
-      ATOMIC_SAF(&waiting_nodes_count_, retire_count);
-    }
+    ATOMIC_SET(&is_retiring_, false);  // return retiring
   }
-  ATOMIC_SET(&is_retiring_, false);  // return retiring
 }
 
 void ObKVCacheHazardSlot::add_nodes(ObKVCacheHazardNode &list)
@@ -161,6 +174,7 @@ int ObKVCacheHazardStation::init(const int64_t waiting_node_threshold, const int
     slot_num_ = slot_num;
     inited_ = true;
   }
+  COMMON_LOG(DEBUG, "Hazard station init details", K(ret), K(waiting_node_threshold_), K(slot_num_));
 
   return ret;
 }
@@ -257,6 +271,7 @@ void ObKVCacheHazardStation::release(const int64_t slot_id)
   }
 
   if (OB_FAIL(ret)) {
+    COMMON_LOG(ERROR, "Fail to release version", K(ret));
   }
 }
 
@@ -275,7 +290,7 @@ int ObKVCacheHazardStation::retire()
   }
 
   {
-    COMMON_LOG(INFO, "retire hazard map node details", K(ret));
+    COMMON_LOG(INFO, "erase tenant hazard map node details", K(ret));
   }
 
   return ret;
@@ -309,6 +324,7 @@ int ObKVCacheHazardStation::print_current_status() const
           } else if (OB_FAIL(ret = databuff_printf(buf, BUFLEN, ctxpos,
                   "[KVCACHE-HAZARD] i=%8ld | acquire_version=%12lu | waiting_nodes_count=%8ld | last_retire_version=%8lu |\n",
                   i, acquired_version, waiting_nodes_count, slot.get_last_retire_version()))) {
+            COMMON_LOG(WARN, "Fail to write data buf", K(ret), K(ctxpos), K(BUFLEN));
           }
         }
         if (OB_SUCC(ret)) {

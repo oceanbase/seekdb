@@ -21,7 +21,6 @@ namespace oceanbase
 {
 namespace storage
 {
-using common::ObLobDiffHeader;
 /*************ObLobQueryIter*****************/
 int ObLobQueryIter::fill_buffer(ObString& buffer, const ObString &data, ObString &remain_data)
 {
@@ -114,9 +113,12 @@ int ObLobInRowQueryIter::get_next_row(ObString& buffer)
   ObString new_remain_data;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("iter is invalid.", K(ret));
   } else if (remain_data_.length() == 0) {
     ret = OB_ITER_END;
+    LOG_DEBUG("not data to write", KPC(this));
   } else if (OB_FAIL(fill_buffer(buffer, remain_data_, new_remain_data))) {
+    LOG_WARN("fill buffer fail", K(ret), KPC(this));
   } else {
     LOG_DEBUG("fill full", K(buffer.length()), K(buffer.size()), K(new_remain_data.length()), K(remain_data_.length()), KPC(this));
     remain_data_ = new_remain_data;
@@ -140,7 +142,9 @@ int ObLobOutRowQueryIter::open(ObLobAccessParam &param, ObLobMetaManager *lob_me
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(lob_meta_mngr->scan(param, meta_iter_))) {
+    LOG_WARN("fail to do lob query with retry", K(ret), K(param_));
   } else if (OB_FAIL(param_.assign(param))) {
+    LOG_WARN("assign fail", K(ret), K(param));
   } else {
     is_reverse_ = param.scan_backward_;
     cs_type_ = param.coll_type_;
@@ -155,6 +159,7 @@ int ObLobOutRowQueryIter::get_next_row(ObString& buffer)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("iter is invalid.", K(ret));
   } else {
     bool has_fill_full = false;
     uint64_t st_len = buffer.length();
@@ -163,6 +168,7 @@ int ObLobOutRowQueryIter::get_next_row(ObString& buffer)
     while (OB_SUCC(ret) && !has_fill_full) {
       // first try fill buffer remain data to output
       if (OB_FAIL(fill_buffer(buffer, last_data_, remain_data))) {
+        LOG_WARN("fill buffer fail", K(ret) ,K(buffer.length()), K(buffer.size()), K(remain_data.length()), K(last_data_.length()));
       } else if (buffer.remain() == 0 || remain_data.length() > 0) {
         LOG_DEBUG("fill full", K(buffer.length()), K(buffer.size()), K(remain_data.length()), K(last_data_.length()));
         has_fill_full = true;
@@ -170,6 +176,7 @@ int ObLobOutRowQueryIter::get_next_row(ObString& buffer)
       } else if (OB_FALSE_IT(last_data_.reset())) {
       } else if (OB_FAIL(meta_iter_.get_next_row(block_data))) {
         if (ret != OB_ITER_END) {
+          LOG_WARN("get next query result failed.", K(ret), K(param_));
         }
       } else {
         last_data_ = block_data;
@@ -210,8 +217,11 @@ int ObLobPartialUpdateRowIter::open(ObLobAccessParam &param, ObLobLocatorV2 &del
   int64_t data_len = diff_header->persist_loc_size_;
   int64_t pos = 0;
   if (OB_FAIL(partial_data_.init())) {
+    LOG_WARN("map create fail", K(ret));
   } else if (OB_FAIL(partial_data_.deserialize(buf, data_len, pos))) {
+    LOG_WARN("deserialize partial data fail", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(partial_data_.sort_index())) {
+    LOG_WARN("sort_index fail", K(ret), K(data_len), K(partial_data_));
   }
   return ret;  
 }
@@ -234,11 +244,13 @@ int ObLobPartialUpdateRowIter::get_next_row(int64_t &offset, ObLobMetaInfo *&old
             *param_, param_->lob_data_->id_, idx.seq_id_,
             old_data.length(), old_data.length(), old_data,
             old_meta_info_))) {
+          LOG_WARN("construct old lob_meta_info fail", K(ret), K(idx), K(old_data));
         } else if (OB_FAIL(ObLobMetaUtil::construct(
             *param_, param_->lob_data_->id_, idx.seq_id_,
             idx.byte_len_, idx.byte_len_,
             ObString(idx.byte_len_, chunk_data.data_.ptr() + idx.pos_),
             new_meta_info_))) {
+          LOG_WARN("construct new lob_meta_info fail", K(ret), K(idx), K(chunk_data));
         } else {
           offset = idx.offset_;
           old_info = &old_meta_info_;
@@ -249,6 +261,7 @@ int ObLobPartialUpdateRowIter::get_next_row(int64_t &offset, ObLobMetaInfo *&old
           idx.byte_len_, idx.byte_len_,
           ObString(idx.byte_len_, chunk_data.data_.ptr() + idx.pos_),
           new_meta_info_))) {
+        LOG_WARN("construct new lob_meta_info fail", K(ret), K(idx), K(chunk_data));
       } else {
         offset = idx.offset_;
         new_info = &new_meta_info_;

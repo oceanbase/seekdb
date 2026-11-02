@@ -1,0 +1,38 @@
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int) merge_engine = delete_insert;
+alter system major freeze;
+select * from t1;
+c1	c2
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+8	80
+9	90
+10	100
+update t1 set c2 = 71 where c1 = 7;
+alter system minor freeze;
+select * from t1 order by c2;
+c1	c2
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	71
+8	80
+9	90
+10	100
+select * from t1 order by c1 desc limit 2;
+c1	c2
+10	100
+9	90
+select c1 + c2 from t1 order by c2 limit 2;
+c1 + c2
+11
+22
+drop table t1;

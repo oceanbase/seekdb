@@ -18,10 +18,14 @@
 #define _STORAGE_DDL_OB_DDL_DAG_THREAD_POOL_
 
 #include "share/ob_thread_pool.h"
-#include "data_plane/ddl/ob_direct_insert.h"
 
 namespace oceanbase
 {
+namespace sql
+{
+class ObSQLSessionInfo;
+}
+
 namespace storage
 {
 class ObDDLIndependentDag;
@@ -29,16 +33,14 @@ class ObDDLIndependentDag;
 class ObDDLDagThreadPool : public share::ObThreadPool
 {
 public:
-  ObDDLDagThreadPool() : is_inited_(false), ddl_dag_(nullptr), worker_context_(nullptr) {}
-  int init(const int64_t thread_count,
-           ObDDLIndependentDag *ddl_dag,
-           data_plane::ObIDirectInsertWorkerContext &worker_context);
+  ObDDLDagThreadPool() : is_inited_(false), ddl_dag_(nullptr), session_info_(nullptr) {}
+  int init(const int64_t thread_count, ObDDLIndependentDag *ddl_dag, sql::ObSQLSessionInfo *session_info);
   virtual void run1() override;
 
 private:
   bool is_inited_;
   ObDDLIndependentDag *ddl_dag_;
-  data_plane::ObIDirectInsertWorkerContext *worker_context_;
+  sql::ObSQLSessionInfo *session_info_;
 };
 
 
@@ -46,3 +48,4 @@ private:
 }// namespace oceanbase
 
 #endif//_STORAGE_DDL_OB_DDL_DAG_THREAD_POOL_
+

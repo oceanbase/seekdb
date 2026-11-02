@@ -25,10 +25,15 @@
 #include "share/cache/ob_kvcache_inst_map.h"
 #include "share/cache/ob_kvcache_map.h"
 #include "share/cache/ob_kvcache_hazard_domain.h"
+#include "sql/optimizer/ob_opt_default_stat.h"
 
 
 namespace oceanbase
 {
+namespace observer
+{
+class ObServer;
+}
 namespace blocksstable
 {
 class ObMicroBlockBufferHandle;
@@ -90,49 +95,27 @@ private:
 };
 
 class ObKVCacheHandle;
-struct ObKVCacheRuntimeOptions
-{
-  static const int64_t DEFAULT_WASH_INTERVAL_US = 200 * 1000;
-  static const int64_t USE_MAX_CACHE_SIZE = 0;
-
-  explicit ObKVCacheRuntimeOptions(
-      const int64_t wash_interval_us = DEFAULT_WASH_INTERVAL_US,
-      const int64_t cache_memory_limit = USE_MAX_CACHE_SIZE)
-      : wash_interval_us_(wash_interval_us),
-        cache_memory_limit_(cache_memory_limit)
-  {}
-
-  bool is_valid() const
-  {
-    return wash_interval_us_ > 0 && cache_memory_limit_ >= USE_MAX_CACHE_SIZE;
-  }
-
-  int64_t wash_interval_us_;
-  int64_t cache_memory_limit_;
-};
-
 class ObKVGlobalCache : public lib::ObICacheWasher
 {
+  friend class observer::ObServer;
 public:
   static const int64_t DEFAULT_ONCE_BATCH_GET_BUCKET_NUM = 10000;
-  static constexpr int64_t MAX_CACHE_SIZE = ObKVCacheStore::MAX_CACHE_SIZE;
   static ObKVGlobalCache &get_instance();
-  static int64_t default_max_cache_size() { return MAX_CACHE_SIZE; }
-  int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,
-           const int64_t max_cache_size = MAX_CACHE_SIZE,
+  int init(ObITenantMemLimitGetter *mem_limit_getter,
+           const int64_t bucket_num = DEFAULT_BUCKET_NUM,
+           const int64_t max_cache_size = DEFAULT_MAX_CACHE_SIZE,
            const int64_t block_size = lib::ACHUNK_SIZE,
-           const int64_t cache_wash_interval = 0,
-           const ObKVCacheRuntimeOptions &runtime_options = ObKVCacheRuntimeOptions());
+           const int64_t cache_wash_interval = 0);
   void stop();
   void wait();
   void destroy();
-  int reload_config(const ObKVCacheRuntimeOptions &runtime_options);
-  int get_suitable_bucket_num(const int64_t cache_memory_limit,
-                              int64_t &bucket_num);
+  int reload_wash_interval();
+  int get_suitable_bucket_num(int64_t& bucket_num);
   int get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
   int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void print_all_cache_info();
   virtual int erase_cache() override;
+  int sync_flush_tenant();
   int erase_cache(const char *cache_name);
 
   int get_washable_size(int64_t &washable_size);
@@ -141,11 +124,10 @@ public:
   virtual int sync_wash_mbs(const int64_t wash_size,
                             lib::ObICacheWasher::ObCacheMemBlock *&wash_blocks);
   int get_cache_name(const int64_t cache_id, char *cache_name);
-  OB_INLINE int64_t get_bucket_num() const { return map_.get_bucket_num(); }
-  int64_t get_managed_used() const
-  {
-    return store_.get_store_size() + map_.get_managed_used();
+  int get_batch_data_block_cache_key(ObIArray<blocksstable::ObMicroBlockCacheKey> &keys) {
+    return map_.get_batch_data_block_cache_key(DEFAULT_ONCE_BATCH_GET_BUCKET_NUM, keys);
   }
+  OB_INLINE int64_t get_bucket_num() const { return map_.get_bucket_num(); }
   HazardDomain& get_hazard_domain() { return hazard_domain_; }
 private:
   template<class Key, class Value> friend class ObIKVCache;
@@ -200,6 +182,7 @@ private:
   int get_cache_id(const char *cache_name, int64_t &cache_id);
 private:
   static const int64_t DEFAULT_BUCKET_NUM = 10000000L;
+  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
   static const int64_t MAP_ONCE_CLEAN_RATIO = 50;  // 50 * 0.2 = 10s
   static const int64_t MAP_ONCE_REPLACE_RATIO = 100;  // 100 * 0.2 = 20s
   static const int64_t MAX_MAP_ONCE_CLEAN_NUM = 200000;  // 200K
@@ -207,13 +190,10 @@ private:
   static const int64_t MAX_MAP_ONCE_REPLACE_NUM = 100000;  // 100K
   static const int64_t TIMER_SCHEDULE_INTERVAL_US = 800 * 1000;
   static const int64_t WORKING_SET_LIMIT_PERCENTAGE = 5;
-  // Target one hash bucket per 2 KiB of KV cache capacity, then round up to
-  // one of the supported prime bucket counts below.
-  static const int64_t KVCACHE_BYTES_PER_BUCKET = 2LL << 10;
+  static const int64_t BASE_SERVER_MEMORY_FACTOR = 1LL << 31; // 2G is the start level
+  static constexpr double MAX_RESERVED_MEMORY_RATIO = 0.3;
   static const int64_t MAX_BUCKET_NUM_LEVEL = 10;
   static const int64_t bucket_num_array_[MAX_BUCKET_NUM_LEVEL];
-  static int calculate_suitable_bucket_num(const int64_t cache_memory_limit,
-                                           int64_t &bucket_num);
   static const int64_t PRINT_INTERVAL = 30 * 1000L * 1000L;
   static const int64_t MAP_WASH_CLEAN_INTERNAL = 10;
   static const int64_t MAP_REPLACE_ONCE_SKIP_COUNT = 10;
@@ -252,6 +232,8 @@ private:
   };
 private:
   bool inited_;
+  // mem limit getter
+  ObITenantMemLimitGetter *mem_limit_getter_;
   // map
   ObKVCacheMap map_;
   // store
@@ -271,8 +253,6 @@ private:
   int64_t map_once_replace_num_;
   int64_t map_replace_skip_count_;
   KVMapReplaceTask replace_task_;
-  ObTimer wash_timer_;
-  ObTimer replace_timer_;
   bool stopped_;
   int64_t cache_wash_interval_;
 };
@@ -381,6 +361,7 @@ int ObKVCache<Key, Value>::init(const char *cache_name, const int64_t mem_limit_
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", KP(cache_name), K(ret));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().register_cache(cache_name, mem_limit_pct, cache_id_))) {
+    COMMON_LOG(WARN, "Fail to register cache, ", K(ret));
   } else {
     COMMON_LOG(INFO, "Succ to register cache", K(cache_name), K_(cache_id));
     inited_ = true;
@@ -458,7 +439,7 @@ int64_t ObKVCache<Key, Value>::get_miss_cnt() const
     ObKVCacheInstHandle inst_handle;
     if (OB_SUCC(ObKVGlobalCache::get_instance().insts_.get_cache_inst(inst_key, inst_handle))) {
       if (NULL != inst_handle.get_inst()) {
-        miss_cnt = inst_handle.get_inst()->status_.total_miss_cnt_.value();
+        miss_cnt = inst_handle.get_inst()->status_.total_miss_cnt_;
       }
     }
   }
@@ -468,7 +449,7 @@ int64_t ObKVCache<Key, Value>::get_miss_cnt() const
 template <class Key, class Value>
 double ObKVCache<Key, Value>::get_hit_rate() const
 {
-  return 0.8;
+  return DEFAULT_CACHE_HIT_RATE;
 }
 
 template <class Key, class Value>
@@ -479,6 +460,7 @@ int ObKVCache<Key, Value>::get_iterator(ObKVCacheIterator &iter)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCache has not been inited, ", K(ret));
   } else if (OB_FAIL(iter.init(cache_id_, &ObKVGlobalCache::get_instance().map_))) {
+    COMMON_LOG(WARN, "Fail to init ObKVCacheIterator, ", K(ret));
   }
   return ret;
 }
@@ -554,6 +536,7 @@ int ObKVCache<Key, Value>::erase(const Key &key)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCache has not been inited, ", K(ret));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().erase(cache_id_, key))) {
+    COMMON_LOG(WARN, "Fail to erase key from ObKVGlobalCache, ", K_(cache_id), K(ret));
   }
   return ret;
 }
@@ -574,6 +557,7 @@ int ObKVCache<Key, Value>::alloc(const int64_t key_size, const int64_t value_siz
           kvpair,
           handle.hazptr_holder_,
           inst_handle))) {
+    COMMON_LOG(WARN, "failed to alloc", K(ret));
   } else {
   }
 
@@ -621,6 +605,7 @@ int ObKVCacheIterator::get_next_kvpair(
       } else if (OB_SUCC(handle_list_.pop_front(node))) {
         bool protect_success;
         if (OB_FAIL(handle.hazptr_holder_.protect(protect_success, node.mb_handle_, node.seq_num_))) {
+          COMMON_LOG(WARN, "protect failed", KP(node.mb_handle_));
         } else if (protect_success) {
           break;
         }
@@ -629,6 +614,7 @@ int ObKVCacheIterator::get_next_kvpair(
           if (pos_ >= map_->bucket_num_) {
             ret = OB_ITER_END;
           } else if (OB_FAIL(map_->multi_get(cache_id_, pos_++, handle_list_))) {
+            COMMON_LOG(WARN, "Fail to multi get from map, ", K(ret));
           }
         } else {
           COMMON_LOG(WARN, "Unexpected error, ", K(ret));

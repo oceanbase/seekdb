@@ -18,7 +18,8 @@
 
 #include "lib/ob_define.h"
 #include "lib/container/ob_iarray.h"
-#include "share/inner_table/local_table_schema.h"
+#include "lib/net/ob_addr.h"
+#include "share/storage/ob_sqlite_connection_pool.h"
 #include <functional>
 
 namespace oceanbase
@@ -30,6 +31,7 @@ struct ObDeadlockEventHistoryEntry
 {
   
   uint64_t event_id_;
+  common::ObAddr svr_addr_;
   uint64_t detector_id_;
   int64_t report_time_;
   int64_t cycle_idx_;
@@ -51,6 +53,7 @@ struct ObDeadlockEventHistoryEntry
 
   ObDeadlockEventHistoryEntry()
     : event_id_(0),
+      svr_addr_(),
       detector_id_(0),
       report_time_(0),
       cycle_idx_(0),
@@ -74,6 +77,7 @@ struct ObDeadlockEventHistoryEntry
   void reset() {
     
     event_id_ = 0;
+    svr_addr_.reset();
     detector_id_ = 0;
     report_time_ = 0;
     cycle_idx_ = 0;
@@ -102,15 +106,17 @@ public:
   ObDeadlockEventHistoryTableStorage();
   virtual ~ObDeadlockEventHistoryTableStorage();
 
-  int init(LocalStore *store);
-  bool is_inited() const { return nullptr != store_; }
+  int init(ObSQLiteConnectionPool *pool);
+  bool is_inited() const { return nullptr != pool_; }
 
   int insert(const ObDeadlockEventHistoryEntry &entry);
   int insert_all(const ObIArray<ObDeadlockEventHistoryEntry> &entries);
   int delete_expired(int64_t report_time_before, int64_t limit);
 
 private:
-  LocalStore *store_;
+  int create_table_if_not_exists();
+
+  ObSQLiteConnectionPool *pool_;
   DISALLOW_COPY_AND_ASSIGN(ObDeadlockEventHistoryTableStorage);
 };
 
@@ -118,3 +124,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_DEADLOCK_EVENT_HISTORY_TABLE_STORAGE_H_
+

@@ -1,0 +1,212 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "observer/ob_server_struct.h"
+#include "ob_all_virtual_dump_tenant_info.h"
+#include "observer/omt/ob_tenant.h"
+
+namespace oceanbase
+{
+using namespace lib;
+namespace observer
+{
+ObAllVirtualDumpTenantInfo::ObAllVirtualDumpTenantInfo()
+  : is_inited_(false)
+{
+}
+
+ObAllVirtualDumpTenantInfo::~ObAllVirtualDumpTenantInfo()
+{
+}
+
+int ObAllVirtualDumpTenantInfo::inner_get_next_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    auto func = [&] (omt::ObTenant &t) {
+      int ret = OB_SUCCESS;
+      const int64_t col_count = output_column_ids_.count();
+      ObObj *cells = cur_row_.cells_;
+      // Column order after removing svr_ip and svr_port:
+      // OB_APP_MIN_COLUMN_ID (16): compat_mode
+      // OB_APP_MIN_COLUMN_ID + 1 (17): unit_min_cpu
+      // ... and so on
+      for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+        uint64_t col_id = output_column_ids_.at(i);
+        switch (col_id) {
+        case OB_APP_MIN_COLUMN_ID:
+          //compat_mode
+          cells[i].set_int(static_cast<int64_t>(t.get_compat_mode()));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 1:
+          //unit_min_cpu
+          cells[i].set_double(t.unit_min_cpu_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 2:
+          //unit_max_cpu
+          cells[i].set_double(t.unit_max_cpu_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 3:
+          //slice
+          cells[i].set_double(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 4:
+          //slice_remain
+          cells[i].set_double(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 5:
+          //token_cnt
+          cells[i].set_int(t.worker_count());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 6:
+          //ass_token_cnt
+          cells[i].set_int(t.worker_count());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 7:
+          //lq_tokens
+          cells[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 8:
+          //used_lq_tokens
+          cells[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 9:
+          //stopped
+          cells[i].set_int(t.stopped_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 10:
+          //idle_us
+          cells[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 11:
+          //recv_hp_rpc_cnt
+          cells[i].set_int(t.recv_hp_rpc_cnt_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 12:
+          //recv_np_rpc_cnt
+          cells[i].set_int(t.recv_np_rpc_cnt_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 13:
+          //recv_lp_rpc_cnt
+          cells[i].set_int(t.recv_lp_rpc_cnt_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 14:
+          //recv_mysql_cnt
+          cells[i].set_int(t.recv_mysql_cnt_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 15:
+          //recv_task_cnt
+          cells[i].set_int(t.recv_task_cnt_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 16:
+          //recv_large_req_cnt
+          cells[i].set_int(t.recv_large_req_cnt_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 17:
+          //tt_large_quries
+          cells[i].set_int(t.tt_large_quries_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 18:
+          //actives
+          cells[i].set_int(t.workers_.get_size());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 19:
+          //workers
+          cells[i].set_int(t.workers_.get_size());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 20:
+          //lq_waiting_workers
+          cells[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 21:
+          //req_queue_total_size
+          cells[i].set_int(t.req_queue_.size());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 22:
+          //queue_0
+          cells[i].set_int(t.req_queue_.queue_size(0));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 23:
+          //queue_1
+          cells[i].set_int(t.req_queue_.queue_size(1));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 24:
+          //queue_2
+          cells[i].set_int(t.req_queue_.queue_size(2));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 25:
+          //queue_3
+          cells[i].set_int(t.req_queue_.queue_size(3));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 26:
+          //queue_4
+          cells[i].set_int(t.req_queue_.queue_size(4));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 27:
+          //queue_5
+          cells[i].set_int(t.req_queue_.queue_size(5));
+          break;
+        case OB_APP_MIN_COLUMN_ID + 28:
+          //large_queued
+          cells[i].set_int(t.lq_retry_queue_size());
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "invalid column id, ", K(ret), K(col_id));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        // The scanner supports up to 64M, so the overflow situation is not considered for the time being
+        if (OB_FAIL(scanner_.add_row(cur_row_))) {
+          SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
+        }
+      }
+      return ret;
+    };
+
+    omt::ObMultiTenant *omt = GCTX.omt_;
+    if (OB_ISNULL(omt)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "nullptr", K(ret));
+    } else {
+      omt::ObTenant *the_tenant = nullptr;
+      if (OB_SUCCESS == omt->get_tenant(the_tenant) && OB_NOT_NULL(the_tenant)) {
+        ret = func(*the_tenant);
+      }
+      if (OB_FAIL(ret)) {
+        SERVER_LOG(WARN, "run tenant func failed", K(ret));
+      } else {
+        scanner_it_ = scanner_.begin();
+        is_inited_ = true;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to get next row", K(ret));
+      }
+    } else {
+      row = &cur_row_;
+    }
+  }
+
+  return ret;
+}
+
+} /* namespace observer */
+} /* namespace oceanbase */

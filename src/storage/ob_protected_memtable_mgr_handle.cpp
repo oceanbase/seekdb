@@ -15,8 +15,8 @@
  */
 
 #include "ob_protected_memtable_mgr_handle.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::memtable;
@@ -26,18 +26,20 @@ namespace oceanbase
 namespace storage
 {
 
-int ObProtectedMemtableMgrHandle::create_tablet_memtable_mgr_(const ObTabletID &tablet_id)
+int ObProtectedMemtableMgrHandle::create_tablet_memtable_mgr_(const ObLSID &ls_id,
+    const ObTabletID &tablet_id,
+    lib::Worker::CompatMode compat_mode)
 {
   int ret = OB_SUCCESS;
   ObTabletMemtableMgr *mgr = NULL;
-  ObTabletMemtableMgrPool *pool = ::oceanbase::share::server_service<::oceanbase::storage::ObTabletMemtableMgrPool>();
+  ObTabletMemtableMgrPool *pool = share::g_mp->tablet_memtable_mgr_pool();
   if (memtable_mgr_handle_.is_valid()) {
   } else if (OB_ISNULL(mgr = pool->acquire())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "failed to memtable manager alloc", KR(ret), K(tablet_id));
-  } else if (OB_FAIL(mgr->ObIMemtableMgr::init(tablet_id))) {
+    STORAGE_LOG(WARN, "failed to memtable manager alloc", KR(ret), K(ls_id), K(tablet_id));
+  } else if (OB_FAIL(mgr->ObIMemtableMgr::init(ls_id, tablet_id, compat_mode))) {
     pool->release(mgr);
-    STORAGE_LOG(WARN, "failed to init memtable mgr", KR(ret), K(tablet_id));
+    STORAGE_LOG(WARN, "failed to init memtable mgr", KR(ret), K(tablet_id), K(ls_id));
   } else {
     memtable_mgr_handle_.set_memtable_mgr(mgr, pool);
   }
@@ -81,6 +83,7 @@ int ObProtectedMemtableMgrHandle::reset()
   if (memtable_mgr_handle_.is_valid()) {
     ObIMemtableMgr *mgr = memtable_mgr_handle_.get_memtable_mgr();
     if (OB_FAIL(mgr->has_memtable() && mgr->release_memtables())) {
+      STORAGE_LOG(ERROR, "failed to release memtables", KR(ret), KPC(this));
     }
     memtable_mgr_handle_.reset();
     STORAGE_LOG(INFO, "protected_memtable_mgr_handle reset", KR(ret), KPC(this));
@@ -101,6 +104,7 @@ int ObProtectedMemtableMgrHandle::release_memtables_and_try_reset_memtable_mgr_h
     // do nothing
   } else if (!need_reset_()) {
   } else if (OB_FAIL(try_reset_memtable_mgr_handle_())) {
+    STORAGE_LOG(WARN, "failed to try_reset_memtable_mgr_handle", KR(ret), K(tablet_id), K(scn), KPC(this));
   }
   return ret;
 }

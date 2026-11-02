@@ -25,7 +25,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
@@ -55,7 +55,9 @@ int ObFTCacheDict::match(const ObString &words, bool &is_match) const
                                             words.ptr() + offset,
                                             words.length() - offset,
                                             char_len))) {
+      LOG_WARN("Invalid string encoding", K(ret), K(words));
     } else if (OB_FAIL(match_with_hit(ObString(char_len, words.ptr() + offset), hit, hit))) {
+      LOG_WARN("Failed to do match with hit", K(ret));
     } else if (hit.is_match() && offset + char_len == words.length()) {
       is_match = true;
       break;
@@ -85,10 +87,11 @@ int ObFTCacheDict::make_and_fetch_cache_entry(const ObFTDictDesc &desc,
 {
   int ret = OB_SUCCESS;
   ObDictCache &cache = ObDictCache::get_instance();
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.name_.hash();
   const ObDictCacheKey put_key(name, desc.type_, range_id);
   const ObDictCacheValue put_value(dat_buff);
   if (OB_FAIL(cache.put_and_fetch_dict(put_key, put_value, value, handle))) {
+    LOG_WARN("Failed to put dict into kv cache", K(ret));
   }
   return ret;
 }

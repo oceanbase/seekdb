@@ -56,6 +56,9 @@ namespace oceanbase {
 
 namespace share {
 
+// hook: storage side registers ObTenantFreezer::get_memstore_limit_percentage,
+// removes share/throttle → storage/tx_storage dependency; falls back to the GCONF cluster value when unregistered
+extern int64_t (*g_memstore_limit_percentage_fn)();
 // This Macor will expand as follows :
 //
 // struct FakeAllocatorForTxShare {
@@ -69,23 +72,17 @@ namespace share {
 // };
 //
 // class ObMemstoreAllocator;
-// class ObTxDataAllocator;
-// class ObMdsAllocator;
+// class ObTenantTxDataAllocator;
+// class ObTenantMdsAllocator;
 //
 // template <typename FakeAllocator, typename... Args>
 // class ObShareResourceThrottleTool;
 //
 // using TxShareThrottleTool = ObShareResourceThrottleTool<FakeAllocatorForTxShare,
 //                                                         ObMemstoreAllocator,
-//                                                         ObTxDataAllocator,
-//                                                         ObMdsAllocator>;
-// Vector has an independent memory limit and does not contribute to TxShare.
-DEFINE_SHARE_THROTTLE(TxShare,
-                      ObMemstoreAllocator,
-                      ObTxDataAllocator,
-                      ObMdsAllocator)
-
-int64_t get_tx_share_memory_limit();
+//                                                         ObTenantTxDataAllocator,
+//                                                         ObTenantMdsAllocator>;
+DEFINE_SHARE_THROTTLE(TxShare, ObMemstoreAllocator, ObTenantTxDataAllocator, ObTenantMdsAllocator, ObTenantVectorAllocator)
 
 
 class ObThrottleInfoGuard;

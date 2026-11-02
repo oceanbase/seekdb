@@ -15,7 +15,7 @@
  */
  
 #include "mds_table_handler.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -31,13 +31,16 @@ ObMdsTableHandler::~ObMdsTableHandler() { ATOMIC_STORE(&is_written_, false); }
 
 int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
                                             const ObTabletID &tablet_id,
+                                            const share::ObLSID &ls_id,
                                             const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
                                             const bool not_exist_create,
                                             ObTabletPointer *pointer)
 {
-  #define PRINT_WRAPPER KR(ret), K(tablet_id), K(not_exist_create), K(*this)
+  #define PRINT_WRAPPER KR(ret), K(tablet_id), K(ls_id), K(not_exist_create), K(*this)
   int ret = OB_SUCCESS;
-  ObLS *tenant_ls = nullptr;
+  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   mds::ObMdsTableMgr *mds_table_mgr;
 
   auto try_get_handle_directly = [this](mds::MdsTableHandle &handle) -> void {
@@ -65,10 +68,17 @@ int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
       // do nothing
     } else {
       if (OB_ISNULL(mds_table_mgr_handle_.get_mds_table_mgr())) {
-        if (MDS_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+        if (OB_ISNULL(ls_service)) {
+          ret = OB_ERR_UNEXPECTED;
+          MDS_LOG_INIT(WARN, "ls service should not be NULL");
+        } else if (MDS_FAIL(ls_service->get_ls(ls_id,
+                                               ls_handle,
+                                               ObLSGetMod::TABLET_MOD))) {
           MDS_LOG_INIT(WARN, "failed to get ls");
-        } else if (MDS_FAIL(tenant_ls->get_tablet_svr()->get_mds_table_mgr(
-                mds_table_mgr_handle_))) {
+        } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+          ret = OB_ERR_UNEXPECTED;
+          MDS_LOG_INIT(WARN, "ls should not be NULL");
+        } else if (MDS_FAIL(ls->get_tablet_svr()->get_mds_table_mgr(mds_table_mgr_handle_))) {
           MDS_LOG_INIT(WARN, "get mds table mgr failed");
         } else if (OB_ISNULL(mds_table_mgr = mds_table_mgr_handle_.get_mds_table_mgr())) {
           ret = OB_ERR_UNEXPECTED;
@@ -78,6 +88,7 @@ int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
       if (OB_SUCC(ret)) {
         if (MDS_FAIL(mds_table_handle_.init<mds::NormalMdsTable>(mds::MdsAllocator::get_instance(),
                                                                  tablet_id,
+                                                                 ls_id,
                                                                  mds_ckpt_scn_from_tablet,
                                                                  pointer,
                                                                  mds_table_mgr_handle_.get_mds_table_mgr()))) {
@@ -179,6 +190,7 @@ void ObMdsTableHandler::mark_removed_from_t3m(ObTabletPointer *pointer)
   MdsRLockGuard guard(lock_);
   if (mds_table_handle_.is_valid()) {
     if (OB_FAIL(mds_table_handle_.mark_removed_from_t3m(pointer))) {
+      MDS_LOG(WARN, "fail to unregister_from_mds_table_mgr", K(*this));
     }
   }
 }

@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "rootserver/ob_domain_index_builder_util.h"
-#include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 
@@ -27,7 +26,7 @@ namespace oceanbase
 using namespace common;
 using namespace obcall;
 using namespace share::schema;
-namespace rootserver
+namespace share
 {
 
 #define LOCATE_INDEX_IDX(INDEX_TYPE, IDX_VALUE)                                                  \
@@ -52,24 +51,27 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
                                                 const uint64_t& data_table_id,
                                                 const int64_t& task_id,
                                                 obcall::ObCreateIndexArg& index_arg,
-                                                rootserver::ObLocalManagementService *local_management_service,
+                                                rootserver::ObRootService *root_service,
                                                 common::hash::ObHashMap<uint64_t, ObDomainDependTaskStatus> &map,
                                                 const oceanbase::common::ObAddr &addr,
                                                 int map_num,
                                                 const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(local_management_service)) {
+  if (OB_ISNULL(root_service)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("root_service is nullptr", K(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
     if (!map.created() &&
       OB_FAIL(map.create(map_num, lib::ObLabel("DepTasMap")))) {
-    } else if (OB_ISNULL(local_management_service)) {
+      LOG_WARN("create dependent task map failed", K(ret));
+    } else if (OB_ISNULL(root_service)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-                   *GCTX.schema_service_, data_table_id,
+      LOG_WARN("root_service is nullptr", K(ret));
+    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(data_table_id,
                                                       ddl_rpc_timeout))) {
+      LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else {
       SMART_VARS_2((obcall::ObCreateAuxIndexArg, arg),
                     (obcall::ObCreateAuxIndexRes, res)) {
@@ -82,8 +84,10 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
           // do nothing
       } else if (OB_FAIL(arg.create_index_arg_.assign(index_arg))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_aux_index(arg, res); }))) {
+        LOG_WARN("generate aux index schema failed", K(ret), K(arg));
       } else if (res.schema_generated_) {
         task_submitted = true;
         aux_table_id = res.aux_table_id_;
@@ -94,15 +98,17 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
         } else { // need to wait data complement finish
           res_task_id = res.ddl_task_id_;
           TCWLockGuard guard(lock);
-          ObDomainDependTaskStatus status;
+          share::ObDomainDependTaskStatus status;
           // check if child task is already added
           if (OB_FAIL(map.get_refactored(aux_table_id, status))) {
             if (OB_HASH_NOT_EXIST == ret) {
               ret = OB_SUCCESS;
               status.task_id_ = res.ddl_task_id_;
               if (OB_FAIL(map.set_refactored(aux_table_id, status))) {
+                  LOG_WARN("set dependent task map failed", K(ret), K(aux_table_id));
               } 
             } else {
+              LOG_WARN("get from dependent task map failed", K(ret));
             }
           }
         }
@@ -133,6 +139,7 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
   ObSArray<ObTableSchema> complete_index_schemas;
   if (OB_UNLIKELY(OB_INVALID_ID == new_data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(new_data_table_id));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < shared_schema_array.count(); ++i) {
       const ObTableSchema &shared_schema = shared_schema_array.at(i);
@@ -161,11 +168,14 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
             if (OB_FAIL(ret)) {
             } else if (index_aux_schema_idx >= 0) {
               if (OB_FAIL(complete_index_schemas.push_back(domain_index_schema))) {
+                LOG_WARN("fail to push back domain index schema", K(ret));
               } else if (OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(index_aux_schema_idx)))) {
+                LOG_WARN("fail to push back aux index schema", K(ret));
               }
             }
           } else {
             if (OB_FAIL(complete_index_schemas.push_back(domain_index_schema))) {
+              LOG_WARN("fail to push back domain index schema", K(ret));
             }
           }
         }
@@ -179,8 +189,11 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
             if (OB_FAIL(ret)) {
             } else if (vec_index_id_idx >= 0 && vec_index_snapshot_data_idx >= 0) {
               if (OB_FAIL(complete_index_schemas.push_back(domain_index_schema))) {
+                LOG_WARN("fail to push back domain index schema", K(ret));
               } else if (OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(vec_index_id_idx)))) {
+                LOG_WARN("fail to push back aux index schema", K(ret));
               } else if (OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(vec_index_snapshot_data_idx)))) {
+                LOG_WARN("fail to push back aux index schema", K(ret));
               }
             }
           }
@@ -194,6 +207,7 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
             if (OB_FAIL(complete_index_schemas.push_back(domain_index_schema)) ||
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(flat_rowkey_cid_idx))) ||
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(flat_cid_vector_idx)))) {
+              LOG_WARN("fail to push back domain index schemas", K(ret));
             }
           }
         } else if (domain_index_schema.is_vec_ivfsq8_centroid_index()) {
@@ -209,6 +223,7 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(sq8_rowkey_cid_idx))) ||
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(sq8_cid_vector_idx))) ||
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(sq8_meta_idx)))) {
+              LOG_WARN("fail to push back domain index schemas", K(ret));
             }
           }
         } else if (domain_index_schema.is_vec_ivfpq_centroid_index()) {
@@ -224,6 +239,7 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(pq_rowkey_cid_idx))) ||
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(pq_pq_centroid_idx))) ||
                 OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(pq_code_idx)))) {
+              LOG_WARN("fail to push back domain index schemas", K(ret));
             }
           }
         } else if (domain_index_schema.is_hybrid_vec_index_log_type()) {
@@ -237,9 +253,13 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
             if (OB_FAIL(ret)) {
             } else if (vec_index_id_idx >= 0 && vec_index_snapshot_data_idx >= 0 && hybrid_vec_index_embedded_idx >= 0) {
               if (OB_FAIL(complete_index_schemas.push_back(domain_index_schema))) {
+                LOG_WARN("fail to push back domain index schema", K(ret));
               } else if (OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(vec_index_id_idx)))) {
+                LOG_WARN("fail to push back aux index schema", K(ret));
               } else if (OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(vec_index_snapshot_data_idx)))) {
+                LOG_WARN("fail to push back aux index schema", K(ret));
               } else if (OB_FAIL(complete_index_schemas.push_back(aux_schema_array.at(hybrid_vec_index_embedded_idx)))) {
+                LOG_WARN("fail to push back aux index schema", K(ret));
               }
             }
           }
@@ -258,17 +278,20 @@ int ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
     } else if (has_complete_fts && need_doc_id) {
       if (OB_FAIL(rebuid_index_schemas.push_back(shared_schema_array.at(rowkey_doc_idx))) ||
           OB_FAIL(rebuid_index_schemas.push_back(shared_schema_array.at(doc_rowkey_idx)))) {
+        LOG_WARN("fail to push back rowkey doc/doc rowkey schema", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (has_complete_nhsw_vec && need_vid) {
       if (OB_FAIL(rebuid_index_schemas.push_back(shared_schema_array.at(rowkey_vid_idx))) ||
           OB_FAIL(rebuid_index_schemas.push_back(shared_schema_array.at(vid_rowkey_idx)))) {
+        LOG_WARN("fail to push back rowkey vid/vid rowkey schema", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < complete_index_schemas.count(); ++i) {
       const ObTableSchema &aux_index_schema = complete_index_schemas.at(i);
       if (OB_FAIL(rebuid_index_schemas.push_back(aux_index_schema))) {
+        LOG_WARN("fail to push back aux index schema", K(ret), K(aux_index_schema));
       }
     }
   }
@@ -287,6 +310,7 @@ int ObDomainIndexBuilderUtil::locate_aux_index_schema_by_name(
   index_aux_schema_idx = -1;
   if (OB_UNLIKELY(inner_index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(inner_index_name));
   } else {
     ObString user_index_name;
     ObString index_aux_name;
@@ -295,22 +319,29 @@ int ObDomainIndexBuilderUtil::locate_aux_index_schema_by_name(
                                               new_data_table_id,
                                               inner_index_name,
                                               user_index_name))) {
+      LOG_WARN("fail to get index name",
+          K(ret), K(new_data_table_id), K(inner_index_name));
     } else if (share::schema::is_built_in_fts_index(type) && 
         OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(&allocator,
                                                                    type,
                                                                    user_index_name,
                                                                    index_aux_name))) {
+      LOG_WARN("fail to generate fts aux index name", K(ret), K(user_index_name));
     } else if (share::schema::is_built_in_vec_index(type) &&
                OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(&allocator,
                                                                       type,
                                                                       user_index_name,
                                                                       index_aux_name))) {
+      LOG_WARN("fail to generate vec index name", K(ret), K(user_index_name));
     } else if (index_aux_name.empty()){
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index aux name is empty, maybe the index type is incorrect",
+          K(ret), K(user_index_name), K(type));
     } else if (OB_FAIL(ObTableSchema::build_index_table_name(allocator,
                                                              new_data_table_id,
                                                              index_aux_name,
                                                              inner_index_aux_name))) {
+      LOG_WARN("fail to build inner index table name", K(ret), K(index_aux_name));
     } else {
       for (int64_t i = 0; i < aux_schema_array.count(); ++i) {
         const ObTableSchema &aux_index_schema = aux_schema_array.at(i);
@@ -324,5 +355,5 @@ int ObDomainIndexBuilderUtil::locate_aux_index_schema_by_name(
   return ret;
 }
 
-}//end namespace rootserver
+}//end namespace share
 }//end namespace oceanbase

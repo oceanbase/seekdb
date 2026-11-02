@@ -64,6 +64,7 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec ctx is null", K(ret));
   } else if (ob_is_null(lambda_type)) {
     is_null_res = true;
   }
@@ -75,9 +76,12 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
       is_null_res = true;
     } else if (!ob_is_collection_sql_type(types_stack[i].get_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, types_stack[i].get_subschema_id(), coll_type))) {
+      LOG_WARN("failed to get array type by subschema id", K(ret), K(types_stack[i].get_subschema_id()));
     } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
     }
   }
 
@@ -86,6 +90,7 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
     type.set_null();
   } else if (!ob_is_int_uint_tc(lambda_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("invalid data type", K(ret), K(lambda_type));
   } else {
     // result type same as the first array
     type.set_collection(types_stack[1].get_subschema_id());
@@ -113,15 +118,22 @@ int ObExprArrayFilter::eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, ObD
     is_null_res = true;
   } else if (res_subschema_id != expr.args_[1]->obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("subschema id is not equal", K(ret), K(res_subschema_id), K(expr.args_[1]->obj_meta_.get_subschema_id()));
   } else if (OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr extra info is null", K(ret));
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
+    LOG_WARN("failed to eval src arrays", K(ret));
   } else if (is_null_res) {
     // do nothing
   } else if (OB_FAIL(eval_lambda_array(ctx, tmp_allocator, info, src_arrs, expr.arg_cnt_ - 1, arr_dim, expr.args_[0], lambda_arr))) {
+    LOG_WARN("failed to eval lambda array", K(ret));
   } else if (OB_FAIL(lambda_arr->init())) {
+    LOG_WARN("array init failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, res_subschema_id, res_arr, false))) {
+    LOG_WARN("construct child array obj failed", K(ret));
   } else if (OB_FAIL(fill_array_by_filter(tmp_allocator, lambda_arr, src_arrs[0], res_arr))) {
+    LOG_WARN("failed to fill array by index", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -130,6 +142,7 @@ int ObExprArrayFilter::eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, ObD
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(res_arr, res_arr->get_raw_binary_len(), expr, ctx, res_str))) {
+      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }
@@ -147,9 +160,11 @@ int ObExprArrayFilter::fill_array_by_filter(ObArenaAllocator &allocator, ObIArra
     if (filter_arr->is_null(i)) {
       // do nothing
     } else if (OB_FAIL(filter_arr->elem_at(i, filter_elem_obj))) {
+      LOG_WARN("failed to get element", K(ret), K(i));
     } else if (filter_elem_obj.get_int() == 0) {
       // do nothing
     } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
+      LOG_WARN("failed to insert element to result array", K(ret), K(i));
     }
   } // end for
   return ret;
@@ -165,7 +180,9 @@ int ObExprArrayFilter::cg_expr(ObExprCGCtx &expr_cg_ctx,
   ObIExprExtraInfo *extra_info = nullptr;
 
   if (OB_FAIL(get_lambda_subschema_id(exec_ctx, raw_expr, lambda_subschema_id))) {
+    LOG_WARN("failed to get lambda subschema id", K(ret));
   } else if (OB_FAIL(construct_extra_info(expr_cg_ctx, raw_expr, rt_expr, extra_info))) {
+    LOG_WARN("failed to construct extra info", K(ret));
   } else {
     static_cast<ObExprArrayMapInfo *>(extra_info)->lambda_subschema_id_ = lambda_subschema_id;
     rt_expr.extra_info_ = extra_info;

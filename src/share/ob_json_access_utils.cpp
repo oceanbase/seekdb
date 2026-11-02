@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_json_access_utils.h"
-#include "share/ob_version_parser.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/ob_cluster_version.h"
+#include "share/rc/ob_tenant_base.h"
 #include "common/json_type/ob_json_base.h"
 #include "lib/utility/ob_smart_call.h"
 namespace oceanbase
@@ -32,7 +32,9 @@ int ObJsonWrapper::get_raw_binary(ObIJsonBase *j_base, ObString &result, ObIAllo
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator) || OB_ISNULL(j_base)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("allocator or j_base is null", K(ret), KP(allocator), KP(j_base));
   } else if (OB_FAIL(SMART_CALL(j_base->get_raw_binary(result, allocator)))) {
+    LOG_WARN("get raw binary fail", K(ret));
   }
   return ret;
 }

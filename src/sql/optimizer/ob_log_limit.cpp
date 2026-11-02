@@ -30,10 +30,15 @@ int ObLogLimit::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
                                                        order_items_,
                                                        all_exprs,
                                                        order_directions))) {
+    LOG_WARN("failed to split expr and direction", K(ret));
   } else if (NULL != limit_expr_ && OB_FAIL(all_exprs.push_back(limit_expr_))) {
+    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != offset_expr_ && OB_FAIL(all_exprs.push_back(offset_expr_))) {
+    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != percent_expr_ && OB_FAIL(all_exprs.push_back(percent_expr_))) {
+    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
+    LOG_WARN("failed to push back expr", K(ret));
   } else {/*do nothing*/ }
   return ret;
 }
@@ -47,7 +52,9 @@ int ObLogLimit::est_cost()
   EstimateCostInfo param;
   param.need_parallel_ = get_parallel();
   if (OB_FAIL(do_re_est_cost(param, card_, op_cost_, cost_))) {
+    LOG_WARN("failed to est cost", K(ret));
   } else {
+    LOG_TRACE("succeed to estimate limit-k cost", K(card_), K(op_cost_), K(cost_));
   }
   return ret;
 }
@@ -65,11 +72,14 @@ int ObLogLimit::do_re_est_cost(EstimateCostInfo &param, double &card, double &op
   const int64_t parallel = param.need_parallel_;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(get_plan()), K(child), K(ret));
   } else if (OB_UNLIKELY((parallel > 1 && (NULL != percent_expr_ || NULL != offset_expr_))
                          || parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected parallel degree", K(ret), K(param), K(percent_expr_), K(offset_expr_));
   } else if (OB_FAIL(get_limit_offset_value(percent_expr_, limit_expr_, offset_expr_,
                                             limit_percent, limit_count, offset_count))) {
+    LOG_WARN("failed to get limit offset value", K(ret));
   } else {
     card = 0 > param.need_row_count_ ? child->get_card() : param.need_row_count_;
     if (0 <= limit_count) {
@@ -102,6 +112,7 @@ int ObLogLimit::do_re_est_cost(EstimateCostInfo &param, double &card, double &op
         param.need_row_count_ = -1;
       }
       if (OB_FAIL(child->re_est_cost(param, child_card, child_cost))) {
+        LOG_WARN("failed to re-est cost", K(ret));
       } else {
         op_cost = ObOptEstCost::cost_get_rows(child_card, opt_ctx);
         cost = op_cost + child_cost;
@@ -121,6 +132,7 @@ int ObLogLimit::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
+    LOG_WARN("failed to get plan item info", K(ret));
   } else if (NULL != limit_expr_ || NULL != offset_expr_ ||  NULL != percent_expr_) {
     BEGIN_BUF_PRINT;
     ObRawExpr *limit = limit_expr_;
@@ -147,13 +159,18 @@ int ObLogLimit::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (NULL != limit_expr_ && OB_FAIL(replace_expr_action(replacer, limit_expr_))) {
+    LOG_WARN("failed to replace limit expr", K(ret));
   } else if (NULL != offset_expr_ && OB_FAIL(replace_expr_action(replacer, offset_expr_))) {
+    LOG_WARN("failed to replace offset expr", K(ret));
   } else if (NULL != percent_expr_ && OB_FAIL(replace_expr_action(replacer, percent_expr_))) {
+    LOG_WARN("failed to replace percent expr", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < order_items_.count(); ++i) {
     if (OB_ISNULL(order_items_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null ", K(ret));
     } else if (OB_FAIL(replace_expr_action(replacer, order_items_.at(i).expr_))) {
+      LOG_WARN("failed to adjust order expr with onetime", K(ret));
     }
   }
   return ret;

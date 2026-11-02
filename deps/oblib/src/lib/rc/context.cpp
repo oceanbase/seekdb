@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "lib/rc/context.h"
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace lib
+{
+_RLOCAL(bool, ContextTLOptGuard::enable_tl_opt);
+
+__MemoryContext__ &__MemoryContext__::root()
+{
+  static __MemoryContext__ *root = nullptr;
+  if (OB_UNLIKELY(nullptr == root)) {
+    static lib::ObMutex mutex;
+    lib::ObMutexGuard guard(mutex);
+    if (nullptr == root) {
+      ContextParam param;
+      param.set_properties(ADD_CHILD_THREAD_SAFE | ALLOC_THREAD_SAFE)
+        .set_parallel(4)
+        .set_mem_attr(ObModIds::OB_ROOT_CONTEXT, ObCtxIds::DEFAULT_CTX_ID);
+      // root_context is at a lower level, being depended on by other static objects, while the destruction order of static objects is uncertain,
+      // So here is modeled on ObMallocAllocator to design a non-destroy mode
+      static StaticInfo static_info{__FILENAME__, __LINE__, __FUNCTION__};
+      __MemoryContext__ *tmp = new (std::nothrow) __MemoryContext__(false, DynamicInfo(), nullptr, param, &static_info);
+      abort_unless(tmp != nullptr);
+      int ret = tmp->init();
+      abort_unless(OB_SUCCESS == ret);
+      root = tmp;
+    }
+  }
+  return *root;
+}
+#ifdef OB_USE_ASAN
+bool __MemoryContext__::enable_asan_allocator = false;
+#endif
+MemoryContext &MemoryContext::root()
+{
+  static MemoryContext root(&__MemoryContext__::root());
+  return root;
+}
+
+int64_t MemoryContext::tree_mem_hold()
+{
+  int64_t total = 0;
+  if (OB_LIKELY(ref_context_ != nullptr)) {
+    total = ref_context_->tree_mem_hold();
+  }
+  return total;
+}
+
+} // end of namespace lib
+} // end of namespace oceanbase

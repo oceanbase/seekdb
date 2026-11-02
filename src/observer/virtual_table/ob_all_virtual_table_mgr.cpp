@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_table_mgr.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase;
@@ -26,6 +26,7 @@ using namespace observer;
 
 ObAllVirtualTableMgr::ObAllVirtualTableMgr()
     : ObVirtualTableScannerIterator(),
+      addr_(),
       tablet_iter_(nullptr),
       tablet_allocator_("VTTable"),
       tablet_handle_(),
@@ -44,10 +45,11 @@ void ObAllVirtualTableMgr::reset()
   table_store_iter_.reset();
   tablet_handle_.reset();
   if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTabletIterator();
+    tablet_iter_->~ObTenantTabletIterator();
     tablet_iter_ = nullptr;
   }
   tablet_allocator_.reset();
+  addr_.reset();
 
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
@@ -66,7 +68,7 @@ int ObAllVirtualTableMgr::init(common::ObIAllocator *allocator)
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid argument", K(ret), KP(allocator));
-  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTabletIterator)))) {
+  } else if (OB_ISNULL(iter_buf_ = allocator->alloc(sizeof(ObTenantTabletIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(WARN, "fail to alloc tablet iter buf", K(ret));
   } else {
@@ -84,8 +86,8 @@ int ObAllVirtualTableMgr::get_next_tablet()
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
     
-    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
-    if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+    if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTenantTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
     }
@@ -122,13 +124,15 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
         } else if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpected invalid tablet", K(ret), K_(tablet_handle));
-        } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_tables(table_store_iter_))) {
+        } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_tables(table_store_iter_, true/*unpack_cg_table*/))) {
+          SERVER_LOG(WARN, "fail to get all tables", K(ret), K_(tablet_handle), K_(table_store_iter));
         } else if (0 != table_store_iter_.count()) {
           break;
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(table_store_iter_.get_next(table))) {
+        SERVER_LOG(WARN, "fail to get table after switch tablet", K(ret));
       }
     }
   }
@@ -137,6 +141,7 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
 
 int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
 {
+  // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;
   ObITable *table = nullptr;
   if (OB_UNLIKELY(!start_to_read_)) {
@@ -153,10 +158,8 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table shouldn't NULL here", K(ret), K(table));
   } else {
-    const int64_t nested_offset = table->is_sstable()
-        ? static_cast<ObSSTable *>(table)->get_macro_offset() : 0;
-    const int64_t nested_size = table->is_sstable()
-        ? static_cast<ObSSTable *>(table)->get_macro_read_size() : 0;
+    const int64_t nested_offset = table->is_sstable() ? static_cast<ObSSTable *>(table)->get_macro_offset() : 0;
+    const int64_t nested_size = table->is_sstable() ? static_cast<ObSSTable *>(table)->get_macro_read_size() : 0;
     const ObITable::TableKey &table_key = table->get_key();
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
@@ -214,6 +217,7 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
           if (table->is_sstable()) {
             blocksstable::ObSSTableMetaHandle sst_meta_hdl;
             if (OB_FAIL(static_cast<blocksstable::ObSSTable *>(table)->get_meta(sst_meta_hdl))) {
+              SERVER_LOG(WARN, "fail to get sstable meta handle", K(ret));
             } else {
               blk_cnt = sst_meta_hdl.get_sstable_meta().get_linked_macro_block_count();
             }
@@ -250,14 +254,32 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
         case NESTED_SIZE:
           cur_row_.cells_[i].set_int(nested_size);
           break;
+        case CG_IDX:
+          cur_row_.cells_[i].set_int(table_key.get_column_group_id());
+          break;
         case DATA_CHECKSUM: {
           int64_t data_checksum = 0;
           if (table->is_memtable()) {
             // memtable has no data checksum, do nothing
+          } else if (table->is_co_sstable() && !static_cast<const ObCOSSTableV2 *>(table)->is_cgs_empty_co_table()) {
+            data_checksum = static_cast<storage::ObCOSSTableV2 *>(table)->get_cs_meta().data_checksum_;
           } else if (table->is_sstable()) {
             data_checksum = static_cast<blocksstable::ObSSTable *>(table)->get_data_checksum();
           }
           cur_row_.cells_[i].set_int(data_checksum);
+          break;
+        }
+        case TABLE_FLAG: {
+          int32_t flag = 0;
+          if (table->is_sstable()) {
+            blocksstable::ObSSTableMetaHandle sst_meta_hdl;
+            if (OB_FAIL(static_cast<blocksstable::ObSSTable *>(table)->get_meta(sst_meta_hdl))) {
+              SERVER_LOG(WARN, "fail to get sstable meta handle", K(ret));
+            } else {
+              flag = sst_meta_hdl.get_sstable_meta().get_table_backup_flag().get_flag();
+            }
+          }
+          cur_row_.cells_[i].set_int(flag);
           break;
         }
         default:
@@ -272,3 +294,4 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
   }
   return ret;
 }
+

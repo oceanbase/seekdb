@@ -18,7 +18,6 @@
 
 
 #include "ob_infix_expression.h"
-#include "common/json_type/ob_json_tree.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
 #include "share/ob_unique_index_row_transformer.h"
@@ -59,6 +58,7 @@ OB_DEF_DESERIALIZE(ObInfixExprItem)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPostExprItem::deserialize(CURRENT_CONTEXT->get_arena_allocator(), buf, data_len, pos))) {
+    LOG_WARN("expr item deserialize failed", K(ret));
   } else {
     bool param_lazy = false;
     bool is_called_in_sql = true;
@@ -81,6 +81,7 @@ int ObInfixExprItem::deep_copy(common::ObIAllocator &alloc, const bool only_obj 
   } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
     ObObj obj;
     if (OB_FAIL(ob_write_obj(alloc, get_obj(), obj))) {
+      LOG_WARN("copy object failed", K(ret));
     } else {
       *reinterpret_cast<ObObj *>(&v2_.v1_) = obj;
     }
@@ -89,15 +90,19 @@ int ObInfixExprItem::deep_copy(common::ObIAllocator &alloc, const bool only_obj 
       ObExprOperatorFactory factory(alloc);
       ObExprOperator *op = NULL;
       if (OB_FAIL(factory.alloc(item_type_, op))) {
+        LOG_WARN("alloc expr operator failed", K(ret));
       } else if (OB_ISNULL(op)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("NULL operator returned", K(ret));
       } else if (OB_FAIL(op->assign(*get_expr_operator()))) {
+        LOG_WARN("expr operator assign failed", K(ret));
       } else {
         v2_.op_ = op;
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unknown expr type", K(ret), K(item_type_));
   }
   return ret;
 }
@@ -138,6 +143,7 @@ OB_DEF_DESERIALIZE(ObInfixExpression)
   OB_UNIS_DECODE(count);
   if (OB_SUCC(ret) && count > 0) {
     if (OB_FAIL(exprs_.init(count, alloc_))) {
+      LOG_WARN("failed to init array", K(ret));
     } else {
       ObInfixExprItem tmp_expr_item;
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
@@ -145,6 +151,7 @@ OB_DEF_DESERIALIZE(ObInfixExpression)
         if (OB_FAIL(ret)) {
           // do mothing
         } else if (OB_FAIL(exprs_.push_back(tmp_expr_item))) {
+          LOG_WARN("failed to push back item", K(ret));
         }
       }
     }
@@ -157,6 +164,7 @@ int ObInfixExpression::set_item_count(const int64_t count)
   int ret = OB_SUCCESS;
   if (count < 0 || count >= std::numeric_limits<uint16_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid item count", K(ret), K(count));
   }
   return exprs_.init(count, alloc_);
 }
@@ -167,11 +175,14 @@ int ObInfixExpression::assign(const ObInfixExpression &other)
   if (this != &other) {
     if (other.exprs_.count() > 0) {
       if (OB_FAIL(exprs_.reserve(other.exprs_.count(), alloc_))) {
+        LOG_WARN("array reserve failed", K(ret));
       } else {
         FOREACH_CNT_X(item, other.exprs_, OB_SUCC(ret)) {
           if (OB_FAIL(exprs_.push_back(*item))) {
+            LOG_WARN("array push back failed", K(ret));
           } else {
             if (OB_FAIL(exprs_.at(exprs_.count() - 1).deep_copy(alloc_))) {
+              LOG_WARN("deep copy expr op failed", K(ret));
             }
           }
         }
@@ -188,13 +199,17 @@ int ObInfixExpression::add_expr_item(const ObInfixExprItem &item)
   // check T_OP_AGG_PARAM_LIST must be the root node of expression
   if (T_OP_AGG_PARAM_LIST == item.get_item_type() && 0 != exprs_.count()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("T_OP_AGG_PARAM_LIST not root node of expression", K(ret));
   } else if (OB_FAIL(exprs_.push_back(item))) {
+    LOG_WARN("array push back failed", K(ret));
   } else {
     ObInfixExprItem &new_item = exprs_.at(exprs_.count() - 1);
     if (OB_FAIL(new_item.deep_copy(alloc_, copy_obj_only))) {
+      LOG_WARN("expr deep copy failed", K(ret));
     } else if (IS_EXPR_OP(new_item.get_item_type())) {
       if (OB_ISNULL(new_item.get_expr_operator())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr operator is NULL", K(ret));
       } else {
         if (new_item.get_expr_operator()->is_param_lazy_eval()) {
           new_item.set_param_lazy_eval();
@@ -218,7 +233,7 @@ int ObInfixExpression::add_expr_item(const ObInfixExprItem &item)
     if (OB_ISNULL(_calc_stack)) { \
       ret = OB_ALLOCATE_MEMORY_FAILED; \
       LOG_WARN("get thread local stack failed", K(ret)); \
-    } else if (OB_UNLIKELY(_stack_size + _cur_top > ObExpressionCalcStack::STACK_SIZE)) { \
+    } else if (OB_UNLIKELY(_stack_size + _cur_top > ObPostfixExpressionCalcStack::STACK_SIZE)) { \
       if (NULL == (stack = static_cast<ObObj *>(expr_ctx.calc_buf_->alloc( \
                       sizeof(ObObj) * _stack_size)))) { \
         ret = OB_ALLOCATE_MEMORY_FAILED; \
@@ -263,12 +278,15 @@ int ObInfixExpression::calc(common::ObExprCtx &expr_ctx,
     if (OB_FAIL(exprs_.at(0).get_item_value_directly(*expr_ctx.phy_plan_ctx_, row, value))
         || OB_ISNULL(value)) {
       ret = COVER_SUCC(OB_ERR_UNEXPECTED);
+      LOG_WARN("get item value directly failed", K(ret), K(row), K_(exprs));
     } else if (value->is_ext() && ObSqlExpressionUtil::expand_array_params(expr_ctx, *value, value)) {
+      LOG_WARN("expand array params failed", K(ret));
     } else {
       val= *value;
     }
   } else if (OB_UNLIKELY(exprs_.at(0).get_item_type() == T_OP_SHADOW_UK_PROJECT)) {
     if (OB_FAIL(uk_fast_project(expr_ctx, row, val))) {
+      LOG_WARN("fail to uk fast project", K(ret));
     }
   } else {
     ALLOC_EVAL_STACK;
@@ -278,7 +296,9 @@ int ObInfixExpression::calc(common::ObExprCtx &expr_ctx,
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(exprs_.count() <= 0)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(exprs_.count()));
     } else if (OB_FAIL(eval(expr_ctx, row, stack, 0))) {
+      LOG_WARN("expr evaluate failed", K(ret));
     } else {
       val = *stack;
     }
@@ -301,7 +321,9 @@ int ObInfixExpression::calc(common::ObExprCtx &expr_ctx, const common::ObNewRow 
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(exprs_.count()));
   } else if (OB_FAIL(eval(expr_ctx, row1, stack, 0))) {
+    LOG_WARN("expr evaluate failed", K(ret));
   } else {
     val = *stack;
   }
@@ -324,26 +346,32 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(res_row.cells_) || OB_UNLIKELY(exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(exprs_.count()));
   } else {
     const ObInfixExprItem &item = exprs_.at(0);
     if (OB_UNLIKELY(T_OP_AGG_PARAM_LIST == item.get_item_type())) {
       for (int64_t i = 0; i < item.get_param_num() && OB_SUCC(ret); i++) {
         if (OB_FAIL(eval(expr_ctx, row, stack, item.get_param_idx() + i))) {
+          LOG_WARN("eval expr failed", K(ret), K(i));
         } else if(aggr_fun == T_FUN_JSON_OBJECTAGG && i == 1) {
           bool is_bool = false;
           ObObj *tmp = stack + item.get_param_idx() + i;
           if (OB_FAIL(get_param_is_boolean(expr_ctx, *tmp, is_bool))) {
+            LOG_WARN("get_param_is_boolean failed", K(ret));
           } else if (is_bool) {
             ObJsonBoolean j_bool(tmp->get_bool());
             ObIJsonBase *j_base = &j_bool;
             ObString raw_bin; // 
             if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, expr_ctx.calc_buf_))) {
+              LOG_WARN("get result binary failed", K(ret), K(*j_base));
             } else {
               // bool type convert to json bool, need to know outside has lob header or not
               bool has_lob_header = true;
-              common::ObTextStringObObjResult text_result(ObJsonType, nullptr, tmp, has_lob_header);
+              ObTextStringObObjResult text_result(ObJsonType, nullptr, tmp, has_lob_header);
               if (OB_FAIL(text_result.init(raw_bin.length(), expr_ctx.calc_buf_))) {
+                LOG_WARN("init lob result failed");
               } else if (OB_FAIL(text_result.append(raw_bin.ptr(), raw_bin.length()))) {
+                LOG_WARN("failed to append realdata", K(ret), K(raw_bin), K(text_result));
               } else {
                 text_result.set_result();
               }
@@ -354,6 +382,7 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(item.get_param_num() > res_row.count_)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("to small result row count",  K(ret), K(item), K(res_row.count_));
         } else {
           MEMCPY(res_row.cells_, stack + item.get_param_idx(),
               sizeof(ObObj) * item.get_param_num());
@@ -361,20 +390,25 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
       }
     } else {
       if (OB_FAIL(eval(expr_ctx, row, stack, 0))) {
+        LOG_WARN("expr evaluate failed", K(ret));
       } else if (aggr_fun == T_FUN_JSON_ARRAYAGG) {
         bool is_bool = false;
         if (OB_FAIL(get_param_is_boolean(expr_ctx, *stack, is_bool))) {
+          LOG_WARN("get_param_is_boolean failed", K(ret));
         } else if (is_bool) {
           ObJsonBoolean j_bool(stack->get_bool());
           ObIJsonBase *j_base = &j_bool;
           ObString raw_bin;
           if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, expr_ctx.calc_buf_))) {
+            LOG_WARN("get result binary failed", K(ret), K(*j_base));
           } else {
             // bool type convert to json bool, need to know outside has lob header or not
             bool has_lob_header = true;
-            common::ObTextStringObObjResult text_result(ObJsonType, nullptr, stack, has_lob_header);
+            ObTextStringObObjResult text_result(ObJsonType, nullptr, stack, has_lob_header);
             if (OB_FAIL(text_result.init(raw_bin.length(), expr_ctx.calc_buf_))) {
+              LOG_WARN("init lob result failed");
             } else if (OB_FAIL(text_result.append(raw_bin.ptr(), raw_bin.length()))) {
+              LOG_WARN("failed to append realdata", K(ret), K(raw_bin), K(text_result));
             } else {
               text_result.set_result();
             }
@@ -407,6 +441,7 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
     if (!item.is_param_lazy_eval()) {
       for (int64_t i = 0; i < item.get_param_num() && OB_SUCC(ret); i++) {
         if (OB_FAIL(eval(ctx, row, stack, item.get_param_idx() + i))) {
+          LOG_WARN("eval expr failed", K(ret), K(i));
         }
       }
     }
@@ -415,6 +450,7 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
     // T_OP_AGG_PARAM_LIST is special processed in calc_row()
     if (OB_UNLIKELY(T_OP_AGG_PARAM_LIST == item.get_item_type())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("agg param list not expected here", K(ret));
     } else if (T_REF_COLUMN == item.get_item_type()) {
       const int64_t idx = item.get_column();
       if (OB_LIKELY(idx >= 0 && OB_LIKELY(idx < row.count_) && OB_LIKELY(NULL != row.cells_))) {
@@ -446,7 +482,9 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
       const ObObj *obj = NULL;
       if (OB_FAIL(item.get_indirect_const(*ctx.phy_plan_ctx_, obj)) || OB_ISNULL(obj)) {
         ret = COVER_SUCC(OB_ERR_UNEXPECTED);
+        LOG_WARN("get obj failed", K(ret));
       } else if (obj->is_ext() && OB_FAIL(ObSqlExpressionUtil::expand_array_params(ctx, *obj, obj))) {
+        LOG_WARN("expand array params failed", K(ret));
       } else {
         stack[pos] = *obj;
       }
@@ -456,8 +494,12 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
       const ObExprOperator *op = item.get_expr_operator();
       if (OB_ISNULL(op)) {
         ret = OB_BAD_NULL_ERROR;
+        LOG_WARN("expr operator is NULL", K(ret));
       } else if (OB_FAIL(op->eval(ctx, stack[pos],
           stack + item.get_param_idx(), item.get_param_num()))) {
+        LOG_WARN("expr evaluate failed", K(ret),
+            "type", item.get_item_type(),
+            "type_name", get_type_name(item.get_item_type()));
       } else  {
         // For expression op, we need set scale info after it has been evaluated.
         if (OB_UNLIKELY(ObBitType == stack[pos].get_type() &&
@@ -468,6 +510,9 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid expression operator", K(ret),
+          "type", item.get_item_type(),
+          "type_name", get_type_name(item.get_item_type()));
     }
   }
   // In case the parameter eval fails, set the parameter value to NULL, because the parameter value
@@ -493,6 +538,7 @@ int ObInfixExpression::generate_idx_for_regexp_ops(int16_t &cur_regexp_op_count)
       ObExprRegexp *regexp_op = static_cast<ObExprRegexp *>(exprs_.at(i).get_expr_operator());
       if (OB_ISNULL(regexp_op)) {
         ret = OB_BAD_NULL_ERROR;
+        LOG_WARN("regexp op is null", K(ret));
       } else {
         regexp_op->set_regexp_idx(cur_regexp_op_count++);
       }
@@ -543,12 +589,14 @@ int ObInfixExpression::uk_fast_project(common::ObExprCtx &expr_ctx, const common
       } else {
         const int64_t col_idx = exprs_.at(i).get_column();
         if (OB_FAIL(projector.push_back(col_idx))) {
+          LOG_WARN("fail to push back projector", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObUniqueIndexRowTransformer::check_need_shadow_columns(row, unique_key_cnt,
+      if (OB_FAIL(ObUniqueIndexRowTransformer::check_need_shadow_columns(row, static_cast<ObCompatibilityMode>(THIS_WORKER.get_compatibility_mode()), unique_key_cnt,
           &projector, expr_ctx.row_ctx_.is_uk_cnt_null_))) {
+        LOG_WARN("fail to check need shadow columns", K(ret));
       }
     }
     expr_ctx.row_ctx_.is_uk_checked_ = true;

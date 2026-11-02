@@ -137,7 +137,8 @@ int ObArithResultTypeMap::define_rules()
   return ret;
 }
 
-ObArithResultTypeMap MOD_RESULT_TYPE_MAP;
+ObArithResultTypeMap ARITH_RESULT_TYPE_ORACLE;
 
 }
 }
+

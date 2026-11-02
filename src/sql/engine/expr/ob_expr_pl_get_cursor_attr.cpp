@@ -28,6 +28,9 @@ namespace sql
 {
 OB_SERIALIZE_MEMBER(ObExprPLGetCursorAttr::ExtraInfo,
                     pl_cursor_info_.type_,
+                    pl_cursor_info_.bulk_rowcount_idx_,
+                    pl_cursor_info_.bulk_exceptions_idx_,
+                    pl_cursor_info_.bulk_exceptions_need_code_,
                     pl_cursor_info_.is_explicit_);
 
 int ObExprPLGetCursorAttr::ExtraInfo::init_pl_cursor_info(ObIAllocator *allocator,
@@ -40,13 +43,16 @@ int ObExprPLGetCursorAttr::ExtraInfo::init_pl_cursor_info(ObIAllocator *allocato
   void *buf = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("allocator is null", K(ret), K(allocator));
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ExtraInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     extra_info = new(buf) ExtraInfo(*allocator, type);
     extra_info->pl_cursor_info_ = cursor_info;
     if (OB_SUCC(ret)) {
       rt_expr.extra_info_ = extra_info;
+      LOG_DEBUG("succ init_cursor_info", K(cursor_info));
     }
   }
   return ret;
@@ -59,8 +65,10 @@ int ObExprPLGetCursorAttr::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ExtraInfo *copied_cursor_info = NULL;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
+    LOG_WARN("failed to alloc expr extra info", K(ret));
   } else if (OB_ISNULL(copied_cursor_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error", K(ret));
   } else {
     copied_cursor_info->pl_cursor_info_ = pl_cursor_info_;
   }
@@ -71,7 +79,8 @@ OB_SERIALIZE_MEMBER((ObExprPLGetCursorAttr, ObFuncExprOperator));
 
 ObExprPLGetCursorAttr::ObExprPLGetCursorAttr(ObIAllocator &alloc)
   : ObFuncExprOperator(
-      alloc, T_FUN_PL_GET_CURSOR_ATTR, N_PL_GET_CURSOR_ATTR, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
+      alloc, T_FUN_PL_GET_CURSOR_ATTR, N_PL_GET_CURSOR_ATTR, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
+      false, INTERNAL_IN_ORACLE_MODE),
     pl_cursor_info_() {}
 
 ObExprPLGetCursorAttr::~ObExprPLGetCursorAttr() {}
@@ -82,8 +91,10 @@ int ObExprPLGetCursorAttr::assign(const ObExprOperator &other)
   const ObExprPLGetCursorAttr *tmp = static_cast<const ObExprPLGetCursorAttr *>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       this->pl_cursor_info_ = tmp->pl_cursor_info_;
     }
@@ -101,8 +112,10 @@ int ObExprPLGetCursorAttr::calc_result_typeN(ObExprResType &type,
   UNUSED(types);
   if (param_num > 1) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid number of arguments", K(param_num), K(ret));
   } else if (!pl_cursor_info_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("pl cursor info is invalid", K(ret));
   } else {
     if (pl_cursor_info_.is_isopen()
         || pl_cursor_info_.is_found()
@@ -133,6 +146,7 @@ int ObExprPLGetCursorAttr::cg_expr(
   const ObPLGetCursorAttrRawExpr &pl_expr = static_cast<const ObPLGetCursorAttrRawExpr&>(raw_expr);
   if (OB_FAIL(ExtraInfo::init_pl_cursor_info(
       op_cg_ctx.allocator_, type_, pl_expr.get_pl_get_cursor_attr_info(), rt_expr))) {
+    LOG_WARN("fail to init_cursor_info", K(ret), K(type_));
   } else {
     rt_expr.eval_func_ = &calc_pl_get_cursor_attr;
   }
@@ -158,28 +172,37 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
   if (OB_FAIL(ret)) {
   } else if (!info->pl_cursor_info_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (info->pl_cursor_info_.is_explicit_cursor()) {
+    LOG_WARN("pl cursor info is invalid", K(ret), K(info->pl_cursor_info_));
+  } else if (pl::ObPLGetCursorAttrInfo::PL_CURSOR_BULK_ROWCOUNT == info->pl_cursor_info_.get_type()
+             || pl::ObPLGetCursorAttrInfo::PL_CURSOR_BULK_EXCEPTIONS == info->pl_cursor_info_.get_type()
+             || info->pl_cursor_info_.is_explicit_cursor()) {
     if (1 != expr.arg_cnt_) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(info->pl_cursor_info_), K(expr.arg_cnt_));
     }
   } else {
     if (1 == expr.arg_cnt_) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(info->pl_cursor_info_), K(expr.arg_cnt_));
     }
   }
   if (OB_SUCC(ret) && 1 == expr.arg_cnt_) {
     datum_meta = expr.args_[0]->datum_meta_;
     if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+      LOG_WARN("eval arg failed", K(ret), K(expr));
     } else if (info->pl_cursor_info_.is_explicit_cursor()) {
       if (datum_meta.type_ != ObExtendType) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument: expected extend type", K(ret));
       }
     } else {
       if (datum->is_null()) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("bulk index count can not null", K(ret));
       } else {
         if (datum_meta.type_ != ObIntType) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid argument: expected int type", K(ret));
         }
       }
     }
@@ -192,8 +215,10 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
         if (obj.is_null()) {
           // do nothing, null cursor is legal...
         } else if (!obj.is_ext()
-                    || obj.get_meta().get_extend_type() != pl::PL_CURSOR_TYPE) {
+                    || (obj.get_meta().get_extend_type() != pl::PL_CURSOR_TYPE
+                        && obj.get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE)) {
           ret = OB_ERR_CURSOR_ATTR_APPLY;
+          LOG_WARN("cursor attribute may not applied to non-cursor", K(ret), K(obj.get_meta()));
         }
       }
       OX (cursor = reinterpret_cast<const pl::ObPLCursorInfo*>(obj.get_ext()));
@@ -215,9 +240,11 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       case pl::ObPLGetCursorAttrInfo::PL_CURSOR_FOUND: {
         if (OB_ISNULL(cursor)) {
           ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
         } else {
           bool found = false, isnull = false;
           if (OB_FAIL(cursor->get_found(found, isnull))) {
+            LOG_WARN("fail to get cursor found attr", K(ret));
           } else if (isnull) {
             expr_datum.set_null();
           } else {
@@ -229,9 +256,11 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       case pl::ObPLGetCursorAttrInfo::PL_CURSOR_NOTFOUND: {
         if (OB_ISNULL(cursor)) {
           ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
         } else {
           bool notfound = false, isnull = false;
           if (OB_FAIL(cursor->get_notfound(notfound, isnull))) {
+            LOG_WARN("fail to get cursor notfound attr", K(ret));
           } else if (isnull) {
             expr_datum.set_null();
           } else {
@@ -243,10 +272,12 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       case pl::ObPLGetCursorAttrInfo::PL_CURSOR_ROWCOUNT: {
         if (OB_ISNULL(cursor)) {
           ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
         } else {
           int64_t rowcount = 0;
           bool isnull = false;
           if (OB_FAIL(cursor->get_rowcount(rowcount, isnull))) {
+            LOG_WARN("fail to get rowcount attr", K(ret));
           } else if (isnull) {
             expr_datum.set_null();
           } else {
@@ -255,8 +286,69 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
         }
         break;
       }
+      case pl::ObPLGetCursorAttrInfo::PL_CURSOR_ROWID: {
+        if (OB_ISNULL(cursor)) {
+          ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
+        } else {
+          ObString rowid;
+          if (OB_FAIL(cursor->get_rowid(rowid))) {
+            LOG_WARN("fail to get rowcount attr", K(ret));
+            // is_for_update && !has_hidden_rowid, indicates that it is a multi-table join without specifying a unique for update table
+            if (OB_INVALID_ROWID == ret && cursor->is_for_update() && !cursor->has_hidden_rowid()) {
+              ret = OB_SUCCESS;
+              expr_datum.set_null();
+            }
+          } else if (OB_UNLIKELY(rowid.empty())) {
+            expr_datum.set_null();
+          } else {
+            expr_datum.set_string(rowid.ptr(), rowid.length());
+          }
+        }
+        break;
+      }
+      case pl::ObPLGetCursorAttrInfo::PL_CURSOR_BULK_ROWCOUNT: {
+        if (OB_ISNULL(cursor)) {
+          ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
+        } else {
+          int64_t index = datum->get_int();
+          int64_t rowcount = 0;
+          if (OB_FAIL(cursor->get_bulk_rowcount(index - 1, rowcount))) {
+            LOG_WARN("failed to get cursor bulk rowcount attr", K(ret));
+          } else {
+            expr_datum.set_int(rowcount);
+          }
+        }
+        break;
+      }
+      case pl::ObPLGetCursorAttrInfo::PL_CURSOR_BULK_EXCEPTIONS_COUNT: {
+        if (OB_ISNULL(cursor)) {
+          ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
+        } else {
+          expr_datum.set_int(cursor->get_bulk_exception_count());
+        }
+        break;
+      }
+      case pl::ObPLGetCursorAttrInfo::PL_CURSOR_BULK_EXCEPTIONS: {
+        if (OB_ISNULL(cursor)) {
+          ret = OB_ERR_INVALID_CURSOR;
+          LOG_WARN("cursor is null", K(ret));
+        } else {
+          int64_t index = datum->get_int(), exception = 0;
+          bool need_code = info->pl_cursor_info_.need_get_exception_code();
+          if (OB_FAIL(cursor->get_bulk_exception(index - 1, need_code, exception))) {
+            LOG_WARN("failed to get bulk exception", K(ret), K(index), K(need_code));
+          } else {
+            expr_datum.set_int(exception);
+          }
+        }
+        break;
+      }
       default: {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("wrong pl get cursor attribute info type", K(ret), K(type));
       }
     }
   }

@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
-#include "query/session/ob_session_access.h"
+#include "storage/tablelock/ob_lock_executor.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
@@ -47,19 +46,30 @@ ObRenameTableStmt::~ObRenameTableStmt()
 int ObRenameTableStmt::add_rename_table_item(const obcall::ObRenameTableItem &rename_table_item){
   int ret = OB_SUCCESS;
   if (OB_FAIL(rename_table_arg_.rename_table_items_.push_back(rename_table_item))) {
+    SQL_RESV_LOG(WARN, "failed to add rename table item to rename table arg!", K(ret));
   }
   return ret;
 }
 
 
-void ObRenameTableStmt::set_lock_priority()
+int ObRenameTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-
-  if (config::enable_lock_priority()) {
-    rename_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
+  
+  if (!true) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
+  } else if (GCONF.enable_lock_priority) {
+    if (!ObLockExecutor::proxy_is_support(session)) {
+      ret = OB_NOT_SUPPORTED;
+      SQL_RESV_LOG(WARN, "is in proxy_mode and not support rename", K(ret), KPC(session));
+    } else {
+      rename_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
+    }
   }
+  return ret;
 }
 
 } //namespace sql
 }
+

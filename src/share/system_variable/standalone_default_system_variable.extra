@@ -3,7 +3,7 @@
     "scenario": "express_oltp",
     "comment": "for workloads like trade, payment core system, internet high throughput application, etc. no restrictions like foreign key, no stored procedure, no long transaction, no large transaction, no complex join, no complex subquery",
     "variables": {
-      "runtime": [
+      "tenant": [
       ]
     }
   },
@@ -11,7 +11,15 @@
     "scenario": "complex_oltp",
     "comment": "for workloads like bank, insurance system. they often have complex join, complex correlated subquery, batch jobs written in PL, have both long and large transactions. Sometimes use parallel execution for short running queries",
     "variables": {
-      "runtime": [
+      "tenant": [
+      ]
+    }
+  },
+  {
+    "scenario": "olap",
+    "comment": "for real-time data warehouse analytics scenarios.",
+    "variables": {
+      "tenant": [
       ]
     }
   },
@@ -19,7 +27,15 @@
     "scenario": "kv",
     "comment": "for key-value workloads with very high throughput and latency sensitivity",
     "variables": {
-      "runtime": [
+      "tenant": [
+      ]
+    }
+  },
+  {
+    "scenario": "htap",
+    "comment": "for mixed OLAP and OLTP workload. Typically utilized for obtaining instant insights from active operational data, fraud detection, and personalized recommendations",
+    "variables": {
+      "tenant": [
       ]
     }
   },
@@ -27,7 +43,7 @@
     "scenario": "express_oltp_perf",
     "comment": "for high performance workloads like trade, payment core system, internet high throughput application, etc. no restrictions like foreign key, no stored procedure, no long transaction, no large transaction, no complex join, no complex subquery",
     "variables": {
-      "runtime": [
+      "tenant": [
       ]
     }
   }

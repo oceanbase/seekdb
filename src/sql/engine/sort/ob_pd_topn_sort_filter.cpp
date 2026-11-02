@@ -17,12 +17,11 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_pd_topn_sort_filter.h"
-#include "share/rc/ob_server_runtime.h"
+#include "sql/engine/sort/ob_sort_vec_op.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
-#include "share/ob_server_struct.h"
-#include "sql/ob_sql.h"
+#include "src/observer/ob_server.h"
 
 namespace oceanbase
 {
@@ -53,6 +52,13 @@ void ObPushDownTopNFilter::destroy()
   topn_filter_ctx_ = nullptr;
 }
 
+int ObPushDownTopNFilter::init(const ObSortVecOpContext &ctx,
+                                      lib::MemoryContext &mem_context)
+{
+  return init(ctx.is_fetch_with_ties_, ctx.pd_topn_filter_info_, ctx.sk_collations_,
+              ctx.exec_ctx_, mem_context);
+}
+
 int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
                                const ObPushDownTopNFilterInfo *pd_topn_filter_info,
                                const ObIArray<ObSortFieldCollation> *sort_collations,
@@ -71,19 +77,19 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
     // Failing to do so means that different SQL queries could access the same plan cache, resulting
     // in identical ObP2PDhKey values. Consequently, these queries would receive the same TOP-N
     // pushdown runtime filter message from a single SQL query, which is a hazardous behavior.
-    CK (OB_NOT_NULL(exec_ctx->get_sql_execution_id_provider()));
-    OX (px_seq_id = exec_ctx->get_sql_execution_id_provider()->get_px_sequence_id());
+    px_seq_id = GCTX.sql_engine_->get_px_sequence_id();
   } else {
     ObPxSqcMeta &sqc = sqc_handler->get_sqc_init_arg().sqc_;
     px_seq_id = sqc.get_interrupt_id().px_interrupt_id_.first_;
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(PX_P2P_DH.alloc_msg(mem_context_->get_malloc_allocator(),
+  if (OB_FAIL(PX_P2P_DH.alloc_msg(mem_context_->get_malloc_allocator(),
                                   pd_topn_filter_info_->dh_msg_type_, p2p_msg))) {
+    LOG_WARN("fail to alloc msg", K(ret));
   } else if (FALSE_IT(pd_topn_filter_msg = static_cast<ObPushDownTopNFilterMsg *>(p2p_msg))) {
   } else if (OB_FAIL(pd_topn_filter_msg->init(pd_topn_filter_info, sort_collations,
                                               exec_ctx, px_seq_id, is_fetch_with_ties))) {
+    LOG_WARN("failed to init pushdown topn filter msg");
   } else if (!pd_topn_filter_info_->is_shuffle_
              && OB_FAIL(create_pd_topn_filter_ctx(pd_topn_filter_info, exec_ctx, px_seq_id))) {
     // for local topn filter pushdown, we directly create filter_ctx here;
@@ -105,6 +111,20 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
     }
   }
 
+  LOG_TRACE("[TopN Filter] init topn filter msg");
+  return ret;
+}
+
+int ObPushDownTopNFilter::update_filter_data(ObCompactRow *compact_row, const RowMeta *row_meta_)
+{
+  int ret = OB_SUCCESS;
+  bool is_updated = false;
+  if (OB_FAIL(pd_topn_filter_msg_->update_filter_data(compact_row, row_meta_, is_updated))) {
+    LOG_WARN("failed to update filter data", K(ret));
+  } else if (FALSE_IT(set_need_update(false))) {
+  } else if (is_updated && OB_FAIL(publish_topn_msg())) {
+    LOG_WARN("failed to publish topn msg");
+  }
   return ret;
 }
 
@@ -113,6 +133,7 @@ int ObPushDownTopNFilter::update_filter_data(ObChunkDatumStore::StoredRow *store
   int ret = OB_SUCCESS;
   bool is_updated = false;
   if (OB_FAIL(pd_topn_filter_msg_->update_filter_data(store_row, is_updated))) {
+    LOG_WARN("failed to update filter data", K(ret));
   } else if (FALSE_IT(set_need_update(false))) {
   } else if (is_updated && OB_FAIL(publish_topn_msg())) {
     LOG_WARN("failed to publish topn msg");
@@ -139,12 +160,21 @@ int ObPushDownTopNFilter::create_pd_topn_filter_ctx(
 
   if (nullptr == topn_filter_ctx) {
     if (OB_FAIL(exec_ctx->create_expr_op_ctx(expr_ctx_id, topn_filter_ctx))) {
+      LOG_WARN("failed to create operator ctx", K(ret), K(expr_ctx_id));
     } else {
       topn_filter_ctx_ = topn_filter_ctx;
       ObP2PDhKey dh_key(pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id);
       topn_filter_ctx->topn_filter_key_ = dh_key;
       topn_filter_ctx->slide_window_.set_adptive_ratio_thresheld(
           pd_topn_filter_info->adaptive_filter_ratio_);
+      int64_t max_batch_size = max(pd_topn_filter_info->max_batch_size_, 1);
+      void *buf = nullptr;
+      if (OB_ISNULL(buf = exec_ctx->get_allocator().alloc((sizeof(uint16_t) * max_batch_size)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate selector_", K(max_batch_size));
+      } else {
+        topn_filter_ctx->row_selector_ = static_cast<uint16_t *>(buf);
+      }
     }
   } else {
     // topn_filter_ctx already exists means it is in rescan process
@@ -167,10 +197,14 @@ int ObPushDownTopNFilter::publish_topn_msg()
     // TODO XUNSI: impl global topn filter
   } else if (!msg_set_) {
     pd_topn_filter_msg_->set_is_ready(true);
-    if (OB_FAIL(PX_P2P_DH.publish_local_msg(*pd_topn_filter_msg_))) {
+    if (OB_FAIL(PX_P2P_DH.send_local_p2p_msg(*pd_topn_filter_msg_))) {
+      LOG_WARN("fail to send local p2p msg", K(ret));
     } else {
       msg_set_ = true;
       if (topn_filter_ctx_) {
+        LOG_TRACE("[TopN Filter] success to set msg to local p2p datahub", K(pd_topn_filter_msg_),
+                  K(topn_filter_ctx_->topn_filter_key_), K(topn_filter_ctx_->total_count_),
+                  K(topn_filter_ctx_->check_count_), K(topn_filter_ctx_->filter_count_));
       }
     }
   }

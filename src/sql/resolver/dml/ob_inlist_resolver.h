@@ -48,6 +48,7 @@ struct ObInListsResolverHelper
   ObCollationType server_collation_;
   bool enable_decimal_int_;
   bool is_prepare_stmt_;
+  uint64_t optimizer_features_enable_version_;
 
   ObInListsResolverHelper(ObIAllocator &alloc, 
                           const ParamStore *param_store, 
@@ -55,20 +56,23 @@ struct ObInListsResolverHelper
                           ObCollationType nchar_collation, 
                           ObCollationType server_collation, 
                           bool enable_decimal_int,
-                          bool is_prepare_stmt)
+                          bool is_prepare_stmt,
+                          uint64_t optimizer_features_enable_version)
   : alloc_(alloc), 
     param_store_(param_store), 
     connect_collation_(connect_collation),
     nchar_collation_(nchar_collation), 
     server_collation_(server_collation), 
     enable_decimal_int_(enable_decimal_int),
-    is_prepare_stmt_(is_prepare_stmt) {}
+    is_prepare_stmt_(is_prepare_stmt),
+    optimizer_features_enable_version_(optimizer_features_enable_version) {}
 
   TO_STRING_KV(K_(connect_collation), 
                K_(nchar_collation), 
                K_(server_collation), 
                K_(enable_decimal_int), 
-               K_(is_prepare_stmt));
+               K_(is_prepare_stmt),
+               K_(optimizer_features_enable_version));
 };
 
 class ObInListResolver

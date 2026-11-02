@@ -94,6 +94,8 @@ OB_INLINE int ObRawEncoder::store_data(
   if (STORED_NOT_EXT != ext_val) {
     if (OB_FAIL(bs.set(column_header_.extend_value_index_,
         extend_value_bit_, static_cast<int64_t>(ext_val)))) {
+      STORAGE_LOG(WARN,"store extend value bit failed",
+          K(ret), K_(column_header), K_(extend_value_bit), K(ext_val), K_(column_index));
     }
   } else if (!column_header_.is_fix_length() || column_header_.length_ > 0) { // need row value store
     switch (store_class_) {
@@ -107,7 +109,8 @@ OB_INLINE int ObRawEncoder::store_data(
       case ObStringSC:
       case ObTextSC: 
       case ObJsonSC:
-      case ObGeometrySC: {
+      case ObGeometrySC:
+      case ObRoaringBitmapSC: {
         MEMCPY(buf, datum.ptr_, datum.len_);
         break;
       }

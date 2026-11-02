@@ -18,19 +18,48 @@
 #define OCEANBASE_SHARE_FTS_INDEX_BUILDER_UTIL_H_
 
 #include "object/ob_object.h"
-#include "query/ddl/ob_ddl_schema_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 namespace oceanbase { namespace sql { class ObSchemaChecker; class ObSqlSchemaGuard; } }
-#include "data_plane/fts/ob_doc_id.h"
-#include "data_plane/fts/ob_fts_literal.h"
-namespace oceanbase { namespace sql { class ObRawExpr; class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
+#include "storage/fts/ob_fts_literal.h"
+namespace oceanbase { namespace sql { class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
 
 namespace oceanbase
 {
+namespace rootserver
+{
+class ObDDLService;
+class ObDDLOperator;
+} // namespace rootserver
+
 namespace share
 {
 class ObMulValueIndexBuilderUtil;
+
+class ObDocIDUtils
+{
+public:
+  // for now, we can judge by it's col id, else we should make it compatiable.
+  static ObDocIDType get_type_by_col_id(const uint64_t col_id)
+  {
+    ObDocIDType type = ObDocIDType::TABLET_SEQUENCE;
+    if (col_id == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
+      return ObDocIDType::HIDDEN_INC_PK;
+    }
+    return type;
+  }
+
+  static bool is_docid_col_id_valid(const uint64_t col_id)
+  {
+    bool bret = false;
+    if (OB_HIDDEN_PK_INCREMENT_COLUMN_ID == col_id) {
+      bret = true;
+    } else if ((col_id > OB_APP_MIN_COLUMN_ID) && (OB_INVALID_ID != col_id)) {
+      bret = true;
+    }
+    return bret;
+  }
+};
 
 class ObFtsIndexBuilderUtil
 {
@@ -53,7 +82,7 @@ public:
       const obcall::ObCreateIndexArg &arg,
       const share::schema::ObIndexType index_type,
       ObSchemaGetterGuard &schema_guard,
-      query::ObIAuxIndexSchemaChecker &schema_checker,
+      rootserver::ObDDLService &ddl_service,
       ObIAllocator &allocator,
       bool &is_exist);
   static int get_doc_id_column_id(
@@ -126,7 +155,7 @@ public:
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
       ObMySQLTransaction &trans);
-  static int try_load_dictionary();
+  static int try_load_dictionary_for_all_tenants();
   static int check_supportability_for_loader_key(const ObString &parser_name,
         const ObCharsetType charset_type);
   static int check_supportability_for_building_index(
@@ -146,7 +175,7 @@ public:
       ObTableSchema &new_table_schema,
       ObTableSchema &new_index_schema,
       common::ObIAllocator &allocator,
-      query::ObIColumnSchemaWriter &column_writer,
+      oceanbase::rootserver::ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans,
       ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
       ObSEArray<ObString, 1> &domain_store_columns);
@@ -159,6 +188,23 @@ public:
         const share::schema::ObIndexType index_type,
         const int64_t original_parallelism,
         int64_t &decided_parallelism);
+  static int decide_ddl_parallelism(
+        const share::schema::ObIndexType index_type,
+        const int64_t original_parallelism,
+        const bool has_parallel_hint,
+        int64_t &decided_parallelism);
+  static int is_fulltext_dict_referenced(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &dict_table_schema,
+      bool &is_referenced);
+  static int validate_fulltext_dict_table_schema(
+      const share::schema::ObTableSchema &table_schema,
+      const bool require_marker);
+  static int find_fts_doc_word_schema(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &data_schema,
+      const share::schema::ObTableSchema &fts_index_schema,
+      const share::schema::ObTableSchema *&doc_word_schema);
 private:
   static int build_fts_aux_index_name(
     const ObIndexType type,

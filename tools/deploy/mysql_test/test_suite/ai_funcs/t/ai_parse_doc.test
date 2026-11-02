@@ -1,0 +1,45 @@
+--echo # ==== ai_parse_doc(model_name, context [, params_json]) -> LONGTEXT ====
+--echo # Vision/OCR document parsing: rasterize a PDF in-process with pdfium and send it
+--echo # to a vision model, returning its text. This test runs a real end-to-end parse of
+--echo # the committed ai_parse_sample.pdf fixture and REQUIRES a live vision endpoint:
+--echo # API_KEY, MODEL_NAME and API_ENDPOINT must all be set (hardcoded in vldb.yml for
+--echo # CI) or the test fails. The parsed text is non-deterministic, so it is not
+--echo # recorded; the test just asserts a document actually parses.
+--disable_warnings
+DROP DATABASE IF EXISTS ai_parse_test;
+--enable_warnings
+CREATE DATABASE ai_parse_test;
+USE ai_parse_test;
+
+--echo # ==== live end-to-end parse of the committed PDF fixture ====
+--echo # Required env (set in vldb.yml for CI, or export locally):
+--echo #   API_KEY       vision endpoint key
+--echo #   MODEL_NAME    e.g. gpt-4o-mini
+--echo #   API_ENDPOINT  e.g. https://api.openai.com/v1/chat/completions
+--echo #   AI_FIXTURE_DIR  abs path to test_suite/ai_funcs (holds ai_parse_sample.pdf)
+--let $api_key = $API_KEY
+--let $api_model = $MODEL_NAME
+--let $api_endpoint = $API_ENDPOINT
+--let $fx = $AI_FIXTURE_DIR
+if (`SELECT '$api_key' = '' OR '$api_model' = '' OR '$api_endpoint' = ''`)
+{
+  --die ai_parse_doc requires API_KEY, MODEL_NAME and API_ENDPOINT -- set them (hardcoded in vldb.yml for CI)
+}
+--disable_query_log
+--disable_result_log
+eval call DBMS_AI_SERVICE.CREATE_AI_MODEL('ap_live', '{"type":"completion","model_name":"$api_model"}');
+eval call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('ap_live_ep', '{"ai_model_name":"ap_live","scope":"all","url":"$api_endpoint","access_key":"$api_key","provider":"openai"}');
+eval CREATE LOCATION ap_live_loc URL = 'file://$fx/';
+SELECT ai_parse_doc('ap_live', load_file('ap_live_loc', 'ai_parse_sample.pdf'), '{"input_type":"pdf"}') INTO @parsed;
+DROP LOCATION ap_live_loc;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ap_live_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ap_live');
+--enable_result_log
+--enable_query_log
+if (`SELECT @parsed IS NULL OR LENGTH(@parsed) = 0`)
+{
+  --die live ai_parse_doc returned empty text from the committed PDF fixture
+}
+
+--echo # cleanup
+DROP DATABASE ai_parse_test;

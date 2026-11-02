@@ -78,14 +78,19 @@ int ObSSTableSecMetaIterator::open(
   const bool is_ddl_mem_sstable = sstable.is_ddl_mem_sstable();
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("Fail to open sstable secondary meta iterator", K(ret));
   } else if (OB_UNLIKELY(!query_range.is_valid()
       || !sstable.is_valid()
       || meta_type == ObMacroBlockMetaType::MAX)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument to open sstable secondary meta iterator",
+        K(ret), K(query_range), K(sstable), K(meta_type));
   } else if (sstable.is_empty()) {
     set_iter_end();
     is_inited_ = true;
+    LOG_DEBUG("Empty sstable secondary meta", K(ret), K(meta_type), K(sstable));
   } else if (OB_FAIL(sstable.get_meta(sstable_meta_hdl_))) {
+    LOG_WARN("get meta handle fail", K(ret), K(sstable));
   } else {
     rowkey_read_info_ = &rowkey_read_info;
     
@@ -97,17 +102,22 @@ int ObSSTableSecMetaIterator::open(
   }
   if (OB_FAIL(ret) || is_prefetch_end_) {
   } else if (is_ddl_mem_sstable) {
+    const bool is_co_sstable = sstable.is_co_sstable() || sstable.is_ddl_mem_co_cg_sstable();
     const ObMicroBlockData &root_block = sstable_meta_hdl_.get_sstable_meta().get_root_info().get_block_data();
     if (ObMicroBlockData::DDL_BLOCK_TREE != root_block.type_ || nullptr == root_block.buf_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("block type is not ddl block tree", K(ret), K(root_block));
     } else {
       block_meta_tree_ = reinterpret_cast<ObBlockMetaTree *>(const_cast<char *>(root_block.buf_));
       const int64_t step = max(1, sample_step);
-      if (OB_FAIL(ddl_iter_.set_iter_param(const_cast<ObStorageDatumUtils *>(&rowkey_read_info.get_datum_utils()), is_reverse_scan, block_meta_tree_, step))) {
+      if (OB_FAIL(ddl_iter_.set_iter_param(const_cast<ObStorageDatumUtils *>(&rowkey_read_info.get_datum_utils()), is_reverse_scan, block_meta_tree_, is_co_sstable, step))) {
+        LOG_WARN("fail to set ddl iter param", K(ret));
       } else if (OB_FAIL(ddl_iter_.locate_range(query_range,
                                                 true, /*is_left_border*/
-                                                true /*is_right_border*/))) {
+                                                true, /*is_right_border*/
+                                                true /*is_bormal_cg*/))) {
         if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
+          LOG_WARN("locate range failed", K(ret), K(query_range), K(ddl_iter_));
         } else {
           ddl_iter_.set_iter_end();
           ret = OB_SUCCESS; // return OB_ITER_END on get_next() for get
@@ -121,10 +131,12 @@ int ObSSTableSecMetaIterator::open(
     }
   } else if (OB_FAIL(idx_cursor_.init(sstable, allocator, rowkey_read_info_,
       get_index_tree_type_map()[meta_type]))) {
+    LOG_WARN("Fail to init index block tree cursor", K(ret), K(meta_type));
   } else if (OB_FAIL(micro_reader_helper_.init(allocator))) {
+    LOG_WARN("Fail to init micro reader helper", K(ret), K(sstable));
   } else {
-    const int64_t store_rowkey_cnt = rowkey_read_info.get_schema_rowkey_count()
-        + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
+    const int64_t store_rowkey_cnt = sstable.is_normal_cg_sstable() ? 1
+        : rowkey_read_info.get_schema_rowkey_count() + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
     is_precise_rowkey_ = store_rowkey_cnt == query_range.get_end_key().get_datum_cnt();
   }
 
@@ -140,11 +152,13 @@ int ObSSTableSecMetaIterator::open(
           query_range.get_border_flag().inclusive_start(),
           start_bound_micro_block_,
           start_key_beyond_range))) {
+        LOG_WARN("Fail to locate start bound micro block", K(ret));
       } else if (OB_FAIL(locate_bound_micro_block(
           query_range.get_end_key(),
           (!query_range.get_border_flag().inclusive_end() || is_precise_rowkey_),
           end_bound_micro_block_,
           end_key_beyond_range))) {
+        LOG_WARN("Fail to locate end bound micro block", K(ret));
       }
     } else {
       if (OB_FAIL(locate_bound_micro_block(
@@ -152,11 +166,13 @@ int ObSSTableSecMetaIterator::open(
           (!query_range.get_border_flag().inclusive_end() || is_precise_rowkey_),
           end_bound_micro_block_,
           end_key_beyond_range))) {
+        LOG_WARN("Fail to locate end bound micro block", K(ret));
       } else if (OB_FAIL(locate_bound_micro_block(
           query_range.get_start_key(),
           query_range.get_border_flag().inclusive_start(),
           start_bound_micro_block_,
           start_key_beyond_range))) {
+        LOG_WARN("Fail to locate start bound micro block", K(ret));
       }
     }
 
@@ -173,8 +189,11 @@ int ObSSTableSecMetaIterator::open(
   } else if (is_prefetch_end_) {
     is_inited_ = true;
   } else if (OB_FAIL(io_allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
+    LOG_WARN("Fail to init block io allocator", K(ret));
   } else if (!is_meta_root && OB_FAIL(prefetch_micro_block(1 /* fetch first micro block */))) {
+    LOG_WARN("Fail to prefetch next micro block", K(ret), K_(is_prefetch_end));
   } else if (OB_FAIL(row_.init(allocator, request_col_cnt))) {
+    STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
   } else {
     if (sample_step != 0) {
       // is sample scan
@@ -188,6 +207,8 @@ int ObSSTableSecMetaIterator::open(
     curr_block_start_idx_ = 1;
     curr_block_end_idx_ = -1;
     is_inited_ = true;
+    LOG_DEBUG("Open secondary meta iterator", K(ret), K(meta_type), K(is_reverse_scan),
+        K(sample_step), K_(step_cnt), K_(curr_block_idx), KPC_(query_range), K_(is_precise_rowkey));
   }
   return ret;
 }
@@ -201,13 +222,17 @@ int ObSSTableSecMetaIterator::get_next(ObDataMacroBlockMeta &macro_meta)
   row_.reuse();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("Secondary meta iterator not inited", K(ret));
   } else if (nullptr != block_meta_tree_) {
     if (!is_target_row_in_curr_block()) {
       ret = OB_ITER_END;
     } else if (OB_UNLIKELY(!ddl_iter_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("cur tree value is null", K(ret), K(ddl_iter_));
     } else if (OB_FAIL(ddl_iter_.get_next_meta(tmp_meta))) {
+      LOG_WARN("get next meta failed", K(ret));
     } else if (OB_FAIL(macro_meta.assign(*tmp_meta))) {
+      LOG_WARN("assign macro meta failed", K(ret), KPC(tmp_meta));
     }
   } else {
     while (OB_SUCC(ret) && !is_target_row_in_curr_block()) {
@@ -217,17 +242,20 @@ int ObSSTableSecMetaIterator::get_next(ObDataMacroBlockMeta &macro_meta)
         const bool is_data_block = sstable_meta_hdl_.get_sstable_meta().get_macro_info().is_meta_root();
         if (!is_data_block && OB_FAIL(open_next_micro_block(macro_id))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
+            LOG_WARN("Fail to open next micro block", K(ret));
           }
         } else if (is_data_block && OB_FAIL(open_meta_root_block())) {
+          LOG_WARN("Fail to open data root block", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(micro_reader_->get_row(curr_block_idx_, row_))) {
+      LOG_WARN("Fail to get secondary meta row from block", K(ret), K_(curr_block_idx));
     } else if (OB_FAIL(macro_meta.parse_row(row_))) {
+      LOG_WARN("Fail to parse macro meta", K(ret));
     } else {
-      const ObSSTableMacroInfo &macro_info =
-          sstable_meta_hdl_.get_sstable_meta().get_macro_info();
+      const ObSSTableMacroInfo &macro_info = sstable_meta_hdl_.get_sstable_meta().get_macro_info();
       const int64_t data_block_count = sstable_meta_hdl_.get_sstable_meta().get_basic_meta().get_data_macro_block_count();
       if (macro_meta.get_macro_id() == ObIndexBlockRowHeader::DEFAULT_IDX_ROW_MACRO_ID) {
         // this means macro meta root block is larger than 16KB but read from the end of data block
@@ -267,13 +295,16 @@ int ObSSTableSecMetaIterator::locate_bound_micro_block(
   ObLogicMacroBlockId logic_id;
   bool equal = false;
   if (OB_FAIL(idx_cursor_.pull_up_to_root())) {
+    LOG_WARN("Fail to pull up tree cursor back to root", K(ret));
   } else if (OB_FAIL(idx_cursor_.drill_down(
       rowkey,
       ObIndexBlockTreeCursor::LEAF,
       lower_bound,
       equal,
       is_beyond_range))) {
+    LOG_WARN("Fail to locate micro block address in index tree", K(ret));
   } else if (OB_FAIL(idx_cursor_.get_idx_row_header(idx_header))) {
+    LOG_WARN("Fail to get index block row header", K(ret));
   } else {
     bound_block.macro_id_ = idx_header->get_macro_id();
     bound_block.offset_ = idx_header->get_block_offset();
@@ -292,12 +323,18 @@ int ObSSTableSecMetaIterator::open_next_micro_block(MacroBlockId &macro_id)
   ObMicroBlockData micro_data;
   ObMicroBlockDataHandle &micro_handle = micro_handles_[curr_handle_idx_ % HANDLE_BUFFER_SIZE];
   if (OB_FAIL(prefetch_micro_block(HANDLE_BUFFER_SIZE - handle_buffer_count()))) {
+    LOG_WARN("Fail to prefetch micro blocks", K(ret), K(handle_buffer_count()));
   } else if (OB_FAIL(micro_handle.get_micro_block_data(&macro_reader_, micro_data))) {
+    LOG_WARN("Fail to get micro block data", K(ret), K_(curr_handle_idx), K(micro_handle));
   } else if (OB_UNLIKELY(!micro_data.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid micro block data", K(ret), K(micro_data));
   } else if (OB_FAIL(micro_reader_helper_.get_reader(micro_data.get_store_type(), micro_reader_))) {
+    LOG_WARN("fail to get micro block reader", K(ret), K(micro_data.get_store_type()));
   } else if (OB_FAIL(micro_reader_->init(micro_data, &(rowkey_read_info_->get_datum_utils())))) {
+    LOG_WARN("Fail to init micro block reader", K(ret));
   } else if (OB_FAIL(micro_reader_->get_row_count(row_cnt))) {
+    LOG_WARN("Fail to get end index", K(ret));
   } else {
     end_idx = row_cnt;
     macro_id = micro_handle.macro_block_id_;
@@ -318,10 +355,15 @@ int ObSSTableSecMetaIterator::open_next_micro_block(MacroBlockId &macro_id)
         begin_idx,
         end_idx,
         is_index_scan))) {
+      LOG_WARN("Fail to locate range", K(ret), KPC(query_range_),K(is_start_bound), K(is_end_bound),
+          K_(start_bound_micro_block), K_(end_bound_micro_block));
     }
+    LOG_DEBUG("Open next micro block", K(ret), K(is_start_bound), K(is_end_bound),
+        K(begin_idx), K(end_idx), K_(curr_block_idx), K(is_index_scan), K(block_id));
   }
 
   if (OB_SUCC(ret) && OB_FAIL(adjust_index(begin_idx, end_idx, row_cnt))) {
+    LOG_WARN("fail to move index", K(ret));
   } else {
     ++curr_handle_idx_;
   }
@@ -338,9 +380,13 @@ int ObSSTableSecMetaIterator::open_meta_root_block()
   int64_t end_idx = 0;
   if (OB_UNLIKELY(!micro_data.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid micro block data", K(ret), K(micro_data));
   } else if (OB_FAIL(micro_reader_helper_.get_reader(micro_data.get_store_type(), micro_reader_))) {
+    LOG_WARN("fail to get micro block reader", K(ret), K(micro_data.get_store_type()));
   } else if (OB_FAIL(micro_reader_->init(micro_data, &(rowkey_read_info_->get_datum_utils())))) {
+    LOG_WARN("Fail to init micro block reader", K(ret));
   } else if (OB_FAIL(micro_reader_->get_row_count(row_cnt))) {
+    LOG_WARN("Fail to get end index", K(ret));
   } else {
     end_idx = row_cnt;
     const bool is_index_scan = true;
@@ -356,13 +402,16 @@ int ObSSTableSecMetaIterator::open_meta_root_block()
         ret = OB_ITER_END;
         FLOG_INFO("this special sstable only locates range during iteration, so beyong range err should be transformed into iter end", K(ret));
       } else {
+        LOG_WARN("Fail to locate range", K(ret), KPC(query_range_));
       }
     }
+    LOG_DEBUG("Open next micro block", K(ret), K(begin_idx), K(end_idx), K(is_index_scan));
   }
 
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(adjust_index(begin_idx, end_idx, row_cnt))) {
+    LOG_WARN("fail to move index", K(ret));
   } else {
     is_prefetch_end_ = true;
   }
@@ -376,6 +425,8 @@ int ObSSTableSecMetaIterator::adjust_index(const int64_t begin_idx, const int64_
   if (is_reverse_scan_) {
     if (OB_UNLIKELY(curr_block_idx_ >= 0)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Invalid current block index on reverse scan", K(ret), K_(curr_block_idx),
+          K_(curr_block_start_idx), K_(curr_block_end_idx), K(begin_idx), K(end_idx));
     } else if (curr_block_idx_ + curr_block_row_cnt >= 0) {
       // next row in this block
       curr_block_idx_ = end_idx + curr_block_idx_ + 1;
@@ -385,6 +436,8 @@ int ObSSTableSecMetaIterator::adjust_index(const int64_t begin_idx, const int64_
   } else {
     if (OB_UNLIKELY(curr_block_idx_ < prev_block_row_cnt_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Invalid current block index on sequential scan", K(ret), K_(curr_block_idx),
+          K_(curr_block_start_idx), K_(curr_block_end_idx), K(begin_idx), K(end_idx), K_(prev_block_row_cnt));
     } else if (curr_block_idx_ - prev_block_row_cnt_ < row_cnt) {
       // First block in scan : begin_idx may larger than 0, update curr_block_idx_
       // Non-first block : next row in this block
@@ -408,6 +461,7 @@ int ObSSTableSecMetaIterator::prefetch_micro_block(int64_t prefetch_depth)
     //prefetch end
   } else if (OB_UNLIKELY(prefetch_depth + handle_buffer_count() > HANDLE_BUFFER_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Prefetch depth larger than available buffer", K(ret));
   } else {
     int64_t prefetch_count = 0;
     const ObIndexBlockRowHeader *idx_row_header = nullptr;
@@ -415,8 +469,10 @@ int ObSSTableSecMetaIterator::prefetch_micro_block(int64_t prefetch_depth)
     ObMicroBlockId micro_block_id;
     while (OB_SUCC(ret) && prefetch_count < prefetch_depth && !is_prefetch_end_) {
       if (OB_FAIL(idx_cursor_.get_idx_row_header(idx_row_header))) {
+        LOG_WARN("Fail to get index block row header", K(ret));
       } else if (OB_UNLIKELY(!idx_row_header->is_data_block())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Unexpected non-leaf node when prefetch sec meta micro block", K(ret));
       } else {
         micro_block_id.macro_id_ = idx_row_header->get_macro_id();
         micro_block_id.offset_ = idx_row_header->get_block_offset();
@@ -425,14 +481,19 @@ int ObSSTableSecMetaIterator::prefetch_micro_block(int64_t prefetch_depth)
             ? start_bound_micro_block_ == micro_block_id
             : end_bound_micro_block_ == micro_block_id;
 
+        LOG_DEBUG("Prefetch next micro block",
+            K(ret), K_(prefetch_handle_idx), K(micro_block_id), KPC(idx_row_header));
         if (OB_FAIL(get_micro_block(
             micro_block_id.macro_id_,
             *idx_row_header,
             micro_handles_[prefetch_handle_idx_ % HANDLE_BUFFER_SIZE]))) {
+          LOG_WARN("Fail to prefetch next micro block",
+              K(ret), K(micro_block_id), KPC(idx_row_header), K_(prefetch_handle_idx));
         } else {
           ++prefetch_handle_idx_;
           ++prefetch_count;
           if (!is_prefetch_end_ && OB_FAIL(idx_cursor_.move_forward(is_reverse_scan_))) {
+            LOG_WARN("Index tree cursor fail to move forward", K(ret));
           }
         }
       }
@@ -450,20 +511,20 @@ int ObSSTableSecMetaIterator::get_micro_block(
   int ret = OB_SUCCESS;
   data_handle.reset();
   ObTabletHandle tablet_handle;
-  const int64_t nested_offset =
-      sstable_meta_hdl_.get_sstable_meta().get_macro_info().get_nested_offset();
+  const int64_t nested_offset = sstable_meta_hdl_.get_sstable_meta().get_macro_info().get_nested_offset();
   if (OB_UNLIKELY(!macro_id.is_valid() || !idx_row_header.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid parameters to locate micro block", K(ret), K(macro_id), K(idx_row_header));
   }
 
   if (OB_SUCC(ret)) {
     ObMicroBlockCacheKey key;
     idx_row_header.has_valid_logic_micro_id() ?
       key.set(idx_row_header.get_logic_micro_id(), idx_row_header.get_data_checksum()) :
-      key.set(macro_id, idx_row_header.get_block_offset() + nested_offset,
-              idx_row_header.get_block_size());
+      key.set(macro_id, idx_row_header.get_block_offset() + nested_offset, idx_row_header.get_block_size());
     if (OB_FAIL(block_cache_->get_cache_block(key, data_handle.cache_handle_))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
+        LOG_WARN("Fail to get micro block handle from cache", K(ret), K(idx_row_header));
       } else {
         // Cache miss, async IO
         ObMicroIndexInfo idx_info;
@@ -477,6 +538,7 @@ int ObSSTableSecMetaIterator::get_micro_block(
             prefetch_flag_.is_use_block_cache(),
             data_handle.io_handle_,
             &io_allocator_))) {
+          LOG_WARN("Fail to prefetch with async io", K(ret));
         } else {
           data_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
         }
@@ -484,6 +546,7 @@ int ObSSTableSecMetaIterator::get_micro_block(
     } else {
       data_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_CACHE;
     }
+    LOG_DEBUG("get cache block", K(ret), K(key), K(macro_id), K(idx_row_header));
   }
 
   if (OB_SUCC(ret)) {
@@ -492,7 +555,9 @@ int ObSSTableSecMetaIterator::get_micro_block(
                                 idx_row_header.get_block_size(),
                                 idx_row_header.get_logic_micro_id(),
                                 idx_row_header.get_data_checksum());
-    if (OB_FAIL(idx_row_header.fill_micro_des_meta(data_handle.des_meta_))) {
+    const bool deep_copy_key = true;
+    if (OB_FAIL(idx_row_header.fill_micro_des_meta(deep_copy_key, data_handle.des_meta_))) {
+      LOG_WARN("Fail to fill deserialize meta", K(ret));
     }
   }
   return ret;

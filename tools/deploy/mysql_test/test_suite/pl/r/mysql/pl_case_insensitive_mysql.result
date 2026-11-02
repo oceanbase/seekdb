@@ -1,0 +1,105 @@
+result_format: 4
+
+drop procedure if exists my_proc;
+create procedure my_proc() begin end;
+create procedure My_proc() begin end;
+ERROR 42000: PROCEDURE My_proc already exists
+create procedure MY_proc() begin end;
+ERROR 42000: PROCEDURE MY_proc already exists
+create procedure MY_PROC() begin end;
+ERROR 42000: PROCEDURE MY_PROC already exists
+
+select routine_name from oceanbase.__all_routine where routine_name = 'my_proc';
++--------------+
+| routine_name |
++--------------+
+| my_proc      |
++--------------+
+select routine_name from oceanbase.__all_routine where routine_name = 'My_proc';
++--------------+
+| routine_name |
++--------------+
+| my_proc      |
++--------------+
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_proc';
++--------------+
+| routine_name |
++--------------+
+| my_proc      |
++--------------+
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_PROC';
++--------------+
+| routine_name |
++--------------+
+| my_proc      |
++--------------+
+
+call my_proc();
+call My_proc();
+call MY_proc();
+call MY_PROC();
+
+drop procedure my_proc;
+
+drop function if exists my_func;
+create function my_func() returns int return 1;
+create function My_func() returns int return 1;
+ERROR 42000: FUNCTION My_func already exists
+create function MY_func() returns int return 1;
+ERROR 42000: FUNCTION MY_func already exists
+create function MY_FUNC() returns int return 1;
+ERROR 42000: FUNCTION MY_FUNC already exists
+
+select routine_name from oceanbase.__all_routine where routine_name = 'my_func';
++--------------+
+| routine_name |
++--------------+
+| my_func      |
++--------------+
+select routine_name from oceanbase.__all_routine where routine_name = 'My_func';
++--------------+
+| routine_name |
++--------------+
+| my_func      |
++--------------+
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_func';
++--------------+
+| routine_name |
++--------------+
+| my_func      |
++--------------+
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_FUNC';
++--------------+
+| routine_name |
++--------------+
+| my_func      |
++--------------+
+
+select my_func();
++-----------+
+| my_func() |
++-----------+
+|         1 |
++-----------+
+select My_func();
++-----------+
+| My_func() |
++-----------+
+|         1 |
++-----------+
+select MY_func();
++-----------+
+| MY_func() |
++-----------+
+|         1 |
++-----------+
+select MY_FUNC();
++-----------+
+| MY_FUNC() |
++-----------+
+|         1 |
++-----------+
+
+drop function my_func;
+
+

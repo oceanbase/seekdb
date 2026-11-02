@@ -17,9 +17,8 @@
 #ifndef OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
 #define OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
 
-#include "lib/container/ob_se_array.h"
-#include "lib/lock/ob_spin_lock.h"
-#include "lib/task/ob_timer.h"
+#include "observer/ob_server_struct.h"
+#include "rootserver/ddl_task/ob_ddl_task.h"
 
 namespace oceanbase
 {
@@ -50,9 +49,12 @@ public:
   int remove_register_task_id(const int64_t task_id);
   int send_task_status_to_rs();
 private:
-  common::ObSEArray<int64_t, 4> register_tasks_;
+  static const int64_t BUCKET_LOCK_BUCKET_CNT = 10243L;
+  static const int64_t RETRY_COUNT = 3L;
+  static const int64_t RETRY_TIME_INTERVAL = 100L;
+  common::hash::ObHashMap<rootserver::ObDDLTaskID, uint64_t> register_tasks_;
   bool is_inited_;
-  common::ObSpinLock lock_;
+  common::ObBucketLock bucket_lock_;
 };
 
 class ObRedefTableHeartBeatTask : public common::ObTimerTask
@@ -60,7 +62,7 @@ class ObRedefTableHeartBeatTask : public common::ObTimerTask
 public:
   ObRedefTableHeartBeatTask();
   virtual ~ObRedefTableHeartBeatTask() = default;
-  int init(common::ObTimer &timer);
+  int init(const int tg_id);
   virtual void runTimerTask() override;
 private:
   int send_task_status_to_rs();
@@ -75,7 +77,7 @@ inline ObDDLHeartBeatTaskContainer &ObDDLHeartBeatTaskContainer::get_instance()
   return THE_ONE;
 }
 
-}  // end of namespace storage
+}  // end of namespace observer
 }  // end of namespace oceanbase
 
 #define OB_DDL_HEART_BEAT_TASK_CONTAINER (::oceanbase::storage::ObDDLHeartBeatTaskContainer::get_instance())

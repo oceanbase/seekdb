@@ -19,7 +19,6 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 
 namespace oceanbase
@@ -55,6 +54,7 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
   const bool is_all_decint_args =
     ob_is_decimal_int(type1.get_type()) && ob_is_decimal_int(type2.get_type());
   if (OB_FAIL(ObArithExprOperator::calc_result_type2(type, type1, type2, type_ctx))) {
+    LOG_WARN("fail to calc result type", K(ret), K(type), K(type1), K(type2));
   } else if (type.is_decimal_int() && (type1.is_null() || type2.is_null())) {
     type.set_scale(MAX(type1.get_scale(), type2.get_scale()));
     type.set_precision(MAX(type1.get_precision(), type2.get_precision()));
@@ -67,13 +67,19 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
       ObExprResType coll_calc_type = type;
       if (OB_ISNULL(exec_ctx)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("exec ctx is null", K(ret));
       } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type1))) {
+        LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
       } else if (coll_type1->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type1->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        LOG_WARN("invalid collection type", K(ret), K(coll_type1->type_id_));
       } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type2.get_subschema_id(), coll_type2))) {
+        LOG_WARN("failed to get array type by subschema id", K(ret), K(type2.get_subschema_id()));
       } else if (coll_type2->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type2->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        LOG_WARN("invalid collection type", K(ret), K(coll_type2->type_id_));
       } else if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, type1, type2, coll_calc_type))) {
+        LOG_WARN("failed to check array compatibilty", K(ret));
       } else {
         type1.set_calc_meta(coll_calc_type);
         type2.set_calc_meta(coll_calc_type);
@@ -83,8 +89,10 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
       // only support vector/array/varchar + vector/array/varchar now // array and varchar need cast to array(float)
       uint16_t res_subschema_id = UINT16_MAX;
       if (OB_FAIL(ObArrayExprUtils::calc_cast_type2(type_, type1, type2, type_ctx, res_subschema_id))) {
+        LOG_WARN("failed to calc cast type", K(ret), K(type1));
       } else if (UINT16_MAX == res_subschema_id) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected result subschema_id", K(ret));
       } else {
         type.set_collection(res_subschema_id);
       }
@@ -95,14 +103,14 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
     type.set_precision(PRECISION_UNKNOWN_YET);
   } else if (type1.get_type_class() == ObIntervalTC
             || type2.get_type_class() == ObIntervalTC) {
-    type.set_scale(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_scale());
-    type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+    type.set_scale(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][type.get_type()].get_scale());
+    type.set_precision(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][type.get_type()].get_precision());
   } else {
     ObScale scale1 = static_cast<ObScale>(MAX(type1.get_scale(), 0));
     ObScale scale2 = static_cast<ObScale>(MAX(type2.get_scale(), 0));
     scale = MAX(scale1, scale2);
     if (type.is_double()) {
-      precision = obmysql::ObMySQLUtil::float_length(scale);
+      precision = ObMySQLUtil::float_length(scale);
     } else if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
       precision = MAX(type1.get_precision(), type2.get_precision());
     } else {
@@ -125,6 +133,7 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
       if (OB_UNLIKELY(PRECISION_UNKNOWN_YET == type.get_precision() ||
                       SCALE_UNKNOWN_YET == type.get_scale())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected decimal int precision and scale", K(ret), K(type));
       } else {
         if (ObRawExprUtils::decimal_int_need_cast(type1.get_accuracy(), type.get_accuracy()) ||
               ObRawExprUtils::decimal_int_need_cast(type2.get_accuracy(), type.get_accuracy())) {
@@ -149,6 +158,7 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
       }
     }
   }
+  LOG_DEBUG("calc_result_type2", K(scale), K(type1), K(type2), K(type), K(precision));
   return ret;
 }
 
@@ -238,6 +248,7 @@ int ObExprAdd::add_int(ObObj &res,
     }
   } else if (ObUIntTC != right.get_type_class()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     res.set_uint64(left_i + right_i);
     if (OB_UNLIKELY(is_int_uint_out_of_range(left_i, right_i, res.get_uint64()))) {
@@ -279,6 +290,7 @@ int ObExprAdd::add_uint(ObObj &res,
     }
   } else if (ObIntTC != right.get_type_class()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (OB_UNLIKELY(is_int_uint_out_of_range(right_i, left_i, res.get_uint64()))) {
       ret = OB_OPERATE_OVERFLOW;
@@ -304,6 +316,7 @@ int ObExprAdd::add_double(ObObj &res,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     double left_d = left.get_double();
     double right_d = right.get_double();
@@ -320,6 +333,7 @@ int ObExprAdd::add_double(ObObj &res,
       LOG_WARN("double out of range", K(res), K(left), K(right), K(res));
       res.set_null();
     }
+    LOG_DEBUG("succ to add double", K(res), K(left), K(right));
   }
   UNUSED(allocator);
   UNUSED(scale);
@@ -335,10 +349,12 @@ int ObExprAdd::add_double_no_overflow(ObObj &res,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     double left_d = left.get_double();
     double right_d = right.get_double();
     res.set_double(left_d + right_d);
+    LOG_DEBUG("succ to add double", K(res), K(left), K(right));
   }
   return ret;
 }
@@ -355,6 +371,7 @@ int ObExprAdd::add_number(ObObj &res,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocator is null", K(ret));
   } else if (OB_FAIL(left.get_number().add_v3(right.get_number(), res_nmb, *allocator))) {
+    LOG_WARN("failed to add numbers", K(ret), K(left), K(right));
   } else {
     if (ObUNumberType == res.get_type()) {
       res.set_unumber(res_nmb);
@@ -380,7 +397,7 @@ int ObExprAdd::add_datetime(ObObj &res, const ObObj &left, const ObObj &right,
     ObTime ob_time;
     if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
       ret = OB_OPERATE_OVERFLOW;
@@ -392,6 +409,7 @@ int ObExprAdd::add_datetime(ObObj &res, const ObObj &left, const ObObj &right,
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
     }
   }
+  LOG_DEBUG("add datetime", K(left), K(right), K(scale), K(res));
   UNUSED(allocator);
   UNUSED(scale);
   return ret;
@@ -409,8 +427,12 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   if (rt_expr.arg_cnt_ != 2 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("count of children is not 2 or children is null", K(ret), K(rt_expr.arg_cnt_),
+                                                              K(rt_expr.args_));
+  } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("child is null", K(ret), K(rt_expr.args_[0]), K(rt_expr.args_[1]));
   } else {
-    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = NULL;
     rt_expr.may_not_need_raw_check_ = false;
     const ObObjType left_type = rt_expr.args_[0]->datum_meta_.type_;
@@ -422,15 +444,19 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
       case ObIntType:
         rt_expr.may_not_need_raw_check_ = true;
         SET_ADD_FUNC_PTR(add_int_int);
+        rt_expr.eval_vector_func_ = add_int_int_vector;
         break;
       case ObUInt64Type:
         rt_expr.may_not_need_raw_check_ = false;
         if (ObIntTC == left_tc && ObUIntTC == right_tc) {
           SET_ADD_FUNC_PTR(add_int_uint);
+          rt_expr.eval_vector_func_ = add_int_uint_vector;
         } else if (ObUIntTC == left_tc && ObIntTC == right_tc) {
           SET_ADD_FUNC_PTR(add_uint_int);
+          rt_expr.eval_vector_func_ = add_uint_int_vector;
         } else if (ObUIntTC == left_tc && ObUIntTC == right_tc) {
           SET_ADD_FUNC_PTR(add_uint_uint);
+          rt_expr.eval_vector_func_ = add_uint_uint_vector;
         }
         break;
       case ObDateTimeType:
@@ -455,54 +481,68 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
         break;
       case ObFloatType:
         SET_ADD_FUNC_PTR(add_float_float);
+        rt_expr.eval_vector_func_ = add_float_float_vector;
         break;
       case ObDoubleType:
         SET_ADD_FUNC_PTR(add_double_double);
+        rt_expr.eval_vector_func_ = add_double_double_vector;
         break;
       case ObUNumberType:
       case ObNumberType:
         if (ob_is_decimal_int(left_type) && ob_is_decimal_int(right_type)) {
           switch (get_decimalint_type(rt_expr.args_[0]->datum_meta_.precision_)) {
             case DECIMAL_INT_32:
-              SET_ADD_FUNC_PTR(add_decimalint32_number_result);
+              SET_ADD_FUNC_PTR(add_decimalint32_oracle);
+              rt_expr.eval_vector_func_ = add_decimalint32_oracle_vector;
               break;
             case DECIMAL_INT_64:
-              SET_ADD_FUNC_PTR(add_decimalint64_number_result);
+              SET_ADD_FUNC_PTR(add_decimalint64_oracle);
+              rt_expr.eval_vector_func_ = add_decimalint64_oracle_vector;
               break;
             case DECIMAL_INT_128:
-              SET_ADD_FUNC_PTR(add_decimalint128_number_result);
+              SET_ADD_FUNC_PTR(add_decimalint128_oracle);
+              rt_expr.eval_vector_func_ = add_decimalint128_oracle_vector;
               break;
             default:
               ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected precision", K(ret), K(rt_expr.datum_meta_));
               break;
           }
         } else {
           SET_ADD_FUNC_PTR(add_number_number);
+          rt_expr.eval_vector_func_ = add_number_number_vector;
         }
         break;
       case ObDecimalIntType:
         switch (get_decimalint_type(rt_expr.datum_meta_.precision_)) {
           case DECIMAL_INT_32:
             SET_ADD_FUNC_PTR(add_decimalint32);
+            rt_expr.eval_vector_func_ = add_decimalint32_vector;
             break;
           case DECIMAL_INT_64:
             SET_ADD_FUNC_PTR(add_decimalint64);
+            rt_expr.eval_vector_func_ = add_decimalint64_vector;
             break;
           case DECIMAL_INT_128:
             SET_ADD_FUNC_PTR(add_decimalint128);
+            rt_expr.eval_vector_func_ = add_decimalint128_vector;
             break;
           case DECIMAL_INT_256:
             SET_ADD_FUNC_PTR(add_decimalint256);
+            rt_expr.eval_vector_func_ = add_decimalint256_vector;
             break;
           case DECIMAL_INT_512:
             if (rt_expr.datum_meta_.precision_ < OB_MAX_DECIMAL_POSSIBLE_PRECISION) {
               SET_ADD_FUNC_PTR(add_decimalint512);
+              rt_expr.eval_vector_func_ = add_decimalint512_vector;
             } else {
               SET_ADD_FUNC_PTR(add_decimalint512_with_check);
+              rt_expr.eval_vector_func_ = add_decimalint512_with_check_vector;
             }
             break;
           default:
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected precision", K(ret), K(rt_expr.datum_meta_));
             break;
         }
         break;
@@ -513,22 +553,31 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
           uint32_t unused;
           bool is_vec = false;
           if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {
+            LOG_WARN("failed to get collection elem type", K(ret), K(sub_id));
           } else if (elem_type == ObTinyIntType) {
             SET_ADD_FUNC_PTR(add_collection_collection_int8_t);
+            rt_expr.eval_vector_func_ = add_collection_collection_int8_t_vector;
           } else if (elem_type == ObSmallIntType) {
             SET_ADD_FUNC_PTR(add_collection_collection_int16_t);
+            rt_expr.eval_vector_func_ = add_collection_collection_int16_t_vector;
           } else if (elem_type == ObInt32Type) {
             SET_ADD_FUNC_PTR(add_collection_collection_int32_t);
+            rt_expr.eval_vector_func_ = add_collection_collection_int32_t_vector;
           } else if (elem_type == ObIntType) {
             SET_ADD_FUNC_PTR(add_collection_collection_int64_t);
+            rt_expr.eval_vector_func_ = add_collection_collection_int64_t_vector;
           } else if (elem_type == ObFloatType) {
             SET_ADD_FUNC_PTR(add_collection_collection_float);
+            rt_expr.eval_vector_func_ = add_collection_collection_float_vector;
           } else if (elem_type == ObDoubleType) {
             SET_ADD_FUNC_PTR(add_collection_collection_double);
+            rt_expr.eval_vector_func_ = add_collection_collection_double_vector;
           } else if (elem_type == ObUInt64Type) {
             SET_ADD_FUNC_PTR(add_collection_collection_uint64_t);
+            rt_expr.eval_vector_func_ = add_collection_collection_uint64_t_vector;
           } else {
             ret = OB_NOT_SUPPORTED;
+            LOG_WARN("invalid element type for array operation", K(ret), K(elem_type));
           }
           break;
         }
@@ -537,6 +586,7 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
     }
     if (OB_ISNULL(rt_expr.eval_func_)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unexpected params type", K(ret), K(left_type), K(right_type), K(result_type));
     }
   }
   return ret;
@@ -578,6 +628,10 @@ int ObExprAdd::add_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_int_int_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObIntIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 struct ObIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_t>
 {
@@ -614,6 +668,10 @@ int ObExprAdd::add_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_int_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObIntUIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 struct ObUIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, uint64_t>
 {
@@ -650,6 +708,10 @@ int ObExprAdd::add_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_uint_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObUIntUIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 struct ObUIntIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_t>
 {
@@ -686,6 +748,10 @@ int ObExprAdd::add_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_uint_int_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObUIntIntBatchAddRaw>>(VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 struct ObFloatBatchAddRawNoCheck : public ObArithOpRawType<float, float, float>
 {
@@ -727,6 +793,11 @@ int ObExprAdd::add_float_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
   return def_batch_arith_op<ObArithOpWrap<ObFloatBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_float_float_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObFloatBatchAddRawWithCheck>>(
+             VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 struct ObDoubleBatchAddRawNoCheck : public ObArithOpRawType<double, double, double>
 {
@@ -776,6 +847,14 @@ int ObExprAdd::add_double_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
       : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_double_double_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return T_OP_AGG_ADD == expr.type_ ?
+           def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDoubleBatchAddRawNoCheck>>(
+             VECTOR_EVAL_FUNC_ARG_LIST) :
+           def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDoubleBatchAddRawWithCheck>>(
+             VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 struct ObNumberAddFunc
 {
@@ -788,6 +867,7 @@ struct ObNumberAddFunc
     number::ObNumber r_num(r.get_number());
     number::ObNumber res_num;
     if (OB_FAIL(l_num.add_v3(r_num, res_num, local_alloc))) {
+      LOG_WARN("add num failed", K(ret), K(l_num), K(r_num));
     } else {
       res.set_number(res_num);
     }
@@ -803,6 +883,7 @@ int ObExprAdd::add_number_number(EVAL_FUNC_ARG_DECL)
 
 int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
+  LOG_DEBUG("add_number_number_batch begin");
   int ret = OB_SUCCESS;
   ObDatumVector l_datums;
   ObDatumVector r_datums;
@@ -811,6 +892,7 @@ int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size,
                                         false))) {
+    LOG_WARN("number add batch evaluation failure", K(ret));
   } else {
     l_datums = left.locate_expr_datumvector(ctx);
     r_datums = right.locate_expr_datumvector(ctx);
@@ -849,6 +931,7 @@ int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       } else {
         // normal path: no speedup
         if (OB_FAIL(l_num.add_v3(r_num, res_num, local_alloc))) {
+          LOG_WARN("mul num failed", K(ret), K(l_num), K(r_num));
         } else {
           results.at(i)->set_number(res_num);
           eval_flags.set(i);
@@ -857,6 +940,7 @@ int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       }
     }
   }
+  LOG_DEBUG("add_number_number_batch done");
   return ret;
 }
 
@@ -874,6 +958,11 @@ struct NmbTryFastAdditionOp
   }
 };
 
+int ObExprAdd::add_number_number_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  NmbTryFastAdditionOp op;
+  return def_number_vector_arith_op(VECTOR_EVAL_FUNC_ARG_LIST, op);
+}
 
 template <bool SWAP_L_R>
 struct ObNumberDatetimeAddFunc
@@ -887,6 +976,7 @@ struct ObNumberDatetimeAddFunc
     int64_t dec_part = 0;
     if (!left_nmb.is_int_parts_valid_int64(int_part,dec_part)) {
       ret = OB_INVALID_DATE_FORMAT;
+      LOG_WARN("invalid date format", K(ret), K(left_nmb));
     } else {
       const int64_t left_i = static_cast<int64_t>(int_part * USECS_PER_DAY)
                             + (left_nmb.is_negative() ? -1  : 1 )
@@ -899,7 +989,7 @@ struct ObNumberDatetimeAddFunc
       if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL
         || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
         char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
         int64_t pos = 0;
         ret = OB_OPERATE_OVERFLOW;
@@ -951,7 +1041,7 @@ struct ObDatetimeDatetimeAddFunc
     if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL
         || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
       ret = OB_OPERATE_OVERFLOW;
@@ -1004,6 +1094,7 @@ struct ObDecimalIntBatchAddRawWithCheck : public ObDecimalIntBatchAddRaw<int512_
       int64_t pos = 0;
       databuff_printf(expr_str, OB_MAX_TWO_OPERATOR_EXPR_LENGTH, pos, "");
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DECIMAL", expr_str);
+      LOG_WARN("decimal int out of range", K(ret));
     }
     return ret;
   }
@@ -1017,6 +1108,10 @@ int ObExprAdd::add_decimal##TYPE(EVAL_FUNC_ARG_DECL)      \
 int ObExprAdd::add_decimal##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST); \
+}                                             \
+int ObExprAdd::add_decimal##TYPE##_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
+{                                            \
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(VECTOR_EVAL_FUNC_ARG_LIST); \
 }
 
 
@@ -1037,11 +1132,16 @@ int ObExprAdd::add_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
     BATCH_EVAL_FUNC_ARG_LIST);
 }
 
+int ObExprAdd::add_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  return def_fixed_len_vector_arith_op<ObVectorArithOpWrap<ObDecimalIntBatchAddRawWithCheck>>(
+    VECTOR_EVAL_FUNC_ARG_LIST);
+}
 
 #undef DECINC_ADD_EVAL_FUNC_DECL
 
 template<typename T>
-struct ObDecimalNumberAddFunc
+struct ObDecimalOracleAddFunc
 {
   int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
                  ObNumStackOnceAlloc &alloc) const
@@ -1050,6 +1150,7 @@ struct ObDecimalNumberAddFunc
     const T res_int = *reinterpret_cast<const T *>(l.ptr_) + *reinterpret_cast<const T *>(r.ptr_);
     number::ObNumber res_num;
     if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
+      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
     } else {
       res.set_number(res_num);
       alloc.free();  // for batch function reuse alloc
@@ -1058,25 +1159,54 @@ struct ObDecimalNumberAddFunc
   }
 };
 
-#define DECINC_ADD_EVAL_FUNC_NUMBER_DECL(TYPE) \
-int ObExprAdd::add_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
+template<typename T>
+struct ObDecimalOracleVectorAddFunc
+{
+  template <typename ResVector, typename LeftVector, typename RightVector>
+  int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
+                 const int64_t idx, const int64_t scale, ObNumStackOnceAlloc &alloc) const
+  {
+    int ret = OB_SUCCESS;
+    const T res_int = *reinterpret_cast<const T *>(l_vec.get_payload(idx))
+                      + *reinterpret_cast<const T *>(r_vec.get_payload(idx));
+    number::ObNumber res_num;
+    if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
+      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
+    } else {
+      res_vec.set_number(idx, res_num);
+      alloc.free();  // for batch function reuse alloc
+    }
+    return ret;
+  }
+};
+
+
+#define DECINC_ADD_EVAL_FUNC_ORA_DECL(TYPE) \
+int ObExprAdd::add_decimal##TYPE##_oracle(EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalNumberAddFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalOracleAddFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprAdd::add_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
+int ObExprAdd::add_decimal##TYPE##_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalNumberAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalOracleAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+}                                            \
+int ObExprAdd::add_decimal##TYPE##_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
+{                                            \
+  ObNumStackOnceAlloc tmp_alloc;                                \
+  const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
+  return def_fixed_len_vector_arith_op_func<ObDecimalOracleVectorAddFunc<TYPE##_t>,\
+                                            ObArithTypedBase<TYPE##_t, TYPE##_t, TYPE##_t>>(VECTOR_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }
 
-DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int32)
-DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int64)
-DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int128)
+DECINC_ADD_EVAL_FUNC_ORA_DECL(int32)
+DECINC_ADD_EVAL_FUNC_ORA_DECL(int64)
+DECINC_ADD_EVAL_FUNC_ORA_DECL(int128)
 
-#undef DECINC_ADD_EVAL_FUNC_NUMBER_DECL
+#undef DECINC_ADD_EVAL_FUNC_ORA_DECL
 
 template<typename T>
 struct ObArrayAddFunc : public ObNestedArithOpBaseFunc
@@ -1093,6 +1223,7 @@ struct ObArrayAddFunc : public ObNestedArithOpBaseFunc
         LOG_WARN("nested size is mismatch", K(ret), K(l.size()), K(r.size()));
     } else if (l.get_format() != ArrayFormat::Vector && MEMCMP(l.get_nullbitmap(), r.get_nullbitmap(), sizeof(uint8_t) * l.size())) {
         ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+        LOG_WARN("nested nullbitmap is mismatch", K(ret));
     } else if (l.get_format() == ArrayFormat::Nested_Array) {
       // compare array dimension
       const ObArrayNested &left = static_cast<const ObArrayNested&>(l);
@@ -1100,24 +1231,33 @@ struct ObArrayAddFunc : public ObNestedArithOpBaseFunc
       ObArrayNested &nest_res = static_cast<ObArrayNested&>(res);
       if (MEMCMP(left.get_nullbitmap(), right.get_nullbitmap(), sizeof(uint8_t) * left.size()) != 0) {
         ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+        LOG_WARN("nested nullbitmap is mismatch", K(ret));
       } else if (MEMCMP(left.get_offsets(), right.get_offsets(), sizeof(uint32_t) * left.size()) != 0) {
         ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+        LOG_WARN("nested offsets is mismatch", K(ret));
       } else if (OB_FAIL(res.set_null_bitmaps(left.get_nullbitmap(), left.size()))) {
+        LOG_WARN("nested nullbitmap copy failed", K(ret));
       } else if (OB_FAIL(res.set_offsets(left.get_offsets(), left.size()))) {
+        LOG_WARN("nested offset copy failed", K(ret));
       } else if (OB_FAIL(operator()(*nest_res.get_child_array(), *left.get_child_array(), *right.get_child_array()))) {
+        LOG_WARN("nested child array add failed", K(ret));
       }
     } else if (l.get_format() != ArrayFormat::Fixed_Size && l.get_format() != ArrayFormat::Vector) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+      LOG_WARN("invaid array type", K(ret), K(l.get_format()));
     } else {
       T *res_data = NULL;
       if (l.get_format() != ArrayFormat::Vector && OB_FAIL(res.set_null_bitmaps(l.get_nullbitmap(), l.size()))) {
+        LOG_WARN("array nullbitmap copy failed", K(ret));
       } else if (OB_FAIL(static_cast<ObArrayBase<T> &>(res).get_reserved_data(l.size(), res_data))) {
+        LOG_WARN("array get resered data failed", K(ret));
       } else {
         T *left_data = reinterpret_cast<T *>(l.get_data());
         T *right_data = reinterpret_cast<T *>(r.get_data());
         for (int64_t i = 0; i < l.size() && OB_SUCC(ret); ++i) {
           res_data[i] = left_data[i] + right_data[i];
           if (OB_FAIL(ObArrayExprUtils::raw_check_add(res_data[i], left_data[i], right_data[i]))) {
+            LOG_WARN("array add check failed", K(ret));
           }
         }
       }
@@ -1134,6 +1274,10 @@ int ObExprAdd::add_collection_collection_##TYPE(EVAL_FUNC_ARG_DECL)      \
 int ObExprAdd::add_collection_collection_##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   return def_batch_arith_op_by_datum_func<ObNestedArithOpWrap<ObArrayAddFunc<TYPE>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx); \
+}                                             \
+int ObExprAdd::add_collection_collection_##TYPE##_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
+{                                            \
+  return def_nested_vector_arith_op_func<ObNestedVectorArithOpFunc<ObArrayAddFunc<TYPE>>>(VECTOR_EVAL_FUNC_ARG_LIST, expr, ctx);  \
 }
 
 COLLECTION_ADD_EVAL_FUNC_DECL(int8_t)

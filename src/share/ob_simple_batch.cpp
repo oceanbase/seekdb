@@ -60,11 +60,14 @@ int ObSimpleBatch::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
     /* send nothing */
   } else if (OB_ISNULL(range_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("NULL data", K(ret));
   } else if (T_SCAN == type_) {
     if (OB_FAIL(range_->serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize range", K(ret));
     }
   } else if (T_MULTI_SCAN == type_) {
     if (OB_FAIL(ranges_->serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize ranges", K(ret));
     }
   }
 
@@ -96,6 +99,7 @@ int ObSimpleBatch::deserialize(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode(buf, data_len, pos, type_))) {
+    LOG_WARN("fail to deserialize batch type", K(ret));
   } else if (T_NONE == type_) {
     /* send nothing */
   } else if (T_SCAN == type_) {
@@ -112,12 +116,15 @@ int ObSimpleBatch::deserialize(common::ObIAllocator &allocator,
                                                            data_len,
                                                            pos,
                                                            ((int64_t *)(&M))))) {
+      LOG_WARN("failed to deserialize count", K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < M; i++) {
       SQLScanRange range;
       if (OB_FAIL(range.deserialize(allocator, buf, data_len, pos))) {
+        LOG_WARN("failed to deserialize range", K(ret));
       } else if (OB_FAIL(ranges->push_back(range))) {
+        LOG_WARN("failed to push back range to batch", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

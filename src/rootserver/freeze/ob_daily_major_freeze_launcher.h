@@ -19,25 +19,28 @@
 
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
-#include "lib/task/ob_timer.h"
+#include "lib/thread/thread_mgr.h"
 #include "share/scn.h"
 
 namespace oceanbase
 {
 namespace common
 {
+class ObServerConfig;
 class ObMySQLProxy;
 }
 namespace rootserver
 {
 class ObMajorMergeInfoManager;
-// The local launcher follows the current database role.
+// primary cluster: sys tenant, meta tenant, user tenant all have this launcher
+// standby cluster: only sys tenant, meta tenant have this launcher
 class ObDailyMajorFreezeLauncher : public common::ObTimerTask
 {
 public:
   ObDailyMajorFreezeLauncher();
   virtual ~ObDailyMajorFreezeLauncher();
-  int init(common::ObMySQLProxy &proxy,
+  int init(common::ObServerConfig &config,
+           common::ObMySQLProxy &proxy,
            ObMajorMergeInfoManager &merge_info_manager);
 
   virtual void runTimerTask() override;
@@ -70,12 +73,12 @@ private:
   bool is_paused_;
   bool already_launch_;
   common::ObMySQLProxy *sql_proxy_;
+  common::ObServerConfig *config_;
   int64_t gc_freeze_info_last_timestamp_;
   ObMajorMergeInfoManager *merge_info_mgr_;
   int64_t last_check_tablet_ckm_us_;
   share::SCN tablet_ckm_gc_compaction_scn_;
   volatile bool stop_;
-  common::ObTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ObDailyMajorFreezeLauncher);
 };

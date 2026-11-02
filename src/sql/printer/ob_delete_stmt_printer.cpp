@@ -29,6 +29,7 @@ int ObDeleteStmtPrinter::do_print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt should not be NULL", K(ret));
   } else {
     expr_printer_.init(buf_, 
                        buf_len_, 
@@ -37,6 +38,7 @@ int ObDeleteStmtPrinter::do_print()
                        print_params_,
                        param_store_);
     if (OB_FAIL(print())) {
+      LOG_WARN("fail to print stmt", K(ret));
     }
   }
 
@@ -50,7 +52,9 @@ int ObDeleteStmtPrinter::print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_basic_stmt())) {
+    LOG_WARN("fail to print basic stmt", K(ret), K(*stmt_));
   } else { /*do nothing*/ }
 
   return ret;
@@ -62,13 +66,23 @@ int ObDeleteStmtPrinter::print_basic_stmt()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_with())) {
+    LOG_WARN("failed to print with", K(ret));
   } else if (OB_FAIL(print_temp_table_as_cte())) {
+    LOG_WARN("failed to print cte", K(ret));
   } else if (OB_FAIL(print_delete())) {
+    LOG_WARN("fail to print select", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_from())) {
+    LOG_WARN("fail to print from", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_where())) {
+    LOG_WARN("fail to print where", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_order_by())) {
+    LOG_WARN("fail to print order by", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_limit())) {
+    LOG_WARN("fail to print limit", K(ret), K(*stmt_));
+  } else if (OB_FAIL(print_returning())) {
+    LOG_WARN("fail to print_returning", K(ret), K(*stmt_));
   } else {
     // do-nothing
   }
@@ -82,12 +96,15 @@ int ObDeleteStmtPrinter::print_delete()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_delete_stmt()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Not a valid delete stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     DATA_PRINTF("delete ");
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(print_hint())) {
+      if (OB_FAIL(print_hint())) { // hint
+        LOG_WARN("fail to print hint", K(ret), K(*stmt_));
       }
     }
   }
@@ -96,5 +113,6 @@ int ObDeleteStmtPrinter::print_delete()
 
 } //end of namespace sql
 } //end of namespace oceanbase
+
 
 

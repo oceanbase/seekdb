@@ -114,7 +114,8 @@ public:
                               const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                               const share::schema::ObTableSchema *index_schema,
                               const int64_t parallelism,
-                              const uint64_t data_format_version,
+                              const int64_t group_id,
+                              const uint64_t tenant_data_version,
                               common::ObIAllocator &allocator,
                               ObDDLTaskRecord &task_record,
                               const int64_t new_fetched_snapshot = 0);
@@ -125,7 +126,8 @@ public:
                                 const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                                 const share::schema::ObTableSchema *index_schema,
                                 const int64_t parallelism,
-                                const uint64_t data_format_version,
+                                const int64_t group_id,
+                                const uint64_t tenant_data_version,
                                 common::ObIAllocator &allocator,
                                 ObDDLTaskRecord &task_record);
   int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
@@ -163,6 +165,8 @@ private:
   int set_basic_infos(const obcall::ObCreateIndexArg &arg,
                       const share::schema::ObTableSchema &data_schema,
                       share::schema::ObTableSchema &schema);
+  int set_global_index_auto_partition_infos(const share::schema::ObTableSchema &data_schema,
+                                            share::schema::ObTableSchema &schema);
   int set_index_table_columns(const obcall::ObCreateIndexArg &arg,
                               const share::schema::ObTableSchema &data_schema,
                               share::schema::ObTableSchema &schema);
@@ -183,6 +187,9 @@ private:
       const int ret,
       const obcall::ObDropIndexArg &arg,
       const share::schema::ObTableSchema *index_schema = nullptr);
+  int create_index_column_group(const obcall::ObCreateIndexArg &arg,
+                                share::schema::ObTableSchema &index_table_schema);
+
   bool rowkey_doc_index_valid(const bool has_docid_col,
                               const int64_t aux_rowkey_doc_ith,
                               const int64_t aux_doc_rowkey_ith,

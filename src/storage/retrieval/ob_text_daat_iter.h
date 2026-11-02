@@ -17,7 +17,6 @@
 #ifndef OB_TEXT_DAAT_ITER_H_
 #define OB_TEXT_DAAT_ITER_H_
 
-#include "query/ob_sql_define.h"
 #include "ob_inv_idx_param_estimator.h"
 #include "ob_sparse_bmw_iter.h"
 #include "ob_sparse_daat_iter.h"
@@ -36,8 +35,8 @@ struct ObTextDaaTParam
 {
   ObTextDaaTParam()
     : dim_iters_(nullptr), base_param_(nullptr), allocator_(nullptr), relevance_collector_(nullptr),
-      bm25_param_est_ctx_(), mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false), need_calc_relevance_(true) {}
+      bm25_param_est_ctx_(), mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
+      minimum_should_match_(0), function_lookup_mode_(false) {}
   ~ObTextDaaTParam() {}
   TO_STRING_KV(K_(base_param), KP_(dim_iters), K_(bm25_param_est_ctx),  K_(mode_flag), K_(function_lookup_mode));
   ObIArray<ObISRDaaTDimIter *> *dim_iters_;
@@ -45,9 +44,9 @@ struct ObTextDaaTParam
   common::ObArenaAllocator *allocator_;
   ObSRDaaTRelevanceCollector *relevance_collector_;
   ObBM25ParamEstCtx bm25_param_est_ctx_;
-  sql::ObMatchAgainstMode mode_flag_;
+  ObMatchAgainstMode mode_flag_;
+  int64_t minimum_should_match_;
   bool function_lookup_mode_;
-  bool need_calc_relevance_;
 };
 
 class ObTextDaaTIter final : public ObSRDaaTIterImpl
@@ -55,21 +54,24 @@ class ObTextDaaTIter final : public ObSRDaaTIterImpl
 public:
   ObTextDaaTIter() : ObSRDaaTIterImpl(),
       bm25_param_estimator_(),
-      mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false),
-      need_calc_relevance_(true) {}
+      mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
+      minimum_should_match_(0),
+      function_lookup_mode_(false) {}
   virtual ~ObTextDaaTIter() { reset(); }
 
   int init(const ObTextDaaTParam &param);
   virtual void reuse(const bool switch_tablet = false) override;
   virtual void reset() override;
+  virtual int get_total_count(int64_t &count) override;
 protected:
   virtual int pre_process() override;
+  virtual int fill_merge_heap() override;
+  virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id) override;
 protected:
   ObBM25ParamEstimator bm25_param_estimator_;
-  sql::ObMatchAgainstMode mode_flag_;
+  ObMatchAgainstMode mode_flag_;
+  int64_t minimum_should_match_;
   bool function_lookup_mode_;
-  bool need_calc_relevance_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTextDaaTIter);
 };
@@ -88,7 +90,6 @@ protected:
   virtual int init_before_wand_process() override;
 protected:
   ObBM25ParamEstimator bm25_param_estimator_;
-  bool need_calc_relevance_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTextBMWIter);
 };

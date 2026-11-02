@@ -27,17 +27,16 @@ int ObEmptyQueryResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObEmptyQueryStmt *empty_query_stmt = NULL;
-  if (T_EMPTY_QUERY != parse_tree.type_
-      && T_FLUSH_PRIVILEGES != parse_tree.type_) {
+  if (T_EMPTY_QUERY != parse_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("unexpected parser tree type for no-op command",
-              K(parse_tree.type_), K(ret));
-  } else if (T_EMPTY_QUERY == parse_tree.type_ && 0 == parse_tree.value_) {
+    LOG_ERROR("parser tree type is not T_EMPTY_QUERY", K(parse_tree.type_), K(ret));
+  } else if (0 == parse_tree.value_) {
     //empty query with no comment
     ret = OB_ERR_EMPTY_QUERY;
 
   } else if (OB_ISNULL(empty_query_stmt = create_stmt<ObEmptyQueryStmt>())) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
+    LOG_WARN("failed to create empty query stmt", K(ret));
   } else {}
   return ret;
 }

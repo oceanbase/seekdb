@@ -107,7 +107,7 @@ public:
   ObExecContext *exec_ctx_;
   ObIAllocator *allocator_;
   
-  // for CTAS
+  // for CTAS in oracle mode
   bool is_for_ctas_;
   
   // relation context
@@ -719,8 +719,8 @@ public:
 
   /**
    * @brief is_foreign_key_rely
-   * Determine whether the foreign key is reliable according to
-   * foreign_key_checks, except for mock parent-table foreign keys.
+   * Determine if the foreign key is reliable, check the global variable foreign_key_check in MYSQL mode
+   * Check the enable_flag in foreign key info in ORACLE mode
    */
   static int is_foreign_key_rely (ObSQLSessionInfo* session_info,
                                   const share::schema::ObForeignKeyInfo *foreign_key_info,
@@ -1585,13 +1585,11 @@ public:
   static int extract_const_bool_expr_info(ObTransformerCtx *ctx,
                                           const common::ObIArray<ObRawExpr*> &exprs,
                                           common::ObIArray<int64_t> &true_exprs,
-                                          common::ObIArray<int64_t> &false_exprs,
-                                          bool skip_warning_expr = false);
+                                          common::ObIArray<int64_t> &false_exprs);
   static int extract_const_bool_expr_result(ObTransformerCtx *ctx,
                                             ObRawExpr *expr,
                                             bool &is_true,
-                                            bool &is_false,
-                                            bool skip_warning_expr = false);
+                                            bool &is_false);
   /* extract exprs in all_exprs whoes indexs are in target_idx to target_exprs */
   static int extract_target_exprs_by_idx(const ObIArray<ObRawExpr*> &all_exprs,
                                          const ObIArray<int64_t> &target_idx,
@@ -1599,11 +1597,7 @@ public:
   static int calc_const_expr_result(ObRawExpr * expr,
                                     ObTransformerCtx *ctx,
                                     ObObj &result,
-                                    bool &calc_happend,
-                                    bool *has_warning = NULL);
-  static int check_static_expr_has_warning(ObTransformerCtx *ctx,
-                                           ObRawExpr *expr,
-                                           bool &has_warning);
+                                    bool &calc_happend);
   static int check_integer_result_type(common::ObIArray<ObRawExpr*> &exprs,
                                        bool &is_valid_type);
 
@@ -1817,6 +1811,17 @@ public:
   static int add_aggr_winfun_expr(ObSelectStmt *stmt,
                                   ObRawExpr *expr,
                                   bool need_strict_check = true);
+  static int expand_mview_table(ObTransformerCtx *ctx, ObDMLStmt *upper_stmt, TableItem *rt_mv_table);
+  static int adjust_col_and_sel_for_expand_mview(ObTransformerCtx *ctx,
+                                                 ObIArray<ColumnItem> &uppper_col_items,
+                                                 ObIArray<SelectItem> &view_sel_items,
+                                                 uint64_t mv_table_id);
+
+  static int generate_view_stmt_from_query_string(const ObString &expand_view,
+                                                  ObTransformerCtx *ctx,
+                                                  ObSelectStmt *&view_stmt);
+  static int set_expand_mview_flag(ObSelectStmt *view_stmt);
+
   static int is_where_subquery_correlated(const ObIArray<ObExecParamRawExpr *> &exec_params,
                                           const ObSelectStmt &subquery, 
                                           bool &is_correlated);
@@ -2004,6 +2009,11 @@ public:
                                   ObSelectStmt *view_stmt,
                                   ObIArray<ObRawExpr *> &common_exprs,
                                   const ObIArray<ObRawExpr *> *extra_view_exprs = NULL);
+  static int check_need_calc_match_score(ObExecContext *exec_ctx,
+                                         const ObDMLStmt *stmt,
+                                         ObRawExpr *match_expr,
+                                         bool &need_calc,
+                                         ObIArray<ObExprConstraint> &constraints);
 private:
   static int is_scalar_expr(ObRawExpr* expr, bool &is_scalar);
 
@@ -2119,11 +2129,14 @@ int ObTransformUtils::replace_exprs(const common::ObIArray<ObRawExpr *> &other_e
     } else if (OB_FAIL(ObTransformUtils::replace_expr(other_exprs,
                                                       new_exprs,
                                                       temp_expr))) {
+      SQL_LOG(WARN, "failed to replace expr", K(ret));
     } else if (OB_FAIL(temp_expr_array.push_back(static_cast<T*>(temp_expr)))) {
+      SQL_LOG(WARN, "failed to push back expr", K(ret));
     } else { /*do nothing*/}
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(exprs.assign(temp_expr_array))) {
+      SQL_LOG(WARN, "failed to assign expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -2168,10 +2181,12 @@ int ObTransformUtils::get_expr_idx(const ObIArray<T *> &source,
   idx = -1;
   if (OB_ISNULL(target)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dest expr is null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && idx == -1 && i < source.count(); ++i) {
     if (OB_ISNULL(source.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("expr in source is null", K(ret));
     } else if (source.at(i) == target) {
       idx = i;
     }
@@ -2189,12 +2204,15 @@ int ObTransformUtils::remove_dup_expr(common::ObIArray<T *> &check,
   for (int64_t i = 0; i < base.count(); i++) {
     int64_t idx = -1;
     if (OB_FAIL(ObTransformUtils::get_expr_idx(check, base.at(i), idx))) {
+      LOG_WARN("find expr failed", K(ret));
     } else if (idx != -1) {
     } else if (OB_FAIL(no_dup.push_back(base.at(i)))) {
+      LOG_WARN("push back failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(base.assign(no_dup))) {
+      LOG_WARN("assign failed", K(ret));
     }
   }
   return ret;

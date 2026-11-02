@@ -20,11 +20,112 @@
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
+#include "sql/engine/sort/ob_sort_vec_op_provider.h"
+#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+
+ObFtsSecondarySortThread::ObFtsSecondarySortThread()
+  : is_inited_(false),
+    is_started_(false),
+    sort_provider_(nullptr),
+    session_info_(nullptr),
+    sort_ret_(OB_SUCCESS)
+{
+}
+
+ObFtsSecondarySortThread::~ObFtsSecondarySortThread()
+{
+  if (is_started_) {
+    stop();
+    wait();
+    is_started_ = false;
+  }
+}
+
+int ObFtsSecondarySortThread::init(
+    ObSortVecOpProvider *sort_provider,
+    ObSQLSessionInfo *session_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("initialize fts secondary sort thread twice", K(ret));
+  } else if (OB_ISNULL(sort_provider) || OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fts secondary sort thread arguments", K(ret), KP(sort_provider),
+        KP(session_info));
+  } else if (OB_FAIL(set_thread_count(1))) {
+    LOG_WARN("set fts secondary sort thread count failed", K(ret));
+  } else {
+    set_run_wrapper(MTL_CTX());
+    sort_provider_ = sort_provider;
+    session_info_ = session_info;
+    sort_ret_ = OB_SUCCESS;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObFtsSecondarySortThread::start_sort()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("fts secondary sort thread is not initialized", K(ret));
+  } else if (OB_UNLIKELY(is_started_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("fts secondary sort thread already started", K(ret));
+  } else if (OB_FAIL(start())) {
+    LOG_WARN("start fts secondary sort thread failed", K(ret));
+  } else {
+    is_started_ = true;
+  }
+  return ret;
+}
+
+int ObFtsSecondarySortThread::wait_sort()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("fts secondary sort thread is not initialized", K(ret));
+  } else if (is_started_) {
+    wait();
+    is_started_ = false;
+    ret = sort_ret_;
+  }
+  return ret;
+}
+
+void ObFtsSecondarySortThread::run1()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_ || OB_ISNULL(sort_provider_) || OB_ISNULL(session_info_))) {
+    sort_ret_ = OB_NOT_INIT;
+    ret = sort_ret_;
+    LOG_WARN("invalid fts secondary sort thread state", K(sort_ret_), K(is_inited_),
+        KP(sort_provider_), KP(session_info_));
+  } else {
+    lib::set_thread_name("FTSDualSort");
+    CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_DDL);
+    THIS_WORKER.set_session(session_info_);
+    const lib::Worker::CompatMode worker_compat_mode =
+        ObCompatibilityMode::MYSQL_MODE == session_info_->get_compatibility_mode()
+            ? lib::Worker::CompatMode::MYSQL
+            : lib::Worker::CompatMode::ORACLE;
+    THIS_WORKER.set_compatibility_mode(worker_compat_mode);
+    sort_ret_ = sort_provider_->sort();
+    if (OB_SUCCESS != sort_ret_) {
+      ret = sort_ret_;
+      LOG_WARN("fts secondary sort failed", K(sort_ret_));
+    }
+    THIS_WORKER.set_session(nullptr);
+  }
+}
 
 ObSortSpec::ObSortSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
   : ObOpSpec(alloc, type),
@@ -80,6 +181,7 @@ int ObSortOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("child is null", K(ret));
   }
   return OB_SUCCESS;
 }
@@ -144,8 +246,10 @@ int ObSortOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
   ObDatum *datum = NULL;
   if (NULL != in_val) {
     if (OB_FAIL(in_val->eval(eval_ctx_, datum))) {
+      LOG_WARN("Failed to calculate expression", K(ret));
     } else if (OB_ISNULL(datum)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected status: datum is null", K(ret));
     } else if (datum->is_null()) {
       out_val = 0;
     } else {
@@ -163,8 +267,11 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
     // do nothing
   } else if (((NULL != MY_SPEC.topn_expr_) && (NULL != MY_SPEC.topk_limit_expr_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid topn_expr or topk_limit_expr", K(MY_SPEC.topn_expr_),
+      K(MY_SPEC.topk_limit_expr_), K(ret));
   } else if (NULL != MY_SPEC.topn_expr_) {
     if (OB_FAIL(get_int_value(MY_SPEC.topn_expr_, topn_cnt))) {
+      LOG_WARN("failed to get int value", K(ret), K(MY_SPEC.topn_expr_));
     } else {
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, topn_cnt);
     }
@@ -173,17 +280,24 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
     int64_t offset = 0;
     if ((OB_FAIL(get_int_value(MY_SPEC.topk_limit_expr_, limit))
         || OB_FAIL(get_int_value(MY_SPEC.topk_offset_expr_, offset)))) {
+      LOG_WARN("Get limit/offset value failed", K(ret));
     } else if (OB_UNLIKELY(limit < 0 || offset < 0)) {
       ret = OB_ERR_ILLEGAL_VALUE;
+      LOG_WARN("Invalid limit/offset value", K(limit), K(offset), K(ret));
     } else {
       // TODO & FIXME by longzhong.wlz : Wait for groupby implementation to handle this logic
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, limit + offset);
       int64_t row_count = 0;
       ObPhyOperatorType op_type = child_->get_spec().type_;
-      if (PHY_HASH_GROUP_BY != op_type) {
+      if (PHY_HASH_GROUP_BY != op_type && PHY_VEC_HASH_GROUP_BY != op_type) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Invalid child_op_", K(op_type), K(ret));
       } else {
-        row_count = static_cast<ObHashGroupByOp *>(child_)->get_hash_groupby_row_count();
+        if (op_type == PHY_VEC_HASH_GROUP_BY) {
+          row_count = static_cast<ObHashGroupByVecOp *>(child_)->get_hash_groupby_row_count();
+        } else {
+          row_count = static_cast<ObHashGroupByOp *>(child_)->get_hash_groupby_row_count();
+        }
       }
       if (OB_SUCC(ret)) {
         topn_cnt = std::max(topn_cnt,
@@ -209,8 +323,10 @@ int ObSortOp::process_sort()
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
+        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("failed to get next row", K(ret));
         }
       } else {
         sort_row_count_++;
@@ -224,6 +340,7 @@ int ObSortOp::process_sort()
     if (OB_SUCC(ret) && need_dump && MY_SPEC.prescan_enabled_
         && OB_FAIL(scan_all_then_sort())) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("fail to scan all rows before inmem sort", K(ret));
       }
     }
     if (OB_ITER_END == ret) {
@@ -233,6 +350,8 @@ int ObSortOp::process_sort()
     sort_impl_.collect_memory_dump_info(op_monitor_info_);
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid read function pointer",
+        K(ret), K(*reinterpret_cast<int64_t *>(&read_func_)));
   }
   return ret;
 }
@@ -248,7 +367,9 @@ int ObSortOp::process_sort_batch()
       clear_evaluated_flag();
       const ObBatchRows *input_brs = NULL;
       if (OB_FAIL(try_check_status())) {
+        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
+        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (input_brs->size_ > 0) {
           sort_row_count_ += input_brs->size_
@@ -265,6 +386,7 @@ int ObSortOp::process_sort_batch()
     if (OB_SUCC(ret) && need_dump && MY_SPEC.prescan_enabled_
         && OB_FAIL(scan_all_then_sort_batch())) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("fail to scan all rows before inmem sort", K(ret));
       }
     }
     op_monitor_info_.otherstat_7_id_ = ObSqlMonitorStatIds::ROW_COUNT;
@@ -273,6 +395,8 @@ int ObSortOp::process_sort_batch()
     sort_impl_.collect_memory_dump_info(op_monitor_info_);
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid read function pointer",
+        K(ret), K(*reinterpret_cast<int64_t *>(&read_func_)));
   }
   return ret;
 }
@@ -288,17 +412,22 @@ int ObSortOp::scan_all_then_sort()
     if (OB_FAIL(cache_store.init(2 * 1024 * 1024,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true/*enable dump*/, 0, true,
         MY_SPEC.compress_type_, &MY_SPEC.all_exprs_))) {
+      LOG_WARN("init sample chunk store failed", K(ret));
     } else if (OB_FAIL(cache_store.alloc_dir_id())) {
+      LOG_WARN("failed to alloc dir id", K(ret));
     }
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
+        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("failed to get next row", K(ret));
         }
       } else {
         sort_row_count_++;
         if (OB_FAIL(cache_store.add_row(MY_SPEC.all_exprs_, eval_ctx_))) {
+          LOG_WARN("failed to add row to cache store", K(ret));
         }
       }
     }
@@ -309,15 +438,18 @@ int ObSortOp::scan_all_then_sort()
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cache_store.finish_add_row(false))) {
+        LOG_WARN("fail to finish add row", K(ret));
       } else {
         const ObChunkDatumStore::StoredRow *store_row = NULL;
         bool has_next = false;
         while (OB_SUCC(ret) && OB_SUCC(cache_store.has_next(has_next)) && has_next) {
           if (OB_FAIL(cache_store.get_next_row(store_row))) {
             if (OB_ITER_END != ret) {
+              LOG_WARN("failed to get next row", K(ret));
             }
           } else if (OB_ISNULL(store_row)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("failed to get next row", K(ret));
           } else {
             OZ(sort_impl_.add_stored_row(*store_row));
           }
@@ -335,13 +467,17 @@ int ObSortOp::scan_all_then_sort_batch()
     if (OB_FAIL(cache_store.init(16 * 1024,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true/*enable dump*/, 0, true,
         MY_SPEC.compress_type_, &MY_SPEC.all_exprs_))) {
+      LOG_WARN("init sample chunk store failed", K(ret));
     } else if (OB_FAIL(cache_store.alloc_dir_id())) {
+      LOG_WARN("failed to alloc dir id", K(ret));
     }
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       const ObBatchRows *input_brs = NULL;
       if (OB_FAIL(try_check_status())) {
+        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
+        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (input_brs->size_ > 0) {
           sort_row_count_ += input_brs->size_
@@ -349,6 +485,7 @@ int ObSortOp::scan_all_then_sort_batch()
           int64_t stored_row_count = -1;
           if (OB_FAIL(cache_store.add_batch(MY_SPEC.all_exprs_, eval_ctx_,
               *input_brs->skip_, input_brs->size_, stored_row_count))) {
+            LOG_WARN("failed to add row to cache store", K(ret));
           }
         }
         if (input_brs->end_) {
@@ -364,6 +501,7 @@ int ObSortOp::scan_all_then_sort_batch()
     op_monitor_info_.otherstat_7_value_ = sort_row_count_; 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cache_store.finish_add_row(false))) {
+        LOG_WARN("fail to finish add row", K(ret));
       } else {
         const ObChunkDatumStore::StoredRow *store_row = NULL;
         bool has_next = false;
@@ -416,6 +554,7 @@ int ObSortOp::init_sort(int64_t row_count,
   int64_t est_rows = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
+    LOG_WARN("failed to get px size", K(ret));
   }
   OZ(sort_impl_.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_, &eval_ctx_,
                      &ctx_, MY_SPEC.enable_encode_sortkey_opt_, MY_SPEC.is_local_merge_sort_,
@@ -444,27 +583,33 @@ int ObSortOp::inner_get_next_row()
     ret = OB_ITER_END;
   } else if (is_first_) {
     // Here what we want is to account
-    // Charge memory to the runtime that owns the execution context.
+    // the resource usage(memory usage in this case) to a 'real' tenant rather than billing
+    // the innocent DEFAULT tenant. We should think about changing the name of this function.
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;
     
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
+      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {
+      LOG_WARN("failed to get topn count", K(ret));
     } else if (topn_cnt <= 0) { 
       iter_end_ = true; 
       ret = OB_ITER_END;
     } else if (MY_SPEC.prefix_pos_ > 0) {
       if (OB_FAIL(init_prefix_sort(row_count, false, topn_cnt))) {
+        LOG_WARN("failed to init prefix sort", K(ret));
       }
     } else {
       if (OB_FAIL(init_sort(row_count, false, topn_cnt))) {
+        LOG_WARN("failed to init sort", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(process_sort())) { // process sort
         if (OB_ITER_END != ret) {
+          LOG_WARN("process sort failed", K(ret));
         }
       }
     }
@@ -478,6 +623,7 @@ int ObSortOp::inner_get_next_row()
       } else {
         if (ctx_.get_my_session()->get_ddl_info().is_ddl() && ret_row_count_ != sort_row_count_) {
           ret = OB_CHECKSUM_ERROR;
+          LOG_WARN("output row count not match", K(ret), K(sort_row_count_), K(ret_row_count_));
         }
         iter_end_ = true;
         reset();
@@ -503,19 +649,24 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
     
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
+      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {
+      LOG_WARN("failed to get topn count", K(ret));
     } else if (topn_cnt <= 0) { 
       brs_.end_ = true;
       brs_.size_ = 0;
     } else if (MY_SPEC.prefix_pos_ > 0) {
       if (OB_FAIL(init_prefix_sort(row_count, true, topn_cnt))) {
+        LOG_WARN("failed to init batch prefix sort", K(ret));
       }
     } else {
       if (OB_FAIL(init_sort(row_count, true, topn_cnt))) {
+        LOG_WARN("failed to init batch sort", K(ret));
       }
     }
     if (OB_SUCC(ret) && !brs_.end_) {
       if (OB_FAIL(process_sort_batch())) {
+        LOG_WARN("process sort failed", K(ret));
       }
     }
   }
@@ -523,12 +674,16 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
   if (OB_SUCC(ret) && !brs_.end_) {
     clear_evaluated_flag();
     if (OB_FAIL((this->*read_batch_func_)(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
+      LOG_WARN("get next row failed");
     } else {
       ret_row_count_ += brs_.size_;
       if (brs_.end_) {
         if (ctx_.get_my_session()->get_ddl_info().is_ddl() && ret_row_count_ != sort_row_count_) {
           ret = OB_CHECKSUM_ERROR;
+          LOG_WARN("output row count not match", K(ret), K(sort_row_count_), K(ret_row_count_));
         }
+        LOG_DEBUG("finish ObSortOp::inner_get_next_batch",
+                  K(MY_SPEC.output_), K(brs_), K(ret_row_count_));
       }
     }
   }

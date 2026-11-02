@@ -1,0 +1,205 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE_SCHEMA
+#include "ob_udf_sql_service.h"
+#include "share/schema/ob_udf.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace share
+{
+namespace schema
+{
+
+int ObUDFSqlService::insert_udf(const ObUDF &udf_info,
+                                common::ObISQLClient *sql_client,
+                                const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sql_client is NULL, ", K(ret));
+  } else if (!udf_info.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    SHARE_SCHEMA_LOG(WARN, "udf_info is invalid", K(udf_info.get_name_str()), K(ret));
+  } else {
+    if (OB_FAIL(add_udf(*sql_client, udf_info))) {
+      LOG_WARN("failed to add udf", K(ret));
+    } else {
+      ObSchemaOperation opt;
+      
+      opt.op_type_ = OB_DDL_CREATE_UDF;
+      opt.schema_version_ = udf_info.get_schema_version();
+      opt.udf_name_ = udf_info.get_udf_name_str();
+      //this is a trick. just like outline, synonym
+      //use table_id_ to store there own id, we use table_id_ to store udf_id and
+      //table name to store udf name. the reason is table_id_ and table_name_ will
+      //be write to inner table which named all_ddl_operation, but udf_name_ will not.
+      opt.table_id_ = udf_info.get_udf_id();
+      opt.table_name_ = udf_info.get_udf_name_str();
+      opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
+      if (OB_FAIL(log_operation(opt, *sql_client))) {
+        LOG_WARN("Failed to log operation", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObUDFSqlService::delete_udf(const common::ObString &name,
+                                const int64_t new_schema_version,
+                                common::ObISQLClient *sql_client,
+                                const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  const int64_t IS_DELETED = 1;
+  
+
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid sql client is NULL", K(ret));
+  } else {
+    // insert into __all_udf_history
+    if (FAILEDx(sql.assign_fmt(
+                   "INSERT INTO %s(name, schema_version, is_deleted)"
+                   " VALUES('%s',%ld,%ld)",
+                   OB_ALL_FUNC_HISTORY_TNAME,
+                   name.ptr(),
+                   new_schema_version, IS_DELETED))) {
+      LOG_WARN("assign insert into all udf history fail", K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("execute sql fail", K(sql), K(ret));
+    } else if (1 != affected_rows) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("no row has inserted", K(ret));
+    } else {/*do nothing*/}
+
+    // delete from __all_func
+    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE name='%s'",
+                               OB_ALL_FUNC_TNAME,
+                               name.ptr()))) {
+      LOG_WARN("append_fmt failed", K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", K(sql), K(ret));
+    } else if (1 != affected_rows) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
+    } else {/*do nothing*/}
+
+    // log operation
+    if (OB_SUCC(ret)) {
+      ObSchemaOperation opt;
+      
+      opt.op_type_ = OB_DDL_DROP_UDF;
+      opt.schema_version_ = new_schema_version;
+      opt.udf_name_ = name;
+      //this is a trick. just like outline, synonym
+      //use table_id_ to store there own id, we use table name to store
+      //udf name.
+      opt.table_name_ = name;
+      opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
+      if (OB_FAIL(log_operation(opt, *sql_client))) {
+        LOG_WARN("Failed to log operation", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+
+int ObUDFSqlService::drop_udf(const ObUDF &udf_info,
+                              const int64_t new_schema_version,
+                              common::ObISQLClient *sql_client,
+                              const common::ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  if (OB_ISNULL(sql_client)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid sql client is NULL", K(ret));
+  } else if (!udf_info.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid udf info in drop udf", K(udf_info.get_name_str()), K(ret));
+  } else if (OB_FAIL(delete_udf(udf_info.get_name(),
+                                new_schema_version, sql_client, ddl_stmt_str))) {
+    LOG_WARN("failed to delete udf", K(udf_info.get_name_str()), K(ret));
+  } else {/*do nothing*/}
+  return ret;
+}
+
+int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
+                             const ObUDF &udf_info,
+                             const bool only_history)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(sql_client);
+  UNUSED(udf_info);
+  UNUSED(only_history);
+  ObSqlString sql;
+  ObSqlString values;
+  const char *tname[] = {OB_ALL_FUNC_TNAME, OB_ALL_FUNC_HISTORY_TNAME};
+  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+  
+  
+  for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); i++) {
+    if (only_history && 0 == STRCMP(tname[i], OB_ALL_FUNC_TNAME)) {
+      continue;
+    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
+      STORAGE_LOG(WARN, "append table name failed, ", K(ret));
+    } else {
+      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
+                                        udf_info.get_udf_id()), "udf_id", "%lu");
+      SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, udf_info.get_name(),
+                                      udf_info.get_name_str().length(), "name");
+      SQL_COL_APPEND_VALUE(sql, values, udf_info.get_ret(), "ret", "%d");
+      SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, udf_info.get_dl(),
+                                      udf_info.get_dl_str().length(), "dl");
+      SQL_COL_APPEND_VALUE(sql, values, udf_info.get_type(), "type", "%d");
+      if (0 == STRCMP(tname[i], OB_ALL_FUNC_HISTORY_TNAME)) {
+        SQL_COL_APPEND_VALUE(sql, values, udf_info.get_schema_version(), "schema_version", "%ld");
+        SQL_COL_APPEND_VALUE(sql, values, "false", "is_deleted", "%s");
+      }
+
+      if (OB_SUCC(ret)) {
+        int64_t affected_rows = 0;
+        if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
+                                   static_cast<int32_t>(values.length()),
+                                   values.ptr()))) {
+          LOG_WARN("append sql failed, ", K(ret));
+        } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+          LOG_WARN("fail to execute sql", K(sql), K(ret));
+        } else {
+          if (!is_single_row(affected_rows)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
+          }
+        }
+      }
+    }
+    values.reset();
+  }
+  return ret;
+}
+
+
+} //end of schema
+} //end of share
+} //end of oceanbase

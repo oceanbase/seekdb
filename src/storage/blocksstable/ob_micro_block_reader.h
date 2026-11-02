@@ -20,7 +20,8 @@
 #include "ob_imicro_block_reader.h"
 #include "ob_micro_block_hash_index.h"
 #include "ob_row_reader.h"
-#include "query/engine/basic/ob_pushdown_filter.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "sql/engine/basic/ob_truncate_filter_struct.h"
 
 namespace oceanbase
 {
@@ -28,7 +29,6 @@ using namespace common;
 using namespace storage;
 namespace storage {
 struct PushdownFilterInfo;
-class ObTruncateFilterEvaluator;
 }
 namespace blocksstable
 {
@@ -100,11 +100,10 @@ public:
       sql::ObPushdownFilterExecutor &filter,
       const sql::PushdownFilterInfo &pd_filter_info,
       common::ObBitmap &result_bitmap);
-  int filter_truncate_evaluator(
-      storage::ObTruncateFilterEvaluator &evaluator,
-      const int64_t start,
-      const int64_t count,
-      const common::ObBitmap *candidate_rows,
+  int filter_pushdown_truncate_filter(
+      const sql::ObPushdownFilterExecutor *parent,
+      sql::ObPushdownFilterExecutor &filter,
+      const sql::PushdownFilterInfo &pd_filter_info,
       common::ObBitmap &result_bitmap);
   int get_rows(
       const common::ObIArray<int32_t> &cols_projector,
@@ -170,6 +169,7 @@ public:
   OB_INLINE bool single_version_rows() { return nullptr != header_ && header_->single_version_rows_; }
   OB_INLINE bool committed_single_version_rows() { return single_version_rows() && !header_->contain_uncommitted_rows(); }
 
+  // For column store
   virtual int find_bound(
       const ObDatumRowkey &key,
       const bool lower_bound,
@@ -179,6 +179,18 @@ public:
       bool &equal) override;
   virtual void reserve_reader_memory(bool reserve) override
   { allocator_.set_reserve_memory(reserve); }
+  int get_rows(
+      const common::ObIArray<int32_t> &cols_projector,
+      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+      const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
+      const bool is_padding_mode,
+      const int32_t *row_ids,
+      const int64_t vector_offset,
+      const int64_t row_cap,
+      ObDatumRow &row_buf,
+      sql::ObExprPtrIArray &exprs,
+      sql::ObEvalCtx &eval_ctx,
+      const bool need_init_vector);
   virtual bool has_lob_out_row() const override final
   { return nullptr != header_ && header_->has_lob_out_row(); }
 

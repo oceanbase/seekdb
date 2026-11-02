@@ -28,7 +28,7 @@
 namespace oceanbase
 {
 namespace transaction {
-class ObTxCtx;
+class ObPartTransCtx;
 }
 
 namespace storage {
@@ -66,6 +66,7 @@ public:
     : type_(T::INVL),
       is_standby_read_(false),
       has_create_tx_ctx_(false),
+      is_delete_insert_(false),
       is_fork_ctx_(false),
       abs_lock_timeout_ts_(-1),
       tx_lock_timeout_us_(-1),
@@ -118,6 +119,7 @@ public:
       handle_start_time_ = OB_INVALID_TIMESTAMP;
       is_standby_read_ = false;
       has_create_tx_ctx_ = false;
+      is_delete_insert_ = false;
       is_fork_ctx_ = false;
       major_snapshot_ = 0;
       lock_wait_start_ts_ = 0;
@@ -154,7 +156,7 @@ public:
       && tx_table_guards_.is_valid()
       && (!tx_ctx_ || mem_ctx_);
   }
-  int init_read(transaction::ObTxCtx *tx_ctx, /* nullable */
+  int init_read(transaction::ObPartTransCtx *tx_ctx, /* nullable */
                 ObMemtableCtx *mem_ctx, /* nullable */
                 storage::ObTxTable *tx_table,
                 const transaction::ObTxSnapshot &snapshot,
@@ -173,6 +175,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "tx_table cannot be NULL", KR(ret), KPC(this));
     } else if (OB_FAIL(tx_table_guards_.tx_table_guard_.init(tx_table))) {
+      TRANS_LOG(WARN, "tx_table_guard init fail", KR(ret), KPC(this));
     } else {
       type_ = is_weak_read ? T::WEAK_READ : T::STRONG_READ;
       tx_ctx_ = tx_ctx;
@@ -196,7 +199,7 @@ public:
     snapshot.version_ = snapshot_version;
     return init_read(NULL, NULL, tx_table, snapshot, timeout, tx_lock_timeout, false, false, NULL);
   }
-  int init_write(transaction::ObTxCtx &tx_ctx,
+  int init_write(transaction::ObPartTransCtx &tx_ctx,
                  ObMemtableCtx &mem_ctx,
                  const transaction::ObTransID &tx_id,
                  const transaction::ObTxSEQ tx_scn,
@@ -215,6 +218,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "tx_table cannot be NULL", KR(ret), KPC(this));
     } else if (OB_FAIL(tx_table_guards_.tx_table_guard_.init(tx_table))) {
+      TRANS_LOG(WARN, "tx_table_guard init fail", KR(ret), KPC(this));
     } else {
       type_ = T::WRITE;
       tx_ctx_ = &tx_ctx;
@@ -231,6 +235,12 @@ public:
     return ret;
   }
 
+  void set_src_tx_table_guard(const storage::ObTxTableGuard &tx_table_guard,
+                              storage::ObLSHandle &src_ls_handle)
+  {
+    tx_table_guards_.src_tx_table_guard_ = tx_table_guard;
+    tx_table_guards_.src_ls_handle_ = src_ls_handle;
+  }
   void set_write_flag(const concurrent_control::ObWriteFlag write_flag)
   {
     write_flag_ = write_flag;
@@ -239,7 +249,7 @@ public:
   {
     abs_lock_timeout_ts_ = abs_lock_timeout;
   }
-  int init_replay(transaction::ObTxCtx &tx_ctx,
+  int init_replay(transaction::ObPartTransCtx &tx_ctx,
                   ObMemtableCtx &mem_ctx,
                   const transaction::ObTransID &tx_id)
   {
@@ -313,6 +323,7 @@ public:
                K_(write_flag),
                K_(handle_start_time),
                K_(is_standby_read),
+               K_(is_delete_insert),
                K_(major_snapshot),
                K_(mds_filter),
                K_(lock_wait_start_ts));
@@ -325,6 +336,7 @@ public: // NOTE: those field should only be accessed by txn relative routine
   // dml_param / scan_param (which is calculated from ob_query_timeout).
   bool is_standby_read_;
   bool has_create_tx_ctx_;
+  bool is_delete_insert_;
   bool is_fork_ctx_;  // indicates current context is in fork table access
   int64_t abs_lock_timeout_ts_;
   // tx_lock_timeout_us is defined as a system variable `ob_trx_lock_timeout`,
@@ -340,11 +352,11 @@ public: // NOTE: those field should only be accessed by txn relative routine
   int64_t tx_lock_timeout_us_;
   int64_t major_snapshot_;
   transaction::ObTxSnapshot snapshot_;
-  storage::ObTxTableGuards tx_table_guards_;
+  storage::ObTxTableGuards tx_table_guards_;  // for transfer query
   // specials for MvccWrite
   transaction::ObTransID tx_id_;
   transaction::ObTxDesc *tx_desc_;             // the txn descriptor
-  transaction::ObTxCtx *tx_ctx_;        // the txn context
+  transaction::ObPartTransCtx *tx_ctx_;        // the txn context
   ObMemtableCtx *mem_ctx_;                     // memtable-ctx
   transaction::ObTxSEQ tx_scn_;                // the change's number of this modify
   concurrent_control::ObWriteFlag write_flag_; // the write flag of the write process

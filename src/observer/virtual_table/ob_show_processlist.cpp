@@ -57,7 +57,9 @@ int ObShowProcesslist::inner_get_next_row(ObNewRow *&row)
                                      output_column_ids_,
                                      schema_guard_,
                                      table_schema_))) {
+        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
       } else if (OB_FAIL(session_mgr_->for_each_session(fill_scanner_))) {
+        SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -74,6 +76,16 @@ int ObShowProcesslist::inner_get_next_row(ObNewRow *&row)
     }
   }
   return ret;
+}
+
+bool ObShowProcesslist::FillScanner::has_process_privilege()
+{
+  int ret = OB_SUCCESS;
+  bool has_priv = false;
+  if (my_session_ != NULL) {
+    has_priv = my_session_->has_user_process_privilege();
+  }
+  return has_priv;
 }
 
 bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info)
@@ -117,6 +129,10 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
     } else {
       type_is_double = tmp_column_schema->get_meta_type().is_double();
     }
+    //If you are in system tenant, you can see all thread.
+    //Otherwise, you can show only the threads at the same Tenant with you.
+    //If you have the PROCESS privilege, you can show all threads at your Tenant.
+    //Otherwise, you can show only your own threads.
     if (sess_info->is_shadow()) {
       // do not show shadow session
     } else {
@@ -147,6 +163,11 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
             }
             break;
           }
+          case TENANT: {
+            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_tenant_name());
+            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
+            break;
+          }
           case HOST: {
             if (OB_FAIL(sess_info->get_peer_addr().ip_port_to_string(peer_buf, common::OB_IP_PORT_STR_BUFF))) {
               ret = OB_ERR_UNEXPECTED;
@@ -174,7 +195,8 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case SQL_ID: {
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
+                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
+                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
               sess_info->get_cur_sql_id(sql_id, OB_MAX_SQL_ID_LENGTH + 1);
             } else {
               sql_id[0] = '\0';
@@ -203,7 +225,8 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case INFO: {
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
+                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
+                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
               cur_row_->cells_[cell_idx].set_varchar(sess_info->get_current_query_string());
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             } else {
@@ -260,6 +283,7 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
+                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_FETCH == sess_info->get_mysql_cmd()) {
               int len = sess_info->get_current_trace_id().to_string(trace_id_, sizeof(trace_id_));
               cur_row_->cells_[cell_idx].set_varchar(trace_id_, len);
@@ -329,7 +353,7 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
             break;
           }
           case SQL_TRACE: {
-            cur_row_->cells_[cell_idx].set_bool(false);
+            cur_row_->cells_[cell_idx].set_bool(sess_info->get_control_info().is_valid());
             break;
           }
           case PLAN_ID: {
@@ -337,14 +361,57 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
             break;
           }
           case LEVEL: {
-            cur_row_->cells_[cell_idx].set_int(-1);
+            cur_row_->cells_[cell_idx].set_int(sess_info->get_control_info().level_);
           } break;
           case SAMPLE_PERCENTAGE: {
-            cur_row_->cells_[cell_idx].set_int(-1);
+            cur_row_->cells_[cell_idx].set_int((sess_info->get_control_info().sample_pct_ == -1)
+                                                  ? -1 : sess_info->get_control_info().sample_pct_*100);
           } break;
           case RECORD_POLICY: {
-            cur_row_->cells_[cell_idx].set_null();
+            if (sess_info->get_control_info().rp_ == 
+                                    sql::FLTControlInfo::RecordPolicy::RP_ALL) {
+              cur_row_->cells_[cell_idx].set_varchar("ALL");
+              cur_row_->cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(
+                                         ObCharset::get_default_charset()));
+            } else if (sess_info->get_control_info().rp_ ==
+                                     sql::FLTControlInfo::RecordPolicy::RP_ONLY_SLOW_QUERY) {
+              cur_row_->cells_[cell_idx].set_varchar("ONLY_SLOW_QUERY");
+              cur_row_->cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(
+                                         ObCharset::get_default_charset()));
+            } else if (sess_info->get_control_info().rp_ ==
+                                      sql::FLTControlInfo::RecordPolicy::RP_SAMPLE_AND_SLOW_QUERY) {
+              cur_row_->cells_[cell_idx].set_varchar("SAMPLE_AND_SLOW_QUERY");
+              cur_row_->cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(
+                                         ObCharset::get_default_charset()));
+            } else {
+              cur_row_->cells_[cell_idx].set_null();
+            }
           } break;
+          case VID: {
+            if (OB_INVALID_ID == sess_info->get_vid()) {
+              cur_row_->cells_[cell_idx].set_null();
+            } else {
+              cur_row_->cells_[cell_idx].set_int(sess_info->get_vid());
+            }
+            break;
+          }
+          case VIP: {
+            if (sess_info->get_vip().empty()) {
+              cur_row_->cells_[cell_idx].set_null();
+            } else {
+              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_vip());
+              cur_row_->cells_[cell_idx].set_collation_type(default_collation);
+            }
+            break;
+          }
+          case VPORT: {
+            if (!sess_info->get_vport()) {
+              cur_row_->cells_[cell_idx].set_null();
+            } else {
+              cur_row_->cells_[cell_idx].set_int(sess_info->get_vport());
+            }
+            break;
+          }
           case IN_BYTES: {
             cur_row_->cells_[cell_idx].set_int(sess_info->get_in_bytes());
             break;
@@ -355,6 +422,10 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           }
           case USER_CLIENT_PORT: {
             cur_row_->cells_[cell_idx].set_int(sess_info->get_client_addr_port());
+            break;
+          }
+          case SERVICE_NAME: {
+            cur_row_->cells_[cell_idx].set_null();
             break;
           }
           case TOTAL_CPU_TIME: {
@@ -372,7 +443,8 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case TOP_INFO: {
             if ((obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) &&
+                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
+                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) &&
                 !sess_info->get_top_query_string().empty()) {
               cur_row_->cells_[cell_idx].set_varchar(sess_info->get_top_query_string());
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
@@ -433,6 +505,7 @@ int ObShowProcesslist::FillScanner::init(ObIAllocator *allocator,
                "some parameter is NULL", K(ret), K(allocator), K(scanner),
               K(cur_row), K(session_info), K(table_schema));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
+    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   } else {
     allocator_ = allocator;
     scanner_ = scanner;

@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_SQL_TASK_
 
 #include "rpc/frame/ob_req_processor.h"
-#include "share/rpc/ob_server_task.h"
+#include "observer/ob_srv_task.h"
 
 namespace oceanbase
 {
@@ -30,17 +30,17 @@ class ObSqlTaskHandler : public rpc::frame::ObReqProcessor
 public:
   ObSqlTaskHandler() : task_(NULL), sql_engine_(NULL) {}
   ~ObSqlTaskHandler() {}
-  int init(rpc::ObSrvTask *task, ObSql *sql_engine);
+  int init(observer::ObSrvTask *task, ObSql *sql_engine);
   void reset();
 protected:
   int run();
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlTaskHandler);
-  rpc::ObSrvTask *task_;
+  observer::ObSrvTask *task_;
   ObSql *sql_engine_;
 };
 
-class ObSqlTask : public rpc::ObSrvTask
+class ObSqlTask : public observer::ObSrvTask
 {
   friend class ObSqlTaskFactory;
 public:

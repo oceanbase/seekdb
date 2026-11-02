@@ -19,31 +19,46 @@
 
 #include "storage/deadlock/ob_deadlock_detector_mgr.h"
 #include "storage/tx/ob_trans_define.h"
-#include "query/session/ob_deadlock_session.h"
+#include "sql/session/ob_sql_session_mgr.h"
 #include "ob_trans_define_v4.h"
 
 namespace oceanbase
 {
-namespace data_plane
+namespace sql
 {
-struct ObStatementDeadlockContext;
+class ObExecContext;
 }
 namespace transaction
 {
 
+class SessionGuard
+{
+public:
+  SessionGuard();
+  SessionGuard(const SessionGuard &) = delete;
+  SessionGuard &operator=(const SessionGuard &) = delete;
+  ~SessionGuard();
+  void set_session(sql::ObSQLSessionInfo *session_ptr);
+  bool is_valid() const;
+  sql::ObSQLSessionInfo &get_session() const;
+  sql::ObSQLSessionInfo *operator->() const;
+  TO_STRING_KV(K_(sess_ptr));
+private:
+  void revert_session_();
+private:
+  sql::ObSQLSessionInfo *sess_ptr_;
+};
+
 class ObTransOnDetectOperation
 {
 public:
-  ObTransOnDetectOperation(query::ObIDeadlockSessionService &session_service,
-                           const uint32_t sess_id,
-                           const ObTransID &trans_id) :
-    session_service_(&session_service), sess_id_(sess_id), trans_id_(trans_id) {}
+  ObTransOnDetectOperation(const uint32_t sess_id, const ObTransID &trans_id) :
+    sess_id_(sess_id), trans_id_(trans_id) {}
   ~ObTransOnDetectOperation() {}
   int operator()(const common::ObIArray<share::detector::ObDetectorInnerReportInfo> &info,
                  const int64_t self_idx);
   TO_STRING_KV(KP(this), K_(sess_id), K_(trans_id));
 private:
-  query::ObIDeadlockSessionService *session_service_;
   uint32_t sess_id_;
   ObTransID trans_id_;
 };
@@ -57,7 +72,8 @@ class ObTransDeadlockDetectorAdapter
   typedef share::detector::CollectCallBack CollectCallBack;
  public:
   enum class UnregisterPath {
-    LOCK_WAIT_MGR_REPOST = 1,
+    AUTONOMOUS_TRANS = 1,
+    LOCK_WAIT_MGR_REPOST,
     LOCK_WAIT_MGR_WAIT_FAILED,
     LOCK_WAIT_MGR_TRANSFORM_WAITING_ROW_TO_TX,
     END_STMT_DONE,
@@ -71,6 +87,8 @@ class ObTransDeadlockDetectorAdapter
   static const char* to_string(const UnregisterPath path)
   {
     switch (path) {
+    case UnregisterPath::AUTONOMOUS_TRANS:
+      return "AUTONOMOUS_TRANS";
     case UnregisterPath::LOCK_WAIT_MGR_REPOST:
       return "LOCK_WAIT_MGR_REPOST";
     case UnregisterPath::LOCK_WAIT_MGR_WAIT_FAILED:
@@ -100,56 +118,54 @@ class ObTransDeadlockDetectorAdapter
   static int lock_wait_mgr_reconstruct_detector_waiting_for_row(CollectCallBack &on_collect_op,
                                                                 const BlockCallBack &call_back,
                                                                 const ObTransID &self_trans_id,
-                                                                const uint32_t sess_id,
-                                                                query::ObIDeadlockSessionService &session_service);
+                                                                const uint32_t sess_id);
   static int lock_wait_mgr_reconstruct_detector_waiting_for_trans(CollectCallBack &on_collect_op,
                                                                   const ObTransID &conflict_trans_id,
                                                                   const ObTransID &self_trans_id,
-                                                                  const uint32_t sess_id,
-                                                                  query::ObIDeadlockSessionService &session_service);
-  static int maintain_deadlock_info_when_end_stmt(
-      ObTxDesc &tx_desc,
-      query::ObIDeadlockSessionService &session_service,
-      const data_plane::ObStatementDeadlockContext &context);
+                                                                  const uint32_t sess_id);
+  // for remote execution, call from sql trans control
+  static int maintain_deadlock_info_when_end_stmt(sql::ObExecContext &exec_ctx, const bool is_rollback);
   // for autonomous trans
-  static int inner_tx_register_to_deadlock(const ObTransID parent_trans_id,
-                                           const ObTransID inner_trans_id,
-                                           const int64_t query_timeout);
+  static int autonomous_register_to_deadlock(const ObTransID last_trans_id,
+                                             const ObTransID now_trans_id,
+                                             const int64_t query_timeout);
   // if trans node on row removed(for example:1, dump trans. 2, a trans write too many row.)
   // change the dependency relationship from row to trans
   static int change_detector_waiting_obj_from_row_to_trans(const ObTransID &self_trans_id,
-                                                           const ObTransID &conflict_trans_id);
+                                                           const ObTransID &conflict_trans_id,
+                                                           const ObAddr &scheduler_addr);
   // for all path
   static void unregister_from_deadlock_detector(const ObTransID &self_trans_id, const UnregisterPath path);
   /**********************************/
-  static int kill_tx(query::ObIDeadlockSessionService &session_service,
-                     const uint32_t sess_id);
-  static int register_or_replace_conflict_trans_ids(
-                                                    query::ObIDeadlockSessionService &session_service,
-                                                    const ObTransID self_tx_id,
+  static int get_conflict_trans_scheduler(const ObTransID &self_trans_id, ObAddr &scheduler_addr);
+  static int kill_tx(const uint32_t sess_id);
+  static int get_session_info(const uint32_t session_id, SessionGuard &guard);
+  static int get_trans_scheduler_info_on_participant(const ObTransID trans_id,
+                                                     const share::ObLSID ls_id, 
+                                                     ObAddr &scheduler_addr);
+  static int register_or_replace_conflict_trans_ids(const ObTransID self_tx_id,
                                                     const uint32_t self_session_id,
-                                                    const ObArray<ObTransID> &conflict_tx_ids);
-  static int kill_stmt(query::ObIDeadlockSessionService &session_service,
-                       const uint32_t sess_id);
+                                                    const ObArray<ObTransIDAndAddr> &conflict_tx_ids);
+  static int kill_stmt(const uint32_t sess_id);
   static void copy_str_and_translate_apostrophe(const char *src_ptr,
                                                 const int64_t src_len,
                                                 char *dest_ptr,// C-style str, contain '\0'
                                                 const int64_t dest_len);
 private:
-  static int register_to_deadlock_detector_(
-                                            query::ObIDeadlockSessionService &session_service,
-                                            const ObTransID self_tx_id,
+  static int register_to_deadlock_detector_(const ObTransID self_tx_id,
                                             const uint32_t self_session_id,
-                                            const ObIArray<ObTransID> &conflict_tx_ids,
-                                            const query::ObDeadlockSessionFacts &session_facts);
+                                            const ObIArray<ObTransIDAndAddr> &conflict_tx_ids,
+                                            SessionGuard &session_guard);
   static int replace_conflict_trans_ids_(const ObTransID self_tx_id,
-                                         const ObIArray<ObTransID> &conflict_tx_ids);
+                                         const ObIArray<ObTransIDAndAddr> &conflict_tx_ids,
+                                         SessionGuard &session_guard);
   static int create_detector_node_and_set_parent_if_needed_(CollectCallBack &on_collect_op,
                                                             const ObTransID &self_trans_id,
-                                                            const uint32_t sess_id,
-                                                            query::ObIDeadlockSessionService &session_service);
-  static int gen_dependency_resource_array_(const ObIArray<ObTransID> &blocked_trans_ids,
+                                                            const uint32_t sess_id);
+  static int get_session_related_info_(const uint32_t sess_id, int64_t &query_timeout);
+  static int gen_dependency_resource_array_(const ObIArray<ObTransIDAndAddr> &blocked_trans_ids_and_addrs,
                                             ObIArray<share::detector::ObDependencyResource> &dependency_resources);
+  static void try_unregister_deadlock_detector_(sql::ObSQLSessionInfo &session, const ObTransID &trans_id, UnregisterPath path);
 };
 
 } // namespace transaction

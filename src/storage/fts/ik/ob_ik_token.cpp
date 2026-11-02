@@ -31,14 +31,17 @@ int ObFTSortList::add_token(const ObIKToken &token)
 
   if (tokens_.empty()) {
     if (OB_FAIL(tokens_.push_back(token))) {
+      LOG_WARN("Failed to push back token", K(ret));
     }
   } else if (tokens_.get_last() == token) {
     // pass
   } else if (token > tokens_.get_last()) {
     if (OB_FAIL(tokens_.push_back(token))) {
+      LOG_WARN("fail to push back token", K(ret));
     }
   } else if (token < tokens_.get_first()) {
     if (OB_FAIL(tokens_.push_front(token))) {
+      LOG_WARN("fail to push back token", K(ret));
     }
   } else {
     for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
@@ -48,7 +51,8 @@ int ObFTSortList::add_token(const ObIKToken &token)
       }
       if (*iter == token) {
         // no need to add again
-      } else if (OB_FAIL(tokens_.insert(++iter, token))) {
+      } else if (OB_FAIL(tokens_.insert(++iter, token))) { // NOTE: insert after iter
+        LOG_WARN("fail to insert token", K(ret));
       } else {
         // insert ok
       }
@@ -156,15 +160,15 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
 
   if (OB_ISNULL(other)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("other is null", K(ret));
   } else {
-    min_offset_ = other->min_offset_;
-    max_offset_ = other->max_offset_;
-    payload_ = other->payload_;
+    reset();
     ObFTSortList::CellIter iter = other->list().tokens().begin();
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {
       bool added = false;
       if (OB_FAIL(add_token_if_no_conflict(*iter, added))) {
+        LOG_WARN("fail to add token", K(ret));
       }
     }
   }
@@ -195,8 +199,10 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   int ret = OB_SUCCESS;
   if (list_.tokens().empty()) {
     ret = OB_ENTRY_NOT_EXIST;
+    LOG_WARN("Token list is empty", K(ret));
   } else if (FALSE_IT(token = list_.tokens().get_last())) {
   } else if (OB_FAIL(list_.tokens().pop_back())) {
+    LOG_WARN("Pop back failed", K(ret));
   } else if (list_.tokens().empty()) {
     min_offset_ = -1;
     max_offset_ = -1;

@@ -1,0 +1,116 @@
+#owner: lana.lgx
+#owner group: data
+
+--disable_warnings
+--error 0, 1396
+drop user mlog_tester;
+drop database if exists mlog_db;
+--enable_warnings
+create user mlog_tester;
+create database mlog_db;
+use mlog_db;
+create table t1 (id int primary key, age int, name varchar(20));
+grant create on mlog_db.* to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con1,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con1;
+# no select privilege on base table
+--error 1142
+create materialized view log on t1;
+
+connection default;
+grant select on mlog_db.t1 to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con2,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con2;
+create materialized view log on t1;
+# no drop table privilege
+--error 1142
+drop materialized view log on t1;
+
+connection default;
+grant drop on mlog_db.t1 to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+# no drop privilege to mlog table
+connect (con3,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con3;
+--error 1142
+drop materialized view log on t1;
+
+# only grant drop privilege on mlog table
+connection default;
+revoke drop on mlog_db.t1 from mlog_tester;
+grant drop on mlog_db.mlog$_t1 to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con4,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con4;
+drop materialized view log on t1;
+
+# revoke create table privilege
+connection default;
+revoke create on mlog_db.* from mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+# no create table privilege
+connect (con5,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con5;
+--error 1142
+create materialized view log on t1;
+
+connection default;
+grant create on mlog_db.* to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con6,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con6;
+create materialized view log on t1;
+
+# revoke drop privilege on mlog table
+connection default;
+revoke drop on mlog_db.mlog$_t1 from mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con7,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con7;
+--error 1142
+drop materialized view log on t1;
+
+connection default;
+grant drop on mlog_db.mlog$_t1 to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con8,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con8;
+drop materialized view log on t1;
+
+# revoke select privilege on base table
+connection default;
+revoke select on mlog_db.t1 from mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+# no select privilege on base table
+connect (con9,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con9;
+--error 1142
+create materialized view log on t1;
+
+connection default;
+grant select on mlog_db.t1 to mlog_tester;
+--source mysql_test/include/check_schema_sync.inc
+
+connect (con10,$OBMYSQL_MS0,mlog_tester,,mlog_db, $OBMYSQL_PORT);
+connection con10;
+create materialized view log on t1;
+drop materialized view log on t1;
+
+# clean up
+connection default;
+use mlog_db;
+--error 0,1051,1146,9755
+drop materialized view log on t1;
+drop table t1;
+drop database mlog_db;

@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE
+
+#include "lib/utility/utility.h"
+#include "plugin/sys/ob_plugin_dl_handle.h"
+#include "plugin/sys/ob_plugin_utils.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#else
+#include <dlfcn.h>
+#endif
+#include <limits.h>
+
+#ifdef _WIN32
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
+#endif
+#endif
+
+namespace oceanbase {
+using namespace common;
+namespace plugin {
+
+ObPluginDlHandle::~ObPluginDlHandle()
+{
+  destroy();
+}
+
+int ObPluginDlHandle::init(const ObString &dl_dir, const ObString &dl_name)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString path_string;
+  path_string.set_label(OB_PLUGIN_MEMORY_LABEL);
+
+  void *dl_handle = nullptr;
+
+  char cwd[PATH_MAX + 1] = {0};
+#ifdef _WIN32
+  if (!dl_dir.prefix_match("/") && !dl_dir.prefix_match("\\")
+      && !(dl_dir.length() >= 2 && dl_dir.ptr()[1] == ':')
+      && OB_ISNULL(_getcwd(cwd, PATH_MAX + 1))) {
+#else
+  if (!dl_dir.prefix_match("/") && OB_ISNULL(getcwd(cwd, PATH_MAX + 1))) {
+#endif
+    ret = OB_IO_ERROR;
+    LOG_WARN("failed to get current work directory", KCSTRING(strerror(errno)), K(ret));
+  }
+
+  if (OB_NOT_NULL(dl_handle_)) {
+    ret = OB_INIT_TWICE;
+  } else if (OB_FAIL(path_string.assign(cwd))
+             || OB_FAIL(path_string.append("/"))
+             || OB_FAIL(path_string.append(dl_dir))
+             || OB_FAIL(path_string.append("/"))
+             || OB_FAIL(path_string.append(dl_name))) {
+    LOG_WARN("failed to allocate string", K(dl_dir), K(dl_name), K(ret));
+  } else if (OB_FAIL(dl_name_.assign(dl_name))) {
+    LOG_WARN("failed to assign dl_name", K(dl_name), K(ret));
+#ifdef _WIN32
+  } else if (OB_ISNULL(dl_handle_ = (void *)LoadLibraryA(path_string.ptr()))) {
+    ret = OB_PLUGIN_DLOPEN_FAILED;
+    LOG_WARN("failed to open dl", K(path_string), K(ret), K(GetLastError()));
+#else
+  } else if (OB_ISNULL(dl_handle_ = dlopen(path_string.ptr(), RTLD_GLOBAL | RTLD_NOW))) {
+    ret = OB_PLUGIN_DLOPEN_FAILED;
+    LOG_WARN("failed to open dl", K(path_string), K(ret), KCSTRING(dlerror()));
+#endif
+  }
+  return ret;
+}
+
+void ObPluginDlHandle::destroy()
+{
+  dl_name_.reset();
+  dl_handle_ = nullptr;
+}
+
+int ObPluginDlHandle::read_value(const char *symbol_name, void *ptr, int64_t size)
+{
+    int ret = OB_SUCCESS;
+    void *address = nullptr;
+    if (OB_FAIL(read_symbol(symbol_name, address))) {
+      LOG_WARN("failed to find symbol from dl", K(ret));
+    } else if (OB_ISNULL(address)) {
+      ret = OB_ENTRY_NOT_EXIST;
+      LOG_WARN("no such symbol or get null value");
+    } else {
+      MEMCPY(ptr, address, size);
+    }
+    return ret;
+}
+
+int ObPluginDlHandle::read_symbol(const char *symbol_name, void *&value)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL((dl_handle_))) {
+    ret = OB_NOT_INIT;
+#ifdef _WIN32
+  } else if (OB_ISNULL(value = (void *)GetProcAddress((HMODULE)dl_handle_, symbol_name))) {
+    ret = OB_ENTRY_NOT_EXIST;
+    LOG_WARN("failed to find symbol", K_(dl_name), KCSTRING(symbol_name), K(GetLastError()));
+  }
+#else
+  } else if (FALSE_IT(dlerror())) { // clear last error
+  } else if (OB_ISNULL(value = dlsym(dl_handle_, symbol_name))) {
+    const char *error = dlerror();
+    if (OB_NOT_NULL(error)) {
+      ret = OB_ENTRY_NOT_EXIST;
+      LOG_WARN("failed to find symbol", K_(dl_name), KCSTRING(symbol_name), KCSTRING(error));
+    }
+  }
+#endif
+  return ret;
+}
+
+} // namespace plugin
+} // namespace oceanbase

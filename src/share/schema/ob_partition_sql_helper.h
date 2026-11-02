@@ -26,6 +26,7 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/storage_cache_policy/ob_storage_cache_common.h"
 
 
 namespace oceanbase
@@ -67,6 +68,8 @@ protected:
     int64_t sub_part_id_;
     int64_t sub_part_idx_;
     PartitionType partition_type_;
+    common::ObString external_location_;
+    storage::ObStorageCachePolicyType part_storage_cache_policy_type_;
 
     TO_STRING_KV(K_(table_id),
                  K_(tablet_id),
@@ -82,7 +85,9 @@ protected:
                  K_(sub_part_num),
                  K_(sub_part_id),
                  K_(sub_part_idx),
-                 K_(partition_type));
+                 K_(partition_type),
+                 K_(external_location),
+                 K_(part_storage_cache_policy_type));
   };
   virtual int extract_part_info(PartInfo &part_info) = 0;
   virtual int convert_to_dml(const PartInfo &part_info, ObDMLSqlSplicer &dml) = 0;
@@ -92,11 +97,15 @@ protected:
   int gen_list_val_str(const common::ObIArray<common::ObNewRow>& list_value,
                        common::ObString &list_val_str,
                        common::ObString &b_list_val_str);
+  int gen_interval_part_name(int64_t part_id,
+                             ObString &part_name);
+
 private:
   char high_bound_val_[common::OB_MAX_B_HIGH_BOUND_VAL_LENGTH];
   char b_high_bound_val_[common::OB_MAX_B_HIGH_BOUND_VAL_LENGTH];
   char list_val_[common::OB_MAX_PARTITION_EXPR_LENGTH];
   char b_list_val_[common::OB_MAX_B_PARTITION_EXPR_LENGTH];
+  char interval_part_name_[common::OB_MAX_PARTITION_NAME_LENGTH];
 };
 
 class ObAddIncPartDMLGenerator : public ObPartDMLGenerator
@@ -357,6 +366,28 @@ private:
   int64_t schema_version_;
   common::ObISQLClient &sql_client_;
   DISALLOW_COPY_AND_ASSIGN(ObUpdatePartHelper);
+};
+
+// split partition
+class ObAddSplitIncPartHelper
+{
+public:
+  ObAddSplitIncPartHelper(const ObPartitionSchema *ori_table,
+                          const ObPartitionSchema *inc_table,
+                          const int64_t schema_version,
+                          common::ObISQLClient &sql_client)
+      : ori_table_(ori_table),
+        inc_table_(inc_table),
+        schema_version_(schema_version),
+        sql_client_(sql_client) {}
+  virtual ~ObAddSplitIncPartHelper() {}
+  int add_split_partition_info();
+private:
+  const ObPartitionSchema *ori_table_;
+  const ObPartitionSchema *inc_table_;
+  int64_t schema_version_;
+  common::ObISQLClient &sql_client_;
+  DISALLOW_COPY_AND_ASSIGN(ObAddSplitIncPartHelper);
 };
 
 // add/truncate partition

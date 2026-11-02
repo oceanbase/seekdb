@@ -22,6 +22,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/scn.h"
+#include "share/ob_ls_id.h"
 #include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
@@ -42,18 +43,19 @@ class ObLSWRSHandler
 public:
   ObLSWRSHandler() { reset(); }
   ~ObLSWRSHandler() { reset(); }
-  int init();
+  int init(const share::ObLSID &ls_id);
   void reset();
   int offline();
   int online();
   int generate_ls_weak_read_snapshot_version(oceanbase::storage::ObLS &ls,
                                               bool &need_skip,
+                                              bool &is_user_ls,
                                               share::SCN &wrs_version,
                                               const int64_t max_stale_time);
   share::SCN get_ls_weak_read_ts() const { return ls_weak_read_ts_; }
   bool can_skip_ls() const { return !is_enabled_; }
 
-  TO_STRING_KV(K_(is_inited), K_(is_enabled), K_(ls_weak_read_ts));
+  TO_STRING_KV(K_(is_inited), K_(is_enabled), K_(ls_id), K_(ls_weak_read_ts));
 
 private:
   int generate_weak_read_timestamp_(oceanbase::storage::ObLS &ls, const int64_t max_stale_time, share::SCN &timestamp);
@@ -66,6 +68,7 @@ protected:
   common::ObSpinLock lock_;
   bool is_inited_;
   bool is_enabled_;
+  share::ObLSID ls_id_;
   share::SCN ls_weak_read_ts_;
 };
 

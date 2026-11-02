@@ -26,7 +26,6 @@
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/ob_sql_trans_util.h"
 #include "sql/engine/ob_exec_feedback_info.h"
-#include "data_plane/transaction/ob_tx_exec_result.h"
 namespace oceanbase
 {
 namespace sql
@@ -38,7 +37,7 @@ struct ObEvalCtx;
 namespace common
 {
 class ObIAllocator;
-// Serialized SQL query result.
+// the result of remote sql query
 class ObScanner
 {
   OB_UNIS_VERSION(1);

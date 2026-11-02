@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_object_construct.h"
-#include "sql/pl/ob_pl_resolver.h"
+#include "pl/ob_pl_resolver.h"
 
 namespace oceanbase
 {
@@ -28,7 +28,8 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObExprObjectConstruct, ObFuncExprOperator), rowsize_, elem_types_, udt_id_);
 
 ObExprObjectConstruct::ObExprObjectConstruct(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc, T_FUN_PL_OBJECT_CONSTRUCT, N_PL_OBJECT_CONSTRUCT, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
+    : ObFuncExprOperator(alloc, T_FUN_PL_OBJECT_CONSTRUCT, N_PL_OBJECT_CONSTRUCT, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
+                         false, INTERNAL_IN_ORACLE_MODE),
       rowsize_(0),
       udt_id_(OB_INVALID_ID),
       elem_types_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(alloc)) {}
@@ -63,6 +64,7 @@ int ObExprObjectConstruct::cg_expr(ObExprCGCtx &op_cg_ctx,
               = OB_NEWx(ObExprObjectConstructInfo, (&alloc), alloc, T_FUN_PL_OBJECT_CONSTRUCT);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys));
     rt_expr.extra_info_ = info;
@@ -85,7 +87,8 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
   if (OB_SUCC(ret)) {
     // if called by check_default_value in ddl resolver, no sql ctx, get guard from session cache
     if (OB_ISNULL(exec_ctx.get_sql_ctx()) || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get schema guard", K(ret));
       } else {
         schema_guard_ptr = &schema_guard;
       }
@@ -100,11 +103,6 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
                                   package_guard,
                                   *(exec_ctx.get_sql_proxy()),
                                   false);
-    resolve_ctx.params_.plan_cache_ = exec_ctx.get_plan_cache();
-    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx.get_pl_sql_runtime();
-    resolve_ctx.params_.pl_engine_ = exec_ctx.get_pl_engine();
-    resolve_ctx.params_.srs_provider_ = exec_ctx.get_srs_provider();
-    resolve_ctx.params_.lob_read_service_ = exec_ctx.get_lob_read_service();
     pl::ObPLINS *ns = NULL;
     if (NULL == session->get_pl_context()) {
       OZ (package_guard.init());
@@ -143,18 +141,24 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
   ObObj *objs = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("failed to eval param ", K(ret));
   } else if (expr.arg_cnt_ > 0
      && OB_ISNULL(objs = static_cast<ObObj *>
         (ctx.exec_ctx_.get_allocator().alloc(expr.arg_cnt_ * sizeof(ObObj))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc mem for objs", K(ret));
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
+    LOG_WARN("failed to convert obj", K(ret));
   } else if (expr.arg_cnt_ > 0 && OB_FAIL(check_types(ctx, objs, info->elem_types_, expr.arg_cnt_))) {
+    LOG_WARN("failed to check types", K(ret));
   } else if (info->rowsize_ != pl::ObRecordType::get_init_size(expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("rowsize_ is not equel to input", K(ret), K(info->rowsize_), K(expr.arg_cnt_));
   } else if (OB_ISNULL(record
            = static_cast<pl::ObPLRecord*>
              (ctx.exec_ctx_.get_allocator().alloc(pl::ObRecordType::get_init_size(expr.arg_cnt_))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc memory", K(ret));
   } else {
     new(record)pl::ObPLRecord(info->udt_id_, expr.arg_cnt_);
     OZ (record->init_data(ctx.exec_ctx_.get_allocator(), false));
@@ -186,8 +190,6 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
                                       objs[i],
                                       info->elem_types_.at(i),
                                       tmp,
-                                      ctx.exec_ctx_.get_srs_provider(),
-                                      ctx.exec_ctx_.get_lob_read_service(),
                                       false));
         if (OB_FAIL(ret)) {
         } else if (tmp.is_ext()) {
@@ -226,6 +228,7 @@ int ObExprObjectConstruct::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, Ob
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     ObDatum &param = expr.locate_param_datum(ctx, i);
     if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
+      LOG_WARN("failed to convert obj", K(ret), K(i));
     }
   }
   return ret;

@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/geo/ob_s2adapter.h" // for htonll
 #include "ob_vector_common_util.h"
+#include "observer/ob_inner_sql_connection_pool.h"
 
 namespace oceanbase {
 namespace share {
@@ -51,9 +52,9 @@ int ObVectorNormalize::L2_normalize_vector(const int64_t dim, float *data, float
 
 // ------------------ ObVectorNormalizeInfo implement ------------------
 
-// ------------------ ObVectorKmeansClusterHelper implement ------------------
+// ------------------ ObVectorClusterHelper implement ------------------
 // search centers[l_idx, r_idx)
-int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
+int ObVectorClusterHelper::get_nearest_probe_centers(
     float *vector,
     const int64_t dim,
     ObIArray<float*> &centers,
@@ -66,6 +67,7 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(vector) || 0 >= dim || 0 >= nprobe) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(dim), K(nprobe), KP(vector));
   } else if (centers.empty()) {
     // do nothing
   } else {
@@ -75,8 +77,10 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
     if (OB_NOT_NULL(norm_info)) {
       if (OB_ISNULL(norm_vector = static_cast<float*>(allocator.alloc(dim * sizeof(float))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc norm vector", K(ret));
       } else if (FALSE_IT(MEMSET(norm_vector, 0, dim * sizeof(float)))) {
       } else if (OB_FAIL(norm_info->normalize_func_(dim, vector, norm_vector, nullptr))) {
+        LOG_WARN("failed to normalize vector", K(ret));
       }
     }
     // get the nearest nprobe centers
@@ -87,6 +91,7 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
       distance = ObVectorL2Distance<float>::l2_square_flt_func(data, centers.at(i), dim);
       if (max_heap_.count() < nprobe) {
         if (OB_FAIL(max_heap_.push(HeapCenterItem(distance, i)))) {
+          LOG_WARN("failed to push center heap", K(ret), K(i), K(distance));
         }
       } else {
         const HeapCenterItem &top = max_heap_.top();
@@ -94,6 +99,7 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
         if (max_compare_(tmp, top)) {
           HeapCenterItem tmp(distance, i);
           if (OB_FAIL(max_heap_.replace_top(tmp))) {
+            LOG_WARN("failed to replace top", K(ret), K(tmp));
           }
         }
       }
@@ -107,54 +113,59 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
   return ret;
 }
 
-int ObVectorKmeansClusterHelper::get_center_idx(const int64_t idx, int64_t &center_id)
+int ObVectorClusterHelper::get_center_idx(const int64_t idx, int64_t &center_id)
 {
   int ret = OB_SUCCESS;
   if (max_heap_.empty()) {
     center_id = 1; // default center_id for empty center_id_table
   } else if (0 > idx || max_heap_.count() <= idx) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     center_id = max_heap_.at(idx).center_idx_ + 1; // idx 0 is id 1
   }
   return ret;
 }
 
-int ObVectorKmeansClusterHelper::get_pq_center_idx(const int64_t idx, const int64_t pq_center_num, int64_t &center_id)
+int ObVectorClusterHelper::get_pq_center_idx(const int64_t idx, const int64_t pq_center_num, int64_t &center_id)
 {
   int ret = OB_SUCCESS;
   if (max_heap_.empty()) {
     center_id = 1; // default center_id for empty center_id_table
   } else if (0 > idx || max_heap_.count() <= idx) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     center_id = (max_heap_.at(idx).center_idx_ % pq_center_num) + 1; // idx 0 is id 1
   }
   return ret;
 }
 
-int ObVectorKmeansClusterHelper::get_center_vector(const int64_t idx, const ObIArray<float *> &centers, float*& center_vector)
+int ObVectorClusterHelper::get_center_vector(const int64_t idx, const ObIArray<float *> &centers, float*& center_vector)
 {
   int ret = OB_SUCCESS;
   center_vector = nullptr;
   if (max_heap_.empty()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid empty max heap", K(ret), K(idx), K(max_heap_.count()));
   } else if (0 > idx || max_heap_.count() <= idx) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(idx), K(max_heap_.count()));
   } else {
     int64_t center_idx = max_heap_.at(idx).center_idx_;
     if (OB_FAIL(centers.at(center_idx, center_vector))) {
+      LOG_WARN("failed to get center vector", K(ret), K(center_idx), K(centers.count()));
     }
   }
   return ret;
 }
 
-void ObVectorKmeansClusterHelper::reset()
+void ObVectorClusterHelper::reset()
 {
   max_heap_.reset();
 }
 
-int ObVectorKmeansClusterHelper::get_center_id_from_string(
+int ObVectorClusterHelper::get_center_id_from_string(
     ObCenterId &center_id, 
     const ObString &str, 
     uint8_t flag/* = IVF_PARSE_CENTER*/)
@@ -162,6 +173,7 @@ int ObVectorKmeansClusterHelper::get_center_id_from_string(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(str.ptr()) || OB_UNLIKELY(str.length() < OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid cluster center id str", K(ret), KP(str.ptr()), K(str.length()));
   } else {
     const ObCenterId *center_id_ptr = reinterpret_cast<const ObCenterId *>(str.ptr());
     if (flag & IVF_PARSE_TABLET_ID) {
@@ -174,15 +186,17 @@ int ObVectorKmeansClusterHelper::get_center_id_from_string(
   return ret;
 }
 
-int ObVectorKmeansClusterHelper::set_center_id_to_string(const ObCenterId &center_id, ObString &str, ObIAllocator *allocator/* = nullptr*/)
+int ObVectorClusterHelper::set_center_id_to_string(const ObCenterId &center_id, ObString &str, ObIAllocator *allocator/* = nullptr*/)
 {
   int ret = OB_SUCCESS;
   if (!center_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid cluster center id", K(ret), K(center_id));
   } else if (OB_NOT_NULL(allocator)) {
     char *buf = nullptr;
     if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(OB_DOC_ID_COLUMN_BYTE_LENGTH)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc cid", K(ret));
     } else {
       str.assign(buf, OB_DOC_ID_COLUMN_BYTE_LENGTH);
       // assign will set length = buffer_size
@@ -196,12 +210,13 @@ int ObVectorKmeansClusterHelper::set_center_id_to_string(const ObCenterId &cente
     tmp.center_id_ = htonll(center_id.center_id_);
     if (OB_DOC_ID_COLUMN_BYTE_LENGTH != str.write(reinterpret_cast<const char *>(&tmp), OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed write data to string", K(ret));
     }
   }
   return ret;
 }
 
-int ObVectorKmeansClusterHelper::get_pq_center_id_from_string(
+int ObVectorClusterHelper::get_pq_center_id_from_string(
     ObPqCenterId &pq_center_id, 
     const ObString &str, 
     uint8_t flag/* = IVF_PARSE_PQ_CENTER*/)
@@ -226,7 +241,7 @@ int ObVectorKmeansClusterHelper::get_pq_center_id_from_string(
 }
 
 
-int ObVectorKmeansClusterHelper::set_pq_center_id_to_string(
+int ObVectorClusterHelper::set_pq_center_id_to_string(
     const ObPqCenterId &pq_center_id, 
     ObString &str, 
     ObIAllocator *alloc/* = nullptr*/)
@@ -255,17 +270,19 @@ int ObVectorKmeansClusterHelper::set_pq_center_id_to_string(
     tmp.center_id_ = htonl(pq_center_id.center_id_);
     if (OB_DOC_ID_COLUMN_BYTE_LENGTH != str.write(reinterpret_cast<const char *>(&tmp), OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed write data to string", K(ret), K(str), KP(alloc));
     }
   }
   return ret;
 }
 
-uint64_t ObVectorKmeansClusterHelper::get_center_prefix(const ObString &center_id, bool is_pq_centroid /*= false*/)
+uint64_t ObVectorClusterHelper::get_center_prefix(const ObString &center_id, bool is_pq_centroid /*= false*/)
 {
   int ret = OB_SUCCESS;
   uint64_t prefix = 0;
   if (OB_ISNULL(center_id.ptr()) || OB_UNLIKELY(center_id.length() < OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid cluster center id str", K(ret), KP(center_id.ptr()), K(center_id.length()));
   } else if (is_pq_centroid) {
     const ObPqCenterId *pq_center_id_ptr = reinterpret_cast<const ObPqCenterId *>(center_id.ptr());
     prefix = ntohll(pq_center_id_ptr->tablet_id_);
@@ -275,6 +292,20 @@ uint64_t ObVectorKmeansClusterHelper::get_center_prefix(const ObString &center_i
   }
   return prefix;
 }
+
+void ObVectorClusterHelper::release_inner_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session)
+{
+  if (nullptr != session) {
+    LOG_INFO("[VECTOR INDEX]: Release inner session", KP(session));
+    session->get_ddl_info().set_is_dummy_ddl_for_inner_visibility(false);
+    session->set_session_sleep();
+    GCTX.session_mgr_->revert_session(session);
+    GCTX.session_mgr_->free_session(free_session_ctx);
+    session = nullptr;
+  }
+}
+
+
 
 // ------------------ ObCentersBuffer implement ------------------
 template <>
@@ -292,6 +323,7 @@ int ObCentersBuffer<float>::divide(const int64_t idx, const int64_t count)
       }
     }
     if (OB_FAIL(ObVectorDiv::calc(raw_vector, static_cast<float>(count), dim_))) {
+      LOG_WARN("fail to div count", K(ret), K(count), K(dim_));
     }
   }
   return ret;
@@ -310,6 +342,7 @@ int ObCentersBuffer<float>::get_nearest_center(const int64_t dim, float *vector,
     double distance = DBL_MAX;
     for (int64_t i = 0; OB_SUCC(ret) && i < total_cnt_; ++i) {
       if (OB_FAIL(ObVectorL2Distance<float>::l2_square_func(vector, vectors_ + i * dim_, dim, distance))) {
+        SHARE_LOG(WARN, "failed to calc l2 square", K(ret));
       } else if (distance < min_distance) {
         min_distance = distance;
         center_idx = i;
@@ -327,6 +360,7 @@ int ObCentersBuffer<float>::add(const int64_t idx, const int64_t dim, float *vec
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), K(dim), KP(vector), K(idx), K_(total_cnt));
   } else if (OB_FAIL(ObVectorAdd::calc(vectors_ + idx * dim_, vector, dim))) {
+    LOG_WARN("fail to calc vectors add", K(ret), K(dim), K(idx), K(total_cnt_));
   }
   return ret;
 }

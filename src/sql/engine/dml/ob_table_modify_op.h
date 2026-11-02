@@ -19,8 +19,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
-#include "sql/engine/expr/ob_expr_ai/ob_ai_column_utils.h"
-#include "sql/session/ob_inner_sql_connection.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/dml/ob_fk_checker.h"
 
@@ -29,11 +28,12 @@ namespace oceanbase
 namespace sql
 {
 
-enum ObDmlSnapshotOptState
+enum ObDmlGTSOptState
 {
-  WITHOUT_SNAPSHOT_OPT_STATE = 0,
-  USE_RESPONSE_SNAPSHOT_STATE = 1,
-  USE_STMT_SNAPSHOT_STATE = 2,
+  WITHOUT_GTS_OPT_STATE = 0,
+  USE_PARTITION_SNAPSHOT_STATE = 1,
+  WITH_UNIQUE_GLOBAL_INDEX_STATE = 2,
+  GTE_GTS_STATE = 3,
 };
   
 class ForeignKeyHandle
@@ -144,12 +144,13 @@ public:
       uint64_t is_pdml_index_maintain_          : 1; // indicates whether the current dml operator is the operator used for index maintenance in pdml (index maintain)
       uint64_t table_location_uncertain_        : 1; // Target access partition location uncertain, need full table scan
       uint64_t use_dist_das_                    : 1;
+      uint64_t has_instead_of_trigger_          : 1; // abandoned, don't use again
       uint64_t is_pdml_update_split_            : 1; // Mark whether delete, insert op is split from update
       uint64_t check_fk_batch_                  : 1; // mark if the foreign key constraint can be checked in batch    
       uint64_t is_pdml_                         : 1;
       uint64_t need_foreign_key_check_          : 1; // mark if need foreign key check  
       uint64_t need_trigger_fire_               : 1; // mark if need trigger fire
-      uint64_t reserved_                        : 53;
+      uint64_t reserved_                        : 52;
     };
   };
   int64_t das_dop_; // default is 0
@@ -169,6 +170,7 @@ public:
       tablet_loc_(nullptr)
   { }
   virtual ~ObTableModifyOpInput() { }
+  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
   virtual void reset()
   {
     table_loc_ = nullptr;
@@ -250,13 +252,6 @@ public:
   void clear_dml_evaluated_flag(int64_t parent_cnt, ObExpr **parent_exprs);
   void clear_dml_evaluated_flag(ObExpr *clear_expr);
 
-  // AI column maintenance. The task rows are written through the session's
-  // inner connection so that they live in the same transaction as the DML.
-  int ai_column_after_insert(const ObInsCtDef &ins_ctdef);
-  int ai_column_after_update(const ObUpdCtDef &upd_ctdef);
-  int ai_column_after_delete(const ObDelCtDef &del_ctdef);
-  int ai_column_flush_vector_invalidations();
-
   ObDMLModifyRowsList& get_dml_modify_row_list() { return dml_modify_rows_;}
   int submit_all_dml_task();
 
@@ -307,41 +302,22 @@ protected:
   virtual void record_err_for_load_data(int err_ret, int row_num) { UNUSED(err_ret); UNUSED(row_num); }
 public:
   common::ObMySQLProxy *sql_proxy_;
-  common::sqlclient::ObISQLConnectionGuard inner_conn_guard_;
-  ObIInnerSQLConnection *inner_conn_;
-  ObIInnerSQLConnection::SavedValue saved_conn_;
+  observer::ObInnerSQLConnection *inner_conn_;
+  observer::ObInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
   bool need_close_conn_;
 
   ObObjPrintParams obj_print_params_;
   bool iter_end_;
   ObDMLRtCtx dml_rtctx_;
+  bool is_error_logging_;
   bool execute_single_row_;
+  ObErrLogRtDef err_log_rt_def_;
   ObSEArray<ObExpr *, 4> trigger_clear_exprs_;
   ObDMLModifyRowsList dml_modify_rows_;
   ObSEArray<ObForeignKeyChecker *, 4> fk_checkers_;
   ObChunkDatumStore::ShadowStoredRow last_store_row_;
-  uint64_t ai_vector_table_id_;
-  common::ObSEArray<common::ObString, 4> ai_vector_predicates_;
 private:
-  int ai_column_load_specs(uint64_t table_id, common::ObIArray<ObAiColumnSpec> &specs);
-  int ai_column_build_predicate(const ObDMLBaseCtDef &ctdef,
-                                const ExprFixedArray &row,
-                                common::ObString &predicate);
-  int ai_column_write_tasks(uint64_t table_id,
-                            const common::ObIArray<ObAiColumnSpec> &specs,
-                            const common::ObString &predicate,
-                            uint64_t request_id,
-                            bool only_dep_changed,
-                            bool force_all,
-                            const common::ObIArray<uint64_t> *updated_cids);
-  int ai_column_delete_tasks(uint64_t table_id,
-                             const common::ObIArray<ObAiColumnSpec> &specs,
-                             const common::ObString &predicate);
-  int ai_column_invalidate_rows(uint64_t table_id,
-                                const ObAiColumnSpec &spec,
-                                const common::ObString &predicate);
-  int ai_column_execute_inner_write(const char *sql);
   ObSQLSessionInfo::StmtSavedValue *saved_session_;
   char saved_session_buf_[sizeof(ObSQLSessionInfo::StmtSavedValue)] __attribute__((aligned (16)));;
 

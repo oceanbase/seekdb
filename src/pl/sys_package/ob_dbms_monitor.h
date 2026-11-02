@@ -14,7 +14,61 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_MONITOR_H_
+#define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_MONITOR_H_
 
-// Compatibility path during the SQL/PL ownership migration.
-#include "sql/pl/sys_package/ob_dbms_monitor.h"
+#include "sql/engine/ob_exec_context.h"
+#include "common/number/ob_number_v2.h"
+
+using namespace oceanbase::common::number;
+
+namespace oceanbase
+{
+namespace pl
+{
+class ObDBMSMonitor
+{
+public:
+  ObDBMSMonitor() {}
+  virtual ~ObDBMSMonitor() {}
+public:
+  // DBMS_MONITOR.OB_SESSION_TRACE_ENABLE(session_id   IN  BINARY_INTEGER DEFAULT NULL, 
+  //                                      level        IN  INT,
+  //                                      sample_pct   IN  NUMBER,
+  //                                      record_policy IN VARCHAR2);
+  static int session_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  //DBMS_MONITOR.OB_SESSION_TRACE_DISABLE(session_id   IN  BINARY_INTEGER);
+  static int session_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+
+  // DBMS_MONITOR.OB_CLIENT_ID_TRACE_ENABLE(client_id    IN  VARCHAR2,
+  //                                        level        IN  INT,
+  //                                        sample_pct   IN  NUMBER,
+  //                                        record_policy IN VARCHAR2);
+  static int client_id_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  // DBMS_MONITOR.OB_CLIENT_ID_TRACE_DISABLE(client_id IN  VARCHAR2);
+  static int client_id_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+
+  // DBMS_MONITOR.OB_MOD_ACT_TRACE_ENABLE(module_name     IN VARCHAR2 DEFAULT ANY_MODULE,
+  //                                      action_name     IN VARCHAR2 DEFAULT ANY_ACTION,
+  //                                      level        IN  INT,
+  //                                      sample_pct   IN  NUMBER,
+  //                                      record_policy IN VARCHAR2);
+  static int mod_act_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  // DBMS_MONITOR.OB_MOD_ACT_TRACE_DISABLE(module_name     IN  VARCHAR2,
+  //                                       action_name     IN  VARCHAR2 DEFAULT ALL_ACTIONS)
+  static int mod_act_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+
+  // DBMS_MONITOR.OB_TRACE_ENABLE(level        IN  INT,
+  //                              sample_pct   IN  NUMBER,
+  //                              record_policy IN VARCHAR2);
+  static int tenant_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  // DBMS_MONITOR.OB_TENANT_TRACE_DISABLE(tenant_name  IN VARCHAR2 DEFAULT NULL);
+  static int tenant_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+
+  static int resolve_control_info(FLTControlInfo &coninfo, ObNumber level, ObNumber sample_pct, ObString record_policy);
+};
+
+} // end of pl
+} // end of oceanbase
+
+#endif /* OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_MONITOR_H_ */

@@ -23,6 +23,7 @@ using namespace share;
 using namespace storage;
 using namespace storage::mds;
 using namespace common;
+using namespace omt;
 namespace observer
 {
 
@@ -52,17 +53,26 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
   MDS_LOG(INFO, "start range read", K(*this));
   if (OB_FAIL(ObMdsEventBuffer::for_each([this, temp_buffer, buf_len](const MdsEventKey &key, const MdsEvent &event) -> int {
     int ret = OB_SUCCESS;
+    int tmp_ret = OB_SUCCESS;
     if (judge_key_in_ranges_(key)) {
-      if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
-        MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
-      } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-        MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
-      } else {
-        MDS_LOG(TRACE, "scan", K(key));
+      if (true ||// SYS tenant can see information of all tenants
+          true) {// Non-SYS tenant can only see information of its own tenant
+        MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
+        
+        if (OB_SUCCESS == tmp_ret) {
+          if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
+            MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
+          } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
+            MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
+          } else {
+            MDS_LOG(TRACE, "scan", K(key));
+          }
+        }
       }
     }
     return ret;
   }))) {
+    MDS_LOG(WARN, "scan read failed", KR(ret), K(*this));
   }
   return ret;
 }
@@ -73,13 +83,21 @@ int ObAllVirtualMdsEventHistory::point_read_(char *temp_buffer, int64_t buf_len)
   MDS_LOG(INFO, "start point read", K(*this));
   {
     for (int64_t idx = 0; idx < tablet_points_.count() && OB_SUCC(ret); ++idx) {
-      MdsEventKey key(tablet_points_[idx]);
+      MdsEventKey key(share::SYS_LS, tablet_points_[idx]);
       if (OB_FAIL(ObMdsEventBuffer::for_each(key, [&key, this, temp_buffer, buf_len](const MdsEvent &event) -> int {
         int ret = OB_SUCCESS;
-        if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
-          MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
-        } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-          MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
+        int tmp_ret = OB_SUCCESS;
+        if (true ||// SYS tenant can see information of all tenants
+            true) {// Non-SYS tenant can only see information of its own tenant
+          MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
+          
+          if (OB_SUCCESS == tmp_ret) {
+            if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
+              MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
+            } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
+              MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
+            }
+          }
         }
         return ret;
       }))) {
@@ -102,6 +120,7 @@ int ObAllVirtualMdsEventHistory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     if (OB_FAIL(get_primary_key_ranges_())) {
+      MDS_LOG(WARN, "fail to get index scan ranges", KR(ret), K(*this));
     } else {
       char *temp_buffer = nullptr;
       constexpr int64_t BUFFER_SIZE = 32_MB;
@@ -150,93 +169,93 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         break;
       }
       
-      case OB_APP_MIN_COLUMN_ID + 1: {// tid
-        cur_row_.cells_[i].set_int(event.thread_id());
+      case OB_APP_MIN_COLUMN_ID + 3: {// tid
+        cur_row_.cells_[i].set_int(event.tid_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 2: {// tname
+      case OB_APP_MIN_COLUMN_ID + 4: {// tname
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, "%s", event.thread_name());
+        databuff_printf(buffer, buffer_size, pos, "%s", event.tname_);
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 3: {// trace
+      case OB_APP_MIN_COLUMN_ID + 5: {// trace
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, event.trace_id());
+        databuff_printf(buffer, buffer_size, pos, event.trace_id_);
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 4: {// timestamp
-        cur_row_.cells_[i].set_timestamp(event.timestamp());
+      case OB_APP_MIN_COLUMN_ID + 6: {// timestamp
+        cur_row_.cells_[i].set_timestamp(event.timestamp_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 5: {// event
+      case OB_APP_MIN_COLUMN_ID + 7: {// event
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, "%s", event.event_name());
+        databuff_printf(buffer, buffer_size, pos, "%s", event.event_);
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 6: {// info
+      case OB_APP_MIN_COLUMN_ID + 8: {// info
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, event.info());
+        databuff_printf(buffer, buffer_size, pos, event.info_str_);
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 7: {// user_key
+      case OB_APP_MIN_COLUMN_ID + 9: {// user_key
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, event.key());
+        databuff_printf(buffer, buffer_size, pos, event.key_str_);
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 8: {// writer_type
+      case OB_APP_MIN_COLUMN_ID + 10: {// writer_type
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.writer_type()));
+        databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.writer_type_));
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 9: {// writer_id
-        cur_row_.cells_[i].set_int(event.writer_id());
+      case OB_APP_MIN_COLUMN_ID + 11: {// writer_id
+        cur_row_.cells_[i].set_int(event.writer_id_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 10: {// seq_no
-        cur_row_.cells_[i].set_int(event.seq_no().get_seq());
+      case OB_APP_MIN_COLUMN_ID + 12: {// seq_no
+        cur_row_.cells_[i].set_int(event.seq_no_.get_seq());
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 11: {// redo_scn
-        cur_row_.cells_[i].set_uint64(event.redo_scn().get_val_for_inner_table_field());
+      case OB_APP_MIN_COLUMN_ID + 13: {// redo_scn
+        cur_row_.cells_[i].set_uint64(event.redo_scn_.get_val_for_inner_table_field());
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 12: {// end_scn
-        cur_row_.cells_[i].set_uint64(event.end_scn().get_val_for_inner_table_field());
+      case OB_APP_MIN_COLUMN_ID + 14: {// end_scn
+        cur_row_.cells_[i].set_uint64(event.end_scn_.get_val_for_inner_table_field());
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 13: {// trans_version
-        cur_row_.cells_[i].set_uint64(event.trans_version().get_val_for_inner_table_field());
+      case OB_APP_MIN_COLUMN_ID + 15: {// trans_version
+        cur_row_.cells_[i].set_uint64(event.trans_version_.get_val_for_inner_table_field());
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 14: {// node_type
+      case OB_APP_MIN_COLUMN_ID + 16: {// node_type
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.node_type()));
+        databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.node_type_));
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 15: {// state
+      case OB_APP_MIN_COLUMN_ID + 17: {// state
         int64_t pos = 0;
-        databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.state()));
+        databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.state_));
         buffer += pos;
         buffer_size -= pos;
         cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
@@ -271,9 +290,11 @@ int ObAllVirtualMdsEventHistory::get_primary_key_ranges_()
         if (OB_SUCC(ret)) {
           if (tablet_low == tablet_high) {
             if (OB_FAIL(tablet_points_.push_back(tablet_low))) {
+              MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
             }
           } else if (OB_SUCCESS != (ret =
             (tablet_ranges_.push_back(ObTuple<common::ObTabletID, common::ObTabletID>(tablet_low, tablet_high))))) {
+            MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
           }
         }
       }

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_to_outfile_row.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::common;
@@ -52,6 +51,7 @@ int ObExprToOutfileRow::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   if (OB_UNLIKELY(param_num <= PARAM_SELECT_ITEM)) {
     ret = OB_INVALID_ARGUMENT_NUM;
+    LOG_WARN("invalid argument number", K(ret), K(param_num));
   } else {
     // deduce type and length
     type.set_varbinary();
@@ -83,6 +83,7 @@ int ObExprToOutfileRow::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) 
     for (int i = PARAM_FIELD; i < PARAM_SELECT_ITEM; i++) {
       if (!expr.args_[i]->is_static_const_) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("non-const format not supported", K(ret));
       }
     }
     expr.eval_func_ = &to_outfile_str;
@@ -98,8 +99,10 @@ int ObExprToOutfileRow::extend_buffer(ObExprOutFileInfo &out_info,
   int64_t new_len = (old_len == 0) ? OB_MALLOC_MIDDLE_BLOCK_SIZE : old_len * 2;
   if (OB_ISNULL(out_info.buf_ = static_cast<char*>(allocator.alloc(new_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate memory", K(ret), K(old_len), K(new_len));
   } else if (OB_ISNULL(out_info.tmp_buf_ = static_cast<char*>(allocator.alloc(new_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate memory", K(ret), K(old_len), K(new_len));
   } else {
     out_info.buf_len_ = new_len;
     out_info.tmp_buf_len_ = new_len;
@@ -117,8 +120,10 @@ int ObExprToOutfileRow::calc_outfile_info(const ObExpr &expr,
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_ISNULL(out_info.print_params_.tz_info_ = session->get_timezone_info())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get timezone info", K(ret));
   } else {
     out_info.print_params_.use_memcpy_ = true;
     out_info.print_params_.binary_string_print_hex_ = false;
@@ -150,15 +155,19 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(expr.arg_cnt_ <= PARAM_SELECT_ITEM)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("evaluate parameters values failed", K(ret));
   } else {
     ObExprOutFileInfo *out_info = NULL;
     auto rt_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
     if (NULL == (out_info = static_cast<ObExprOutFileInfo *>
                  (ctx.exec_ctx_.get_expr_op_ctx(rt_ctx_id)))) {
       if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(rt_ctx_id, out_info))) {
+        LOG_WARN("failed to create operator ctx", K(ret));
       } else if (OB_FAIL(calc_outfile_info(expr, ctx,
                                            ctx.exec_ctx_.get_allocator(), *out_info))) {
+        LOG_WARN("fail calc outfile info", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -176,12 +185,9 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           } else { // text tc
             ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
             common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-            const common::ObLobReadOptions *lob_read_options = nullptr;
             if (OB_SUCC(ret)
-                && OB_FAIL(ctx.exec_ctx_.get_lob_read_options(lob_read_options))) {
-            } else if (OB_SUCC(ret)
-                && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                               obj, obj, lob_read_options, &temp_allocator))) {
+                && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(obj, obj, NULL, &temp_allocator))) {
+              LOG_WARN("failed to convert outrow lobs", K(ret), K(obj));
             }
             OZ(print_field(buf, buf_len, pos, obj, *out_info));
           }
@@ -195,6 +201,7 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           char *res_buf = NULL;
           if (OB_ISNULL(res_buf = expr.get_str_res_mem(ctx, pos))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("allocate memory failed", K(ret), K(pos));
           } else {
             MEMCPY(res_buf, buf, pos);
             expr_datum.set_string(res_buf, pos);
@@ -283,6 +290,7 @@ int ObExprToOutfileRow::print_wchar_to_buf(char *buf, const int64_t buf_len, int
   int ret = OB_SUCCESS;
   int result_len = 0;
   if (OB_FAIL(ObCharset::wc_mb(coll_type, wchar, buf + pos, buf_len - pos, result_len))) {
+    LOG_WARN("failed to convert wc to mb");
   } else {
     pos += result_len;
   }

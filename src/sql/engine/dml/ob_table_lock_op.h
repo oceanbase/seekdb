@@ -31,6 +31,10 @@ public:
       : ObTableModifyOpInput(ctx, spec)
   {
   }
+  virtual int init(ObTaskInfo &task_info) override
+  {
+    return ObTableModifyOpInput::init(task_info);
+  }
 };
 
 class ObTableLockSpec : public ObTableModifySpec

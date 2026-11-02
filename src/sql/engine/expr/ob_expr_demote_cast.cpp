@@ -51,7 +51,9 @@ int ObExprDemoteCastBase::get_column_res_type(const ObExprResType &param_type,
   ObDatumMeta column_datum_meta;
   if (!param_type.is_int() && !param_type.get_param().is_int()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cast param type is unexpected", K(ret), K(param_type));
   } else if (OB_FAIL(get_column_datum_meta(param_type.get_param().get_int(), column_datum_meta))) {
+    LOG_WARN("fail to get column datum meta", K(ret));
   } else {
     column_res_type.set_type(static_cast<ObObjType>(column_datum_meta.type_));
     column_res_type.set_cs_type(static_cast<ObCollationType>(column_datum_meta.cs_type_));
@@ -153,17 +155,23 @@ int ObExprDemoteCastBase::demote_cast(const ObExpr &expr, ObEvalCtx &ctx, TypeDe
       ret = OB_SUCCESS;
       res.set_outside();
     } else {
+      LOG_WARN("fail to eval const expr", K(ret));
     }
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, column_info))) {
+    LOG_WARN("fail to eval column info", K(ret));
   } else if (OB_UNLIKELY(column_info->is_null())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the column type is null", K(ret));
   } else if (OB_FAIL(get_column_datum_meta(column_info->get_int(), // restore column meta from args
                                            column_datum_meta))) {
+    LOG_WARN("fail to get column datum meta", K(ret));
   } else if (OB_UNLIKELY(constant->is_null())) {
     if (OB_FAIL(demote_null_constant(expr.args_[0], column_datum_meta, res))) {
+      LOG_WARN("fail to demote null constant", K(ret));
     }
   } else {
     if (OB_FAIL(demote_field_constant(*constant, constant_datum_meta, column_datum_meta, res))) {
+      LOG_WARN("fail to demote field constant", K(ret));
     }
   }
   return ret;
@@ -212,6 +220,7 @@ int ObExprDemoteCastBase::demote_field_constant(const ObDatum &constant,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected expr type", K(ret), K(dst_meta));
     }
   }
   return ret;
@@ -225,6 +234,7 @@ int ObExprDemoteCastBase::demote_int_field_constant(const ObDatum &constant,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberType != src_meta.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input type", K(ret), K(src_meta));
   } else {
     number::ObNumber num(constant.get_number());
     if (ob_is_int_tc(dst_meta.type_)) {
@@ -256,6 +266,7 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberType != src_meta.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input type", K(ret), K(src_meta));
   } else {
     number::ObNumber num(constant.get_number());
     if (ob_is_number_tc(dst_meta.type_)) {
@@ -265,7 +276,9 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber round_num;
       if (OB_FAIL(round_num.from(num, tmp_alloc))) {
+        LOG_WARN("fail to copy number", K(ret), K(num));
       } else if (OB_FAIL(round_num.round(dst_meta.scale_))) {
+        LOG_WARN("fail to round number", K(ret));
       } else if (0 != round_num.compare(num)) {
         // Digits of number after round is lost (truncated)
         res.set_outside();
@@ -279,8 +292,10 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
         int32_t int_bytes = 0;
         int32_t out_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
         if (OB_FAIL(wide::from_number(round_num, tmp_alloc, in_scale, decint, int_bytes))) {
+          LOG_WARN("cast number to decimal int failed", K(ret), K(round_num));
         } else if (OB_ISNULL(decint)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("decimal int result is null", K(ret));
         } else if (ObDatumCast::need_scale_decimalint(in_scale, int_bytes, out_scale, out_bytes)) {
           ObDecimalIntBuilder res_val;
           // For check range bound.
@@ -293,13 +308,17 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
           int cmp_max = 0;
           if (OB_FAIL(wide::common_scale_decimalint(decint, int_bytes, in_scale, out_scale,
                                                     scaled_val))) {
+            LOG_WARN("fail to scale decimal int value", K(ret), K(in_scale), K(out_scale));
           } else if (OB_FAIL(wide::compare(scaled_val, min_v, cmp_min))) {
+            LOG_WARN("compare failed", K(ret));
           } else if (OB_FAIL(wide::compare(scaled_val, max_v, cmp_max))) {
+            LOG_WARN("compare failed", K(ret));
           } else if (cmp_min <= 0 || cmp_max >= 0 || in_scale > out_scale) {
             // out of range bound
             res.set_outside();
           } else if (OB_FAIL(ObDatumCast::align_decint_precision_unsafe(
               scaled_val.get_decimal_int(), scaled_val.get_int_bytes(), out_bytes, res_val))) {
+            LOG_WARN("fail to align decimal int precision", K(ret));
           } else {
             res.val_.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
             res.set_inside();
@@ -326,6 +345,7 @@ int ObExprDemoteCastBase::demote_year_field_constant(const ObDatum &constant,
       && ObDoubleType != src_meta.type_
       && ObMySQLDateTimeType != src_meta.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input type", K(ret), K(src_meta));
   } else {
     uint8_t year_val = 0;
     if (ObIntType == src_meta.type_) {
@@ -364,6 +384,7 @@ int ObExprDemoteCastBase::demote_date_field_constant(const ObDatum &constant,
   ObTime ob_time;
   if (OB_UNLIKELY(ObDateTimeType != src_meta.type_ && ObMySQLDateTimeType != src_meta.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input type", K(ret), K(src_meta));
   } else if (ObDateTimeType == src_meta.type_ &&
       OB_FAIL(ObTimeConverter::datetime_to_ob_time(constant.get_datetime(), NULL /*tz_info*/,
                                                    ob_time))) {
@@ -398,6 +419,7 @@ int ObExprDemoteCastBase::demote_datetime_timestamp_field_constant(const ObDatum
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!ob_is_datetime_tc(src_meta.type_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input type", K(ret), K(src_meta));
   } else {
     res.val_.set_datetime(constant.get_datetime());
     res.set_inside();
@@ -420,6 +442,7 @@ int ObExprDemoteCastBase::demote_time_field_constant(const ObDatum &constant,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObTimeType != src_meta.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input type", K(ret), K(src_meta));
   } else {
     res.val_.set_time(constant.get_time());
     res.set_inside();
@@ -437,6 +460,7 @@ int ObExprDemoteCastBase::demote_null_constant(const ObExpr *constant_expr,
   // result for scenarios that do not require constraints and mark it's range placement as inside.
   const ObExpr *real_expr = NULL;
   if (OB_FAIL(ObExprUtil::get_real_expr_without_cast(constant_expr, real_expr))) {
+    LOG_WARN("fail to get real expr without case", K(ret));
   } else if (ObRawExprTypeDemotion::need_constraint(real_expr->datum_meta_.type_,
                                                     column_meta.type_)) {
     res.set_outside();
@@ -463,6 +487,7 @@ int ObExprDemoteCast::calc_result_type2(ObExprResType &type,
   // no additional casts should be required for the comparison.
   ObExprResType column_res_type;
   if (OB_FAIL(get_column_res_type(type2, column_res_type))) {
+    LOG_WARN("fail to get column res type", K(ret), K(type2));
   } else if (ob_is_int_uint_tc(column_res_type.get_type())) {
     if (ob_is_int_tc(column_res_type.get_type())) {
       type.set_int();
@@ -482,6 +507,7 @@ int ObExprDemoteCast::calc_result_type2(ObExprResType &type,
       type.set_accuracy(column_res_type.get_accuracy());
     }
     if (OB_FAIL(set_calc_type_for_const_param(column_res_type, type1, type_ctx))) {
+      LOG_WARN("fail to set calc type for const param", K(ret));
     }
   }
   return ret;
@@ -495,8 +521,10 @@ int ObExprDemoteCast::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
   for (int64_t i = 0; i < rt_expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     if (OB_ISNULL(rt_expr.args_[i])) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("the args is null.", K(ret), K(rt_expr), K(i));
     } else if (1 == i && ObIntType != rt_expr.args_[i]->datum_meta_.type_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the args type is unexpected", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
@@ -510,6 +538,7 @@ int ObExprDemoteCast::eval_demoted_val(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int ret = OB_SUCCESS;
   TypeDemotionRes res(demoted_val);
   if (OB_FAIL(demote_cast(expr, ctx, res))) {
+    LOG_WARN("fail to demote cast", K(ret));
   } else if (OB_UNLIKELY(res.is_outside())) {
     // Expected error, in order to prevent the calculable expr from getting a result
     ret = OB_DATA_OUT_OF_RANGE;
@@ -532,7 +561,9 @@ int ObExprRangePlacement::calc_result_type2(ObExprResType &type,
   type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type]);
   ObExprResType column_res_type;
   if (OB_FAIL(get_column_res_type(type2, column_res_type))) {
+    LOG_WARN("fail to get column res type", K(ret), K(type2));
   } else if (OB_FAIL(set_calc_type_for_const_param(column_res_type, type1, type_ctx))) {
+    LOG_WARN("fail to set calc type for const param", K(ret));
   }
   return ret;
 }
@@ -545,8 +576,10 @@ int ObExprRangePlacement::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
   for (int64_t i = 0; i < rt_expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     if (OB_ISNULL(rt_expr.args_[i])) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("the args is null.", K(ret), K(rt_expr), K(i));
     } else if (1 == i && ObIntType != rt_expr.args_[i]->datum_meta_.type_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the args type is unexpected", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
@@ -567,6 +600,7 @@ int ObExprRangePlacement::eval_range_placement(const ObExpr &expr, ObEvalCtx &ct
   demoted_val.pack_ = 0;
   TypeDemotionRes res(demoted_val);
   if (OB_FAIL(demote_cast(expr, ctx, res))) {
+    LOG_WARN("fail to demote cast", K(ret));
   } else {
     // set range placement value as datum result
     range_placement.set_int32(static_cast<int32_t>(res.rp_));

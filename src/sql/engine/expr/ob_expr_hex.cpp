@@ -104,6 +104,7 @@ int ObExprHex::get_uint64(const ObObj &obj, ObCastCtx &cast_ctx, uint64_t &out)
   out = 0;
   if (OB_UNLIKELY(obj.is_number())) {
     if (OB_FAIL(number_uint64(obj.get_number(), out))) {
+      LOG_WARN("number to uint fail", K(ret));
     }
   } else {
     EXPR_GET_UINT64_V2(obj, out);
@@ -119,7 +120,9 @@ int ObExprHex::number_uint64(const number::ObNumber &num_val, uint64_t &out)
   number::ObNumber nmb;
   ObNumStackOnceAlloc alloc;
   if (OB_FAIL(nmb.from(num_val, alloc))) {
+    LOG_WARN("deep copy failed", K(ret));
   } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(nmb.round(0)))) {
+    LOG_WARN("round failed", K(ret), K(nmb));
   } else if (nmb.is_valid_int64(tmp_int)) {
     out = static_cast<uint64_t>(tmp_int);
   } else if (nmb.is_valid_uint64(tmp_uint)) {
@@ -143,12 +146,17 @@ int ObExprHex::decimalint_uint64(
               in_meta.precision_, in_meta.scale_,
               in_meta.precision_ - in_meta.scale_ + 1, 0, 0,
               *datum, builder))) {
+    LOG_WARN("do_round_decimalint failed",
+             K(ret), K(in_meta.precision_), K(in_meta.scale_),
+             K(in_meta.precision_ - in_meta.scale_ + 1));
   } else if (OB_FAIL(wide::check_range_valid_int64(
              builder.get_decimal_int(), builder.get_int_bytes(), is_valid_int64, tmp_int))) {
+    LOG_WARN("check_range_valid_int64 failed", K(ret), K(builder.get_int_bytes()));
   } else if (is_valid_int64) {
     out = static_cast<uint64_t>(tmp_int);
   } else if (OB_FAIL(wide::check_range_valid_uint64(
       builder.get_decimal_int(), builder.get_int_bytes(), is_valid_uint64, tmp_uint))) {
+    LOG_WARN("check_range_valid_int64 failed", K(ret), K(builder.get_int_bytes()));
   } else if (is_valid_uint64) {
     out = tmp_uint;
   } else {
@@ -169,6 +177,7 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
+    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else {
@@ -179,6 +188,7 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
         OZ(number_uint64(number::ObNumber(arg->get_number()), val));
       } else if (ObDecimalIntType == in_type) {
         if (OB_FAIL(decimalint_uint64(expr.args_[0]->datum_meta_, arg, val))) {
+          LOG_WARN("decimalint_uint64 failed", K(ret));
         }
       } else {
         val = arg->get_uint();
@@ -187,10 +197,12 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
       char *buf = expr.get_str_res_mem(ctx, max_len);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("get memory failed", K(ret));
       } else {
         const int len = snprintf(buf, max_len, "%llX", static_cast<unsigned long long>(val));
         if (len < 0 || len > max_len) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("snprintf failed", K(ret), K(len));
         } else {
           expr_datum.set_string(buf, len);
         }
@@ -200,16 +212,19 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
       if (!ob_is_text_tc(in_type)) {
         if (OB_FAIL(ObDatumHexUtils::hex(expr, arg->get_string(), ctx,
                                          alloc_guard.get_allocator(), expr_datum))) {
+          LOG_WARN("to hex failed", K(ret));
         }
       } else { // text tc
         ObString str;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, alloc_guard.get_allocator(),
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(alloc_guard.get_allocator(),
                                                               *arg,
                                                               expr.args_[0]->datum_meta_,
                                                               expr.args_[0]->obj_meta_.has_lob_header(),
                                                               str))) {
+          LOG_WARN("failed to get lob data", K(ret));
         } else if (OB_FAIL(ObDatumHexUtils::hex(expr, str, ctx,
                                                 alloc_guard.get_allocator(), expr_datum))) {
+          LOG_WARN("to hex failed", K(ret));
         }
       }
     }

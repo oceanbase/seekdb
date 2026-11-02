@@ -30,13 +30,14 @@ class ObVirtualSqlPlanStatistics : public common::ObVirtualTableScannerIterator
 public:
   ObVirtualSqlPlanStatistics();
   virtual ~ObVirtualSqlPlanStatistics();
+  int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
   
 private:
 
 
-int get_next_operator_stat_row(bool &is_end);
+int get_row_from_specified_tenant(bool &is_end);
 int fill_cells(const sql::ObOperatorStat &pstat);
 private:
   enum COLUMN_ID
@@ -64,4 +65,5 @@ private:
 } //end namespace oceanbase
 
 #endif /* OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_STATISTICS_H */
+
 

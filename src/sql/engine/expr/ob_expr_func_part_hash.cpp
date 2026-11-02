@@ -28,9 +28,10 @@ namespace sql
 
 ObExprFuncPartHashBase::ObExprFuncPartHashBase(common::ObIAllocator &alloc, ObExprOperatorType type,
           const char *name, int32_t param_num, int32_t dimension,
-          bool is_internal_for_mysql)
+          bool is_internal_for_mysql,
+          bool is_internal_for_oracle)
     : ObFuncExprOperator(alloc, type, name, param_num, NOT_VALID_FOR_GENERATED_COL, dimension,
-                         is_internal_for_mysql)
+                         is_internal_for_mysql, is_internal_for_oracle)
 {
 }
 
@@ -74,8 +75,10 @@ int ObExprFuncPartHashBase::calc_value_for_mysql(const T &input, T &output,
       }
       output.set_int(num);
     } else {
+      LOG_WARN("Failed to get value", K(ret));
     }
   }
+  LOG_TRACE("calc hash value with mysql mode", K(ret));
   return ret;
 }
 
@@ -97,6 +100,7 @@ int ObExprFuncPartHash::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("objs_stack is null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
       ObObjTypeClass tc = types_stack[i].get_type_class();
@@ -125,11 +129,13 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
     int32_t val_len = obj.get_val_len();
     const char* obj1_str = obj.get_string_ptr();
     char* real_end = NULL;
-    // Keep partition hash stable by trimming fixed-length character padding.
+    // oracle hash test
     if (OB_FAIL(common::ObCharset::trim_end_of_str(obj1_str, val_len, real_end,
                                                    ObCharset::charset_type_by_coll(obj.get_collation_type())))){
+      LOG_WARN("fail to trim end of str", K(ret));
     } else if (OB_ISNULL(real_end)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null ptr", K(ret));
     } else {
       val_len = real_end - obj1_str;
       if (val_len < 0) {
@@ -139,6 +145,7 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
         obj_trimmed.set_collation_type(obj.get_collation_type());
         obj_trimmed.set_string(ObCharType, obj.get_string_ptr(), val_len);
         if (OB_FAIL(obj_trimmed.hash_murmur(res, seed))) {
+          LOG_WARN("fail to do hash", K(ret));
         }
       }
     }
@@ -146,10 +153,34 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
     ret = wide::PartitionHash<ObMurmurHash, ObObj>::calculate(obj, seed, res);
   } else {
     if (OB_FAIL(obj.hash_murmur(res, seed))) {
+      LOG_WARN("fail to do hash", K(ret));
     }
   }
   return ret;
 }
+bool ObExprFuncPartHash::is_oracle_supported_type(const common::ObObjType type)
+{
+  bool supported = false;
+  switch (type) {
+    case ObIntType:
+    case ObFloatType:
+    case ObDoubleType:
+    case ObNumberType:
+    case ObDateTimeType:
+    case ObCharType:
+    case ObVarcharType:
+    case ObDecimalIntType: {
+      supported = true;
+      break;
+    }
+    default: {
+      supported = false;
+    }
+  }
+  return supported;
+}
+
+
 int ObExprFuncPartHash::calc_value(
     ObExprCtx &expr_ctx,
     const ObObj *objs_stack,
@@ -160,9 +191,11 @@ int ObExprFuncPartHash::calc_value(
   //DO not change this function's result.
   //This will influence data.
   //If you need to do, remember ObTableLocation has the same code!!!
+  CHECK_COMPATIBILITY_MODE(expr_ctx.my_session_);
   // mysql mode only allows one parameter, syntax already restricts
   if (OB_ISNULL(objs_stack) || 1 != param_num) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("objs_stack is null or number incorrect", K(objs_stack), K(param_num), K(ret));
   } else {
     ret = calc_value_for_mysql(objs_stack[0], result, objs_stack[0].get_type());
   }
@@ -174,6 +207,7 @@ int ObExprFuncPartHash::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_exp
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("expect one parameter in mysql", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "part hash");
   }
 
@@ -190,9 +224,11 @@ int ObExprFuncPartHash::eval_part_hash(
   // for mysql, see calc_value_for_mysql
   ObDatum *arg0 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg0))) {
+    LOG_WARN("evaluate parameter failed", K(ret));
   } else if (arg0->is_null()) {
     expr_datum.set_int(0);
   } else if (OB_FAIL(calc_value_for_mysql(*arg0, expr_datum, expr.args_[0]->datum_meta_.type_))) {
+    LOG_WARN("calc value for mysql failed", K(ret));
   }
   return ret;
 }

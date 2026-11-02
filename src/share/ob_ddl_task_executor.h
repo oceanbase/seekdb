@@ -23,8 +23,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/profile/ob_trace_id.h"
-#include "lib/thread/ob_async_task_queue.h"
-#include "lib/thread/thread_pool.h"
+#include "lib/thread/thread_mgr_interface.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "share/ob_errno.h"
 #include "share/ob_thread_pool.h"
@@ -63,7 +62,8 @@ public:
       || is_stop_state(ret_code)
       || is_not_exist(ret_code)
       || is_retry(ret_code)
-      || is_timeout(ret_code);
+      || is_timeout(ret_code)
+      || is_location_service_renew_error(ret_code);
   }
   static bool in_ddl_retry_black_list(const int ret_code)
   {
@@ -72,7 +72,7 @@ public:
   }
   static bool is_ddl_force_no_more_process(const int ret_code)
   {
-    return common::OB_STANDBY_DATABASE_READ_ONLY == ret_code;
+    return common::OB_STANDBY_READ_ONLY == ret_code;
   }
 private:
   static bool is_timeout(const int ret_code) {
@@ -86,20 +86,19 @@ private:
   }
   static bool is_retry(const int ret_code) {
     return common::OB_EAGAIN == ret_code || common::OB_DDL_SCHEMA_VERSION_NOT_MATCH == ret_code || common::OB_TASK_EXPIRED == ret_code || common::OB_NEED_RETRY == ret_code
-        || common::OB_ERR_SHARED_LOCK_CONFLICT == ret_code || common::OB_SCHEMA_EAGAIN == ret_code || OB_DATA_NOT_UPTODATE == ret_code
-        || common::OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret_code || common::OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret_code
+        || common::OB_ERR_SHARED_LOCK_CONFLICT == ret_code || common::OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == ret_code || common::OB_SCHEMA_EAGAIN == ret_code || OB_DATA_NOT_UPTODATE == ret_code
+        || common::OB_ERR_REMOTE_SCHEMA_NOT_FULL == ret_code || common::OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret_code || common::OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret_code
         || common::OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret_code || common::OB_TRANS_STMT_NEED_RETRY == ret_code || common::OB_SCHEMA_NOT_UPTODATE == ret_code
         || common::OB_TRANSACTION_SET_VIOLATION == ret_code || common::OB_TRY_LOCK_ROW_CONFLICT == ret_code || common::OB_TRANS_CANNOT_SERIALIZE == ret_code || common::OB_GTI_NOT_READY == ret_code
         || common::OB_TRANS_WEAK_READ_VERSION_NOT_READY == ret_code || common::OB_REPLICA_NOT_READABLE == ret_code || common::OB_ERR_INSUFFICIENT_PX_WORKER == ret_code
         || common::OB_EXCEED_MEM_LIMIT == ret_code || common::OB_INACTIVE_SQL_CLIENT == ret_code || common::OB_INACTIVE_RPC_PROXY == ret_code || common::OB_LS_OFFLINE == ret_code;
   }
   static bool is_not_exist(const int ret_code) {
-    return common::OB_LS_NOT_EXIST == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_RUNTIME_SCHEMA_NOT_READY == ret_code
-        || common::OB_SERVER_RUNTIME_NOT_READY == ret_code;
+    return common::OB_LS_NOT_EXIST == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_TENANT_NOT_EXIST == ret_code
+        || common::OB_TENANT_NOT_IN_SERVER == ret_code;
   }
   static bool is_stop_state(const int ret_code) {
-    return common::OB_NOT_INIT == ret_code || common::OB_IN_STOP_STATE == ret_code
-        || common::OB_SERVER_IS_INIT == ret_code || common::OB_SERVER_IS_STOPPING == ret_code
+    return common::OB_IN_STOP_STATE == ret_code || common::OB_SERVER_IS_INIT == ret_code || common::OB_SERVER_IS_STOPPING == ret_code
         || common::OB_RS_SHUTDOWN == ret_code || common::OB_PARTITION_IS_STOPPED == ret_code
         || common::OB_PARTITION_IS_BLOCKED == ret_code;
   }
@@ -140,7 +139,7 @@ private:
   common::ObConcurrentFIFOAllocator allocator_;
 };
 
-class ObDDLTaskExecutor : public lib::ThreadPool
+class ObDDLTaskExecutor : public lib::TGRunnable
 {
 public:
   ObDDLTaskExecutor();
@@ -159,6 +158,7 @@ private:
   bool is_inited_;
   TaskQueue task_queue_;
   common::ObThreadCond cond_;
+  int tg_id_;
 };
 
 template <typename T>
@@ -173,30 +173,30 @@ int ObDDLTaskExecutor::push_task(const T &task)
       STORAGE_LOG(WARN, "fail to push back task", K(ret));
     }
   } else if (OB_FAIL(cond_.broadcast())) {
+    STORAGE_LOG(WARN, "fail to broadcase siginal", K(ret));
   }
   return ret;
 }
 
 class ObAsyncTask;
 
-class ObDDLLocalBuilder
+class ObDDLReplicaBuilder
 {
 public:
-  ObDDLLocalBuilder();
-  ~ObDDLLocalBuilder();
+  ObDDLReplicaBuilder();
+  ~ObDDLReplicaBuilder();
   int init();
   int start();
   void stop();
-  void server_module_thread_stop();
-  void server_module_thread_wait();
+  void mtl_thread_stop();
+  void mtl_thread_wait();
   void destroy();
   int push_task(ObAsyncTask &task);
 
 private:
-  int64_t get_thread_cnt_() const;
   bool is_thread_started_;
   bool is_stopped_;
-  ObAsyncTaskQueue task_queue_;
+  int tg_id_;
 };
 
 }  // end namespace share

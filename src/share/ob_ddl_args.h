@@ -30,10 +30,12 @@ struct ObDDLArg
 public:
   ObDDLArg() :
       ddl_stmt_str_(),
+      ddl_id_str_(),
       sync_from_primary_(false),
       based_schema_object_infos_(),
       parallelism_(0),
       task_id_(0),
+      consumer_group_id_(0),
       is_parallel_(false)
    { }
   virtual ~ObDDLArg() = default;
@@ -42,11 +44,12 @@ public:
     return 0 < based_schema_object_infos_.count();
   }
   virtual bool is_allow_when_disable_ddl() const { return false; }
+  virtual bool is_allow_when_upgrade() const { return false; }
   bool is_sync_from_primary() const
   {
     return sync_from_primary_;
   }
-  // DDL availability in physical standby mode.
+  //user tenant can not ddl in standby
   virtual bool is_allow_in_standby() const
   { return true; }
   virtual int assign(const ObDDLArg &other);
@@ -54,19 +57,25 @@ public:
   void reset()
   {
     ddl_stmt_str_.reset();
+    
+    ddl_id_str_.reset();
     sync_from_primary_ = false;
     based_schema_object_infos_.reset();
     parallelism_ = 0;
     task_id_ = 0;
+    consumer_group_id_ = 0;
     is_parallel_ = false;
   }
   DECLARE_TO_STRING;
 
   common::ObString ddl_stmt_str_;
+  
+  common::ObString ddl_id_str_;
   bool sync_from_primary_;
   common::ObSArray<share::schema::ObBasedSchemaObjectInfo> based_schema_object_infos_;
   int64_t parallelism_;
   int64_t task_id_;
+  int64_t consumer_group_id_;
   //some parallel ddl is effect before 4220, this member is valid after 4220
   bool is_parallel_;
 };

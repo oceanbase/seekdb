@@ -44,7 +44,7 @@ int ObExprUtcTimestamp::calc_result_type0(ObExprResType &type, ObExprTypeCtx &ty
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);
   }
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   return OB_SUCCESS;
 }
 
@@ -54,6 +54,7 @@ int ObExprUtcTimestamp::eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr_ctx.phy_plan_ctx_ is null", K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -62,6 +63,7 @@ int ObExprUtcTimestamp::eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
       ObMySQLDateTime mdt_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_mdatetime(ts_value, mdt_value))) {
+        LOG_WARN("failed to convert datetime to mysql datetime", K(ret));
       } else {
         ObTimeConverter::trunc_mdatetime(expr.datum_meta_.scale_, mdt_value);
         expr_datum.set_mysql_datetime(mdt_value);
@@ -99,7 +101,7 @@ int ObExprUtcTime::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);
   }
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   return OB_SUCCESS;
 }
 
@@ -118,6 +120,7 @@ int ObExprUtcTime::eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr_ctx.phy_plan_ctx_ is null", K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -125,6 +128,7 @@ int ObExprUtcTime::eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx,
     int64_t ts_value = ctx.exec_ctx_.get_physical_plan_ctx()->get_cur_time().get_timestamp();
     int64_t t_value = 0;
     if (OB_FAIL(ObTimeConverter::datetime_to_time(ts_value,  NULL /* tz_info */, t_value))) {
+      LOG_WARN("failed to convert datetime to time", K(ret));
     } else {
       ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, t_value);
       expr_datum.set_time(t_value);
@@ -150,7 +154,7 @@ int ObExprUtcDate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
     type.set_date();
   }
   type.set_result_flag(NOT_NULL_FLAG);
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   type.set_scale(0);
   return OB_SUCCESS;
 }
@@ -171,6 +175,7 @@ int ObExprUtcDate::eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx,
   UNUSED(expr);
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr_ctx.phy_plan_ctx_ is null", K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -179,12 +184,14 @@ int ObExprUtcDate::eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateType == expr.datum_meta_.type_) {
       ObMySQLDate d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_mdate(ts_value, NULL /* tz_info */, d_value))) {
+        LOG_WARN("failed to convert datetime to mysql date", K(ret));
       } else {
         expr_datum.set_mysql_date(d_value);
       }
     } else {
       int32_t d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_date(ts_value, NULL /* tz_info */, d_value))) {
+        LOG_WARN("failed to convert datetime to date", K(ret));
       } else {
         expr_datum.set_date(d_value);
       }
@@ -212,7 +219,7 @@ int ObExprCurTimestamp::calc_result_type0(ObExprResType &type, ObExprTypeCtx &ty
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);
   }
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   return OB_SUCCESS;
 }
 
@@ -223,6 +230,8 @@ int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("phy_plan_ctx_ my_session_ or is null",
+             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -235,6 +244,7 @@ int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
       ObMySQLDateTime mdt_value = 0;
       if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(ts_value, tz_info, mdt_value))) {
+        LOG_WARN("failed to convert timestamp to mysql datetime", K(ret));
       } else {
         ObTimeConverter::trunc_mdatetime(expr.datum_meta_.scale_, mdt_value);
         //mysql: return a datetime value
@@ -242,6 +252,7 @@ int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
       }
     } else {
       if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(ts_value, tz_info, dt_value))) {
+        LOG_WARN("failed to convert timestamp to datetime", K(ret));
       } else {
         ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, dt_value);
         //mysql: return a datetime value
@@ -280,7 +291,7 @@ int ObExprSysdate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);
   }
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   return OB_SUCCESS;
 }
 
@@ -294,6 +305,8 @@ int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())
       || OB_ISNULL(cur_tz_info)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("phy_plan_ctx_ or my_session_ or cur_tz_info is null",
+             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(cur_tz_info), K(ret));
   } else {
     int64_t utc_timestamp = 0;
     ObTimeZoneInfoWrap tz_info_wrap;
@@ -305,6 +318,7 @@ int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
         if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(utc_timestamp,
                                                             cur_tz_info,
                                                             dt_value))) {
+          LOG_WARN("failed to convert timestamp to mysql datetime", K(ret));
         } else {
           ObTimeConverter::trunc_mdatetime(expr.datum_meta_.scale_, dt_value);
           expr_datum.set_mysql_datetime(dt_value);
@@ -314,6 +328,7 @@ int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
         if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(utc_timestamp,
                                                           cur_tz_info,
                                                           dt_value))) {
+          LOG_WARN("failed to convert timestamp to datetime", K(ret));
         } else {
           ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, dt_value);
           expr_datum.set_datetime(dt_value);
@@ -336,7 +351,7 @@ int ObExprSysdate::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
 
 ObExprCurDate::ObExprCurDate(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_CUR_DATE, N_CUR_DATE, 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE)
+                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 ObExprCurDate::~ObExprCurDate()
@@ -356,7 +371,7 @@ int ObExprCurDate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);
   }
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   return OB_SUCCESS;
 }
 
@@ -368,6 +383,8 @@ int ObExprCurDate::eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("phy_plan_ctx_ or my_session_ is null",
+             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -378,12 +395,14 @@ int ObExprCurDate::eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateType == expr.datum_meta_.type_) {
       ObMySQLDate d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_mdate(ts_value, tz_info, d_value))) {
+        LOG_WARN("failed to convert datetime to mysql date", K(ret));
       } else {
         expr_datum.set_mysql_date(d_value);
       }
     } else {
       int32_t d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_date(ts_value, tz_info, d_value))) {
+        LOG_WARN("failed to convert datetime to date", K(ret));
       } else {
         expr_datum.set_date(d_value);
       }
@@ -418,7 +437,7 @@ int ObExprCurTime::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);
   }
-  type.set_precision(ObAccuracy::MAX_ACCURACY2[0][type.get_type()].get_precision());
+  type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   return OB_SUCCESS;
 }
 
@@ -430,6 +449,8 @@ int ObExprCurTime::eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("phy_plan_ctx_ or my_session_ is null",
+             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -439,6 +460,7 @@ int ObExprCurTime::eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx,
     if (OB_FAIL(ObTimeConverter::datetime_to_time(ts_value,
                                                   get_timezone_info(ctx.exec_ctx_.get_my_session()),
                                                   t_value))) {
+      LOG_WARN("failed to convert datetime to time", K(ret));
     } else {
       ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, t_value);
       expr_datum.set_time(t_value);

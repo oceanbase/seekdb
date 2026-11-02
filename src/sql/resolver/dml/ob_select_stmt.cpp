@@ -28,6 +28,7 @@ int SelectItem::deep_copy(ObIRawExprCopier &expr_copier,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr_copier.copy(other.expr_, expr_))) {
+    LOG_WARN("failed to copy expr", K(ret));
   } else {
     is_real_alias_ = other.is_real_alias_;
     alias_name_ = other.alias_name_;
@@ -60,16 +61,20 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
   max_file_size_ = other.max_file_size_;
   escaped_cht_ = other.escaped_cht_;
   cs_type_ = other.cs_type_;
+  file_partition_expr_ = other.file_partition_expr_;
   buffer_size_ = other.buffer_size_;
   user_vars_.assign(other.user_vars_);
-  has_header_ = other.has_header_;
-  if (OB_FAIL(ob_write_string(allocator, other.null_str_, null_str_))) {
+  if (OB_FAIL(copier.copy(other.file_partition_expr_, file_partition_expr_))) {
+    LOG_WARN("deep copy file partition expr failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.external_properties_, external_properties_))) {
+    LOG_WARN("failed to deep copy string", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.pl_vars_.count(); ++i) {
     ObRawExpr* pl_var;
     if (OB_FAIL(copier.copy(other.pl_vars_.at(i), pl_var))) {
+      LOG_WARN("failed to copy exprs", K(ret));
     } else if (OB_FAIL(pl_vars_.push_back(pl_var))) {
+      LOG_WARN("failed to push back group by expr", K(ret));
     }
   }
   return ret;
@@ -94,12 +99,13 @@ int ObSelectStmt::check_table_be_modified(uint64_t ref_table_id, bool& is_exists
       LOG_ERROR("table item is NULL", K(ret), K(i), K(table_items_.count()));
     } else if (table_item->for_update_ && ref_table_id == table_item->ref_id_) {
       is_exists = true;
-      LOG_DEBUG("table is referenced more than once in select for update", K(is_exists), K(ref_table_id), K(table_items_.count()));
+      LOG_DEBUG("duplicate table is used in select for update", K(is_exists), K(ref_table_id), K(table_items_.count()));
     }
   }
   if (OB_SUCC(ret) && !is_exists) {
     ObSEArray<ObSelectStmt*, 16> child_stmts;
     if (OB_FAIL(get_child_stmts(child_stmts))) {
+      LOG_ERROR("get child stmt failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && !is_exists && i < child_stmts.count(); ++i) {
         ObSelectStmt *sub_stmt = child_stmts.at(i);
@@ -107,6 +113,7 @@ int ObSelectStmt::check_table_be_modified(uint64_t ref_table_id, bool& is_exists
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("sub stmt is null", K(ret));
         } else if (OB_FAIL(SMART_CALL(sub_stmt->check_table_be_modified(ref_table_id, is_exists)))) {
+          LOG_WARN("check sub stmt whether has select for update failed", K(ret), K(i));
         }
       }
     }
@@ -123,6 +130,7 @@ bool ObSelectStmt::has_distinct_or_concat_agg() const
       has = aggr->is_param_distinct() ||
             // Consistent with the has_group_concat_ flag in ObAggregateProcessor.
             T_FUN_GROUP_CONCAT == aggr->get_expr_type() ||
+            T_FUN_KEEP_WM_CONCAT == aggr->get_expr_type() ||
             T_FUN_WM_CONCAT == aggr->get_expr_type() ||
             T_FUN_JSON_ARRAYAGG == aggr->get_expr_type() ||
             T_FUN_ORA_JSON_ARRAYAGG == aggr->get_expr_type() ||
@@ -138,7 +146,9 @@ int ObSelectStmt::add_window_func_expr(ObWinFunRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(win_func_exprs_.push_back(expr))) {
+    LOG_WARN("failed to add expr", K(ret));
   } else {
     expr->set_explicited_reference();
   }
@@ -149,6 +159,7 @@ int ObSelectStmt::set_qualify_filters(common::ObIArray<ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(qualify_filters_.assign(exprs))) {
+    LOG_WARN("failed to add expr", K(ret));
   }
   return ret;
 }
@@ -158,10 +169,12 @@ int ObSelectStmt::remove_window_func_expr(ObWinFunRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < win_func_exprs_.count(); i++) {
       if (OB_ISNULL(win_func_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (expr == win_func_exprs_.at(i)) {
         ret = win_func_exprs_.remove(i);
         break;
@@ -177,9 +190,11 @@ int ObSelectStmt::check_aggr_and_winfunc(ObRawExpr &expr)
   if (expr.is_aggr_expr() &&
       !ObRawExprUtils::find_expr(agg_items_, &expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("aggr expr does not exist in the stmt", K(agg_items_), K(expr), K(ret));
   } else if (expr.is_win_func_expr() &&
              !ObRawExprUtils::find_expr(win_func_exprs_, &expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("win func expr does not exist in the stmt", K(ret), K(expr));
   }
   return ret;
 }
@@ -188,15 +203,25 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDMLStmt::assign(other))) {
+    LOG_WARN("failed to copy stmt");
   } else if (OB_FAIL(select_items_.assign(other.select_items_))) {
+    LOG_WARN("assign other select items failed", K(ret));
   } else if (OB_FAIL(group_exprs_.assign(other.group_exprs_))) {
+    LOG_WARN("assign other group exprs failed", K(ret));
   } else if (OB_FAIL(rollup_exprs_.assign(other.rollup_exprs_))) {
+    LOG_WARN("assign other rollup exprs failed", K(ret));
   } else if (OB_FAIL(having_exprs_.assign(other.having_exprs_))) {
+    LOG_WARN("assign other having exprs failed", K(ret));
   } else if (OB_FAIL(agg_items_.assign(other.agg_items_))) {
+    LOG_WARN("assign other aggr items failed", K(ret));
   } else if (OB_FAIL(win_func_exprs_.assign(other.win_func_exprs_))) {
+    LOG_WARN("assign window function exprs failed", K(ret));
   } else if (OB_FAIL(qualify_filters_.assign(other.qualify_filters_))) {
+    LOG_WARN("assign window function filter exprs failed", K(ret));
   } else if (OB_FAIL(rollup_directions_.assign(other.rollup_directions_))) {
+    LOG_WARN("assign other rollup directions.", K(ret));
   } else if (OB_FAIL(set_query_.assign(other.set_query_))) {
+    LOG_WARN("assign set query failed", K(ret));
   } else {
     set_op_ = other.set_op_;
     is_recursive_cte_ = other.is_recursive_cte_;
@@ -211,6 +236,7 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
     children_swapped_ = other.children_swapped_;
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
+    is_expanded_mview_ = other.is_expanded_mview_;
     is_select_straight_join_ = other.is_select_straight_join_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
   }
@@ -225,21 +251,33 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   const ObSelectStmt &other = static_cast<const ObSelectStmt &>(input);
   if (OB_UNLIKELY(!input.is_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("input stmt is invalid", K(ret));
   } else if (OB_FAIL(set_query_.assign(other.set_query_))) {
+    LOG_WARN("failed to assgin set query", K(ret));
   } else if (OB_FAIL(ObDMLStmt::deep_copy_stmt_struct(allocator, expr_copier, other))) {
+    LOG_WARN("deep copy DML stmt failed", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.group_exprs_, group_exprs_))) {
+    LOG_WARN("deep copy group expr failed", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.rollup_exprs_, rollup_exprs_))) {
+    LOG_WARN("deep copy rollup expr failed", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.having_exprs_, having_exprs_))) {
+    LOG_WARN("deep copy having expr failed", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.agg_items_, agg_items_))) {
+    LOG_WARN("deep copy agg item failed", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.win_func_exprs_, win_func_exprs_))) {
+    LOG_WARN("deep copy window function expr failed", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.qualify_filters_, qualify_filters_))) {
+    LOG_WARN("deep copy window function expr failed", K(ret));
   } else if (OB_FAIL(rollup_directions_.assign(other.rollup_directions_))) {
+    LOG_WARN("assign rollup directions failed", K(ret));
   } else if (OB_FAIL(deep_copy_stmt_objects<SelectItem>(expr_copier,
                                                         other.select_items_,
                                                         select_items_))) {
+    LOG_WARN("deep copy select items failed", K(ret));
   } else if (OB_FAIL(deep_copy_stmt_objects<OrderItem>(expr_copier,
                                                        other.order_items_,
                                                        order_items_))) {
+    LOG_WARN("deep copy order items failed", K(ret));
   } else {
     set_op_ = other.set_op_;
     is_recursive_cte_ = other.is_recursive_cte_;
@@ -254,6 +292,7 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     is_fetch_with_ties_ = other.is_fetch_with_ties_;
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
+    is_expanded_mview_ = other.is_expanded_mview_;
     is_select_straight_join_ = other.is_select_straight_join_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
     // copy insert into statement
@@ -262,9 +301,11 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
       void *ptr = allocator.alloc(sizeof(ObSelectIntoItem));
       if (OB_ISNULL(ptr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate select into item", K(ret));
       } else {
         temp_into_item = new(ptr) ObSelectIntoItem();
         if (OB_FAIL(temp_into_item->deep_copy(allocator, expr_copier, *other.into_item_))) {
+          LOG_WARN("deep copy into item failed", K(ret));
         } else {
           into_item_ = temp_into_item;
         }
@@ -282,6 +323,7 @@ int ObSelectStmt::create_select_list_for_set_stmt(ObRawExprFactory &expr_factory
   ObSelectStmt *child_stmt = NULL;
   if (OB_ISNULL(child_stmt = get_set_query(0))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null stmt", K(ret), K(child_stmt), K(get_set_op()));
   } else {
     int64_t num = child_stmt->get_select_item_size();
     for (int64_t i = 0; OB_SUCC(ret) && i < num; i++) {
@@ -296,7 +338,9 @@ int ObSelectStmt::create_select_list_for_set_stmt(ObRawExprFactory &expr_factory
       res_type = child_select_item.expr_->get_result_type();
       if (OB_FAIL(ObRawExprUtils::make_set_op_expr(expr_factory, i, set_op_type, res_type,
                                                    NULL, new_select_item.expr_))) {
+        LOG_WARN("create set op expr failed", K(ret));
       } else if (OB_FAIL(add_select_item(new_select_item))) {
+        LOG_WARN("push back set select item failed", K(ret));
       } else if (OB_ISNULL(new_select_item.expr_) ||
                  OB_UNLIKELY(!new_select_item.expr_->is_set_op_expr())) {
         ret = OB_ERR_UNEXPECTED;
@@ -311,8 +355,11 @@ int ObSelectStmt::update_stmt_table_id(ObIAllocator *allocator, const ObSelectSt
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDMLStmt::update_stmt_table_id(allocator, other))) {
+    LOG_WARN("failed to update stmt table id", K(ret));
   } else if (OB_UNLIKELY(set_query_.count() != other.set_query_.count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected child query count", K(ret), K(set_query_.count()),
+                                                 K(other.set_query_.count()));
   } else {
     ObSelectStmt *child_query = NULL;
     ObSelectStmt *other_child_query = NULL;
@@ -320,7 +367,9 @@ int ObSelectStmt::update_stmt_table_id(ObIAllocator *allocator, const ObSelectSt
       if (OB_ISNULL(other_child_query = other.set_query_.at(i))
           || OB_ISNULL(child_query = set_query_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null statement", K(ret), K(child_query), K(other_child_query));
       } else if (OB_FAIL(SMART_CALL(child_query->update_stmt_table_id(allocator, *other_child_query)))) {
+        LOG_WARN("failed to update stmt table id", K(ret));
       } else { /* do nothing*/ }
     }
   }
@@ -331,31 +380,44 @@ int ObSelectStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDMLStmt::iterate_stmt_expr(visitor))) {
+    LOG_WARN("failed to replace inner stmt expr", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < select_items_.count(); i++) {
     if (OB_FAIL(visitor.visit(select_items_.at(i).expr_, SCOPE_SELECT))) {
+      LOG_WARN("failed to visit select exprs", K(ret));
     } else { /*do nothing*/ }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.visit(group_exprs_, SCOPE_GROUPBY))) {
+      LOG_WARN("failed to visit group exprs", K(ret));
     } else if (OB_FAIL(visitor.visit(rollup_exprs_, SCOPE_GROUPBY))) {
+      LOG_WARN("failed to visit rollup exprs", K(ret));
     } else if (OB_FAIL(visitor.visit(having_exprs_, SCOPE_HAVING))) {
+      LOG_WARN("failed to visit having exprs", K(ret));
     } else if (OB_FAIL(visitor.visit(agg_items_, SCOPE_DICT_FIELDS))) {
+      LOG_WARN("failed to visit aggr items", K(ret));   
     } else {/* do nothing */}
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.visit(win_func_exprs_, SCOPE_DICT_FIELDS))) {
+      LOG_WARN("failed to visit winfunc exprs", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.visit(qualify_filters_, SCOPE_QUALIFY_FILTER))) {
+      LOG_WARN("failed to visit winfunc exprs", K(ret));
     }
   }
   if (OB_SUCC(ret) && NULL != into_item_) {
     for (int64_t i = 0; OB_SUCC(ret) && i < into_item_->pl_vars_.count(); ++i) {
       if (OB_FAIL(visitor.visit(into_item_->pl_vars_.at(i), SCOPE_SELECT_INTO))) {
+        LOG_WARN("failed to visit select into", K(ret));
       }
+    }
+    if (OB_SUCC(ret) && into_item_->file_partition_expr_ != NULL
+        && OB_FAIL(visitor.visit(into_item_->file_partition_expr_, SCOPE_SELECT))) {
+      LOG_WARN("failed to visit select into", K(ret));
     }
   }
   return ret;
@@ -380,8 +442,10 @@ ObSelectStmt::ObSelectStmt()
   children_swapped_ = false;
   check_option_ = VIEW_CHECK_OPTION_NONE;
   contain_ab_param_ = false;
+  is_expanded_mview_ = false;
   is_select_straight_join_ = false;
   is_implicit_distinct_ = false;
+  is_oracle_compat_groupby_ = false;
 }
 
 ObSelectStmt::~ObSelectStmt()
@@ -397,6 +461,7 @@ int ObSelectStmt::add_select_item(SelectItem &item)
       item.expr_->set_alias_column_name(item.alias_name_);
     }
     if (OB_FAIL(select_items_.push_back(item))) {
+      LOG_WARN("push back new item failed", K(ret));
     }
   } else {
     ret = OB_ERR_ILLEGAL_ID;
@@ -415,6 +480,7 @@ int ObSelectStmt::get_child_stmt_size(int64_t &child_size) const
   int ret = OB_SUCCESS;
   int64_t tmp_size = 0;
   if (OB_FAIL(ObDMLStmt::get_child_stmt_size(tmp_size))) {
+    LOG_WARN("failed to get child stmt size", K(ret));
   } else {
     child_size = tmp_size + set_query_.count();
   }
@@ -425,7 +491,9 @@ int ObSelectStmt::get_child_stmts(ObIArray<ObSelectStmt*> &child_stmts) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(child_stmts, set_query_))) {
+    LOG_WARN("failed to append child query", K(ret));
   } else if (OB_FAIL(ObDMLStmt::get_child_stmts(child_stmts))) {
+    LOG_WARN("failed to get child stmts", K(ret));
   }
   return ret;
 }
@@ -436,6 +504,7 @@ int ObSelectStmt::set_child_stmt(const int64_t child_num, ObSelectStmt* child_st
   if (child_num < set_query_.count()) {
     ret = set_set_query(child_num, child_stmt);
   } else if (OB_FAIL(ObDMLStmt::set_child_stmt(child_num - set_query_.count(), child_stmt))) {
+    LOG_WARN("failed to set dml child stmt", K(ret));
   }
   return ret;
 }
@@ -445,6 +514,7 @@ int ObSelectStmt::set_set_query(const int64_t index, ObSelectStmt *stmt)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(index < 0 || index >= set_query_.count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to set child query", K(ret), K(index), K(set_query_.count()));
   } else {
     set_query_.at(index) = stmt;
   }
@@ -467,8 +537,10 @@ int ObSelectStmt::get_from_subquery_stmts(ObIArray<ObSelectStmt*> &child_stmts,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(child_stmts.assign(set_query_))) {
+    LOG_WARN("failed to assign child query", K(ret));
   } else if (OB_FAIL(ObDMLStmt::get_from_subquery_stmts(child_stmts,
                                                         contain_lateral_table))) {
+    LOG_WARN("get from subquery stmts failed", K(ret));
   }
   return ret;
 }
@@ -521,6 +593,7 @@ int ObSelectStmt::do_to_string(char *buf, const int64_t buf_len, int64_t &pos) c
            //K_(win_func_exprs),
            K(child_stmts),
            K_(check_option),
+           K_(is_expanded_mview),
            K_(is_implicit_distinct)
              );
     }
@@ -546,14 +619,17 @@ int ObSelectStmt::check_and_get_same_aggr_item(ObRawExpr *expr,
   same_aggr = NULL;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr is null", K(ret));
   } else {
     bool is_existed = false;
     for (int64_t i = 0; OB_SUCC(ret) && !is_existed && i < agg_items_.count(); ++i) {
       bool need_check_status = (i + 1) % 1000 == 0;
       if (OB_ISNULL(agg_items_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is null", K(ret));
       } else if (need_check_status &&
                  OB_FAIL(THIS_WORKER.check_status())) {
+        LOG_WARN("failed to check status", K(ret));
       } else if (agg_items_.at(i)->same_as(*expr)) {
         is_existed = true;
         same_aggr = agg_items_.at(i);
@@ -569,6 +645,7 @@ int ObSelectStmt::get_same_win_func_item(const ObRawExpr *expr, ObWinFunRawExpr 
   win_expr = NULL;
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
   } else {
     ObQuestionmarkEqualCtx cmp_ctx;
     bool is_existed = false;
@@ -580,10 +657,12 @@ int ObSelectStmt::get_same_win_func_item(const ObRawExpr *expr, ObWinFunRawExpr 
         is_existed = true;
       } else if (need_check_status &&
                  OB_FAIL(THIS_WORKER.check_status())) {
+        LOG_WARN("failed to check status", K(ret));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                                        cmp_ctx.equal_pairs_))) {
+      LOG_WARN("failed to append equal param info", K(ret));
     }
   }
   return ret;
@@ -617,11 +696,13 @@ int ObSelectStmt::clear_sharable_expr_reference()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDMLStmt::clear_sharable_expr_reference())) {
+    LOG_WARN("failed to clear sharable expr reference", K(ret));
   } else {
     ObRawExpr *expr = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_items_.count(); i++) {
       if (OB_ISNULL(expr = agg_items_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else {
         expr->clear_explicited_referece();
       }
@@ -629,6 +710,7 @@ int ObSelectStmt::clear_sharable_expr_reference()
     for (int64_t i = 0; OB_SUCC(ret) && i < win_func_exprs_.count(); i++) {
       if (OB_ISNULL(expr = win_func_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else {
         expr->clear_explicited_referece();
       }
@@ -644,34 +726,45 @@ int ObSelectStmt::remove_useless_sharable_expr(ObRawExprFactory *expr_factory,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr_factory)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObDMLStmt::remove_useless_sharable_expr(expr_factory, session_info, explicit_for_col))) {
+    LOG_WARN("failed to remove useless sharable expr", K(ret));
   } else {
     ObRawExpr *expr = NULL;
     const bool is_scala = is_scala_group_by();
     for (int64_t i = agg_items_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
       if (OB_ISNULL(expr = agg_items_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (expr->is_explicited_reference()) {
         /*do nothing*/
       } else if (OB_FAIL(agg_items_.remove(i))) {
+        LOG_WARN("failed to remove agg item", K(ret));
       } else {
+        LOG_TRACE("succeed to remove agg items", K(*expr));
       }
     }
     for (int64_t i = win_func_exprs_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
       if (OB_ISNULL(expr = win_func_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (expr->is_explicited_reference()) {
         /*do nothing*/
       } else if (OB_FAIL(win_func_exprs_.remove(i))) {
+        LOG_WARN("failed to remove win func expr", K(ret));
       } else {
+        LOG_TRACE("succeed to remove win func exprs", K(*expr));
       }
     }
     if (OB_SUCC(ret) && is_scala && agg_items_.empty()) {
       ObAggFunRawExpr *aggr_expr = NULL;
       if (OB_FAIL(ObRawExprUtils::build_dummy_count_expr(*expr_factory, session_info, aggr_expr))) {
+        LOG_WARN("failed to build a dummy expr", K(ret));
       } else if (OB_FAIL(agg_items_.push_back(aggr_expr))) {
+        LOG_WARN("failed to push back", K(ret));
       } else if (OB_FAIL(set_sharable_expr_reference(*aggr_expr,
                                                      ExplicitedRefType::REF_BY_NORMAL))) {
+        LOG_WARN("failed to set sharable exprs reference", K(ret));
       } else {/* do nothing */}
     }
   }
@@ -691,7 +784,8 @@ bool ObSelectStmt::is_spj() const
            || get_aggr_item_size() != 0
            || get_from_item_size() == 0
            || is_contains_assignment()
-           || has_window_function());
+           || has_window_function()
+           || has_sequence());
   return bret;
 }
 
@@ -707,7 +801,8 @@ bool ObSelectStmt::is_spjg() const
            || has_limit()
            || get_from_item_size() == 0
            || is_contains_assignment()
-           || has_window_function());
+           || has_window_function()
+           || has_sequence());
   return bret;
 }
 
@@ -718,7 +813,9 @@ int ObSelectStmt::get_select_exprs(ObIArray<ObRawExpr*> &select_exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < select_items_.count(); ++i) {
     if (OB_ISNULL(expr = select_items_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null select expr", K(ret));
     } else if (OB_FAIL(select_exprs.push_back(expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -732,7 +829,9 @@ int ObSelectStmt::get_select_exprs(ObIArray<ObRawExpr*> &select_exprs) const
   for (int64_t i = 0; OB_SUCC(ret) && i < select_items_.count(); ++i) {
     if (OB_ISNULL(expr = select_items_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null select expr", K(ret));
     } else if (OB_FAIL(select_exprs.push_back(expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/}
   }
   return ret;
@@ -745,9 +844,11 @@ int ObSelectStmt::get_select_exprs_without_lob(ObIArray<ObRawExpr*> &select_expr
   for (int64_t i = 0; OB_SUCC(ret) && i < select_items_.count(); ++i) {
     if (OB_ISNULL(expr = select_items_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null select expr", K(ret));
     } else if (ObLongTextType == expr->get_data_type()) {
       /*do nothing*/
     } else if (OB_FAIL(select_exprs.push_back(expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -760,9 +861,11 @@ int ObSelectStmt::get_equal_set_conditions(ObIArray<ObRawExpr *> &conditions,
   int ret = OB_SUCCESS;
   if (!(check_having && has_rollup()) &&
       OB_FAIL(ObDMLStmt::get_equal_set_conditions(conditions, is_strict, check_having))) {
+    LOG_WARN("failed to get equal set cond", K(ret));
   } else if (!check_having) {
     // do nothing
   } else if (OB_FAIL(append(conditions, having_exprs_))) {
+    LOG_WARN("failed to append having exprs", K(ret));
   } else { /* do nothing */ }
   return ret;
 }
@@ -776,9 +879,11 @@ int ObSelectStmt::get_set_stmt_size(int64_t &size) const
       const ObSelectStmt *stmt = (i == -1) ? this : set_stmts.at(i);
       if (OB_ISNULL(stmt)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("stmt is null", K(ret));
       } else if (!stmt->is_set_stmt()) {
         // do nothing
       } else if (OB_FAIL(append(set_stmts, stmt->set_query_))) {
+        LOG_WARN("failed to append stmts", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -820,6 +925,7 @@ int ObSelectStmt::recursive_get_expr(ObRawExpr *expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (expr->has_flag(target_flag)) {
     ret = exprs.push_back(expr);
   } else if (expr->has_flag(search_flag)) {
@@ -828,6 +934,7 @@ int ObSelectStmt::recursive_get_expr(ObRawExpr *expr,
                                                 exprs,
                                                 target_flag,
                                                 search_flag)))) {
+        LOG_WARN("failed to recursive get expr", K(ret));
       }
     }
   }
@@ -853,12 +960,15 @@ int ObSelectStmt::get_pure_set_exprs(ObIArray<ObRawExpr*> &pure_set_exprs) const
     for (int64_t i = 0; OB_SUCC(ret) && i < get_select_item_size(); ++i) {
       if (OB_ISNULL(select_expr = get_select_item(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (!select_expr->has_flag(CNT_SET_OP)) {
         /* do nothing, for recursive union all, exists search/cycle pseudo columns*/
       } else if (OB_ISNULL(set_op_expr = get_pure_set_expr(select_expr))
                  || OB_UNLIKELY(!set_op_expr->is_set_op_expr())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected expr", K(ret), K(i), K(*select_expr));
       } else if (OB_FAIL(pure_set_exprs.push_back(set_op_expr))) {
+        LOG_WARN("failed to push back expr", K(ret));
       }
     }
   }
@@ -866,7 +976,7 @@ int ObSelectStmt::get_pure_set_exprs(ObIArray<ObRawExpr*> &pure_set_exprs) const
 }
 
 // cast sys functions above set op expr can be:
-//   T_FUN_SYS_CAST/T_FUN_SYS_RAWTOHEX/T_FUN_SYS_TO_NCHAR
+//   T_FUN_SYS_CAST/T_FUN_SYS_RAWTOHEX/T_FUN_SYS_TO_NCHAR/T_FUN_SYS_TO_CHAR
 // use this function to get set op expr from expr child recursively
 ObRawExpr* ObSelectStmt::get_pure_set_expr(ObRawExpr *expr)
 {
@@ -891,10 +1001,12 @@ int ObSelectStmt::check_is_simple_lock_stmt(bool &is_valid) const
       !has_order_by() &&
       get_aggr_item_size() == 0 &&
       !is_contains_assignment() &&
-      !has_window_function()) {
+      !has_window_function() &&
+      !has_sequence()) {
     bool contain_lock_expr = false;
     for (int64_t i = 0; !contain_lock_expr && i < select_items_.count(); i ++) {
       if (OB_FAIL(ObRawExprUtils::check_contain_lock_exprs(select_items_.at(i).expr_, contain_lock_expr))) {
+        LOG_WARN("failed to check contain lock exprs", K(ret));
       }
     }
     is_valid = contain_lock_expr;
@@ -915,6 +1027,7 @@ int ObSelectStmt::formalize_implicit_distinct()
     reset_implicit_distinct();
   }
   if (OB_FAIL(ObDMLStmt::formalize_implicit_distinct())) {
+    LOG_WARN("failed to do formalize implicit distinct", K(ret));
   }
   return ret;
 }
@@ -940,6 +1053,7 @@ int ObSelectStmt::check_from_dup_insensitive(bool &is_from_dup_insens) const
   if (is_set_stmt()) {
     is_valid = false;
   } else if (OB_FAIL(check_relation_exprs_deterministic(is_valid))) {
+    LOG_WARN("failed to check relation exprs deterministic", K(ret));
   } else if (!is_valid) {
     // do nothing
   }
@@ -948,6 +1062,7 @@ int ObSelectStmt::check_from_dup_insensitive(bool &is_from_dup_insens) const
   if (OB_FAIL(ret) || !is_valid) {
     // do nothing
   } else if (OB_FAIL(is_duplicate_insensitive_aggregation(is_dup_insens_aggr))) {
+    LOG_WARN("failed to check has duplicate-insensitive aggregation", K(ret));
   } else if (is_dup_insens_aggr) {
     is_from_dup_insens = true;
   } else if (has_group_by() || has_window_function()) {
@@ -1000,6 +1115,7 @@ int ObSelectStmt::is_duplicate_insensitive_aggregation(bool &is_dup_insens_aggr)
       const ObAggFunRawExpr *agg_expr = get_aggr_item(i);
       if (OB_ISNULL(agg_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("agg expr is null", K(ret));
       } else if (agg_expr->get_expr_type() == T_FUN_SYS_BIT_AND
                  || agg_expr->get_expr_type() == T_FUN_SYS_BIT_OR
                  || agg_expr->get_expr_type() == T_FUN_MAX
@@ -1024,10 +1140,12 @@ int ObSelectStmt::is_query_deterministic(bool &is_deterministic) const
   ObArray<ObRawExpr *> relation_exprs;
   is_deterministic = true;
   if (OB_FAIL(get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to get relation exprs", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_deterministic && i < relation_exprs.count(); i++) {
       if (OB_ISNULL(relation_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("got null expr");
       } else {
         is_deterministic = relation_exprs.at(i)->is_deterministic();
       }
@@ -1035,13 +1153,16 @@ int ObSelectStmt::is_query_deterministic(bool &is_deterministic) const
     for (int64_t i = 0; OB_SUCC(ret) && is_deterministic && i < set_query_.count(); i++) {
       if (OB_ISNULL(set_query_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("got null expr");
       } else if (OB_FAIL(SMART_CALL(set_query_.at(i)->is_query_deterministic(is_deterministic)))) {
+        LOG_WARN("failed to check set query deterministic", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && is_deterministic && i < get_table_size(); ++i) {
       const TableItem *table_item = get_table_item(i);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table_item is null", K(i));
       } else if (table_item->is_basic_table() ||
                  table_item->is_values_table() ||
                  table_item->is_json_table() ||
@@ -1052,6 +1173,7 @@ int ObSelectStmt::is_query_deterministic(bool &is_deterministic) const
                  table_item->is_lateral_table() ||
                  table_item->is_temp_table()) {
         if (OB_FAIL(SMART_CALL(table_item->ref_query_->is_query_deterministic(is_deterministic)))) {
+          LOG_WARN("failed to check table item deterministic", K(ret));
         }
       } else {
         is_deterministic = false;

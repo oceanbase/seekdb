@@ -28,6 +28,7 @@ int ObDistPlans::init(ObSqlPlanSet *ps)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ps)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     plan_set_ = ps;
   }
@@ -45,9 +46,12 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
   //need to clear all location info before calculate candi tablet locations
   //because get_phy_locations will build the related_tablet_map in ObDASCtx
   //and add candi table location into DASCtx
-  DAS_CTX(pc_ctx.exec_ctx_).clear_all_location_info();
+  if (!pc_ctx.try_get_plan_) {
+    DAS_CTX(pc_ctx.exec_ctx_).clear_all_location_info();
+  }
   if (OB_ISNULL(plan_set_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid null plan_set_", K(ret));
   } else if ((plan_set_->is_multi_stmt_plan())) {
     // If it is a multi stmt plan, it must be a single-table distributed plan, and the physical partition address can be directly calculated based on table location
     // single table should just return plan, do not match
@@ -56,7 +60,9 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       LOG_DEBUG("dist plan list is empty", K(ret), K(dist_plans_.count()));
     } else if (OB_ISNULL(dist_plans_.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-    } else {
+      LOG_WARN("get an unexpected null plan", K(ret), K(dist_plans_.at(0)));
+    } else if (is_plan_available(*dist_plans_.at(0), pc_ctx)) {
+      dist_plans_.at(0)->set_dynamic_ref_handle(pc_ctx.handle_id_);
       plan = dist_plans_.at(0);
       is_matched = true;
 
@@ -66,21 +72,25 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       ObArray<ObCandiTableLoc> candi_table_locs;
       if (OB_ISNULL(plan_set_)) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid null plan set", K(ret), K(plan_set_));
       } else if (!plan_set_->enable_inner_part_parallel()) {
         // do nothing
       } else if (OB_FAIL(ObPhyLocationGetter::get_phy_locations(plan->get_table_locations(),
                                                                 pc_ctx,
                                                                 candi_table_locs))) {
+        LOG_WARN("failed to get physical table locations", K(ret));
       } else if (candi_table_locs.empty()) {
         // do nothing.
-      } else if (OB_FAIL(ObPhyLocationGetter::build_table_locs(
-                   pc_ctx.exec_ctx_.get_das_ctx(), plan->get_table_locations(),
-                   candi_table_locs))) {
+      } else if (!pc_ctx.try_get_plan_
+                 && OB_FAIL(ObPhyLocationGetter::build_table_locs(
+                      pc_ctx.exec_ctx_.get_das_ctx(), plan->get_table_locations(),
+                      candi_table_locs))) {
+        LOG_WARN("fail to init table locs", K(ret));
       }
     }
   }
 
-  ObPlanMatchHelper helper;
+  ObPlanMatchHelper helper(plan_set_);
   ObArray<ObCandiTableLoc> phy_tbl_infos;
   ObArray<ObTableLocation> out_tbl_locations;
   for (int64_t i = 0; OB_SUCC(ret) && !is_matched && i < dist_plans_.count();
@@ -90,11 +100,20 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
     out_tbl_locations.reuse();
     if (OB_ISNULL(tmp_plan)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(tmp_plan));
     } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
+      LOG_WARN("fail to match dist plan", K(ret));
     } else if (is_matched) {
-      plan = tmp_plan;
-      if (OB_FAIL(ObPhyLocationGetter::build_table_locs(DAS_CTX(pc_ctx.exec_ctx_),
-                                                        out_tbl_locations, phy_tbl_infos))) {
+      if (!is_plan_available(*tmp_plan, pc_ctx)) {
+        is_matched = false;
+      } else {
+        tmp_plan->set_dynamic_ref_handle(pc_ctx.handle_id_);
+        plan = tmp_plan;
+        if (!pc_ctx.try_get_plan_
+            && OB_FAIL(ObPhyLocationGetter::build_table_locs(DAS_CTX(pc_ctx.exec_ctx_),
+                                                             out_tbl_locations, phy_tbl_infos))) {
+          LOG_WARN("fail to init table locs", K(ret));
+        }
       }
     }
   }
@@ -112,7 +131,7 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
 {
   int ret = OB_SUCCESS;
   bool is_matched = false;
-  ObPlanMatchHelper helper;
+  ObPlanMatchHelper helper(plan_set_);
   ObArray<ObCandiTableLoc> phy_tbl_infos;
   ObArray<ObTableLocation> out_tbl_locations;
 
@@ -123,9 +142,12 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
     const ObPhysicalPlan *tmp_plan = dist_plans_.at(i);
     if (OB_ISNULL(tmp_plan)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(tmp_plan));
     } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
+      LOG_WARN("fail to match dist plan", K(ret));
     } else {
-      is_matched = is_matched && tmp_plan->has_same_location_constraints(plan);
+      is_matched = is_matched && tmp_plan->has_same_location_constraints(plan)
+                   && is_same_plan(plan, *tmp_plan, pc_ctx);
     }
 
     if (!is_matched) {
@@ -137,12 +159,41 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
 
   if (OB_SUCC(ret) && !is_matched) {
     if (OB_FAIL(dist_plans_.push_back(&plan))) {
+      LOG_WARN("fail to add plan", K(ret));
     }
   }
 
   return ret;
 }
 
+bool ObDistPlans::is_plan_available(const ObPhysicalPlan &plan, ObPlanCacheCtx &pc_ctx) const
+{
+  bool can_use = true;
+  if (pc_ctx.try_get_plan_) {
+    if (pc_ctx.compare_plan_->get_plan_hash_value() != plan.get_plan_hash_value()) {
+      can_use = false;
+    }
+  } else if (pc_ctx.enable_adaptive_plan_cache_) {
+    if (!plan.is_active_status()) {
+      can_use = false;
+      pc_ctx.has_inactive_plan_ = true;
+    } else {
+      pc_ctx.has_inactive_plan_ = false;
+    }
+  }
+  return can_use;
+}
+
+bool ObDistPlans::is_same_plan(const ObPhysicalPlan &plan, const ObPhysicalPlan &compare_plan,
+                               ObPlanCacheCtx &pc_ctx) const
+{
+  bool is_same = true;
+  if (pc_ctx.add_with_compare_
+      && plan.get_plan_hash_value() != compare_plan.get_plan_hash_value()) {
+    is_same = false;
+  }
+  return is_same;
+}
 // Delete all plan and corresponding plan stat
 int ObDistPlans::remove_all_plan()
 {
@@ -152,6 +203,8 @@ int ObDistPlans::remove_all_plan()
   for (int64_t i = 0; i < dist_plans_.count(); i++) {
     if (OB_ISNULL(dist_plans_.at(i))) {
       tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get un expected null in dist_plans",
+               K(tmp_ret), K(dist_plans_.at(i)));
     } else {
       dist_plans_.at(i) = NULL;
     }

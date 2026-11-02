@@ -76,6 +76,8 @@ int ObRevokeStmt::add_user(const uint64_t user_id)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(users_.push_back(user_id))) {
+    LOG_WARN("failed to add user_id to users", K(user_id), K(ret));
+
   }
   return ret;
 }
@@ -85,8 +87,11 @@ int ObRevokeStmt::add_role(const uint64_t role_id)
   int ret = OB_SUCCESS;
   if (OB_HASH_EXIST == role_id_set_.exist_refactored(role_id)) {
     ret = OB_PRIV_DUP;
+    LOG_WARN("revoke duplicated role", K(ret), K(role_id));
   } else if (OB_FAIL(role_id_set_.set_refactored(role_id))) {
+    LOG_WARN("set role to hash set failed", K(ret), K(role_id));
   } else if (OB_FAIL(user_arg_.role_ids_.push_back(role_id))) {
+    LOG_WARN("failed to add role", K(ret), K(role_id));
   }
   return ret;
 }
@@ -123,6 +128,7 @@ int ObRevokeStmt::add_grantee(const ObString &grantee)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(grantees_.add_string(grantee))) {
+    LOG_WARN("failed to add user", K(ret));
   }
   return ret;
 }

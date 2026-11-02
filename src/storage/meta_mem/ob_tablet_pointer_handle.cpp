@@ -55,6 +55,7 @@ void ObTabletPointerHandle::reset()
     if (nullptr == map_) {
       STORAGE_LOG(ERROR, "map is null", K(ret), KP_(map));
     } else if (OB_FAIL(map_->dec_handle_ref(ObResourceHandle<ObTabletPointer>::ptr_))) {
+      STORAGE_LOG(WARN, "fail to decrease handle reference count", K(ret));
     } else {
       ObResourceHandle<ObTabletPointer>::ptr_ = nullptr;
     }
@@ -73,6 +74,7 @@ int ObTabletPointerHandle::assign(const ObTabletPointerHandle &other)
   int ret = common::OB_SUCCESS;
   if (this != &other) {
     if (OB_FAIL(set(other.ptr_, other.map_))) {
+      STORAGE_LOG(WARN, "failed to set member", K(ret), K(other));
     }
   }
   return ret;
@@ -89,6 +91,7 @@ int ObTabletPointerHandle::set(
   } else {
     reset();
     if (OB_FAIL(map->inc_handle_ref(ptr))) {
+      STORAGE_LOG(WARN, "fail to inc tablet poiner", K(ret), KP(ptr), KP(map));
     } else {
       ObResourceHandle<ObTabletPointer>::ptr_ = ptr;
       map_ = map;

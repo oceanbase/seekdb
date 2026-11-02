@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/obmp_set_option.h"
+#include "src/sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
@@ -31,31 +32,44 @@ int ObMPSetOption::deserialize()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid packet", K(ret), K_(req));
   } else if (OB_UNLIKELY(req_->get_type() != ObRequest::OB_MYSQL)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    if (OB_UNLIKELY(ObMySQLCommandLayout::U16 != pkt.get_command_layout())) {
-      ret = OB_INVALID_DATA;
-    } else {
-      set_opt_ = static_cast<uint16_t>(pkt.get_command_scalar0());
-    }
+    char *buf = const_cast<char *>(pkt.get_cdata());
+    ObMySQLUtil::get_uint2(buf, set_opt_);
   }
   return ret;
 }
 
 int ObMPSetOption::process()
 {
+  LOG_TRACE("set option", K_(set_opt));
   int ret = common::OB_SUCCESS;
   bool need_disconnect = true;
   ObSQLSessionInfo *session = NULL;
   bool need_response_error = true;
   ObSMConnection *conn = NULL;
-  if (OB_FAIL(get_session(session))) {
+  const ObMySQLRawPacket &mysql_pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
+
+  if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
+    LOG_WARN("failed to alloc easy buf", K(ret));
+  } else if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
+    LOG_WARN("failed to update last packet pos", K(ret));
+  } else if (OB_FAIL(get_session(session))) {
+    LOG_WARN("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null pointer");
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get connection fail", K(conn), K(ret));
+  } else {
+    if (OB_FAIL(process_extra_info(*session, mysql_pkt, need_response_error))) {
+      LOG_WARN("fail get process extra info", K(ret));
+    }
   }
 
   if (OB_SUCC(ret)) {
@@ -88,7 +102,9 @@ int ObMPSetOption::process()
     if (OB_FAIL(ret)) {
         // do nothing
     } else if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+      LOG_WARN("fail to send ok pakcet in statistic response", K(ok_param), K(ret));
     } else if (OB_FAIL(revert_session(session))) {
+      LOG_ERROR("failed to revert session", K(ret));
     } else {
       // do nothing
     }
@@ -97,7 +113,9 @@ int ObMPSetOption::process()
   if (OB_FAIL(ret)) {
     if (need_disconnect && is_conn_valid()) {
       force_disconnect();
-    } else  if (OB_FAIL(send_error_packet(ret, NULL))) {
+      LOG_WARN("disconnect connection when process query", K(ret));
+    } else  if (OB_FAIL(send_error_packet(ret, NULL))) { // override ret, no need to throw further
+      LOG_WARN("failed to send error packet", K(ret));
     }
   }
 

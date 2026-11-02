@@ -38,7 +38,7 @@ public:
   struct {
     uint16_t has_column_checksum_ : 1;
     uint16_t has_string_out_row_ : 1; // flag for furture, varchar and char can be overflowed as lob handle
-    uint16_t all_lob_in_row_ : 1; // true when every LOB value is stored in-row
+    uint16_t all_lob_in_row_ : 1; // compatible with 4.0, we assume that all lob is out row in old data
     uint16_t contains_hash_index_   : 1;
     uint16_t hash_index_offset_from_end_ : 10;
     uint16_t has_min_merged_trans_version_   : 1;
@@ -60,7 +60,14 @@ public:
     }; // For flat format
     uint8_t opt_;
   };
-  uint16_t var_column_count_; // For pax encoding format
+  union {
+    uint16_t var_column_count_; // For pax encoding format
+    struct { // For cs encoding format
+      uint8_t compressor_type_;
+      uint8_t cs_reserved_;
+    };
+    uint16_t opt2_;
+  };
 
   union {
     uint32_t row_index_offset_; // For flat format
@@ -105,7 +112,7 @@ public:
   }
   TO_STRING_KV(K_(magic), K_(version), K_(header_size), K_(header_checksum),
       K_(column_count), K_(rowkey_column_count), K_(has_column_checksum), K_(row_count), K_(row_store_type),
-      K_(opt), K_(var_column_count), K_(row_offset), K_(original_length), K_(max_merged_trans_version), K_(min_merged_trans_version),
+      K_(opt), K_(var_column_count), K_(compressor_type), K_(row_offset), K_(original_length), K_(max_merged_trans_version), K_(min_merged_trans_version),
       K_(data_length), K_(data_zlength), K_(data_checksum), KP_(column_checksums), K_(single_version_rows),
       K_(contain_uncommitted_rows),  K_(is_last_row_last_flag), K(is_valid()));
 public:

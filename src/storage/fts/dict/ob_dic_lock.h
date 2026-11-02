@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_DICT_OB_DIC_LOCK_H_
 #define OCEANBASE_STORAGE_DICT_OB_DIC_LOCK_H_
 #include "storage/ddl/ob_ddl_lock.h"
-#include "data_plane/fts/dict/ob_dic_loader.h"
+#include "src/storage/fts/dict/ob_dic_loader.h"
 
 namespace oceanbase
 {
@@ -26,19 +26,19 @@ namespace storage
 class ObDicLock : public ObDDLLock
 {
 public:
-  static int lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
+  static int lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
       const transaction::tablelock::ObTableLockMode lock_mode, 
       const transaction::tablelock::ObTableLockOwnerID &lock_owner);
-  static int lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
+  static int lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans);
-  static int unlock_dic_tables(const ObDicLoader &dic_loader,
+  static int unlock_dic_tables(const ObTenantDicLoader &dic_loader, 
       const transaction::tablelock::ObTableLockMode lock_mode, 
       const transaction::tablelock::ObTableLockOwnerID lock_owner,
       ObMySQLTransaction &trans);
   static int lock_dic_tables_in_trans(
-      const ObDicLoader &dic_loader,
+      const ObTenantDicLoader &dic_loader,  
       const transaction::tablelock::ObTableLockMode lock_mode, 
       ObMySQLTransaction &trans);
 private:

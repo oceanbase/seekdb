@@ -55,7 +55,7 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
 
   if (OB_SUCC(ret)) {
     const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-            ? type_ctx.get_session()->get_actual_length_semantics()
+            ? type_ctx.get_session()->get_actual_nls_length_semantics()
             : common::LS_BYTE);
     type.set_type(text_type);
     type.set_length(static_cast<ObLength>(max_len));
@@ -66,8 +66,11 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
 
     ObSEArray<ObExprResType, 2> types;
     if (OB_FAIL(types.push_back(source))) {
+      LOG_WARN("failed to push back source type", K(ret));
     } else if (OB_FAIL(types.push_back(padding_str))) {
+      LOG_WARN("failed to push back padding source type", K(ret));
     } else if (OB_FAIL(aggregate_charsets_for_string_result(type, &types.at(0), 2, type_ctx))) {
+      LOG_WARN("failed to set collation", K(ret));
     } else {
       source.set_calc_collation_type(type.get_collation_type());
       source.set_calc_collation_level(type.get_collation_level());
@@ -88,7 +91,9 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *len = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid arg cnt, must be 3", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, pad, len))) {
+    LOG_WARN("eval param value failed", K(ret));
   } else if (src->is_null() || pad->is_null() || len->is_null()) {
     res.set_null();
   } else {
@@ -106,8 +111,10 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
       ObExprStrResAlloc res_alloc(expr, ctx); // make sure alloc() is called only once
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session is NULL", K(ret));
       } else if (OB_FAIL(ObExprBaseLRpad::calc_mysql(ObExprBaseLRpad::RPAD_TYPE, expr, ctx,
                             *src, len_char, *pad, *session, res_alloc, res))) {
+        LOG_WARN("calc_mysql failed", K(ret));
       }
     } else {
       res.set_datum(*src);
@@ -129,8 +136,8 @@ int ObExprPad::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 DEF_SET_LOCAL_SESSION_VARS(ObExprPad, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(2);
-  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_MAX_ALLOWED_PACKET);
-  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_MAX_ALLOWED_PACKET);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 

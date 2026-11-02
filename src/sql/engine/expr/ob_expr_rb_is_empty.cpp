@@ -1,0 +1,93 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_rb_is_empty.h"
+#include "sql/engine/expr/ob_expr_rb_func_helper.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+ObExprRbIsEmpty::ObExprRbIsEmpty(common::ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_RB_IS_EMPTY, N_RB_IS_EMPTY, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprRbIsEmpty::~ObExprRbIsEmpty()
+{
+}
+
+int ObExprRbIsEmpty::calc_result_type1(ObExprResType &type,
+                                       ObExprResType &type1,
+                                       common::ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  INIT_SUCC(ret);
+  if (ob_is_null(type1.get_type())) {
+    // do nothing
+  } else if (!(type1.is_roaringbitmap() || type1.is_hex_string())) {
+    ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+    LOG_WARN("invalid roaringbitmap data type provided.", K(ret), K(type1.get_type()), K(type1.get_collation_type()));
+  }
+  if (OB_SUCC(ret)) {
+    type.set_int();
+    type.set_scale(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].scale_);
+    type.set_precision(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].precision_);
+  }
+  return ret;
+}
+
+int ObExprRbIsEmpty::eval_rb_is_empty(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  INIT_SUCC(ret);
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
+  ObExpr *rb_arg = expr.args_[0];
+  bool is_rb_null = false;
+  ObString rb_bin;
+  uint64_t cardinality = 0;
+  if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb_arg, rb_bin, is_rb_null))) {
+    LOG_WARN("fail to get input roaringbitmap", K(ret));
+  } else if (is_rb_null || rb_bin == nullptr) {
+    res.set_null();
+  } else if (OB_FAIL(ObRbUtils::get_cardinality(tmp_allocator, rb_bin, cardinality))){
+    LOG_WARN("failed to get cardinality from roaringbitmap binary", K(ret));
+  } else if (cardinality == 0) {
+    res.set_bool(true);
+  } else {
+    res.set_bool(false);
+  }
+  return ret;
+}
+
+int ObExprRbIsEmpty::cg_expr(ObExprCGCtx &expr_cg_ctx,
+                              const ObRawExpr &raw_expr,
+                              ObExpr &rt_expr) const
+{
+  UNUSED(expr_cg_ctx);
+  UNUSED(raw_expr);
+  rt_expr.eval_func_ = ObExprRbIsEmpty::eval_rb_is_empty;
+  return OB_SUCCESS;
+}
+
+} // namespace sql
+} // namespace oceanbase

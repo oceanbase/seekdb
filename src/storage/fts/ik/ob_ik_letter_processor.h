@@ -29,6 +29,8 @@ public:
   ObIKLetterProcessor();
   ~ObIKLetterProcessor() override {}
 
+  void reuse() override;
+
   int do_process(TokenizeContext &ctx,
                  const char *ch,
                  const uint8_t char_len,

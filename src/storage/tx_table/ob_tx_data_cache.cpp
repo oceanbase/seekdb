@@ -39,16 +39,17 @@ int ObTxDataCacheValue::init(const ObTxData &tx_data)
     if (TX_DATA_SLICE_SIZE == size) {
       // this tx data do not have undo actions, use reserved memory
       tx_data_buf = &reserved_buf_;
-    } else if (OB_ISNULL(tx_data_buf = server_malloc(size, "TX_DATA_CACHE"))) {
+    } else if (OB_ISNULL(tx_data_buf = mtl_malloc(size, "TX_DATA_CACHE"))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "allocate memory for tx data cache value failed", KR(ret));
     } else {
-      server_alloc_buf_ = tx_data_buf;
+      mtl_alloc_buf_ = tx_data_buf;
     }
 
     // deep copy tx data to the buf
     if (OB_FAIL(ret)){
     } else if (OB_FAIL(inner_deep_copy_(tx_data_buf, tx_data))) {
+      STORAGE_LOG(WARN, "deep copy tx data failed", KR(ret), K(tx_data));
     } else {
       is_inited_ = true;
     }
@@ -68,6 +69,7 @@ int ObTxDataCacheValue::init(const ObTxDataCacheValue &tx_data_cache_val, void *
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "init tx data cache value with invalid argument", KR(ret), K(tx_data_cache_val));
   } else if (OB_FAIL(inner_deep_copy_(tx_data_buf, *tx_data))) {
+    STORAGE_LOG(WARN, "inner deep copy tx data failed", KR(ret), KPC(tx_data));
   } else {
     is_inited_ = true;
   }
@@ -76,8 +78,8 @@ int ObTxDataCacheValue::init(const ObTxDataCacheValue &tx_data_cache_val, void *
 
 void ObTxDataCacheValue::destroy()
 {
-  if (OB_NOT_NULL(server_alloc_buf_)) {
-    server_free(server_alloc_buf_);
+  if (OB_NOT_NULL(mtl_alloc_buf_)) {
+    mtl_free(mtl_alloc_buf_);
   }
   is_inited_ = false;
   tx_data_ = nullptr;
@@ -98,6 +100,7 @@ int ObTxDataCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheVa
     ObTxDataCacheValue *tx_data_cache_value = new (buf) ObTxDataCacheValue();
     int64_t fixed_size = sizeof(*tx_data_cache_value);
     if (OB_FAIL(tx_data_cache_value->init(*this, buf + fixed_size, buf_len - fixed_size))) {
+      STORAGE_LOG(WARN, "init tx data cache failed", KR(ret));
     } else {
       value = tx_data_cache_value;
     }
@@ -129,6 +132,7 @@ int ObTxDataCacheValue::inner_deep_copy_(void *tx_data_buf, const ObTxData &rhs)
       undo_node_array_ = (ObUndoStatusNode *)((char *)tx_data_buf + TX_DATA_SLICE_SIZE + TX_DATA_SLICE_SIZE);
       // ignore mds op
       if (OB_FAIL(inner_deep_copy_undo_status_(rhs))) {
+        STORAGE_LOG(WARN, "deep copy undo status node for tx data kv cache failed", KR(ret), K(rhs));
       }
     }
   }
@@ -189,6 +193,7 @@ int ObTxDataKVCache::put_row(const ObTxDataCacheKey &key, const ObTxDataCacheVal
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid tx data cache key or cache value", KR(ret), K(value));
   } else if (OB_FAIL(put(key, value, true /*overwrite*/))) {
+    STORAGE_LOG(WARN, "put tx data cache row failed", KR(ret), K(key), K(value));
   } else {
     // put tx data cache row success
   }

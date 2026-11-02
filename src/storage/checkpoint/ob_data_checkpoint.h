@@ -95,6 +95,7 @@ public:
   // used for virtual table
   static const uint64_t LS_DATA_CHECKPOINT_TABLET_ID = 40000;
   int init(ObLS *ls);
+  int safe_to_destroy(bool &is_safe_destroy);
   ObCheckpointDList* get_checkpoint_list(const ObFreezeCheckpointLocation &location)
   {
     ObCheckpointDList *ret = NULL;
@@ -146,9 +147,9 @@ public:
 
   bool is_empty();
 
-  static void set_global_freeze() { is_global_freeze_for_flush_ = true; }
-  static void reset_global_freeze() { is_global_freeze_for_flush_ = false; }
-  static bool is_global_freeze() { return is_global_freeze_for_flush_; }
+  static void set_tenant_freeze() { is_tenant_freeze_for_flush_ = true; }
+  static void reset_tenant_freeze() { is_tenant_freeze_for_flush_ = false; }
+  static bool is_tenant_freeze() { return is_tenant_freeze_for_flush_; }
 
   static void set_freeze_source(const ObFreezeSourceFlag source) { freeze_source_ = source; }
   static void reset_freeze_source() { freeze_source_ = ObFreezeSourceFlag::INVALID_SOURCE; }
@@ -222,7 +223,7 @@ private:
 
   bool ls_freeze_finished_;
 
-  static __thread bool is_global_freeze_for_flush_;
+  static __thread bool is_tenant_freeze_for_flush_;
   static __thread ObFreezeSourceFlag freeze_source_;
 };
 

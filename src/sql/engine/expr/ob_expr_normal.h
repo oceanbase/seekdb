@@ -34,8 +34,7 @@ class ObExprNormal : public ObFuncExprOperator
     int initialize(ObEvalCtx &ctx, const ObExpr &expr);
     int generate_next_value(int64_t sample, double &result);
   private:
-    double mean_ = 0.0;
-    double stddev_ = 0.0;
+    std::normal_distribution<double> normal_dist_;
     std::mt19937_64 gen_; // map continuous small number to large sparse space
   };
 public:

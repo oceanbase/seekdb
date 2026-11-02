@@ -29,10 +29,10 @@ namespace oceanbase
 namespace common
 {
 class ObNewRow;
-struct ObDatumAccessContext;
 }
 namespace sql
 {
+class LastCompactRow;
 class ObRowComparer
 {
 public:
@@ -51,8 +51,7 @@ public:
   ObDatumRowCompare();
   int init(const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-      const common::ObIArray<const ObChunkDatumStore::StoredRow*> &rows,
-      const common::ObDatumAccessContext *datum_access_ctx);
+      const common::ObIArray<const ObChunkDatumStore::StoredRow*> &rows);
 
   // compare function for quick sort.
   bool operator()(int64_t row_idx1, int64_t row_idx2);
@@ -68,7 +67,56 @@ public:
   const ObIArray<ObSortFieldCollation> *sort_collations_;
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   const common::ObIArray<const ObChunkDatumStore::StoredRow*> *rows_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
+};
+
+class ObCompactRowCompare
+{
+public:
+  ObCompactRowCompare();
+  int init(const ObIArray<ObSortFieldCollation> *sort_collations,
+      const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
+      const common::ObIArray<const ObCompactRow*> &rows);
+
+  // compare function for quick sort.
+  bool operator()(int64_t row_idx1, int64_t row_idx2);
+
+  bool is_inited() const { return NULL != sort_collations_; }
+  // interface required by ObBinaryHeap
+  int get_error_code() { return ret_; }
+
+  void reset() { this->~ObCompactRowCompare(); new (this)ObCompactRowCompare(); }
+  int get_ret() const { return ret_; }
+  void set_row_meta(const RowMeta &row_meta) { row_meta_ = &row_meta; }
+public:
+  int ret_;
+  const ObIArray<ObSortFieldCollation> *sort_collations_;
+  const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
+  const common::ObIArray<const ObCompactRow*> *rows_;
+  const RowMeta *row_meta_;
+};
+
+class ObLastCompactRowCompare
+{
+public:
+  ObLastCompactRowCompare();
+  int init(const ObIArray<ObSortFieldCollation> *sort_collations,
+      const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
+      const common::ObIArray<const LastCompactRow*> &rows);
+
+  // compare function for quick sort.
+  bool operator()(int64_t row_idx1, int64_t row_idx2);
+
+  bool is_inited() const { return NULL != sort_collations_; }
+  // interface required by ObBinaryHeap
+  int get_error_code() { return ret_; }
+
+  void reset() { this->~ObLastCompactRowCompare(); new (this)ObLastCompactRowCompare(); }
+  int get_ret() const { return ret_; }
+public:
+  int ret_;
+  const ObIArray<ObSortFieldCollation> *sort_collations_;
+  const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
+  const common::ObIArray<const LastCompactRow*> *rows_;
 };
 
 class ObMaxDatumRowCompare
@@ -77,8 +125,7 @@ public:
   ObMaxDatumRowCompare();
   int init(const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-      const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> &rows,
-      const common::ObDatumAccessContext *datum_access_ctx);
+      const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> &rows);
 
   // compare function for quick sort.
   bool operator()(int64_t row_idx1, int64_t row_idx2);
@@ -94,7 +141,6 @@ public:
   const ObIArray<ObSortFieldCollation> *sort_collations_;
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> *rows_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
 };
 
 /*
@@ -110,8 +156,7 @@ public:
 
   /* Initialization method (1) */
   int init(int64_t capacity, const ObIArray<ObSortFieldCollation> *sort_collations,
-      const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-      const common::ObDatumAccessContext *datum_access_ctx = nullptr);
+      const ObIArray<ObSortCmpFunc> *sort_cmp_funs);
 
   /* Initialization method (2) */
   /* For ObPxMergeSort, the two parameters of the above init function cannot be obtained at the same time, so it is split into two functions for init */
@@ -119,6 +164,7 @@ public:
   void set_sort_columns(const common::ObIArray<ObSortColumn> &sort_columns)
   { sort_columns_ = &sort_columns; }
   int init();
+  void set_row_meta(const RowMeta &row_meta) { indexed_row_comparer_.set_row_meta(row_meta); }
   int push(const ROW *row);
   int pop(const ROW *&row);
   // This interface is only used to clear heap and release memory
@@ -183,17 +229,18 @@ ObRowHeap<COMPARE, ROW>::~ObRowHeap()
 template <class COMPARE, class ROW>
 int ObRowHeap<COMPARE, ROW>::init(int64_t capacity,
   const ObIArray<ObSortFieldCollation> *sort_collations,
-  const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-  const common::ObDatumAccessContext *datum_access_ctx)
+  const ObIArray<ObSortCmpFunc> *sort_cmp_funs)
 {
   int ret = common::OB_SUCCESS;
   if (capacity <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid capacity", K(capacity), K(ret));
   } else if (OB_FAIL(row_idx_.reserve(capacity))) {
+    SQL_ENG_LOG(WARN, "fail alloc mem", K(capacity), K(ret));
   } else if (OB_FAIL(row_arr_.prepare_allocate(capacity))) {
-  } else if (OB_FAIL(indexed_row_comparer_.init(
-                 sort_collations, sort_cmp_funs, row_arr_, datum_access_ctx))) {
+    SQL_ENG_LOG(WARN, "fail alloc mem", K(capacity), K(ret));
+  } else if (OB_FAIL(indexed_row_comparer_.init(sort_collations, sort_cmp_funs, row_arr_))) {
+    SQL_ENG_LOG(WARN, "fail init comparer", K(ret));
   } else {
     writable_ch_idx_ = 0;
     capacity_ = capacity;
@@ -240,6 +287,7 @@ int ObRowHeap<COMPARE, ROW>::push(const ROW *row)
              "row_idx_cnt", row_idx_.count(),
              K(ret));
   } else if (OB_FAIL(row_idx_.push_back(writable_ch_idx_))) {
+    SQL_ENG_LOG(WARN, "fail push row", K_(writable_ch_idx), K(ret));
   } else if (OB_UNLIKELY(NULL != row_arr_.at(writable_ch_idx_))) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "expect NULL in row_arr", K_(writable_ch_idx), K(ret));
@@ -249,6 +297,7 @@ int ObRowHeap<COMPARE, ROW>::push(const ROW *row)
                    (&row_idx_.at(0)) + row_idx_.count(),
                    indexed_row_comparer_);
     if (OB_FAIL(indexed_row_comparer_.get_ret())) {
+      SQL_ENG_LOG(WARN, "fail do heap sort", K(ret));
     }
   }
   return ret;
@@ -268,7 +317,9 @@ int ObRowHeap<COMPARE, ROW>::pop(const ROW *&row)
                                     (&row_idx_.at(0)) + row_idx_.count(),
                                     indexed_row_comparer_))) {
   } else if (OB_FAIL(indexed_row_comparer_.get_ret())) {
+    SQL_ENG_LOG(WARN, "fail do heap pop", K(ret));
   } else if (OB_FAIL(row_idx_.pop_back(writable_ch_idx_))) {
+    SQL_ENG_LOG(WARN, "fail get a row", K(ret));
   } else if (OB_UNLIKELY(NULL == row_arr_.at(writable_ch_idx_))) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "NULL row unexpected", K_(writable_ch_idx), K(ret));
@@ -287,6 +338,7 @@ int ObRowHeap<COMPARE, ROW>::raw_pop(const ROW *&row)
     ret = common::OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(row_idx_.pop_back(writable_ch_idx_))) {
+    SQL_ENG_LOG(WARN, "fail get a row", K(ret));
   } else if (OB_UNLIKELY(NULL == row_arr_.at(writable_ch_idx_))) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "NULL row unexpected", K_(writable_ch_idx), K(ret));
@@ -308,3 +360,4 @@ void ObRowHeap<COMPARE, ROW>::shrink()
 }
 #endif /* __OB_SQL_PX_ROW_HEAP_H__ */
 //// end of header file
+

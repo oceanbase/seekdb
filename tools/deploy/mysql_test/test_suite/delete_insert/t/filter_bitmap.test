@@ -1,0 +1,71 @@
+--disable_query_log
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (syscon, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection syscon;
+set @@session.explicit_defaults_for_timestamp=off;
+set session ob_trx_timeout=100000000000;
+set @@recyclebin = off;
+
+connection conn1;
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+--enable_warnings
+--enable_query_log
+
+create table t1(a int primary key, b int, c int) merge_engine = delete_insert;
+insert into t1 values(1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 4), (5, 5, 5), (6, 6, 6), (7, 7, 7), (8, 8, 8), (9, 9, 9);
+insert into t1 select a + 100, b, c from t1;
+insert into t1 select a + 200, b, c from t1;
+insert into t1 select a + 400, b, c from t1;
+insert into t1 select a + 800, b, c from t1;
+insert into t1 select a + 1600, b, c from t1;
+insert into t1 select a + 3200, b, c from t1;
+insert into t1 select a + 6400, b, c from t1;
+insert into t1 select a + 12800, b, c from t1;
+insert into t1 select a + 25600, b, c from t1;
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+update t1 set b = null where a % 100 = 1;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+select * from t1 where a % 100 = 1;
+
+create table t2(a int primary key, b int, c int) merge_engine = delete_insert;
+insert into t2 values(1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 4), (5, 5, 5), (6, 6, 6), (7, 7, 7), (8, 8, 8), (9, 9, 9);
+insert into t2 select a + 100, b, c from t2;
+insert into t2 select a + 200, b, c from t2;
+insert into t2 select a + 400, b, c from t2;
+insert into t2 select a + 800, b, c from t2;
+insert into t2 select a + 1600, b, c from t2;
+insert into t2 select a + 3200, b, c from t2;
+insert into t2 select a + 6400, b, c from t2;
+insert into t2 select a + 12800, b, c from t2;
+insert into t2 select a + 25600, b, c from t2;
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+begin;
+update t2 set b = null where a % 100 = 1;
+select * from t2 where a % 100 = 1;
+
+commit;
+
+create table t3(a int primary key, b int, c int) merge_engine = delete_insert;
+insert into t3 values(1, 1, 1), (2, 2, 2);
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+
+delete from t3 where a = 1;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+insert into t3 values(1, 2, 3);
+
+select * from t3;
+
+--disable_query_log
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+--enable_query_log

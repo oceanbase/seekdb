@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 #include "ob_all_virtual_tx_data.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
-#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase {
@@ -33,6 +32,7 @@ int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
 
   if (false == start_to_read_) {
     if (OB_FAIL(get_primary_key_())) {
+      SERVER_LOG(WARN, "get primary key failed", KR(ret));
     } else if (OB_FAIL(generate_virtual_tx_data_row_(tx_data_row_))) {
       if (OB_ITER_END == ret) {
       } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
@@ -41,6 +41,7 @@ int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "generate virtual tx data row failed", KR(ret));
       }
     } else if (OB_FAIL(fill_in_row_(tx_data_row_, row))) {
+      SERVER_LOG(WARN, "fill in row failed", KR(ret));
     } else {
       start_to_read_ = true;
     }
@@ -50,9 +51,7 @@ int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualTxData::fill_in_row_(
-    const data_plane::ObVirtualTxDataRow &row_data,
-    common::ObNewRow *&row)
+int ObAllVirtualTxData::fill_in_row_(const VirtualTxDataRow &row_data, common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
@@ -121,6 +120,7 @@ int ObAllVirtualTxData::get_primary_key_()
                  "size of end key",
                  key_range.get_end_key().get_obj_cnt());
     } else if (OB_FAIL(handle_key_range_(key_range))) {
+      SERVER_LOG(WARN, "handle key range faield", KR(ret));
     }
   }
   return ret;
@@ -145,27 +145,39 @@ int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
                K(tx_id_low),
                K(tx_id_high));
   } else {
+// Use sys tenant in single-node mode
     tx_id_ = tx_id_low;
   }
 
   return ret;
 }
 
-int ObAllVirtualTxData::generate_virtual_tx_data_row_(
-    data_plane::ObVirtualTxDataRow &tx_data_row)
+int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_row)
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE
+  MOD_SCOPE
   {
+    ObLSHandle ls_handle;
     ObLS *ls = nullptr;
-    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
-    if (OB_ISNULL(ls_service)) {
+    ObLSService *ls_service = share::g_mp->ls_service();
+    if (OB_FAIL(ls_service->get_ls(share::SYS_LS, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+      if (OB_LS_NOT_EXIST == ret) {
+        ret = OB_ITER_END;
+      } else {
+        SERVER_LOG(WARN, "get ls from ls service failed", KR(ret));
+      }
+    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls service is null", KR(ret));
-    } else if (OB_FAIL(ls_service->get_ls(ls))) {
+      SERVER_LOG(ERROR, "get ls failed from ls handle", KR(ret), K(ls_handle));
     } else if (OB_FAIL(ls->generate_virtual_tx_data_row(tx_id_, tx_data_row))) {
+      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls_handle));
     } else {
+      SERVER_LOG(DEBUG, "generate tx data row succeed", KPC(ls), K(tx_data_row));
     }
+  }
+
+  if (OB_FAIL(ret) && OB_TENANT_NOT_IN_SERVER == ret) {
+    ret = OB_ITER_END;
   }
   return ret;
 }

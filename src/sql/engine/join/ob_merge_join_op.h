@@ -79,9 +79,11 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(merge_directions_.init(merge_directions.count()))) {
+      SQL_ENG_LOG(WARN, "fail to init merge direction", K(ret));
     }
     ARRAY_FOREACH(merge_directions, i) {
       if (OB_FAIL((add_merge_direction(merge_directions.at(i))))) {
+        SQL_ENG_LOG(WARN, "failed to add merge direction", K(ret), K(i));
       }
     }
     return ret;
@@ -431,7 +433,9 @@ private:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(right_fetcher_.backup())) {
+      SQL_ENG_LOG(WARN, "back right row failed", K(ret));
     } else if (OB_FAIL(ObJoinOp::blank_row(right_->get_spec().output_))) {
+      SQL_ENG_LOG(WARN, "blank right row failed", K(ret));
     }
     return ret;
   }
@@ -440,7 +444,9 @@ private:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(left_fetcher_.backup())) {
+      SQL_ENG_LOG(WARN, "back left row failed", K(ret));
     } else if (OB_FAIL(ObJoinOp::blank_row(left_->get_spec().output_))) {
+      SQL_ENG_LOG(WARN, "blank left row failed", K(ret));
     }
     return ret;
   }

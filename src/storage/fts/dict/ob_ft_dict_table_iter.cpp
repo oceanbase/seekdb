@@ -39,7 +39,9 @@ int ObFTDictTableIter::get_key(ObString &str)
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("Not inited.", K(ret));
   } else if (OB_FAIL(res_.get_result()->get_varchar("word", str))) {
+    LOG_WARN("Failed to get varchar", K(ret));
   }
   return ret;
 }
@@ -55,8 +57,10 @@ int ObFTDictTableIter::next()
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("Not inited.", K(ret));
   } else if (OB_FAIL(res_.get_result()->next())) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("Failed to get next row", K(ret));
     }
   }
   return ret;
@@ -69,13 +73,29 @@ int ObFTDictTableIter::init(const ObString &table_name)
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("Inited twice.", K(ret));
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-      } else if (OB_FAIL(sql_string.append(table_name))) {
-      } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
+      const char *dot = table_name.find('.');
+      const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - table_name.ptr();
+      ObString database_name;
+      ObString pure_table_name;
+      if (dot_pos <= 0 || dot_pos >= table_name.length() - 1) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("dictionary table name must be qualified", K(ret), K(table_name));
+      } else {
+        database_name.assign_ptr(table_name.ptr(), static_cast<int32_t>(dot_pos));
+        pure_table_name.assign_ptr(table_name.ptr() + dot_pos + 1,
+                                   static_cast<int32_t>(table_name.length() - dot_pos - 1));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+                                               database_name.length(), database_name.ptr(),
+                                               pure_table_name.length(), pure_table_name.ptr()))) {
+        LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
+        LOG_WARN("Failed to execute sql", K(ret));
       }
     }
 
@@ -83,8 +103,10 @@ int ObFTDictTableIter::init(const ObString &table_name)
       // already logged
     } else if (OB_ISNULL(res_.get_result())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Failed to get result", K(ret));
     } else if (OB_FAIL(res_.get_result()->next())) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("Failed to get next row", K(ret));
       } else {
         is_inited_ = true;
       }

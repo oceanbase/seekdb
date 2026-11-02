@@ -40,6 +40,7 @@ int ObExprQuote::calc_result_type1(ObExprResType &type, ObExprResType &type1,
   type.set_varchar();
   type.set_length(2 * type1.get_length() + 2);
   if OB_FAIL(aggregate_charsets_for_string_result(type, &type1, 1, type_ctx)) {
+    LOG_WARN("aggregate charset for res failed", K(ret));
   } else {
     type1.set_calc_type(ObVarcharType);
     type1.set_calc_collation_type(type.get_collation_type());
@@ -68,6 +69,7 @@ int ObExprQuote::calc(ObString &res_str, ObString str, ObCollationType coll_type
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("calc buf is NULL", K(ret));
   } else {
     ObString escape_char = ObCharsetUtils::get_const_str(coll_type, '\\');
     int64_t buf_len = str.length() * 2 + 2 * escape_char.length();
@@ -105,6 +107,7 @@ int ObExprQuote::calc(ObString &res_str, ObString str, ObCollationType coll_type
           break;
         }
         }
+        LOG_DEBUG("debug result", K(wchar), KPHEX(buf, pos));
         return ret;
       };
       OZ (string_write_buf(ObCharsetUtils::get_const_str(coll_type, '\''), buf, buf_len, pos));
@@ -122,6 +125,7 @@ int ObExprQuote::calc_quote_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
+    LOG_WARN("eval param failed", K(ret));
   } else if (arg->is_null()) {
     // in mysql, quote(null) does not return nulltype but 'null'
     // (without enclosing single quotation marks)
@@ -144,6 +148,7 @@ int ObExprQuote::calc_quote_expr(const ObExpr &expr, ObEvalCtx &ctx,
       if (OB_ERR_INCORRECT_STRING_VALUE == ret) {
         ret = OB_SUCCESS;
       } else {
+        LOG_WARN("calc quote expr failed", K(ret), K(str));
       }
     } else {
       res_datum.set_string(res_str);

@@ -24,6 +24,7 @@
 #include "ob_scan_merge_loser_tree.h"
 #include "ob_simple_rows_merger.h"
 #include "storage/ob_i_store.h"
+#include "lib/statistic_event/ob_stat_event.h"
 
 namespace oceanbase
 {
@@ -75,6 +76,8 @@ private:
   int64_t filt_del_count_;
   const blocksstable::ObDatumRange *range_;
   blocksstable::ObDatumRange cow_range_;
+  const blocksstable::ObDatumRange *di_base_range_;
+  blocksstable::ObDatumRange di_base_cow_range_;
 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObMultipleScanMerge);

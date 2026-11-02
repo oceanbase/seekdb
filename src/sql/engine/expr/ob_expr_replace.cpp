@@ -21,7 +21,6 @@
 
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"
-#include "sql/session/ob_sql_session_info.h"
 #include "lib/charset/ob_charset_string_helper.h"
 
 namespace oceanbase
@@ -49,16 +48,20 @@ int ObExprReplace::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (3 != param_num) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Replace() should have three arguments in MySql Mode", K(ret), K(param_num));
   } else if (2 != param_num && 3 != param_num) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Replace() should have three arguments in Oracle Mode", K(ret), K(param_num));
   } else if (OB_ISNULL(types_array) || OB_ISNULL(type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error. types_array or session null",
+             K(ret), KP(types_array), KP(type_ctx.get_session()));
   } else {
     if (types_array[0].is_lob()) {
       type.set_type(ObLongTextType);
     } else {
       type.set_varchar();
-      type.set_length_semantics(type_ctx.get_session()->get_actual_length_semantics());
+      type.set_length_semantics(type_ctx.get_session()->get_actual_nls_length_semantics());
     }
     if (3 == param_num) {
       types_array[2].set_calc_type(ObVarcharType);
@@ -113,12 +116,14 @@ int ObExprReplace::replace(ObString &ret_str,
     ret_str = text;
   } else if (OB_ISNULL(from.ptr())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error. nullpointer(s)", K(ret), K(from), K(to));
   } else if (OB_UNLIKELY(text.length() < from.length()) ||
              OB_UNLIKELY(from == to)) {
     ret_str = text;
   } else if (OB_FAIL(ObSQLUtils::check_well_formed_str(text, cs_type, dst_str, is_null, false, false))
             || OB_FAIL(ObSQLUtils::check_well_formed_str(from, cs_type, dst_str, is_null, false, false))
             || OB_FAIL(ObSQLUtils::check_well_formed_str(to, cs_type, dst_str, is_null, false, false))) {
+    LOG_WARN("check well formed str failed", K(ret));
   } else {
     ObSEArray<uint32_t, 4> locations(common::ObModIds::OB_SQL_EXPR_REPLACE,
                                      common::OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -130,6 +135,7 @@ int ObExprReplace::replace(ObString &ret_str,
         ret = locations.push_back(scanner.get_remain_str().ptr() - text.ptr());
         scanner.forward_bytes(from.length());
       } else if (OB_FAIL(scanner.next_character(mb, wc))) {
+        LOG_WARN("get next character failed", K(ret));
       } else {
         //do nothing
       }
@@ -194,6 +200,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
   bool is_clob = expr.args_[0]->datum_meta_.is_clob();
   bool is_lob_res = ob_is_text_tc(expr.datum_meta_.type_);
   if (OB_FAIL(expr.eval_param_value(ctx, text, from, to))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (text->is_null()
              || (is_mysql && from->is_null())
              || (is_mysql && NULL != to && to->is_null())) {
@@ -204,12 +211,31 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     } else {
       ObLobLocatorV2 locator(from->get_string(), from_expr->obj_meta_.has_lob_header());
       if (OB_FAIL(locator.get_lob_data_byte_len(from_len))) {
+        LOG_WARN("get lob data byte length failed", K(ret), K(locator));
       }
     }
     if (OB_FAIL(ret)){
     } else if (is_mysql && !from->is_null() && 0 == from_len) {
       ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
-      expr_datum.set_datum(*text);
+      const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
+      uint64_t compat_version = 0;
+      ObCompatType compat_type = COMPAT_MYSQL57;
+      bool is_enable = false;
+      if (OB_ISNULL(session)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session info is null", K(ret));
+      } else if (OB_FAIL(helper.get_compat_version(compat_version))) {
+        LOG_WARN("failed to get compat version", K(ret));
+      } else if (OB_FAIL(ObCompatControl::check_feature_enable(compat_version,
+                                              ObCompatFeatureType::FUNC_REPLACE_NULL, is_enable))) {
+        LOG_WARN("failed to check feature enable", K(ret));
+      } else if (OB_FAIL(session->get_compatibility_control(compat_type))) {
+        LOG_WARN("failed to get compat type", K(ret));
+      } else if (is_enable && COMPAT_MYSQL57 == compat_type) {
+        expr_datum.set_datum(*text);
+      } else {
+        expr_datum.set_null();
+      }
     } else {
       expr_datum.set_null();
     }
@@ -222,6 +248,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
                         !from->is_null() ? from->get_string() : ObString(),
                         (NULL != to && !to->is_null()) ? to->get_string() : ObString(),
                         alloc))) {
+      LOG_WARN("do replace failed", K(ret));
     } else {
       if (res.empty() && !is_mysql && !expr.args_[0]->datum_meta_.is_clob()) {
         expr_datum.set_null();
@@ -237,21 +264,26 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     from_data = from->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *text,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *text,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_data))) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *from,
+      LOG_WARN("failed to get string data", K(ret), K(expr.args_[0]->datum_meta_));   
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *from,
                        expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), from_data))) {
+      LOG_WARN("failed to get string data", K(ret), K(expr.args_[1]->datum_meta_));   
     } else if (NULL == to) {
       to_data.reset();
     } else if (OB_FALSE_IT(to_data = to->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *to,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *to,
                        expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), to_data))) {
+      LOG_WARN("failed to get string data", K(ret), K(expr.args_[2]->datum_meta_));   
     }
     if (OB_SUCC(ret)) {
       int64_t max_len = ObAccuracy::DDL_DEFAULT_ACCURACY[expr.datum_meta_.get_type()].get_length();
       if (OB_FAIL(replace(res, expr.datum_meta_.cs_type_, text_data, from_data,
                           to_data, temp_allocator, max_len))) {
+        LOG_WARN("do replace for lob resutl failed", K(ret), K(expr.datum_meta_.type_));
       } else if (OB_FAIL(ObTextStringHelper::string_to_templob_result(expr, ctx, expr_datum, res))) {
+        LOG_WARN("set lob result failed", K(ret));
       }
     } 
   }
@@ -260,8 +292,9 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprReplace, raw_expr) {
   int ret = OB_SUCCESS;
-  SET_LOCAL_SYSVAR_CAPACITY(1);
+  SET_LOCAL_SYSVAR_CAPACITY(2);
   EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_OB_COMPATIBILITY_VERSION);
   return ret;
 }
 

@@ -101,7 +101,7 @@ private:
   int inner_get_tablet(
       const ObLobAccessParam &param,
       const common::ObTabletID &tablet_id,
-      ObLS *tenant_ls,
+      ObLSHandle &ls_handle,
       ObTabletHandle &handle);
 
   bool check_lob_tablet_id(
@@ -109,6 +109,7 @@ private:
       const common::ObTabletID &lob_meta_tablet_id,
       const common::ObTabletID &lob_piece_tablet_id);
 
+  int fetch_lob_id_for_split_src(const ObLobAccessParam& param, const ObTabletID &lob_tablet_id, uint64_t &lob_id);
   int prepare_lob_meta_dml(ObLobAccessParam& param);
 
   int build_lob_meta_table_dml(ObLobAccessParam& param);
@@ -151,5 +152,6 @@ private:
 } // oceanbase
 
 #endif
+
 
 

@@ -17,12 +17,13 @@
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
 #include "share/ob_rpc_struct.h"
 
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
 namespace storage
 {
-ObBatchCreateTabletPrettyArg::ObBatchCreateTabletPrettyArg(const obcall::ObBatchCreateTabletArg &arg)
+ObBatchCreateTabletPrettyArg::ObBatchCreateTabletPrettyArg(const ObBatchCreateTabletArg &arg)
   : arg_(arg)
 {
 }
@@ -34,7 +35,8 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
     // do nothing
   } else {
     J_OBJ_START();
-    J_KV("major_frozen_scn", arg_.major_frozen_scn_,
+    J_KV("ls_id", arg_.id_,
+         "major_frozen_scn", arg_.major_frozen_scn_,
          "total_tablet_cnt", arg_.get_tablet_count());
     J_COMMA();
 
@@ -42,7 +44,7 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
     J_COLON();
     J_OBJ_START();
     for (int64_t i = 0; i < arg_.tablets_.count(); ++i) {
-      const obcall::ObCreateTabletInfo &info = arg_.tablets_.at(i);
+      const ObCreateTabletInfo &info = arg_.tablets_.at(i);
       ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
       BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
@@ -50,7 +52,9 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
       BUF_PRINTF("] ");
       J_KV("data_tablet_id", info.data_tablet_id_,
            "tablet_ids", info.tablet_ids_,
-           "is_create_bind_hidden_tablets", info.is_create_bind_hidden_tablets_);
+           "compat_mode", info.compat_mode_,
+           "is_create_bind_hidden_tablets", info.is_create_bind_hidden_tablets_,
+           "has_cs_replica", info.has_cs_replica_);
     }
     J_NEWLINE();
     J_OBJ_END();

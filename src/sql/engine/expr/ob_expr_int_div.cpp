@@ -76,6 +76,7 @@ int ObExprIntDiv::calc_result_type2(ObExprResType &type, ObExprResType &type1, O
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObArithExprOperator::calc_result_type2(type, type1, type2, type_ctx))) {
+    LOG_WARN("fail to calc result type", K(ret), K(type), K(type1), K(type2));
   } else {
     type.set_precision(static_cast<ObPrecision>(MAX(type1.get_precision(), 0)));
     type.set_scale(0);
@@ -183,6 +184,7 @@ int ObExprIntDiv::intdiv_number(ObObj &res, const ObObj &left, const ObObj &righ
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected operator type", "left type", left.get_type_class(), "right type", right.get_type_class());
   } else if (OB_FAIL(ObExprDiv::calc(res, left, right, allocator, scale))) {
+    LOG_WARN("failed to div numbers", K(ret), K(left), K(right));
   } else {/* do nothing */ }
   return ret;
 }
@@ -195,6 +197,7 @@ int ObExprIntDiv::div_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else if (right->get_int() == 0) {
@@ -232,6 +235,7 @@ int ObExprIntDiv::div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datu
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else if (right->get_uint() == 0) {
@@ -263,6 +267,7 @@ int ObExprIntDiv::div_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &dat
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else if (right->get_uint() == 0) {
@@ -288,6 +293,7 @@ int ObExprIntDiv::div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datu
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else if (right->get_int() == 0) {
@@ -319,6 +325,7 @@ int ObExprIntDiv::div_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else if (right->get_number().is_zero()) {
@@ -337,6 +344,7 @@ int ObExprIntDiv::div_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
     uint64_t uint64_value = 0;
 
     if (OB_FAIL(lnum.div(rnum, result, local_alloc))) {
+      LOG_WARN("add number failed", K(ret));
     } else {
       if (ObIntType == expr.datum_meta_.type_) {
         ret = result.extract_valid_int64_with_trunc(int64_value);
@@ -345,8 +353,10 @@ int ObExprIntDiv::div_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
       }
 
       if (OB_FAIL(ret)) {
+        LOG_WARN("fail to trunc number", K(ret), K(result));
         if (OB_DATA_OUT_OF_RANGE == ret) {
           ret = OB_OPERATE_OVERFLOW;
+          LOG_WARN("operate overflow", K(ret), K(result), K(int64_value), K(uint64_value));
         }
       } else {
         if (ObIntType == expr.datum_meta_.type_) {
@@ -377,6 +387,7 @@ int ObExprIntDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   const ObObjTypeClass right_tc = ob_obj_type_class(right);
 
   rt_expr.inner_functions_ = NULL;
+  LOG_DEBUG("arrive here cg_expr", K(ret), K(rt_expr), K(left), K(right));
   if (ObIntTC == left_tc) {
     if (ObIntTC == right_tc) {
       rt_expr.eval_func_ = ObExprIntDiv::div_int_int;
@@ -400,6 +411,7 @@ int ObExprIntDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(op_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
     if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())

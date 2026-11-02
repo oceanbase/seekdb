@@ -15,10 +15,9 @@
  */
 
 #include "ob_tx_ctx_table.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_tx_ctx.h"
-#include "storage/tx/tx_ctx_cache.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 
 namespace oceanbase
 {
@@ -29,12 +28,6 @@ namespace storage
 
 void ObTxCtxTableRecoverHelper::reset()
 {
-  if (nullptr != tx_ctx_cache_) {
-    STORAGE_LOG(INFO, "close recover tx ctx cache",
-                "hit_count", tx_ctx_cache_->get_hit_count(),
-                "miss_count", tx_ctx_cache_->get_miss_count());
-  }
-  TxCtxCache::close(tx_ctx_cache_);
   in_multi_row_state_ = false;
   prev_meta_.reset();
   buf_.reset();
@@ -110,22 +103,29 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
                                                    ObTxCtxTableInfo& ctx_info)
 {
   int ret = OB_SUCCESS;
-  transaction::ObTxCtx *tx_ctx = NULL;
+  transaction::ObPartTransCtx *tx_ctx = NULL;
   bool tx_ctx_existed = true;
-  if (nullptr == tx_ctx_cache_) {
-    tx_ctx_cache_ = TxCtxCache::create(TxCtxCache::REPLAY_MAX_FREE_COUNT);
-  }
+  common::ObAddr scheduler;
+  // since 4.3 cluster_version in ctx_info
+  uint64_t cluster_version = ctx_info.cluster_version_;
   transaction::ObTxCreateArg arg(true,  /* for_replay */
-                                 TxCtxSource::RECOVER,
+                                 PartCtxSource::RECOVER,
                                  ctx_info.tx_id_,
+                                 ctx_info.ls_id_,
+                                 ctx_info.cluster_id_,     /* cluster_id */
+                                 cluster_version,
                                  0, /*session_id*/
+                                 0, /*client_sid*/
+                                 0, /*associated_session_id*/
+                                 scheduler,
                                  INT64_MAX,
-                                 ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>(),
-                                 tx_ctx_cache_);
+                                 share::g_mp->trans_service());
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
                                            tx_ctx_existed, /*tx_ctx_existed*/
                                            tx_ctx))) {
+    STORAGE_LOG(WARN, "failed to create tx ctx", K(ret));
   } else if (OB_FAIL(tx_ctx->recover_tx_ctx_table_info(ctx_info))) {
+    STORAGE_LOG(WARN, "recover from trans sstable durable ctx info failed", K(ret), K(*tx_ctx));
   } else {
     STORAGE_LOG(INFO, "restore trans state in memory", K(ctx_info));
   }
@@ -133,6 +133,7 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   if (NULL != tx_ctx) {
     int tmp_ret = 0;
     if (OB_TMP_FAIL(ls_tx_ctx_mgr->revert_tx_ctx(tx_ctx))) {
+      STORAGE_LOG(WARN, "failed to revert trans ctx", K(ret));
     }
     tx_ctx = NULL;
   }
@@ -165,10 +166,12 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
     bool need_to_append_buf = false;
     int64_t pos = 0;
     if (OB_FAIL(curr_meta.deserialize(meta_str.ptr(), meta_str.length(), pos))) {
+      STORAGE_LOG(WARN, "failed to deserialize ctx meta", K(ret), K(curr_meta));
     } else {
       STORAGE_LOG(INFO, "deserialize ctx meta succ", K(ret), K(curr_meta));
       if (is_in_multi_row_state_()) {
         if (OB_FAIL(validate_extend_meta_(curr_meta))) {
+          STORAGE_LOG(WARN, "validate_extend_meta failed", K(ret), K(*this));
         } else {
           need_to_append_buf = true;
         }
@@ -178,6 +181,7 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
         } else {
           set_in_multi_row_state_();
           if (OB_FAIL(buf_reserve_(curr_meta.get_tx_ctx_serialize_size()))) {
+            STORAGE_LOG(WARN, "Failed to reserve tx local buffer", K(ret));
           } else {
             need_to_append_buf = true;
           }
@@ -187,6 +191,7 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
 
     if (OB_SUCC(ret) && need_to_append_buf) {
       if (OB_FAIL(append_curr_value_buf_(value_str.ptr(), value_str.length()))) {
+        STORAGE_LOG(WARN, "append buf failed", K(ret), K(*this));
       }
     }
 
@@ -210,15 +215,20 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
 
   if (OB_SUCC(ret) && buf_completed) {
     ctx_info_.reset();
-    transaction::ObTxCtx *tx_ctx = NULL;
+    transaction::ObPartTransCtx *tx_ctx = NULL;
     int64_t pos = 0;
     bool tx_ctx_existed = true;
-    if (OB_FAIL(ctx_info_.deserialize(deserialize_buf, deserialize_buf_length, pos, tx_data_table))) {
-    } else if (OB_FAIL(ctx_info_.exec_info_.merge_buffer_ctx_array_to_multi_data_source())) {
+    ctx_info_.set_compatible_version(curr_meta.get_version());
+    if (FALSE_IT(TLOCAL_P_TX_BUFFER_NODE_ARRAY = &ctx_info_.exec_info_.multi_data_source_)) {// FIXME: for compat issue, should be removed after barrier version
+    } else if (OB_FAIL(ctx_info_.deserialize(deserialize_buf, deserialize_buf_length, pos, tx_data_table))) {
+      STORAGE_LOG(WARN, "failed to deserialize status_info", K(ret), K_(ctx_info));
+      TLOCAL_P_TX_BUFFER_NODE_ARRAY = nullptr;// FIXME: for compat issue, should be removed after barrier version
+    } else if (FALSE_IT(TLOCAL_P_TX_BUFFER_NODE_ARRAY = nullptr)) {// FIXME: for compat issue, should be removed after barrier version
+    } else if (FALSE_IT(ctx_info_.exec_info_.mrege_buffer_ctx_array_to_multi_data_source())) {
     } else if (OB_FAIL(recover_one_tx_ctx_(ls_tx_ctx_mgr, ctx_info_))) {
       // heap memory needed be freed, but can not do this in destruction, cause tx_buffer_node has no value sematics
       ctx_info_.exec_info_.clear_buffer_ctx_in_multi_data_source();
-      STORAGE_LOG(ERROR, "failed to recover_one_tx_ctx_", K(ret), K(ctx_info_));
+      STORAGE_LOG(WARN, "failed to recover_one_tx_ctx_", K(ret), K(ctx_info_));
     } else {
       // heap memory needed be freed, but can not do this in destruction, cause tx_buffer_node has no value sematics
       ctx_info_.exec_info_.clear_buffer_ctx_in_multi_data_source();
@@ -234,8 +244,10 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
 }
 
 ObTxCtxTable::ObTxCtxTable()
-  : ls_tx_ctx_mgr_(NULL)
+  : ls_id_(),
+    ls_tx_ctx_mgr_(NULL)
 {
+  ls_id_.reset();
 }
 
 ObTxCtxTable::~ObTxCtxTable()
@@ -243,22 +255,28 @@ ObTxCtxTable::~ObTxCtxTable()
   reset();
 }
 
-int ObTxCtxTable::init() {
-  return acquire_ref_();
+int ObTxCtxTable::init(const ObLSID& ls_id) {
+  return acquire_ref_(ls_id);
 }
 
-OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_()
+OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
 {
   reset();
   int ret = OB_SUCCESS;
   transaction::ObTransService *txs = NULL;
+  ls_id_ = ls_id;
 
   if (NULL == ls_tx_ctx_mgr_) {
-    if (OB_ISNULL(txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
+    if (OB_ISNULL(txs = share::g_mp->trans_service())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "trans_service get fail", K(ret));
+    } else if (OB_FAIL(txs->get_tx_ctx_mgr().get_ls_tx_ctx_mgr(ls_id, ls_tx_ctx_mgr_))) {
+      TRANS_LOG(ERROR, "get ls tx ctx mgr with ref failed", KP(txs));
+    } else if (NULL == ls_tx_ctx_mgr_) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(ERROR, "ls tx ctx mgr is null", KP(txs));
     } else {
-      ls_tx_ctx_mgr_ = &txs->get_tx_ctx_mgr().get_tx_ctx_manager();
+      TRANS_LOG(INFO, "get ls tx ctx mgr successfully", KP(txs));
     }
   }
 
@@ -268,7 +286,19 @@ OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_()
 OB_WEAK_SYMBOL int ObTxCtxTable::release_ref_()
 {
   int ret = OB_SUCCESS;
-  ls_tx_ctx_mgr_ = NULL;
+  transaction::ObTransService *txs = NULL;
+
+  if (NULL != ls_tx_ctx_mgr_) {
+    if (OB_ISNULL(txs = share::g_mp->trans_service())) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(ERROR, "trans_service get fail", K(ret));
+    } else if (OB_FAIL(txs->get_tx_ctx_mgr().revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr_))) {
+      TRANS_LOG(ERROR, "revert ls tx ctx mgr with ref failed", KP(txs));
+    } else {
+      TRANS_LOG(INFO, "revert ls tx ctx mgr successfully", K(ls_id_), K(this));
+      ls_tx_ctx_mgr_ = NULL;
+    }
+  }
 
   return ret;
 }
@@ -283,6 +313,7 @@ void ObTxCtxTable::reset()
 {
   recover_helper_.reset();
   release_ref_();
+  ls_id_.reset();
   ls_tx_ctx_mgr_ = NULL;
 }
 
@@ -320,6 +351,7 @@ int ObTxCtxTable::check_with_tx_data(const transaction::ObTransID tx_id, ObITxDa
       TRANS_LOG(WARN, "check with tx data failed", KR(ret), K(tx_id));
     }
   } else {
+    TRANS_LOG(DEBUG, "check with tx data in tx ctx table successfully", K(tx_id));
   }
 
   return ret;

@@ -37,6 +37,7 @@ int ObGeoReverseCoordinateVisitor::reverse_point_coordinate(ObIWkbGeogPoint *geo
   ObWkbGeogPoint* inner_pt = reinterpret_cast<ObWkbGeogPoint*>(const_cast<char*>(geo->val())); 
   if (OB_ISNULL(inner_pt)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("unexpected null geo value");
   } else {
     inner_pt->set<0>(y);
     inner_pt->set<1>(x);
@@ -48,6 +49,7 @@ int ObGeoReverseCoordinateVisitor::visit(ObIWkbGeogPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(reverse_point_coordinate(geo))){
+    LOG_WARN("failed to calculate point range", K(ret));
   }
   return ret;
 }

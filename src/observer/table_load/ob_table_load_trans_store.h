@@ -1,0 +1,257 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "common/object/ob_object.h"
+#include "lib/allocator/page_arena.h"
+#include "observer/table_load/ob_table_load_obj_cast.h"
+#include "observer/table_load/ob_table_load_struct.h"
+#include "observer/table_load/ob_table_load_time_convert.h"
+#include "share/ob_autoincrement_param.h"
+#include "share/object/ob_obj_cast.h"
+#include "share/schema/ob_column_schema.h"
+#include "observer/table_load/ob_table_load_row_array.h"
+#include "storage/direct_load/ob_direct_load_datum_row.h"
+#include "storage/direct_load/ob_direct_load_i_table.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+struct ObDirectLoadTableDataDesc;
+class ObDirectLoadITable;
+class ObIDirectLoadPartitionTableBuilder;
+class ObDirectLoadInsertTableBatchRowDirectWriter;
+class ObDirectLoadBatchRows;
+class ObDirectLoadRowFlag;
+} // namespace storage
+namespace observer
+{
+class ObTableLoadParam;
+class ObTableLoadTransCtx;
+class ObTableLoadStoreCtx;
+struct ObTableLoadStoreTrans;
+class ObTableLoadDagWriter;
+
+class ObTableLoadTransStore
+{
+public:
+  ObTableLoadTransStore(ObTableLoadTransCtx *trans_ctx) : trans_ctx_(trans_ctx)
+  {
+    
+  }
+  ~ObTableLoadTransStore() { reset(); }
+  int init();
+  void reset();
+  int64_t get_session_count() const { return session_store_array_.count(); }
+  TO_STRING_KV(KP_(trans_ctx), K_(session_store_array));
+public:
+  struct SessionStore
+  {
+    SessionStore() : session_id_(0)
+    {
+    }
+    int32_t session_id_;
+    ObDirectLoadTableHandleArray tables_handle_;
+    TO_STRING_KV(K_(session_id), K_(tables_handle));
+  };
+  ObTableLoadTransCtx *const trans_ctx_;
+  common::ObArray<SessionStore *> session_store_array_;
+};
+
+class ObTableLoadTransStoreWriter
+{
+public:
+  ObTableLoadTransStoreWriter(ObTableLoadStoreTrans *trans, ObTableLoadTransStore *trans_store);
+  ~ObTableLoadTransStoreWriter();
+  int init();
+  TO_STRING_KV(KP_(trans_ctx));
+public:
+  // Only called in the corresponding worker thread, serial execution
+  int write(int32_t session_id, const table::ObTableLoadTabletObjRowArray &row_array);
+  int px_write(common::ObIVector *tablet_id_vector,
+               const storage::ObDirectLoadBatchRows &batch_rows);
+  int px_write(const common::ObTabletID &tablet_id,
+               const storage::ObDirectLoadBatchRows &batch_rows);
+  int px_write(const common::ObTabletID &tablet_id,
+               const storage::ObDirectLoadBatchRows &batch_rows,
+               const uint16_t *selector,
+               const int64_t size);
+  int cast_row(int32_t session_id,
+               const table::ObTableLoadObjRow &obj_row,
+               const ObDirectLoadDatumRow *&datum_row);
+  int flush(int32_t session_id, bool &is_finished);
+  int clean_up(int32_t session_id);
+private:
+  int init_session_ctx_array();
+  int init_column_schemas_and_lob_info();
+  int cast_column(common::ObArenaAllocator &cast_allocator,
+                  ObDataTypeCastParams cast_params,
+                  const share::schema::ObColumnSchemaV2 *column_schema,
+                  const common::ObObj &obj,
+                  blocksstable::ObStorageDatum &datum,
+                  int32_t session_id);
+  int cast_row(common::ObArenaAllocator &cast_allocator,
+               ObDataTypeCastParams cast_params,
+               const table::ObTableLoadObjRow &obj_row,
+               ObDirectLoadDatumRow &datum_row,
+               int32_t session_id);
+  int handle_autoinc_column(const share::schema::ObColumnSchemaV2 *column_schema,
+                            const common::ObObj &obj,
+                            blocksstable::ObStorageDatum &datum,
+                            int32_t session_id);
+  int handle_identity_column(const share::schema::ObColumnSchemaV2 *column_schema,
+                             const common::ObObj &obj,
+                             common::ObObj &out_obj,
+                             common::ObArenaAllocator &cast_allocator);
+  int check_rowkey_length(const ObDirectLoadDatumRow &datum_row,
+                          const int64_t rowkey_column_count);
+
+private:
+  class IWriter
+  {
+  public:
+    IWriter() = default;
+    virtual ~IWriter() = default;
+    virtual void reset() = 0;
+    virtual int append_row(const common::ObTabletID &tablet_id,
+                           const ObDirectLoadDatumRow &datum_row,
+                           const storage::ObDirectLoadRowFlag &row_flag) = 0;
+    virtual int append_batch(const common::ObTabletID &tablet_id,
+                             const storage::ObDirectLoadBatchRows &batch_rows) = 0;
+    virtual int append_selective(const common::ObTabletID &tablet_id,
+                                 const storage::ObDirectLoadBatchRows &batch_rows,
+                                 const uint16_t *selector,
+                                 const int64_t size) = 0;
+    virtual int close() = 0;
+  };
+
+  class StoreWriter : public IWriter
+  {
+  public:
+    StoreWriter();
+    virtual ~StoreWriter();
+    void reset() override;
+    int init(ObTableLoadStoreCtx *store_ctx,
+             ObTableLoadTransStore *trans_store,
+             int32_t session_id);
+    int append_row(const common::ObTabletID &tablet_id,
+                   const ObDirectLoadDatumRow &datum_row,
+                   const storage::ObDirectLoadRowFlag &row_flag) override;
+    int append_batch(const common::ObTabletID &tablet_id,
+                     const storage::ObDirectLoadBatchRows &batch_rows) override;
+    int append_selective(const common::ObTabletID &tablet_id,
+                         const storage::ObDirectLoadBatchRows &batch_rows,
+                         const uint16_t *selector,
+                         const int64_t size) override;
+    int close() override;
+  private:
+    int new_table_builder(const common::ObTabletID &tablet_id,
+                          ObIDirectLoadPartitionTableBuilder *&table_builder);
+    int get_table_builder(const common::ObTabletID &tablet_id,
+                          ObIDirectLoadPartitionTableBuilder *&table_builder);
+    int inner_append_row(const common::ObTabletID &tablet_id,
+                         ObIDirectLoadPartitionTableBuilder *table_builder,
+                         const ObDirectLoadDatumRow &datum_row);
+  private:
+    typedef common::hash::ObHashMap<common::ObTabletID, ObIDirectLoadPartitionTableBuilder *>
+      TableBuilderMap;
+    ObTableLoadStoreCtx *store_ctx_;
+    ObTableLoadTransStore *trans_store_;
+    int32_t session_id_;
+    ObArenaAllocator allocator_;
+    TableBuilderMap table_builder_map_;
+    ObSEArray<ObIDirectLoadPartitionTableBuilder *, 1> table_builders_;
+    ObDirectLoadDatumRow datum_row_;
+    bool is_single_part_;
+    bool is_closed_;
+    bool is_inited_;
+  };
+
+  class DirectWriter : public IWriter
+  {
+  public:
+    DirectWriter();
+    virtual ~DirectWriter();
+    void reset() override;
+    int init(ObTableLoadStoreCtx *store_ctx);
+    int append_row(const common::ObTabletID &tablet_id,
+                   const ObDirectLoadDatumRow &datum_row,
+                   const storage::ObDirectLoadRowFlag &row_flag) override;
+    int append_batch(const common::ObTabletID &tablet_id,
+                     const storage::ObDirectLoadBatchRows &batch_rows) override;
+    int append_selective(const common::ObTabletID &tablet_id,
+                         const storage::ObDirectLoadBatchRows &batch_rows,
+                         const uint16_t *selector,
+                         const int64_t size) override;
+    int close() override;
+  private:
+    int new_batch_writer(const common::ObTabletID &tablet_id,
+                          ObDirectLoadInsertTableBatchRowDirectWriter *&batch_writer);
+    int get_batch_writer(const common::ObTabletID &tablet_id,
+                          ObDirectLoadInsertTableBatchRowDirectWriter *&batch_writer);
+  private:
+    typedef common::hash::ObHashMap<common::ObTabletID, ObDirectLoadInsertTableBatchRowDirectWriter *>
+      BatchWriterMap;
+    ObTableLoadStoreCtx *store_ctx_;
+    ObArenaAllocator allocator_;
+    ObArenaAllocator lob_allocator_;
+    BatchWriterMap batch_writer_map_;
+    ObSEArray<ObDirectLoadInsertTableBatchRowDirectWriter *, 1> batch_writers_;
+    int64_t max_batch_size_;
+    bool is_single_part_;
+    bool is_closed_;
+    bool is_inited_;
+  };
+
+private:
+  ObTableLoadStoreTrans *const trans_;
+  ObTableLoadTransStore *const trans_store_;
+  ObTableLoadTransCtx *const trans_ctx_;
+  ObTableLoadStoreCtx *const store_ctx_;
+  const ObTableLoadParam &param_;
+  common::ObArenaAllocator allocator_;
+  storage::ObDirectLoadTableDataDesc *table_data_desc_;
+  common::ObCollationType collation_type_;
+  common::ObCastMode cast_mode_;
+  ObTableLoadTimeConverter time_cvrt_;
+  // does not contain hidden primary key columns
+  // and does not contain virtual generated columns
+  common::ObArray<const share::schema::ObColumnSchemaV2 *> column_schemas_;
+  struct SessionContext
+  {
+    SessionContext(int32_t session_id, ObDataTypeCastParams cast_params);
+    ~SessionContext();
+    const int32_t session_id_;
+    ObDirectLoadDatumRow datum_row_;
+    common::ObArenaAllocator cast_allocator_;
+    ObDataTypeCastParams cast_params_;
+    IWriter *writer_;
+    ObTableLoadDagWriter *dag_writer_;
+    uint64_t last_receive_sequence_no_;
+    int64_t processed_rows_;
+  };
+  SessionContext *session_ctx_array_;
+  int64_t session_count_;
+  int64_t lob_inrow_threshold_; // for incremental direct load
+  int64_t flush_count_ CACHE_ALIGNED;
+  bool is_inited_;
+  ObSchemaGetterGuard schema_guard_;
+};
+
+} // namespace observer
+} // namespace oceanbase

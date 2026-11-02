@@ -20,7 +20,6 @@
 #include "share/datum/ob_datum_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -44,7 +43,9 @@ static int check_expr_and_eval(const ObExpr &expr, ObEvalCtx &ctx,
       || OB_UNLIKELY(expr.arg_cnt_ != 1) || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("failed to eval", K(ret));
   } else if (param_datum->is_null()) {
     found_null = true;
   } else {
@@ -79,6 +80,7 @@ DEF_EVAL_ABS_FUNC(ObNumberType)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -98,6 +100,7 @@ DEF_EVAL_ABS_FUNC(ObUNumberType)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -117,6 +120,7 @@ DEF_EVAL_ABS_FUNC(ObFloatType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
+    LOG_WARN("check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -132,6 +136,7 @@ DEF_EVAL_ABS_FUNC(ObDoubleType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -147,6 +152,7 @@ DEF_EVAL_ABS_FUNC(ObUDoubleType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -161,6 +167,7 @@ DEF_EVAL_ABS_FUNC(ObIntType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -168,6 +175,7 @@ DEF_EVAL_ABS_FUNC(ObIntType)
     // Only mysql mode will call this function, if INT64_MIN is found, out of range needs to be reported
     if (INT64_MIN == param_int) {
       ret = OB_OPERATE_OVERFLOW;
+      LOG_WARN("value out of range", K(ret));
     } else {
       expr_datum.set_int(param_int >= 0 ? param_int : -param_int);
     }
@@ -181,6 +189,7 @@ DEF_EVAL_ABS_FUNC(ObUInt64Type)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -201,6 +210,7 @@ DEF_EVAL_ABS_FUNC(ObDecimalIntType)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
+    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -217,6 +227,7 @@ DEF_EVAL_ABS_FUNC(ObDecimalIntType)
         MAKE_DECIMAL_INT_OPPOSITE(int512)
         default: {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
           break;
         }
       }
@@ -232,6 +243,393 @@ DEF_EVAL_ABS_FUNC(ObDecimalIntType)
 
 ObExpr::EvalFunc abs_funcs[ObMaxType];
 
+static int check_expr_and_eval_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                               const ObBitVector &skip, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(expr.type_ != T_OP_ABS)
+      || OB_UNLIKELY(expr.arg_cnt_ != 1) || OB_ISNULL(expr.args_)
+      || OB_ISNULL(expr.args_[0])) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
+  } else if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("failed to eval vector", K(ret));
+  }
+  return ret;
+}
+
+// base
+template<ObObjType obj_type>
+int eval_vector_abs(const ObExpr &expr,
+                    ObEvalCtx &ctx,
+                    const ObBitVector &skip,
+                    const EvalBound &bound)
+{
+  UNUSED(expr);
+  UNUSED(ctx);
+  UNUSED(skip);
+  UNUSED(bound);
+  return OB_NOT_SUPPORTED;
+}
+
+#define DEF_EVAL_ABS_VEC_FUNC(type)                                              \
+  template <>                                                                    \
+  int eval_vector_abs<type>(const ObExpr &expr, ObEvalCtx &ctx,                  \
+                            const ObBitVector &skip, const EvalBound &bound)     \
+
+
+template<VecValueTypeClass vec_tc, typename ArgVec, typename ResVec>
+class EvalVectorRowAbsHelper {
+public:
+};
+
+#define DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(type)            \
+template<typename ArgVec, typename ResVec>               \
+class EvalVectorRowAbsHelper<type, ArgVec, ResVec> {     \
+  public:                                                \
+  static int inner_eval_abs_row(const ArgVec *arg_vec,   \
+                                ResVec *res_vec,         \
+                                const int64_t &idx)
+
+
+template<VecValueTypeClass vec_tc, typename ArgVec, typename ResVec>
+class EvalVectorAbsHelper {
+public:
+  static int inner_eval_abs_vector(const ObExpr &expr,
+                                   ObEvalCtx &ctx,
+                                   const ObBitVector &skip,
+                                   const EvalBound &bound) 
+  {
+    int ret = OB_SUCCESS;
+    ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+    ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+    for (int64_t j = bound.start(); OB_SUCC(ret) && j < bound.end(); ++j) {
+      if (skip.at(j)) {
+        continue;
+      }
+      if (arg_vec->is_null(j)) {
+        res_vec->set_null(j);
+      } else {
+        ret = EvalVectorRowAbsHelper<vec_tc, ArgVec, ResVec>::
+            inner_eval_abs_row(arg_vec, res_vec, j);
+      }
+    }
+    return ret;
+  }
+};
+
+#define DEF_INNER_EVAL_ABS_VEC_FUNC(type)                     \
+template<typename ArgVec, typename ResVec>                    \
+class EvalVectorAbsHelper<type, ArgVec, ResVec> {             \
+  public:                                                     \
+  static int inner_eval_abs_vector(const ObExpr &expr,        \
+                                    ObEvalCtx &ctx,           \
+                                    const ObBitVector &skip,  \
+                                    const EvalBound &bound) 
+
+#define END_DEF_INNER_EVAL_ABS_FUNC };
+
+template<VecValueTypeClass vec_tc>
+static int dispatch_eval_abs_fixed_len_vector(const ObExpr &expr,
+                                              ObEvalCtx &ctx,
+                                              const ObBitVector &skip,
+                                              const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+  VectorFormat res_format = expr.get_format(ctx);
+  if (VEC_FIXED == arg_format && VEC_FIXED == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObFixedLengthVector<RTCType<vec_tc>, VectorBasicOp<vec_tc>>,
+                              ObFixedLengthVector<RTCType<vec_tc>, VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else if (VEC_UNIFORM == arg_format && VEC_FIXED == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObUniformVector<false, VectorBasicOp<vec_tc>>,
+                              ObFixedLengthVector<RTCType<vec_tc>, VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else if (VEC_UNIFORM_CONST == arg_format && VEC_FIXED == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObUniformVector<true, VectorBasicOp<vec_tc>>,
+                              ObFixedLengthVector<RTCType<vec_tc>, VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else {
+    ret = EvalVectorAbsHelper<vec_tc, ObVectorBase, ObVectorBase>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  }
+  return ret;
+}
+
+template<VecValueTypeClass vec_tc>
+static int dispatch_eval_abs_variable_len_vector(const ObExpr &expr,
+                                              ObEvalCtx &ctx,
+                                              const ObBitVector &skip,
+                                              const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+  VectorFormat res_format = expr.get_format(ctx);
+  if (VEC_DISCRETE == arg_format && VEC_DISCRETE == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObDiscreteVector<VectorBasicOp<vec_tc>>,
+                              ObDiscreteVector<VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else if (VEC_CONTINUOUS == arg_format && VEC_DISCRETE == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObContinuousVector<VectorBasicOp<vec_tc>>,
+                              ObDiscreteVector<VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else if (VEC_UNIFORM == arg_format && VEC_DISCRETE == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObUniformVector<false, VectorBasicOp<vec_tc>>,
+                              ObDiscreteVector<VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else if (VEC_UNIFORM_CONST == arg_format && VEC_DISCRETE == res_format) {
+    ret = EvalVectorAbsHelper<vec_tc, ObUniformVector<true, VectorBasicOp<vec_tc>>,
+                              ObDiscreteVector<VectorBasicOp<vec_tc>>>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  } else {
+    ret = EvalVectorAbsHelper<vec_tc, ObVectorBase, ObVectorBase>::
+                              inner_eval_abs_vector(expr, ctx, skip, bound);
+  }
+  return ret;
+}
+
+// ObNullType
+DEF_INNER_EVAL_ABS_VEC_FUNC(VEC_TC_NULL)
+{
+  int ret = OB_SUCCESS;
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  for (int64_t j = bound.start(); OB_SUCC(ret) && j < bound.end(); ++j) {
+    if (skip.at(j)) {
+      continue;
+    }
+    res_vec->set_null(j);
+  }
+  return ret;
+}
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_EVAL_ABS_VEC_FUNC(ObNullType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else {
+      VectorFormat res_format = expr.get_format(ctx);
+      switch (res_format) {
+      case VEC_DISCRETE:
+      case VEC_CONTINUOUS:
+      case VEC_FIXED: {
+        ret = EvalVectorAbsHelper<VEC_TC_NULL, ObVectorBase, ObBitmapNullVectorBase>::
+                                        inner_eval_abs_vector(expr, ctx, skip, bound);
+        break;
+      }
+      case VEC_UNIFORM: {
+        ret = EvalVectorAbsHelper<VEC_TC_NULL, ObVectorBase, ObUniformFormat<false>>::
+                                inner_eval_abs_vector(expr, ctx, skip, bound);
+        break;
+      }
+      case VEC_UNIFORM_CONST: {
+        ret = EvalVectorAbsHelper<VEC_TC_NULL, ObVectorBase, ObUniformFormat<true>>::
+                                inner_eval_abs_vector(expr, ctx, skip, bound);
+        break;
+      }
+      default: {
+        ret = EvalVectorAbsHelper<VEC_TC_NULL, ObVectorBase, ObVectorBase>::
+                                inner_eval_abs_vector(expr, ctx, skip, bound);
+      }
+    }
+  }
+  return ret;
+}
+
+// ObNumberType
+DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(VEC_TC_NUMBER)
+{
+  number::ObNumber param_nmb(arg_vec->get_number(idx));
+  if (param_nmb.is_negative()) {
+    res_vec->set_number(idx, param_nmb.negate());
+  } else {
+    res_vec->set_number(idx, param_nmb);
+  }
+  return OB_SUCCESS;
+}
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_EVAL_ABS_VEC_FUNC(ObNumberType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_variable_len_vector<
+                     VEC_TC_NUMBER>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObUNumberType
+// The "ObUNumberType" and "ObNumberType" are processed using the same logic.
+DEF_EVAL_ABS_VEC_FUNC(ObUNumberType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_variable_len_vector<
+                     VEC_TC_NUMBER>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObFloatType
+DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(VEC_TC_FLOAT)
+{
+  float param_float = arg_vec->get_float(idx);
+  res_vec->set_float(idx, param_float > 0.0 ? param_float : -param_float);
+  return OB_SUCCESS;
+}
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_EVAL_ABS_VEC_FUNC(ObFloatType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_fixed_len_vector<
+                      VEC_TC_FLOAT>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObDoubleType
+DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(VEC_TC_DOUBLE)
+{
+  double param_double = arg_vec->get_double(idx);
+  res_vec->set_double(idx, param_double >= 0 ? param_double : -param_double);
+  return OB_SUCCESS;
+}
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_EVAL_ABS_VEC_FUNC(ObDoubleType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_fixed_len_vector<
+                    VEC_TC_DOUBLE>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObUDoubleType
+DEF_EVAL_ABS_VEC_FUNC(ObUDoubleType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_fixed_len_vector<
+                     VEC_TC_DOUBLE>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObIntType
+DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(VEC_TC_INTEGER)
+{
+  int ret = OB_SUCCESS;
+  int64_t param_int = arg_vec->get_int(idx);
+  // This function is only called in the MySQL mode. 
+  // If it is found to be INT64_MIN, it should report an "out of range" error.
+  if (INT64_MIN == param_int) {
+    ret = OB_OPERATE_OVERFLOW;
+    LOG_WARN("int value out of range", K(ret));
+  } else {
+    res_vec->set_int(idx, param_int >= 0 ? param_int : -param_int);
+  }
+  return ret;
+}
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_EVAL_ABS_VEC_FUNC(ObIntType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_fixed_len_vector<
+                     VEC_TC_INTEGER>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObUInt64Type
+DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(VEC_TC_UINTEGER)
+{
+  res_vec->set_uint(idx, arg_vec->get_uint64(idx));
+  return OB_SUCCESS;
+}
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_EVAL_ABS_VEC_FUNC(ObUInt64Type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else if (OB_FAIL(dispatch_eval_abs_fixed_len_vector<
+                     VEC_TC_UINTEGER>(expr, ctx, skip, bound))) {
+    LOG_WARN("dispatch_eval_abs_variable_len_vector", K(ret));
+  }
+  return ret;
+}
+
+// ObDecimalIntType
+#define DEF_INNER_EVAL_ABS_DECIMAL_VEC_FUNC(INT_BIT)                                \
+DEF_INNER_EVAL_ABS_VEC_ROW_FUNC(VEC_TC_DEC_INT##INT_BIT)                            \
+{                                                                                   \
+  const ObDecimalInt *decint = arg_vec->get_decimal_int(idx);                       \
+  bool is_neg = wide::is_negative(decint, INT_BIT / CHAR_BIT);                      \
+  if (is_neg) {                                                                     \
+    ObDecimalIntBuilder res_val;                                                    \
+    res_val.from(-(*(decint->int##INT_BIT##_v_)));                                  \
+    res_vec->set_decimal_int(idx, res_val.get_decimal_int(), INT_BIT / CHAR_BIT);   \
+  } else {                                                                          \
+    res_vec->set_decimal_int(idx, decint, INT_BIT / CHAR_BIT);                      \
+  }                                                                                 \
+  return OB_SUCCESS;                                                                \
+}                                                                                   \
+END_DEF_INNER_EVAL_ABS_FUNC
+
+DEF_INNER_EVAL_ABS_DECIMAL_VEC_FUNC(32)
+DEF_INNER_EVAL_ABS_DECIMAL_VEC_FUNC(64)
+DEF_INNER_EVAL_ABS_DECIMAL_VEC_FUNC(128)
+DEF_INNER_EVAL_ABS_DECIMAL_VEC_FUNC(256)
+DEF_INNER_EVAL_ABS_DECIMAL_VEC_FUNC(512)
+
+DEF_EVAL_ABS_VEC_FUNC(ObDecimalIntType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_expr_and_eval_vector(expr, ctx, skip, bound))) {
+    LOG_WARN("check_expr_and_eval_vector failed", K(ret));
+  } else {
+    int16_t precision = expr.datum_meta_.precision_;
+    if (precision <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("dicimal precision <= 0", K(ret), K(precision));
+    } else if (precision <= MAX_PRECISION_DECIMAL_INT_32) {
+      ret = dispatch_eval_abs_fixed_len_vector<VEC_TC_DEC_INT32>(expr, ctx, skip, bound);
+    } else if (precision <= MAX_PRECISION_DECIMAL_INT_64) {
+      ret = dispatch_eval_abs_fixed_len_vector<VEC_TC_DEC_INT64>(expr, ctx, skip, bound);
+    } else if (precision <= MAX_PRECISION_DECIMAL_INT_128) {
+      ret = dispatch_eval_abs_fixed_len_vector<VEC_TC_DEC_INT128>(expr, ctx, skip, bound);
+    } else if (precision <= MAX_PRECISION_DECIMAL_INT_256) {
+      ret = dispatch_eval_abs_fixed_len_vector<VEC_TC_DEC_INT256>(expr, ctx, skip, bound);
+    } else {
+      ret = dispatch_eval_abs_fixed_len_vector<VEC_TC_DEC_INT512>(expr, ctx, skip, bound);
+    }
+  }
+  return ret;
+}
+
+ObExpr::EvalVectorFunc abs_vec_funcs[ObMaxType];
 
 template<int IDX>
 struct AbsFuncIniter
@@ -239,6 +637,7 @@ struct AbsFuncIniter
   static bool init_array()
   {
     abs_funcs[IDX] = &eval_datum_abs<static_cast<ObObjType>(IDX)>;
+    abs_vec_funcs[IDX] = &eval_vector_abs<static_cast<ObObjType>(IDX)>;
     return true;
   }
 };
@@ -246,6 +645,7 @@ struct AbsFuncIniter
 static bool abs_eval_func_init_ret = ObArrayConstIniter<ObMaxType, AbsFuncIniter>::init();
 
 static_assert(ObMaxType == sizeof(abs_funcs) / sizeof(void *), "unexpected size");
+static_assert(ObMaxType == sizeof(abs_vec_funcs) / sizeof(void *), "unexpected size");
 
 ObExprAbs::ObExprAbs(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_ABS, N_ABS, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
@@ -257,8 +657,10 @@ int ObExprAbs::assign(const ObExprOperator &other)
   const ObExprAbs *tmp_other = dynamic_cast<const ObExprAbs *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->func_ = tmp_other->func_;
     }
@@ -274,6 +676,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
   } else if (NOT_ROW_DIMENSION == row_dimension_) {
     // result type
     ObObjType itype;
@@ -289,7 +692,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
     // The result cannot be of character type, no need to set collation
     if (type.is_double() && type1.get_scale() != SCALE_UNKNOWN_YET) {
       type.set_scale(type1.get_scale());
-      type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
+      type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type1.get_scale())));
     } else {
       type.set_accuracy(type1.get_accuracy());
     }
@@ -302,6 +705,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
       ObObjType param_calc_type = calc_param_type(type1.get_type());
       if (OB_UNLIKELY(ObMaxType == param_calc_type)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid param calc type", K(ret), K(type1.get_type()), K(param_calc_type));
       } else {
         type1.set_calc_type(param_calc_type);
         if (type1.get_type() == ObJsonType) {
@@ -331,7 +735,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
 //others. (datetime time varchar, etc)
 
-//extended types. (datetime time varchar, etc)
+//others for oracle. (datetime time varchar, etc)
 
 
 
@@ -350,10 +754,13 @@ int ObExprAbs::cg_expr(ObExprCGCtx &ctx,
       || OB_UNLIKELY(rt_expr.arg_cnt_ !=  1)
       || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_UNLIKELY(rt_expr.args_[0]->datum_meta_.type_ >= ObMaxType)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arg type for abs", K(ret));
   } else {
     rt_expr.eval_func_ = abs_funcs[rt_expr.args_[0]->datum_meta_.type_];
+    rt_expr.eval_vector_func_ = abs_vec_funcs[rt_expr.args_[0]->datum_meta_.type_];
   }
   return ret;
 }

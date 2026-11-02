@@ -28,8 +28,6 @@ namespace oceanbase
 namespace sql
 {
 
-class ObInsertStmt;
-
 typedef std::pair<uint64_t, uint64_t> JoinTableIdPair;
 
 struct DistinctObjMeta
@@ -365,6 +363,16 @@ private:
                                 ObIArray<ObRawExpr*> &query_ref_exprs,
                                 ObIArray<ObRawExpr*> &query_ref_remove_const_exprs);
 
+  int transform_cast_multiset_for_stmt(ObDMLStmt *&stmt, bool &is_happened);
+  int transform_cast_multiset_for_expr(ObDMLStmt &stmt, ObRawExpr *&expr, bool &trans_happened);
+  int add_constructor_to_multiset(ObDMLStmt &stmt,
+                                  ObQueryRefRawExpr *multiset_expr,
+                                  const pl::ObPLDataType &elem_type,
+                                  bool& trans_happened);
+  int add_column_conv_to_multiset(ObQueryRefRawExpr *multiset_expr,
+                                  const pl::ObPLDataType &elem_type,
+                                  bool& trans_happened);
+
   int transform_for_last_insert_id(ObDMLStmt *stmt, bool &trans_happened);
   int expand_for_last_insert_id(ObDMLStmt &stmt, ObIArray<ObRawExpr*> &exprs, bool &is_happended);
   int expand_last_insert_id_for_join(ObDMLStmt &stmt, JoinedTable *join_table, bool &is_happened);
@@ -375,11 +383,17 @@ private:
   int check_exec_param_correlated(const ObRawExpr *expr, bool &is_correlated);
   int check_is_correlated_cte(ObSelectStmt *stmt, ObIArray<ObSelectStmt *> &visited_cte, bool &is_correlated);
   int convert_join_preds_vector_to_scalar(JoinedTable &joined_table, bool &trans_happened);
-  int preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened);
+  int preserve_order_for_fulltext_search(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                         ObDMLStmt *stmt,
+                                         bool &trans_happened);
+  int check_count_over_fts_limit(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                 ObSelectStmt &stmt,
+                                 bool &can_eliminate_order);
 
   int flatten_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_flatten_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
   int do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int expand_materialized_view(ObDMLStmt *stmt, bool &trans_happened);
   int preserve_order_for_pagination(ObDMLStmt *stmt, 
                                     bool &trans_happened);
   int check_stmt_need_preserve_order(ObDMLStmt *stmt, 

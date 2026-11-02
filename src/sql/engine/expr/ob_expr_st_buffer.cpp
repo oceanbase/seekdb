@@ -81,6 +81,7 @@ int ObExprSTBufferStrategy::calc_result_typeN(ObExprResType &type,
     type.set_collation_type(CS_TYPE_BINARY);
   } else {
     ret = OB_NOT_IMPLEMENT;
+    LOG_WARN("invalid first element type", K(ret), K(first_type));
   }
   return ret;
 }
@@ -90,7 +91,7 @@ int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCt
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_BUFFER_STRATEGY);
   ObDatum *strategy_datum = NULL;
   ObString strategy_str;
   ObDatum *val_datum = NULL;
@@ -102,26 +103,34 @@ int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCt
   if (is_null_result) {
     // do nothing
   } else if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, strategy_datum))) {
+    LOG_WARN("failed to eval first argument", K(ret));
   } else if (FALSE_IT(strategy_str = strategy_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *strategy_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *strategy_datum,
              expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), strategy_str))) {
+    LOG_WARN("fail to get real string data", K(ret), K(strategy_str));
+  } else if (FALSE_IT(tmp_allocator.set_baseline_size(strategy_str.length()))) {
   } else {
     strategy = get_strategy_type_by_name(strategy_str);
     if (ObGeoBufferStrategyType::INVALID == strategy) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid buffer strategy type", K(ret), K(strategy_str));
     } else if (ObGeoBufferStrategyType::POINT_SQUARE != strategy && ObGeoBufferStrategyType::END_FLAT != strategy) {
       if (num_args != 2) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument number", K(ret), K(num_args));
       } else if (ob_is_null(expr.args_[1]->datum_meta_.type_)) {
         is_null_result = true;
       } else if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, val_datum))) {
+        LOG_WARN("failed to eval second parameter of st_buffer_strategy", K(ret));
       } else {
         points_per_circle = val_datum->get_double();
         if (points_per_circle <= 0) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid points number per circle", K(ret), K(points_per_circle));
         } else if ((ObGeoBufferStrategyType::JOIN_MITER != strategy)
             && (points_per_circle > OB_MAX_POINTS_IN_GEOMETRY)) {
           ret = OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED;
+          LOG_WARN("points number overflowed", K(ret), K(points_per_circle));
           LOG_USER_ERROR(OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED,
                          "points_per_circle",
                          OB_MAX_POINTS_IN_GEOMETRY,
@@ -140,6 +149,7 @@ int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCt
       char *res_buf = expr.get_str_res_mem(ctx, ST_BUFFER_STRATEGY_LEN);
       if (OB_ISNULL(res_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         ObGeoWkbByteOrderUtil::write<uint32_t>(res_buf, static_cast<uint32_t>(strategy));
         ObGeoWkbByteOrderUtil::write<double>(res_buf + sizeof(uint32_t), points_per_circle);
@@ -216,6 +226,7 @@ int ObExprSTBuffer::calc_result_typeN(ObExprResType &type,
           } else {
             ret = OB_INVALID_ARGUMENT;
             LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
+            LOG_WARN("invalid type for st_buffer", K(ret), K(i), K(types[i].get_type()));
           }
         }
       }
@@ -251,12 +262,14 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
                                  && (strategy_cs_type != CS_TYPE_BINARY)));
     if (is_priv_strategy) {
       if (OB_FAIL(allocator.eval_arg(first_strategy_arg, ctx, strat_datum))) {
+        LOG_WARN("eval pg style buffer strategy arg failed", K(ret));
       } else if (ob_is_integer_type(strategy_data_type)) {
         if (strat_datum->get_int() <= 0) {
           // do nothing, not strategy argument, use default value;
         } else if (strat_datum->get_int() > OB_MAX_POINTS_IN_GEOMETRY) {
           // can't more than 65536, it will stuck in bg if circle_points is too large
           ret = OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED;
+          LOG_WARN("points number overflowed", K(ret), K(strat_datum->get_int()));
           LOG_USER_ERROR(OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED,
                          "points_per_circle",
                          OB_MAX_POINTS_IN_GEOMETRY,
@@ -273,17 +286,21 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
       } else {
         ObString pg_text_strategy = strat_datum->get_string();
         ObString pg_strategy_clone;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator, *strat_datum,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator, *strat_datum,
                   first_strategy_arg->datum_meta_, first_strategy_arg->obj_meta_.has_lob_header(), pg_text_strategy))) {
+          LOG_WARN("fail to get real string data", K(ret), K(pg_text_strategy));
         } else {
           char *buf = reinterpret_cast<char*>(allocator.alloc(pg_text_strategy.length() + 1));
           if (OB_UNLIKELY(buf == NULL)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("allocate memory for pg stype buffer strategy arg failed",
+              K(pg_text_strategy.length()), K(ret));
           } else {
             *(buf + pg_text_strategy.length()) = '\0';
             MEMCPY(buf, pg_text_strategy.ptr(), pg_text_strategy.length());
             pg_strategy_clone.assign_buffer(buf, pg_text_strategy.length());
             if (OB_FAIL(parse_text_strategy(pg_strategy_clone, buf_strat))) {
+              LOG_WARN("prase one stratety failed", K(ret));
               LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_PRIV_ST_BUFFER);
             }
           }
@@ -293,10 +310,13 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
       for (int i = ST_BUFFER_STRATEG_ARG_START_IDX; i < num_args && OB_SUCC(ret); i++) {
         ObString strat_str;
         if (OB_FAIL(allocator.eval_arg(expr.args_[i], ctx, strat_datum))) {
+          LOG_WARN("eval buffer strategy arg failed", K(ret));
         } else if (FALSE_IT(strat_str = strat_datum->get_string())) {
-        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator, *strat_datum,
+        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator, *strat_datum,
                   expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), strat_str))) {
+          LOG_WARN("fail to get real string data", K(ret), K(strat_str));
         } else if (OB_FAIL(parse_binary_strategy(strat_str, buf_strat))) {
+          LOG_WARN("prase one stratety failed", K(ret));
         }
       }
     }
@@ -306,7 +326,7 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
 }
 
 int ObExprSTBuffer::fill_proj4_params(lib::MemoryContext &mem_ctx,
-                                      common::ObSrsCacheGuard &srs_guard,
+                                      omt::ObSrsCacheGuard &srs_guard,
                                       uint32 srid,
                                       ObGeometry *geo,
                                       const ObSrsItem *srs,
@@ -323,17 +343,26 @@ int ObExprSTBuffer::fill_proj4_params(lib::MemoryContext &mem_ctx,
     int32_t bestsrid;
 
     if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
+      LOG_WARN("failed to get self srs item", K(ret), K(srid));
     } else if (OB_FAIL(srs->get_proj4_param(&allocator, buf_strat.proj4_self_))) {
+      LOG_WARN("failed to get proj4 prams from self srs", K(ret), K(srid));
     } else if (OB_FAIL(srs_guard.get_srs_item(OB_GEO_DEFAULT_GEOGRAPHY_SRID, buf_strat.srs_wgs84_))) {
+      LOG_WARN("failed to get wgs84 srs item", K(ret), K(OB_GEO_DEFAULT_GEOGRAPHY_SRID));
     } else if (OB_FAIL(buf_strat.srs_wgs84_->get_proj4_param(&allocator, buf_strat.proj4_wgs84_))) {
+      LOG_WARN("failed to get proj4 prams from wgs84 srs", K(ret), K(srid));
     } else if (geo->type() == ObGeoType::POINT) {
       // point dont transform to proj
       is_transform_method = true;
     } else if (OB_FAIL(box_context.append_geo_arg(geo))) {
+      LOG_WARN("build box context failed", K(ret), K(box_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Box>::geo_func::eval(box_context, geogbox))) {
+      LOG_WARN("failed to do box functor failed", K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::get_box_bestsrid(geogbox, NULL, bestsrid))) {
+      LOG_WARN("failed to get box bestsrid", K(ret), KP(geogbox));
     } else if (OB_FAIL(srs_guard.get_srs_item(bestsrid, buf_strat.srs_proj_))) {
+      LOG_WARN("failed to get proj srs item", K(ret), K(bestsrid));
     } else if (OB_FAIL(buf_strat.srs_proj_->get_proj4_param(&allocator, buf_strat.proj4_proj_))) {
+      LOG_WARN("failed to get proj4 prams from proj srs", K(ret), K(srid));
     } else {
       is_transform_method = true;
     }
@@ -352,12 +381,12 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObGeoBufferStrategy buf_strat;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_BUFFER);
   bool is_null_result = false;
   bool is_empty = false;
   uint32_t srid = 0;
   const ObSrsItem *srs = NULL;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   ObString proj4_param;
 
   // check null
@@ -365,7 +394,9 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     is_null_result = (expr.args_[i]->datum_meta_.type_ == ObNullType);
   }
   if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, geo_datum))) {
+    LOG_WARN("eval geo arg failed", K(ret));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, dist_datum))) {
+    LOG_WARN("eval distance arg failed", K(ret));
   } else if (geo_datum->is_null() || dist_datum->is_null() || is_null_result) {
     is_null_result = true;
     res.set_null();
@@ -380,46 +411,62 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     if (!is_valid_distance(distance)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *geo_datum,
+      LOG_WARN("nan distance argument", K(ret), K(distance));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *geo_datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), geo_str))) {
+      LOG_WARN("fail to get real string data", K(ret), K(geo_str));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(geo_str.length()))) {
     } else if (std::abs(distance) < ST_BUFFER_DISTANCE_MIN
                && geo_str.length() < WKB_DATA_OFFSET + WKB_GEO_TYPE_SIZE) {
       // Consist with mysql, return original invalid wkb if distance is too small. 
       // However pg will return fixed geometry.
       if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, geo_str))) {
+        LOG_WARN("fail to pack geo res", K(ret));
       }
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, geo_str, srs,
         true, N_ST_BUFFER))) {
+      LOG_WARN("fail to get srs item", K(ret));
     } else if (std::abs(distance) < ST_BUFFER_DISTANCE_MIN) {
       // Consist with mysql, return wkb(add version) if distance is too small. 
       // However pg will return fixed geometry.
       ObString res_wkb;
       if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, geo_str,
                                 geo, srs, N_ST_BUFFER, GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
+        LOG_WARN("parse wkb failed", K(ret), K(geo_str));
       } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))) {
+        LOG_WARN("failed to write geometry to wkb", K(ret));
       } else {
         res.set_string(res_wkb);
       }
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, geo_str,
         geo, srs, N_ST_BUFFER, GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+      LOG_WARN("parse wkb failed", K(ret), K(geo_str));
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(geo_str, srid))) {
+      LOG_WARN("get type and srid from wkb failed", K(ret));
     } else if ((srid != 0) && OB_FAIL(srs->get_proj4_param(&temp_allocator, proj4_param))) {
+      LOG_WARN("fail to get proj4 param", K(ret));
     } else if (OB_NOT_NULL(srs) && srs->is_geographical_srs() && geo->type() != ObGeoType::POINT) {
       ret = OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS;
       LOG_USER_ERROR(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, N_ST_BUFFER, ObGeoTypeUtil::get_geo_name_by_type(geo->type()));
+      LOG_WARN("invalid type for geographic srs", K(ret), K(geo->type()));
     } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo, is_empty))) {
+      LOG_WARN("check input empty failed", K(ret));
     } else if (is_empty) {
       ObString res_wkb;
       ObGeometry *empty_res_geo = OB_NEWx(ObCartesianGeometrycollection, (&temp_allocator), srid, temp_allocator);
       if (OB_ISNULL(empty_res_geo)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate memory for empty geographic result", K(ret), KP(empty_res_geo));
       } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*empty_res_geo, expr, ctx, srs, res_wkb, srid))) {
+        LOG_WARN("failed to write empty geometry to wkb", K(ret));
       } else {
         res.set_string(res_wkb);
       }
     } else if (OB_FAIL(guard.init())) {
+      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       if (distance < 0 
           && geo->type() != ObGeoType::GEOMETRYCOLLECTION
@@ -427,27 +474,38 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
           && geo->type() != ObGeoType::MULTIPOLYGON) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
+        LOG_WARN("wrong distance argument", K(ret), K(distance), K(geo->type()));
       } else if (OB_FAIL(init_buffer_strategy(expr, ctx, temp_allocator, buf_strat, distance))) {
+        LOG_WARN("failed to build st_buffer strategy", K(ret));
       } else {
         ObGeoEvalCtx gis_context(*mem_ctx, srs);
         ObGeometry *res_geo = NULL;
         bool need_normalize = OB_NOT_NULL(srs) && srs->is_geographical_srs();
         if (OB_FAIL(gis_context.append_geo_arg(geo))) {
+          LOG_WARN("failed to append geo arg to gis context", K(ret), K(gis_context.get_geo_count()));
         } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
+          LOG_WARN("failed to append buffer strategy to gis context", K(ret), K(gis_context.get_geo_count()));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
+          LOG_WARN("eval st_buffer failed", K(ret));
           ObGeoExprUtils::geo_func_error_handle(ret, N_ST_BUFFER);
         } else if (OB_ISNULL(res_geo)) {
           ret = OB_ERR_NULL_VALUE;
+          LOG_WARN("eval st_buffer null result", K(ret));
         } else if (need_normalize && OB_FAIL(ObGeoExprUtils::denormalize_wkb(proj4_param, res_geo))) {
+          LOG_WARN("failed to do denormalize wkb", K(ret), K(proj4_param));
         } else {
           ObString res_wkb;
           // Notice: all geography result in pg use srid 4326
           if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*res_geo, expr, ctx, srs, res_wkb))){
+            LOG_WARN("failed to write geometry to wkb", K(ret));
           } else {
             res.set_string(res_wkb);
           }
         }
       }
+    }
+    if (mem_ctx != nullptr) {
+      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
 
@@ -469,6 +527,7 @@ int ObExprSTBuffer::parse_binary_strategy(const ObString &str, ObGeoBufferStrate
   INIT_SUCC(ret);
   if (str.length() < ST_BUFFER_STRATEGY_LEN) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the length of buffer strategy need greater than 12", K(ret), K(str));
   } else {
     uint32_t type_val =  ObGeoWkbByteOrderUtil::read<uint32_t>(str.ptr());
     ObGeoBufferStrategyType s_type = static_cast<ObGeoBufferStrategyType>(type_val);
@@ -538,6 +597,8 @@ int ObExprSTBuffer::parse_binary_strategy(const ObString &str, ObGeoBufferStrate
       if (ret == OB_INVALID_ARGUMENT) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
       }
+      LOG_WARN("unsupported buffer strategy combination", K(ret), K(s_type), K(strategy.has_join_s_),
+        K(strategy.has_end_s_), K(strategy.has_point_s_));
     }
     
   }
@@ -574,9 +635,11 @@ int ObExprSTBuffer::parse_text_strategy(ObString &str, ObGeoBufferStrategy &stra
     val = strchr(key, '=');
     if (OB_ISNULL(val) || *(val + 1) == '\0') {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalided buffer strategy", K(ret), K(key));
     } else {
       *val = '\0';
       ++val;
+      LOG_DEBUG("invalided buffer strategy", K(key), K(val));
       if (!strcmp(key, "endcap")) {
         if ( !strcmp(val, "round") ) {
           strategy.state_num_ &= ~END_FLAT_MASK;
@@ -584,6 +647,7 @@ int ObExprSTBuffer::parse_text_strategy(ObString &str, ObGeoBufferStrategy &stra
           strategy.state_num_ |= END_FLAT_MASK;
         } else {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("not supported endcap strategy", K(ret), K(val));
         }
       } else if (!strcmp(key, "join")) {
         if (!strcmp(val, "round")) {
@@ -592,6 +656,7 @@ int ObExprSTBuffer::parse_text_strategy(ObString &str, ObGeoBufferStrategy &stra
           strategy.state_num_ |= JOIN_MITER_MASK;
         } else {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("not supported join strategy", K(ret), K(val));
         }
       } else if (!strcmp(key, "mitre_limit") || !strcmp(key, "miter_limit")) {
         strategy.join_miter_val_ = atof(val);
@@ -613,13 +678,16 @@ int ObExprSTBuffer::parse_text_strategy(ObString &str, ObGeoBufferStrategy &stra
           singleside = -1;
         } else {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("not supported side strategy", K(ret), K(val));
         }
       } else {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("not supported strategy key", K(ret), K(key));
       }
       param = strtok_r(NULL, " ", &saver);
     }
   }
+  LOG_DEBUG("invalided buffer strategy", K(strategy.state_num_));
   return ret;
 }
 
@@ -659,6 +727,7 @@ int ObExprPrivSTBuffer::calc_result_typeN(ObExprResType &type,
           if (!ob_is_string_type(types[2].get_type()) && !ob_is_integer_type(types[2].get_type())) {
             ret = OB_INVALID_ARGUMENT;
             LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_PRIV_ST_BUFFER);
+            LOG_WARN("invalid type for st_buffer", K(ret), K(types[2].get_type()));
           }
         }
       }
@@ -686,20 +755,22 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   ObGeoBufferStrategy buf_strat;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_BUFFER);
   bool is_null_result = false;
   bool is_transform_method = false;
   bool is_empty = false;
   uint32_t srid = 0;
   const ObSrsItem *srs = NULL;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
 
   // check null
   for (int i = 0; i < num_args && !is_null_result; i++) {
     is_null_result = (expr.args_[i]->datum_meta_.type_ == ObNullType);
   }
   if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, geo_datum))) {
+    LOG_WARN("eval geo arg failed", K(ret));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, dist_datum))) {
+    LOG_WARN("eval distance arg failed", K(ret));
   } 
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
@@ -707,14 +778,20 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   } else if (geo_datum->is_null() || geo_datum->is_null() || is_null_result) {
     res.set_null();
   } else if (FALSE_IT(geo_str = geo_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *geo_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *geo_datum,
             expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), geo_str))) {
+    LOG_WARN("fail to get real string data", K(ret), K(geo_str));
+  } else if (FALSE_IT(temp_allocator.set_baseline_size(geo_str.length()))) {
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, geo_str, srs, true))) {
+    LOG_WARN("fail to get srs item", K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, geo_str, geo, srs, N_PRIV_ST_BUFFER, 
                     GEO_CHECK_RING | GEO_CORRECT | GEO_ALLOW_3D | GEO_CHECK_RANGE
                      | GEO_NOT_COPY_WKB))) {
+    LOG_WARN("parse wkb failed", K(ret), K(geo_str));
   } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(geo_str, srid))) {
+    LOG_WARN("get type and srid from wkb failed", K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo, is_empty))) {
+    LOG_WARN("check input empty failed", K(ret));
   } else if (is_empty) {
     ObGeometry *empty_res_geo = NULL;
     ObString res_wkb;
@@ -726,33 +803,41 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
     }
     if (OB_ISNULL(empty_res_geo)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for empty geographic result", K(ret), KP(empty_res_geo));
     } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*empty_res_geo, expr, ctx, srs, res_wkb, srid))) {
+      LOG_WARN("failed to write empty geometry to wkb", K(ret));
     } else {
       res.set_string(res_wkb);
     }
   } else if (OB_FAIL(guard.init())) {
+    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     distance = dist_datum->get_double();
     if (!is_valid_distance(distance)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_PRIV_ST_BUFFER);
+      LOG_WARN("nan distance argument", K(ret), K(distance));
     } else if (distance < 0 
         && geo->type() != ObGeoType::GEOMETRYCOLLECTION
         && geo->type() != ObGeoType::POLYGON
         && geo->type() != ObGeoType::MULTIPOLYGON) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
+      LOG_WARN("wrong distance argument", K(ret), K(distance), K(geo->type()));
     } else if (std::abs(distance) < ST_BUFFER_DISTANCE_MIN) {
       // Consist with mysql, return original wkb if distance is too small. 
       // However pg will return fixed geometry.
       ObString res_wkb;		
-      if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))){
+      if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))){		
+        LOG_WARN("failed to write geometry to wkb", K(ret));		
       } else {		
         res.set_string(res_wkb);		
       }
     } else if (OB_FAIL(init_buffer_strategy(expr, ctx, temp_allocator, buf_strat, distance))) {
+      LOG_WARN("failed to build st_buffer strategy", K(ret));
     } else if (OB_FAIL(fill_proj4_params(*mem_ctx,
                                          srs_guard,
                                          srid,
@@ -760,6 +845,7 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
                                          srs,
                                          buf_strat,
                                          is_transform_method))){
+      LOG_WARN("failed to fill proj4 params for st_buffer strategy", K(ret));
     } else {
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       ObGeometry *res_geo = NULL;
@@ -767,17 +853,23 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
       if(OB_NOT_NULL(srs) && srs->is_geographical_srs()) {
         ObGeoNormalizeVisitor normalize_visitor(srs);
         if (OB_FAIL(geo->do_visit(normalize_visitor))) {
+          LOG_WARN("normalize geo failed", K(ret));
         } else if (OB_FAIL(ObGeoTypeUtil::correct_polygon(temp_allocator, srs, false, *geo))) {
+          LOG_WARN("correct geo failed", K(ret), K(geo));
         }
       }
 
       if (OB_SUCC(ret)) { 
         if (OB_FAIL(gis_context.append_geo_arg(geo))) {
+          LOG_WARN("failed to append geo arg to gis context", K(ret), K(gis_context.get_geo_count()));
         } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
+          LOG_WARN("failed to append buffer strategy to gis context", K(ret), K(gis_context.get_geo_count()));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
+          LOG_WARN("eval st_buffer failed", K(ret));
           ObGeoExprUtils::geo_func_error_handle(ret, N_PRIV_ST_BUFFER);
         } else if (OB_ISNULL(res_geo)) {
           ret = OB_ERR_NULL_VALUE;
+          LOG_WARN("eval st_buffer null result", K(ret));
         } else if (OB_NOT_NULL(srs) && srs->is_geographical_srs() && geo->type() == ObGeoType::POINT) {
           ObString buffered_res_wkb;
           ObGeometry *res_bin = NULL;
@@ -785,12 +877,18 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
           if (srs->get_srid() == buf_strat.srs_wgs84_->get_srid()) {
             // do nothing
           } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *res_geo, srs, buffered_res_wkb))) {
+            LOG_WARN("fail to to_wkb for res_geo buffer", K(ret));
           } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, buffered_res_wkb, res_bin, srs, N_PRIV_ST_BUFFER,
               ObGeoBuildFlag::GEO_DEFAULT | ObGeoBuildFlag::GEO_NOT_COPY_WKB))) {
+            LOG_WARN("fail to create geo bin for point buffer", K(ret));
           } else if (OB_FAIL(transform_context.append_geo_arg(res_bin))) {
+            LOG_WARN("failed to append geo arg to gis context", K(ret), K(transform_context.get_geo_count()));
           } else if (OB_FAIL(transform_context.append_val_arg(&buf_strat.proj4_self_))) {
+            LOG_WARN("failed to append src_proj4_param to gis context", K(ret), K(transform_context.get_geo_count()));
           } else if (OB_FAIL(transform_context.append_val_arg(&buf_strat.proj4_wgs84_))) {
+            LOG_WARN("failed to append dest_proj4_param to gis context", K(ret), K(transform_context.get_geo_count()));
           } else if (OB_FAIL(ObGeoFuncTransform::eval(transform_context, wgs84_geo))) {
+            LOG_WARN("eval boost transform failed", K(ret), K(buf_strat.proj4_self_), K(buf_strat.proj4_wgs84_));
             ObGeoExprUtils::geo_func_error_handle(ret, N_PRIV_ST_BUFFER);
           } else {
             res_geo = wgs84_geo;
@@ -802,14 +900,19 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
           // Notice: all geography result in pg use srid 4326
           if (!is_transform_method
               && OB_FAIL(ObGeoExprUtils::geo_to_wkb(*res_geo, expr, ctx, srs, res_wkb))){
+            LOG_WARN("failed to write geometry to wkb", K(ret));
           } else if (is_transform_method
               && OB_FAIL(ObGeoExprUtils::geo_to_wkb(*res_geo, expr, ctx, buf_strat.srs_wgs84_, res_wkb))) {
+            LOG_WARN("failed to write geography to wkb", K(ret));
           } else {
             res.set_string(res_wkb);
           }
         }
       }
     } 
+  }
+  if (mem_ctx != nullptr) {
+    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

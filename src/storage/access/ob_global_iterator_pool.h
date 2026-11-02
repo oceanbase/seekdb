@@ -72,8 +72,8 @@ class ObGlobalIteratorPool final
 public:
   ObGlobalIteratorPool();
   ~ObGlobalIteratorPool();
-  static int server_module_init(ObGlobalIteratorPool *&pool);
-  static void server_module_destroy(ObGlobalIteratorPool *&poll);
+  static int mtl_init(ObGlobalIteratorPool *&pool);
+  static void mtl_destroy(ObGlobalIteratorPool *&poll);
   int get(const ObQRIterType type, CachedIteratorNode *&cache_node);
   void release(CachedIteratorNode *&cache_node);
   void wash();
@@ -91,20 +91,21 @@ public:
   static int64_t get_max_col_count() { return ITER_POOL_MAX_COL_CNT_LIMIT; }
   static const int64_t ITER_POOL_ITER_MEM_LIMIT = 256L << 10; // 256K
   TO_STRING_KV(K_(is_inited), K_(is_washing), K_(is_disabled), K_(get_cnt), K_(bucket_cnt),
-               K_(memory_budget), KP_(cached_node_array));
+               K_(tenant_mem_user_limit), K_(tenant_mem_user_hold), KP_(cached_node_array));
 private:
   OB_INLINE bool check_need_iterator_pool()
   {
     bool need = true;
     if (need) {
-      memory_budget_ = lib::get_memory_budget();
-      need = memory_budget_ >= ITER_POOL_MIN_MEM_THRESHOLD;
+      tenant_mem_user_limit_ = lib::get_tenant_memory_limit();
+      tenant_mem_user_hold_ = lib::get_tenant_memory_hold();
+      need = tenant_mem_user_limit_ > ITER_POOL_TENANT_MIN_MEM_THRESHOLD;
     }
     return need;
   }
   OB_INLINE int64_t calc_bucket_cnt() const
   {
-    const int64_t mem_limit = memory_budget_ * ITER_POOL_MAX_MEM_PERCENT;
+    const int64_t mem_limit = tenant_mem_user_limit_ * ITER_POOL_MAX_MEM_PERCENT;
     int64_t bucket_cnt = mem_limit / (ITER_POOL_ITER_MEM_LIMIT * (1 + ITER_POOL_MAX_CACHED_ITER_TYPE));
     if (bucket_cnt < 2) {
       bucket_cnt = 2;
@@ -118,11 +119,13 @@ private:
   int inner_get(const ObQRIterType type, CachedIteratorNode *&cache_node);
   bool is_washing() const;
   bool is_disabled() const;
-  static const int64_t ITER_POOL_MIN_MEM_THRESHOLD = (32LL << 30) / 5; // 6.4G
-  static constexpr double ITER_POOL_MAX_MEM_PERCENT = 0.004;
+  static const int64_t ITER_POOL_TENANT_MIN_MEM_THRESHOLD = 8L << 30; // 8G
+  static constexpr double ITER_POOL_MAX_MEM_PERCENT = 0.002;
   static const int64_t ITER_POOL_MAX_TABLE_CNT_LIMIT = 6;
   static const int64_t ITER_POOL_MAX_COL_CNT_LIMIT = 32;
   static const int64_t ITER_POOL_MAX_BUCKET_CNT = 257;
+  static const int64_t ITER_POOL_WASH_HIGH_THRESHOLD = 85;
+  static const int64_t ITER_POOL_WASH_LOW_THRESHOLD = 75;
   static const int64_t ITER_POOL_MAX_CACHED_ITER_TYPE = T_SINGLE_SCAN;
   static_assert(ITER_POOL_MAX_CACHED_ITER_TYPE > T_INVALID_ITER_TYPE && ITER_POOL_MAX_CACHED_ITER_TYPE < T_MAX_ITER_TYPE,
                 "[Global Iterator Pool] invalid iter type");
@@ -131,7 +134,8 @@ private:
   bool is_disabled_;
   uint64_t get_cnt_;
   int64_t bucket_cnt_;
-  int64_t memory_budget_;
+  int64_t tenant_mem_user_limit_;
+  int64_t tenant_mem_user_hold_;
   CachedIteratorNode *cached_node_array_[ITER_POOL_MAX_CACHED_ITER_TYPE + 1];
   ObArenaAllocator allocator_;
 };

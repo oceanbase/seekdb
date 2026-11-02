@@ -42,13 +42,16 @@ int ObDeleteStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   const ObDeleteStmt &other = static_cast<const ObDeleteStmt &>(input);
   if (OB_UNLIKELY(get_stmt_type() != input.get_stmt_type())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt type does not match", K(ret));
   } else if (OB_FAIL(ObDelUpdStmt::deep_copy_stmt_struct(allocator,
                                                          expr_copier,
                                                          other))) {
+    LOG_WARN("failed to deep copy stmt", K(ret));
   } else if (OB_FAIL(deep_copy_stmt_objects<ObDeleteTableInfo>(allocator,
                                                              expr_copier,
                                                              other.table_info_,
                                                              table_info_))) {
+    LOG_WARN("failed do deep copy table info", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -58,7 +61,9 @@ int ObDeleteStmt::assign(const ObDeleteStmt &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDelUpdStmt::assign(other))) {
+    LOG_WARN("failed to assign stmt", K(ret));
   } else if (OB_FAIL(table_info_.assign(other.table_info_))) {
+    LOG_WARN("failed to assign table info", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -82,8 +87,10 @@ int ObDeleteStmt::remove_delete_table_info(int64_t table_id)
   for (int64_t i = table_info_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
     if (OB_ISNULL(table_info_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
     } else if (table_id == table_info_.at(i)->table_id_) {
       if (OB_FAIL(table_info_.remove(i))) {
+        LOG_WARN("failed to remove table info", K(ret));
       } else {
         break;
       }
@@ -119,6 +126,14 @@ int64_t ObDeleteStmt::to_string(char *buf, const int64_t buf_len) const
           K(child_stmts)
           );
   }
+  if (is_error_logging()) {
+    J_KV("is_err_log", error_log_info_.is_error_log_,
+         "err_log_table_name", error_log_info_.table_name_,
+         "err_log_database_name", error_log_info_.database_name_,
+         "err_log_table_id", error_log_info_.table_id_,
+         "err_log_reject_limit", error_log_info_.reject_limit_,
+         "err_log_exprs", error_log_info_.error_log_exprs_);
+  }
   J_OBJ_END();
   return pos;
 }
@@ -127,6 +142,7 @@ int ObDeleteStmt::get_dml_table_infos(ObIArray<ObDmlTableInfo*>& dml_table_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(dml_table_info, table_info_))) {
+    LOG_WARN("failed to append table info", K(ret));
   }
   return ret;
 }
@@ -135,6 +151,7 @@ int ObDeleteStmt::get_dml_table_infos(ObIArray<const ObDmlTableInfo*>& dml_table
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(dml_table_info, table_info_))) {
+    LOG_WARN("failed to append table info", K(ret));
   }
   return ret;
 }
@@ -146,10 +163,26 @@ int ObDeleteStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
     ObDeleteTableInfo* table_info = table_info_.at(i);
     if (OB_ISNULL(table_info))  {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get null table info", K(ret));
     } else if (OB_FAIL(append(view_check_exprs, table_info->view_check_exprs_))) {
+      LOG_WARN("failed to append view check exprs", K(ret));
     }
   }
   return ret;
+}
+
+int64_t ObDeleteStmt::get_instead_of_trigger_column_count() const
+{
+  const TableItem *table_item = NULL;
+  int64_t column_count = 0;
+  if (1 == table_info_.count() &&
+      NULL != table_info_.at(0) &&
+      NULL != (table_item = get_table_item_by_id(table_info_.at(0)->table_id_)) &&
+      table_item->is_view_table_ &&
+      NULL != table_item->ref_query_) {
+    column_count = table_item->ref_query_->get_select_item_size();
+  }
+  return column_count;
 }
 
 int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)
@@ -158,10 +191,12 @@ int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)
   int64_t idx = 0;
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (; idx < table_info_.count(); ++idx) {
       if (OB_ISNULL(table_info_.at(idx))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (table_info_.at(idx)->table_id_ == table->table_id_) {
         break;
       }
@@ -170,7 +205,9 @@ int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)
       // not find, do nothing
     } else if (table_info_.count() == 1) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("can not remove all dml table", K(ret));
     } else if (OB_FAIL(table_info_.remove(idx))) {
+      LOG_WARN("failed to remove dml table info", K(ret));
     }
   }
   return ret;

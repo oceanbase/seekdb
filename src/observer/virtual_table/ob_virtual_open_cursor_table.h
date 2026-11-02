@@ -74,11 +74,11 @@ public:
   virtual ~ObVirtualOpenCursorTable();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  void sesession_pool(sql::ObSQLSessionMgr *sess_mgr) { session_mgr_ = sess_mgr; }
+  void set_session_mgr(sql::ObSQLSessionMgr *sess_mgr) { session_mgr_ = sess_mgr; }
   int set_addr(const common::ObAddr &addr);
   
 private:
-  // V$OPEN_CURSOR-compatible column layout.
+  // https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/V-OPEN_CURSOR.html
   enum {
         SADDR = common::OB_APP_MIN_COLUMN_ID, // session point addr
     SID,                        // session id

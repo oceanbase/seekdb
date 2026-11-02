@@ -19,7 +19,7 @@
 
 #include "lib/container/ob_vector.h"
 #include "sql/parser/parse_node.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/ob_rpc_struct.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
@@ -29,7 +29,6 @@ namespace oceanbase
 namespace sql
 {
 class ObExecContext;
-class ObIPLSqlRuntime;
 class ObCreateTriggerStmt;
 class ObAlterTriggerStmt;
 class ObDropTriggerStmt;
@@ -42,9 +41,6 @@ public:
   int execute(ObExecContext &ctx, ObCreateTriggerStmt &stmt);
   int analyze_dependencies(share::schema::ObSchemaGetterGuard &schema_guard,
                            ObSQLSessionInfo *session_info,
-                           ObPlanCache &plan_cache,
-                           ObIPLSqlRuntime *pl_sql_runtime,
-                           pl::ObPL *pl_engine,
                            common::ObMySQLProxy *sql_proxy,
                            ObIAllocator &allocator,
                            obcall::ObCreateTriggerArg &arg);

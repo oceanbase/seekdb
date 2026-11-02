@@ -33,6 +33,11 @@ namespace common
 class ObIAllocator;
 }
 
+namespace share
+{
+class ObTenantSpaceFetcher;
+}
+
 namespace observer
 {
 
@@ -48,8 +53,9 @@ public:
 
 private:
   int fill_cells(sql::ObSqlPlanItem *plan_item);
-  int extract_plan_ids(const common::ObIArray<common::ObNewRange> &ranges);
-  int dump_plans();
+  int extract_tenant_and_plan_id(const common::ObIArray<common::ObNewRange> &ranges);
+  int dump_all_tenant_plans();
+  int dump_tenant_plans();
   int prepare_next_plan();
 
 private:

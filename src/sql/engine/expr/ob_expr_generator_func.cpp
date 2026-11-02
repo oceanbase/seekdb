@@ -55,8 +55,10 @@ int ObExprGeneratorFunc::eval_next_value(const ObExpr &expr,
   if (OB_ISNULL(generator_ctx = static_cast<ObExprGeneratorFuncCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, generator_ctx))) {
+      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(generator_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("generator ctx is NULL", K(ret));
     }
   }
 
@@ -64,7 +66,9 @@ int ObExprGeneratorFunc::eval_next_value(const ObExpr &expr,
     ObDatum *limit_datum = NULL;
     if (OB_UNLIKELY(1 != expr.arg_cnt_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected arg_cnt", K(ret), K(expr.arg_cnt_));
     } else if (OB_FAIL(expr.eval_param_value(ctx, limit_datum))) {
+      LOG_WARN("expr.eval_param_value failed", K(ret));
     } else if (OB_UNLIKELY(limit_datum->is_null())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "generator function. The argument should be an integer.");
@@ -89,8 +93,10 @@ int ObExprGeneratorFunc::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(1 != raw_expr.get_param_count())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid param count for in expr", K(ret));
   } else if (OB_ISNULL(raw_expr.get_param_expr(0))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null param expr", K(ret));
   } else if (!raw_expr.get_param_expr(0)->is_const_expr()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "generator function. The argument should be a constant integer");

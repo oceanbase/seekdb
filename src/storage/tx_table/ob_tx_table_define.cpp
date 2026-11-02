@@ -38,7 +38,9 @@ int ObTxCtxTableCommonHeader::serialize(char *buf, const int64_t buf_len, int64_
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, MAGIC_VERSION_))) {
+    TRANS_LOG(WARN, "encode version fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, DATA_LEN_))) {
+    TRANS_LOG(WARN, "encode data_len fail", K(DATA_LEN_), K(buf_len), K(pos), K(ret));
   }
   return ret;
 }
@@ -53,7 +55,9 @@ int ObTxCtxTableCommonHeader::deserialize(const char *buf, const int64_t buf_len
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid arguments.", KP(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &des_version))) {
+    TRANS_LOG(WARN, "decode version fail", K(des_version), K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &des_data_len))) {
+    TRANS_LOG(WARN, "decode data_len fail", K(des_data_len), K(buf_len), K(pos), K(ret));
   } else if (des_version != MAGIC_VERSION_) {
     ret = OB_NOT_SUPPORTED;
     TRANS_LOG(WARN, "object des_version mismatch", K(ret), K(des_version));
@@ -83,15 +87,13 @@ int ObTxCtxTableInfo::serialize(char *buf,
   int ret = OB_SUCCESS;
   const int64_t data_len = get_serialize_size_();
   ObTxCtxTableCommonHeader header(MAGIC_VERSION, data_len);
-  if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_version_)) {
-    ret = OB_NOT_SUPPORTED;
-    TRANS_LOG(WARN, "transaction context data version mismatch", K(ret), K_(data_version),
-              "current_data_version", DATA_CURRENT_VERSION);
-  } else if (OB_ISNULL(tx_data_guard_.tx_data())) {
+  if (OB_ISNULL(tx_data_guard_.tx_data())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "invalid tx data guard", KR(ret), KPC(this));
   } else if (OB_FAIL(header.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "encode header fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialize_(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize fail", K(ret));
   }
   return ret;
 }
@@ -103,9 +105,19 @@ int ObTxCtxTableInfo::serialize_(char *buf,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tx_id_.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize tx_id fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(ls_id_.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize ls_id fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, cluster_id_))) {
+    TRANS_LOG(WARN, "encode cluster id failed", K(cluster_id_), K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize state_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(exec_info_.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize exec_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(table_lock_info_.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize exec_info fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, (int64_t)cluster_version_))) {
+    TRANS_LOG(WARN, "encode cluster_version fail", K(buf_len), K(pos), K(ret));
   }
 
   return ret;
@@ -120,8 +132,11 @@ int ObTxCtxTableInfo::deserialize(const char *buf,
   ObTxCtxTableCommonHeader header(MAGIC_VERSION, 0);
 
   if (OB_FAIL(tx_data_table.alloc_tx_data(tx_data_guard_, false/* enable_throttle */))) {
+      STORAGE_LOG(WARN, "alloc tx data failed", KR(ret));
   } else if (OB_FAIL(header.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize header fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(deserialize_(buf, buf_len, pos, tx_data_table))) {
+    TRANS_LOG(WARN, "deserialize_ fail", "buf_len", buf_len, K(pos), K(ret));
   }
   return ret;
 }
@@ -134,9 +149,30 @@ int ObTxCtxTableInfo::deserialize_(const char *buf,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tx_id_.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize tx_id fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(ls_id_.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize ls_id fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &cluster_id_))) {
+    TRANS_LOG(WARN, "encode cluster_id fail", K(cluster_id_), K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->deserialize(buf, buf_len, pos, *tx_data_table.get_tx_data_allocator()))) {
+    TRANS_LOG(WARN, "deserialize state_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(exec_info_.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize exec_info fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(table_lock_info_.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize exec_info fail.", KR(ret), K(pos), K(buf_len));
+  }
+  // _NOTE_
+  // before 4.2.1.1, the serialize size of table_lock_info_
+  // is not accurate(which larger than real serialize size),
+  // this caused the size of ObTxCtxTableInfo is also inaccurate
+  //
+  // when deserialize use `compatible_version_` to decide whether
+  // guess extra members by examine remain buf size
+  if (OB_SUCC(ret) && compatible_version_ >= ObTxCtxTableMeta::VERSION_1 && buf_len > pos) {
+    // has remains, continue to deserialize new members
+    if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, (int64_t*)&cluster_version_))) {
+      TRANS_LOG(WARN, "dencode cluster_version fail", K(buf_len), K(pos), K(ret));
+    }
   }
 
   return ret;
@@ -158,6 +194,9 @@ int64_t ObTxCtxTableInfo::get_serialize_size_(void) const
 {
   int64_t len = 0;
   len += tx_id_.get_serialize_size();
+  len += ls_id_.get_serialize_size();
+  len += serialization::encoded_length_vi64(cluster_id_);
+  len += serialization::encoded_length_vi64((int64_t)cluster_version_);
   len += (OB_NOT_NULL(tx_data_guard_.tx_data()) ? tx_data_guard_.tx_data()->get_serialize_size() : 0);
   len += exec_info_.get_serialize_size();
   len += table_lock_info_.get_serialize_size();
@@ -170,6 +209,15 @@ bool ObTxCtxTableInfo::is_valid() const
   if (OB_UNLIKELY(!tx_id_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "tx id not valid", K(ret), K(tx_id_));
+  } else if (OB_UNLIKELY(!ls_id_.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "ls id not valid", K(ret), K(ls_id_));
+    // TODO: gengli  this is invalid if it a uncommited tx
+    // } else if (OB_UNLIKELY(!state_info_.is_valid())) {
+    //   ret = OB_ERR_UNEXPECTED;
+    //   TRANS_LOG(ERROR, "state info not valid", K(ret), K(state_info_));
+  } else {
+    // do nothing
   }
   return OB_SUCC(ret);
 }
@@ -180,7 +228,9 @@ int ObTxCtxTableMeta::serialize(char *buf, const int64_t buf_len, int64_t &pos) 
   const int64_t data_len = get_serialize_size_();
   ObTxCtxTableCommonHeader header(MAGIC_VERSION, data_len);
   if (OB_FAIL(header.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "encode header fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialize_(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize fail", K(ret));
   }
   return ret;
 }
@@ -190,10 +240,19 @@ int ObTxCtxTableMeta::serialize_(char* buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tx_id_.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize tx_id fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(ls_id_.serialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "serialize ls_id fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, tx_ctx_serialize_size_))) {
+    TRANS_LOG(WARN, "encode serizlize_size_ fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, row_num_))) {
+    TRANS_LOG(WARN, "encode row_num fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, row_idx_))) {
+    TRANS_LOG(WARN, "encode row_idx fail", K(buf_len), K(pos), K(ret));
+  } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, version_))) {
+    TRANS_LOG(WARN, "encode version fail", K(buf_len), K(pos), K(ret));
   } else {
+    TRANS_LOG(DEBUG, "ObTxCtxTableMeta encode succ", K(buf_len), K(pos));
   }
   return ret;
 }
@@ -204,7 +263,9 @@ int ObTxCtxTableMeta::deserialize(const char *buf, const int64_t buf_len, int64_
   ObTxCtxTableCommonHeader header(MAGIC_VERSION, 0);
 
   if (OB_FAIL(header.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize header fail", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(deserialize_(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize_ fail", "buf_len", buf_len, K(pos), K(ret));
   }
   return ret;
 }
@@ -214,9 +275,21 @@ int ObTxCtxTableMeta::deserialize_(const char* buf, const int64_t buf_len, int64
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tx_id_.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize tx_id fail.", KR(ret), K(pos), K(buf_len));
+  } else if (OB_FAIL(ls_id_.deserialize(buf, buf_len, pos))) {
+    TRANS_LOG(WARN, "deserialize ls_id fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &tx_ctx_serialize_size_))) {
+    TRANS_LOG(WARN, "deserialize serizlize_size fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::decode_vi32(buf, buf_len, pos, &row_num_))) {
+    TRANS_LOG(WARN, "deserialize row_num fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::decode_vi32(buf, buf_len, pos, &row_idx_))) {
+    TRANS_LOG(WARN, "deserialize row_idx fail.", KR(ret), K(pos), K(buf_len));
+  } else if (pos < buf_len) { // decode the version field
+    if (OB_FAIL(serialization::decode_vi32(buf, buf_len, pos, &version_))) {
+      TRANS_LOG(WARN, "deserialize version fail.", KR(ret), K(pos), K(buf_len));
+    }
+  } else {
+    version_ = VERSION_0; // VERSION_0 without version field serialized
   }
   return ret;
 }
@@ -237,9 +310,11 @@ int64_t ObTxCtxTableMeta::get_serialize_size_() const
 {
   int64_t len = 0;
   len += tx_id_.get_serialize_size();
+  len += ls_id_.get_serialize_size();
   len += serialization::encoded_length_vi64(tx_ctx_serialize_size_);
   len += serialization::encoded_length_vi32(row_num_);
   len += serialization::encoded_length_vi32(row_idx_);
+  len += serialization::encoded_length_vi32(version_);
   return len;
 }
 
@@ -276,8 +351,13 @@ int ObCommitVersionsArray::serialize(char *buf, const int64_t buf_len, int64_t &
     STORAGE_LOG(WARN, "serialize ObCommitVersionsArray failed.", KR(ret), KP(buf), K(buf_len),
                 K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, UNIS_VERSION))) {
+    STORAGE_LOG(WARN, "encode UNIS_VERSION failed.", KR(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, len))) {
+    STORAGE_LOG(WARN, "encode length of commit versions array failed.", KR(ret), KP(buf),
+                K(buf_len), K(pos));
   } else if (OB_FAIL(serialize_(buf, buf_len, pos))) {
+    STORAGE_LOG(WARN, "serialize_ ObCommitVersionsArray failed.", KR(ret), KP(buf), K(buf_len),
+                K(pos));
   }
 
   return ret;
@@ -294,10 +374,12 @@ int ObCommitVersionsArray::deserialize(const char *buf, const int64_t data_len, 
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments.", KP(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &version))) {
+    STORAGE_LOG(WARN, "decode version fail", K(version), K(data_len), K(pos), K(ret));
   } else if (version != UNIS_VERSION) {
     ret = OB_VERSION_NOT_MATCH;
     STORAGE_LOG(WARN, "object version mismatch", K(ret), K(version));
   }  else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &len))) {
+    STORAGE_LOG(WARN, "decode data len fail", K(len), K(data_len), K(pos), K(ret));
   } else if (OB_UNLIKELY(len < 0)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "can't decode object with negative length", KR(ret), K(len));
@@ -309,6 +391,7 @@ int ObCommitVersionsArray::deserialize(const char *buf, const int64_t data_len, 
     pos = 0;
     array_.reuse();
     if (OB_FAIL(deserialize_(buf + original_pos, len, pos))) {
+      STORAGE_LOG(WARN, "deserialize_ ObCommitVersionsArray fail", K(len), K(pos), K(ret));
     }
     pos += original_pos;
   }
@@ -410,3 +493,4 @@ void ObITxDataCheckFunctor::set_may_exist_undecided_state_in_tx_data_table()
 
 } // end namespace transaction
 } // end namespace oceanbase
+

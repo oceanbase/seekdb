@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_LOGSERVICE_PALF_ENV_
 #define OCEANBASE_LOGSERVICE_PALF_ENV_
 #include <stdint.h>
-#include "logservice/ob_log_allocator.h"
+#include "rpc/frame/ob_req_transport.h"
+#include "logservice/ob_tenant_mutil_allocator.h"
 #include "lib/function/ob_function.h"
 #include "palf_env_impl.h"
 namespace oceanbase
@@ -28,18 +29,29 @@ class ObAddr;
 class ObIOManager;
 }
 
+namespace rpc
+{
+namespace frame
+{
+class ObReqTransport;
+}
+}
+
 namespace share
 {
 class ObLocalDevice;
+class ObResourceManager;
 }
 namespace palf
 {
+class PalfRoleChangeCb;
 class PalfHandle;
 class PalfDiskOptions;
 class ILogBlockPool;
 
 class PalfEnv
 {
+  friend class LogRequestHandler;
 public:
   // static interface
   // create the palf env with the specified "base_dir".
@@ -54,6 +66,7 @@ public:
                              ILogBlockPool *log_block_pool,
                              PalfMonitorCb *monitor,
                              common::ObIODevice *log_local_device,
+                             share::ObResourceManager *resource_manager,
                              common::ObIOManager *io_manager,
                              PalfEnv *&palf_env);
   // static interface
@@ -63,19 +76,21 @@ public:
 public:
   PalfEnv();
   ~PalfEnv();
-  // Create the unique log stream.
-  // @param [in] access_mode, palf access mode
+  // Migration scenario destination end replica creation interface
+  // @param [in] id, the identifier of the log stream to be created
+  // @param [in] access_mode，palf access mode
   // @param [in] palf_base_info, the log start information of palf
   // @param [out] handle, the generated palf_handle object after successful creation
-  int create(const AccessMode &access_mode,
+  int create(const int64_t id,
+             const AccessMode &access_mode,
              const PalfBaseInfo &palf_base_info,
              PalfHandle &handle);
-  // Open the unique log stream and return its handle.
-  int open(PalfHandle &handle);
+  // Open a Paxos Replica corresponding to an id, and return the file handle
+  int open(int64_t id, PalfHandle &handle);
   // Close a handle
   void close(PalfHandle &handle);
-  // Delete the unique log stream and its physical files.
-  int remove();
+  // Delete the Paxos Replica corresponding to the id, which will also delete the physical file;
+  int remove(int64_t id);
 
   // @brief get palf disk usage
   // @param [out] used_size_byte
@@ -103,7 +118,11 @@ public:
   // and will be reset as OB_INVALID_TIMESTAMP when an io task ends, atomically.
   int get_io_start_time(int64_t &last_working_time);
   // @brief iterate each PalfHandle of PalfEnv and execute 'func'
+  int for_each(const ObFunction<int(const PalfHandle&)> &func);
+  // just for LogRpc
   palf::IPalfEnvImpl *get_palf_env_impl() { return &palf_env_impl_; }
+  // should be removed in version 4.2.0.0
+  int update_replayable_point(const SCN &replayable_scn);
   int start();
 private:
   void stop_();

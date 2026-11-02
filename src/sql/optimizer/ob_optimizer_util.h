@@ -1169,6 +1169,8 @@ public:
                                 bool &is_null_qual);
 
 
+  static bool has_psedu_column(const ObRawExpr &expr);
+
   static int check_pushdown_filter_to_base_table(ObLogPlan &plan,
                                                  const uint64_t table_id,
                                                  const ObIArray<ObRawExpr*> &pushdown_filters,
@@ -1209,11 +1211,23 @@ public:
                               ObIArray<ObRawExpr*> &range_exprs,
                               ObIArray<ObRawExpr*> &all_table_filters);
 
-  static int check_basic_sharding_info(const ObIArray<ObLogicalOperator *> &child_ops,
+  static int check_basic_sharding_info(const ObAddr &local_addr,
+                                       const ObIArray<ObLogicalOperator *> &child_ops,
                                        bool &is_basic);
 
-  static int check_basic_sharding_info(const ObIArray<ObShardingInfo*> &input_shardings,
+  static int check_basic_sharding_info(const ObAddr &local_addr,
+                                       const ObIArray<ObLogicalOperator *> &child_ops,
+                                       bool &is_basic,
+                                       bool &is_remote);
+
+  static int check_basic_sharding_info(const ObAddr &local_server,
+                                       const ObIArray<ObShardingInfo*> &input_shardings,
                                        bool &is_basic);
+
+  static int check_basic_sharding_info(const ObAddr &local_server,
+                                       const ObIArray<ObShardingInfo*> &input_shardings,
+                                       bool &is_basic,
+                                       bool &is_remote);
 
   static int compute_basic_sharding_info(const ObAddr &local_addr,
                                          const ObIArray<ObLogicalOperator *> &child_ops,
@@ -1226,6 +1240,21 @@ public:
                                          ObIAllocator &allocator,
                                          ObShardingInfo *&result_sharding,
                                          int64_t &inherit_sharding_index);
+
+  static int get_duplicate_table_replica(const ObCandiTableLoc &phy_table_loc,
+                                         ObIArray<ObAddr> &valid_addrs);
+
+  static int compute_duplicate_table_sharding(const ObAddr &local_addr,
+                                              const ObAddr &selected_addr,
+                                              ObIAllocator &allocator,
+                                              ObShardingInfo &src_sharding,
+                                              ObIArray<ObAddr> &valid_addrs,
+                                              ObShardingInfo *&target_sharding);
+
+  static int generate_duplicate_table_replicas(ObIAllocator &allocator,
+                                               const ObCandiTableLoc *source_table_loc,
+                                               ObIArray<ObAddr> &valid_addrs,
+                                               ObCandiTableLoc *&target_table_loc);
 
   static int64_t get_join_style_parallel(const int64_t left_parallel,
                                          const int64_t right_parallel,
@@ -1263,6 +1292,8 @@ public:
                                   common::ObIArray<ColumnItem> *column_items = NULL);
 
   static int check_contain_ora_rowscn_expr(const ObRawExpr *expr, bool &contains);
+
+  static int check_contain_part_id_columnref_expr(const ObRawExpr *expr, bool &contains);
 
   static int allocate_group_id_expr(ObLogPlan *log_plan, ObRawExpr *&group_id_expr);
 
@@ -1402,6 +1433,8 @@ public:
 
   static int check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObRawExpr &expr, bool &is_static_false);
 
+  static int check_ancestor_node_support_skip_scan(ObLogicalOperator* op, bool &can_use_batch_nlj);
+
   static int try_split_or_qual(const ObDMLStmt *stmt,
                                ObRawExprFactory &expr_factory,
                                const ObSQLSessionInfo *session_info,
@@ -1443,6 +1476,10 @@ public:
                                     const ObIArray<ObExecParamRawExpr*> &rescan_params,
                                     bool for_nlj,
                                     bool &can_batch_rescan);
+  static int check_can_batch_rescan_compat(ObLogicalOperator *op,
+                                           const ObIArray<ObExecParamRawExpr*> &rescan_params,
+                                           bool for_nlj,
+                                           bool &can_batch_rescan);
   static int check_aggr_can_pre_aggregate(const ObAggFunRawExpr *aggr,
                                           bool &can_pre_aggr);
 
@@ -1514,10 +1551,12 @@ int ObOptimizerUtil::remove_item(common::ObIArray<T> &items,
     if (v == item) {
       tmp_removed = true;
     } else if (OB_FAIL(new_arr.push_back(items.at(i)))) {
+      SQL_OPT_LOG(WARN, "failed to push back expr to array", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(items.assign(new_arr))) {
+      SQL_OPT_LOG(WARN, "failed to reset exprs array", K(ret));
     } else if (NULL != removed) {
       *removed = tmp_removed;
     }
@@ -1537,6 +1576,7 @@ int ObOptimizerUtil::remove_item(common::ObIArray<T> &items,
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (!find_item(rm_items, items.at(i))) {
       if (OB_FAIL(new_arr.push_back(items.at(i)))) {
+        SQL_OPT_LOG(WARN, "failed to push back expr to array", K(ret));
       }
     } else {
       tmp_removed = true;
@@ -1544,6 +1584,7 @@ int ObOptimizerUtil::remove_item(common::ObIArray<T> &items,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(items.assign(new_arr))) {
+      SQL_OPT_LOG(WARN, "failed to reset exprs array", K(ret));
     } else if (NULL != removed) {
       *removed = tmp_removed;
     }
@@ -1562,11 +1603,13 @@ int ObOptimizerUtil::intersect(const ObIArray<T> &first,
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (find_item(second, first.at(i))) {
       if (OB_FAIL(new_arr.push_back(first.at(i)))) {
+        SQL_OPT_LOG(WARN, "failed to push back item to array", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(third.assign(new_arr))) {
+      SQL_OPT_LOG(WARN, "failed to assign item array", K(ret));
     }
   }
   return ret;
@@ -1589,20 +1632,24 @@ int ObOptimizerUtil::intersect(const ObIArray<ObSEArray<T, 4>> &sets,
   } else {
     common::ObSEArray<common::ObSEArray<T, 8> , 2> intersection;
     if (OB_FAIL(intersection.prepare_allocate(2))) {
+      SQL_OPT_LOG(WARN, "failed to pre allocate array", K(ret));
     } else {
       bool cur = 0;
       if (OB_FAIL(intersection.at(cur^1).assign(sets.at(0)))) {
+        SQL_OPT_LOG(WARN, "failed to assign item array", K(ret));
       }
       for (int64_t i = 1; OB_SUCC(ret) && intersection.at(cur^1).count() > 0 && i < N; ++i, cur^=1) {
         for (int64_t j =0; OB_SUCC(ret) && j < sets.at(i).count(); j++) {
           if (find_item(intersection.at(cur^1), sets.at(i).at(j))) {
             if (OB_FAIL(intersection.at(cur).push_back(sets.at(i).at(j)))) {
+              SQL_OPT_LOG(WARN, "failed to push back item to array", K(ret));
             }
           }
         }
       }
       if (OB_SUCC(ret)){
         if (OB_FAIL(result.assign(intersection.at(cur^1)))) {
+          SQL_OPT_LOG(WARN, "failed to assign item array", K(ret));
         }
       }
     }
@@ -1666,6 +1713,7 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
     // do nothing
   } else if (choose_cnt >= input_array.count()) {
     if (OB_FAIL(output_array.assign(input_array))) {
+      SQL_OPT_LOG(WARN, "failed to assign", K(ret));
     }
   } else {
     ObSEArray<int64_t, 8> indices; // shuffle indices and choose the first `choose_cnt` members
@@ -1674,6 +1722,7 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
     int64_t already_choose = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < input_array.count(); i ++) {
       if (OB_FAIL(indices.push_back(i))) {
+        SQL_OPT_LOG(WARN, "failed to push back", K(ret));
       }
     }
     if (NULL != priority_indices) {
@@ -1693,9 +1742,12 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < choose_cnt; i ++) {
       if (OB_FAIL(output_array.push_back(input_array.at(indices.at(i))))) {
+        SQL_OPT_LOG(WARN, "failed to push back", K(ret));
       }
     }
   }
+  SQL_OPT_LOG(DEBUG, "succeed to choose random members",
+      K(choose_cnt), KPC(priority_indices), K(output_array));
   return ret;
 }
 
