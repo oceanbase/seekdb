@@ -49,9 +49,8 @@ int ObBEngFTParser::get_next_token(
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    // The English analyzer keeps normalized token storage alive until the next
-    // document is analyzed. ObAddWord consumes the token synchronously and
-    // copies it into the index word map when needed, so avoid a second
+    // The English analyzer writes normalized tokens into the caller-owned
+    // allocator, whose lifetime covers the word map, so avoid a second
     // allocation and memcpy here.
     word = token.ptr_;
     word_len = token.len_;
