@@ -346,13 +346,23 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
 }
 
 int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
-                      GraphPathDirection direction)
+                      GraphPathDirection direction,
+                      const GraphIdentityIndex *known_visited)
 {
   int ret = OB_SUCCESS;
   release();
   stats_ = GraphExpandStats();
   direction_ = direction;
+  // A native shortest query can also run inside DML or snapshot reads. In
+  // those contexts a prior visited state is not an existence proof for this
+  // access, so leave the ordinary target lookup path unchanged.
+  if (!sources_verified_) {
+    known_visited = nullptr;
+  }
+  const int64_t binding_id = inputs.empty() ? -1 : inputs.at(0).binding_id_;
   if (direction != GraphPathDirection::OUT && direction != GraphPathDirection::IN) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (known_visited != nullptr && inputs.empty()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(validate_and_account(inputs))) {
   } else if (OB_FAIL(access_.check_status())) {
@@ -362,6 +372,15 @@ int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
     // Bound physical ranges, not the number of associated path/seed bindings.
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_FAIL(check_memory_limit())) {
+  }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; OB_SUCC(ret) && known_visited != nullptr
+         && i < inputs.count(); ++i) {
+      if (inputs.at(i).binding_id_ != binding_id) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("visited graph index requires one seed binding", K(ret), K(i));
+      }
+    }
   }
   if (OB_SUCC(ret)) {
     stats_.input_states_ = inputs.count();
@@ -380,6 +399,8 @@ int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
     }
   }
   if (OB_SUCC(ret)) {
+    known_visited_ = known_visited;
+    known_visited_binding_id_ = binding_id;
     is_open_ = true;
   } else {
     ret = fail(ret);
@@ -434,13 +455,15 @@ int GraphExpand::load_next_page()
         stats_.scanned_edges_, scanned_edges);
   }
   if (OB_SUCC(ret) && !edge_page_.edges().empty()) {
-    if (OB_FAIL(edge_page_.prepare_targets())) {
+    if (OB_FAIL(edge_page_.prepare_targets(
+            known_visited_, known_visited_binding_id_))) {
     } else if (OB_FAIL(check_memory_limit())) {
+    } else if (OB_FAIL(access_.check_status())) {
     }
   }
   if (OB_SUCC(ret) && !edge_page_.edges().empty()) {
     stats_.looked_up_vertices_ += edge_page_.targets().count();
-    if (OB_FAIL(access_.lookup_vertices(
+    if (!edge_page_.targets().empty() && OB_FAIL(access_.lookup_vertices(
             edge_page_.targets(), edge_page_.existing_targets(),
             GraphVertexLookupPhase::TARGET))) {
     } else if (OB_FAIL(access_.check_status())) {
@@ -450,7 +473,7 @@ int GraphExpand::load_next_page()
     } else if (OB_FAIL(check_memory_limit())) {
     } else {
       for (int64_t i = 0; i < edge_page_.edges().count(); ++i) {
-        if (!edge_page_.target_exists(i)) {
+        if (edge_page_.target_missing(i)) {
           ++stats_.orphan_edges_;
         }
       }
@@ -512,9 +535,10 @@ int GraphExpand::get_next_row(GraphExpandOutput &output)
 }
 
 int GraphExpand::rescan(const ObIArray<GraphExpandInput> &inputs,
-                        GraphPathDirection direction)
+                        GraphPathDirection direction,
+                        const GraphIdentityIndex *known_visited)
 {
-  return open(inputs, direction);
+  return open(inputs, direction, known_visited);
 }
 
 int GraphExpand::fail(int error)
@@ -538,6 +562,8 @@ void GraphExpand::release()
   is_open_ = false;
   input_group_started_ = false;
   fixed_memory_bytes_ = 0;
+  known_visited_ = nullptr;
+  known_visited_binding_id_ = -1;
 }
 
 } // namespace sql
