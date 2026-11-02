@@ -39,7 +39,7 @@ mvt_agg_result::mvt_agg_result(ObIAllocator &alloc, ObILobReadService &lob_read_
     : allocator_(alloc), temp_allocator_(nullptr), lob_read_service_(lob_read_service),
       inited_(false), lay_name_("default"), geom_name_(), geom_idx_(UINT32_MAX),
       feature_id_name_(), feat_id_idx_(UINT32_MAX), builder_(mvt::new_builder()),
-      column_cnt_(UINT32_MAX), extent_(4096), column_offset_(0)
+      extent_(4096), column_offset_(0)
 {}
 
 mvt_agg_result::~mvt_agg_result() = default;

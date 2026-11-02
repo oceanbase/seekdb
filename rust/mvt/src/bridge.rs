@@ -34,7 +34,6 @@ pub(crate) mod ffi {
         fn add_sint(self: &mut LayerBuilder, key: u32, value: i64);
         fn add_bool(self: &mut LayerBuilder, key: u32, value: bool);
         fn commit_feature(self: &mut LayerBuilder);
-        fn encode(self: &LayerBuilder) -> Vec<u8>;
         fn encoded_len(self: &LayerBuilder) -> usize;
         fn encode_to(self: &LayerBuilder, output: &mut [u8]) -> bool;
     }

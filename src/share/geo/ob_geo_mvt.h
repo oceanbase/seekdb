@@ -66,7 +66,6 @@ public:
   // feature id column index
   uint32_t feat_id_idx_;
   rust::Box<mvt::LayerBuilder> builder_;
-  uint32_t column_cnt_;
   uint32_t extent_;
   uint32_t column_offset_;
 };
