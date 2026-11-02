@@ -1825,4 +1825,4 @@ cc_library(
     visibility = ["//src/observer:__pkg__"],
 )
 
-exports_files(["geo/ob_vector_tile.proto"], visibility = ["//rust:__pkg__"])
+exports_files(["geo/ob_vector_tile.proto"], visibility = ["//rust/mvt:__pkg__"])

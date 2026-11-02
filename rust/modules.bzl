@@ -3,6 +3,12 @@
 load("//rust/sql-nio:features.bzl", "FEATURES")
 
 MODULES = {
+    "mvt": {"bridge": "src/bridge.rs"},
+    "standby-rpc": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/service.h"],
+        "exclude_platforms": ["emscripten"],
+    },
     "local": {
         "bridge": "src/bridge.rs",
         "headers": ["include/callbacks.h"],
