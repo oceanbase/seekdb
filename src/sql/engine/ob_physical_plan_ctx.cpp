@@ -778,6 +778,80 @@ int ObPhysicalPlanCtx::capture_native_parameter(int64_t index, NativeTypedDatum 
   return ret;
 }
 
+int ObPhysicalPlanCtx::capture_runtime_parameter_slot(int64_t index,
+    NativeParameterSlotSnapshot &snapshot) const
+{
+  NativeParameterSlotSnapshot candidate;
+  int ret = capture_native_parameter(index, candidate.value_, candidate.attributes_);
+  if (OB_SUCC(ret)) {
+    candidate.owner_ = this;
+    candidate.generation_ = parameter_snapshot_generation_;
+    candidate.index_ = index;
+    int64_t page = 0, slot = 0;
+    ScalarFrameLayout::locate_parameter(original_param_cnt_, index, page, slot);
+    const ParameterValuePage &values = ParameterValuePage::from_handle(param_frame_ptrs_.at(page));
+    candidate.word_ = values.words()[slot];
+    candidate.state_ = values.states()[slot];
+    ret = validate_runtime_parameter_slot(candidate);
+  }
+  if (OB_SUCC(ret)) { snapshot = candidate; }
+  return ret;
+}
+
+int ObPhysicalPlanCtx::validate_runtime_parameter_slot(const NativeParameterSlotSnapshot &snapshot) const
+{
+  if (snapshot.owner_ != this || snapshot.generation_ != parameter_snapshot_generation_
+      || !has_native_parameter(snapshot.index_) || snapshot.value_.type_ == nullptr) {
+    return OB_STATE_NOT_MATCH;
+  }
+  int64_t page_index = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, snapshot.index_, page_index, slot);
+  const ParameterValuePage &page = ParameterValuePage::from_handle(param_frame_ptrs_.at(page_index));
+  const SqlType &type = *snapshot.value_.type_;
+  const Datum &value = snapshot.value_.datum_;
+  const bool compact = type.kind() == ObIntType
+      && type.canonical_representation() == DatumRepresentation::Inline64;
+  if (!page.matches_layout(slot, *native_parameter_types_.at(snapshot.index_))
+      || compact != ((snapshot.state_ & ParameterValuePage::INLINE_I64) != 0)
+      || static_cast<uint8_t>(value.state()) != (snapshot.state_ & ParameterValuePage::STATE_MASK)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  // Validate current state too; its Type may legitimately differ after a rebind.
+  Datum current;
+  int ret = page.read(slot, current);
+  int64_t bytes = 0;
+  if (OB_SUCC(ret)) { ret = DatumCopyPlan(type).carrier_span_size(value, bytes); }
+  if (OB_SUCC(ret) && value.is_present()) {
+    if (compact && (value.length() != 0 || value.reference_flags() != Datum::NoReferenceFlags)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (!compact && snapshot.word_ == 0) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  return ret;
+}
+
+void ObPhysicalPlanCtx::restore_runtime_parameter_slot(const NativeParameterSlotSnapshot &snapshot)
+{
+  OB_ASSERT(validate_runtime_parameter_slot(snapshot) == OB_SUCCESS);
+  int64_t page_index = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, snapshot.index_, page_index, slot);
+  ParameterValuePage &page = ParameterValuePage::from_handle(param_frame_ptrs_.at(page_index));
+  const Datum value = snapshot.value_.datum_;
+  if (value.is_present() && (snapshot.state_ & ParameterValuePage::INLINE_I64) == 0) {
+    // A setter can overwrite the old cell and later replace its slot by NULL
+    // or I64. Restore its saved descriptor contents before publishing the word.
+    *reinterpret_cast<Datum *>(snapshot.word_) = value;
+  }
+  page.words()[slot] = snapshot.word_;
+  page.states()[slot] = snapshot.state_;
+  if (Datum *projection = page.find_materialized(slot)) { *projection = value; }
+  native_parameter_types_.at(snapshot.index_) = snapshot.value_.type_;
+  native_parameter_metadata_.at(snapshot.index_) = snapshot.attributes_;
+  // Unlike assign()/set_runtime_parameter(), this keeps current EvalInfo and
+  // evaluated bitmaps unchanged. Payload spans still borrow statement lifetime.
+}
+
 int ObPhysicalPlanCtx::capture_native_group(int64_t group_index, NativeParameterGroup &output) const
 {
   if (!native_parameters_ready_ || group_index < 0 || group_index >= native_group_inputs_.count()) {

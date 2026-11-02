@@ -22,6 +22,8 @@
 #include "lib/charset/ob_charset.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_expr_cmp_func.h"
+#include "sql/engine/expr/ob_expr_substring_index.h"
+#include "sql/engine/expr/ob_expr_like.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -3017,6 +3019,276 @@ TEST_F(NativeParameterBatchComparison, null_short_circuit_does_not_execute_ordin
     EXPECT_EQ(OB_ERR_UNEXPECTED, evaluate());
     EXPECT_EQ(1, callback_calls_);
     EXPECT_TRUE(owner_.sizes_.empty());
+  }
+}
+
+class NativeParameterSubstringIndex : public NativeExecutionParameters
+{
+protected:
+  NativeParameterSubstringIndex()
+    : frame_{}, frames_{frame_.data(), nullptr}, eval_(exec_), expressions_{},
+      args_{&expressions_[0], &expressions_[1], &expressions_[2]}, trace_(), callbacks_{} {}
+
+  void SetUp() override
+  {
+    NativeExecutionParameters::SetUp();
+    ASSERT_EQ(OB_SUCCESS, exec_.init_expr_op(1));
+  }
+
+  void configure(bool string_alias = false)
+  {
+    ASSERT_NO_FATAL_FAILURE(load({17, 19, 0}));
+    if (string_alias) {
+      DatumParameter escape;
+      escape.set_varchar_view(ObString::make_string("\\"));
+      escape.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      escape.set_length(1); escape.set_param_meta();
+      escape.set_need_to_check_type(true); escape.set_raw_text_info(7, 1);
+      ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(2, escape));
+    }
+    ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+    frames_[1] = plan().get_param_frame_ptrs().at(0);
+    exec_.set_frames(frames_); eval_.frames_ = frames_;
+    for (int64_t i = 0; i < 4; ++i) {
+      ObExpr &expr = expressions_[i];
+      expr.reset();
+      const bool integer = i == 2 && !string_alias;
+      const SqlValueType type = integer ? ObIntType : ObVarcharType;
+      SqlTypeMeta meta; meta.set_type(type); meta.set_scale(0);
+      meta.set_collation_type(integer ? CS_TYPE_BINARY : CS_TYPE_UTF8MB4_BIN);
+      expr.obj_meta_ = meta;
+      expr.datum_meta_ = ObDatumMeta(type, meta.get_collation_type(), 0, integer ? 20 : -1);
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(meta,
+          integer ? ObAccuracy(20, 0) : ObAccuracy(32), request_arena_));
+      if (i == 2) {
+        expr.type_ = T_QUESTIONMARK; expr.native_parameter_alias_ = true; expr.extra_ = 2;
+        expr.frame_idx_ = 1;
+        expr.datum_off_ = ScalarFrameLayout::datum_offset(2);
+        expr.eval_info_off_ = ScalarFrameLayout::eval_info_offset(2);
+        ASSERT_EQ(OB_SUCCESS, expr.bind_sql_type(*plan().get_native_parameter_type(2), request_arena_));
+      } else {
+        const int64_t slot = i == 3 ? 2 : i;
+        expr.type_ = i == 3 ? T_FUN_SYS_SUBSTRING_INDEX : T_REF_COLUMN;
+        expr.frame_idx_ = 0;
+        expr.datum_off_ = ScalarFrameLayout::datum_offset(slot);
+        expr.eval_info_off_ = ScalarFrameLayout::eval_info_offset(slot);
+        new (frame_.data() + expr.datum_off_) Datum();
+        new (frame_.data() + expr.eval_info_off_) ObEvalInfo{};
+      }
+    }
+    result().args_ = args_; result().arg_cnt_ = 3; result().expr_ctx_id_ = 0;
+    result().eval_func_ = ObExprSubstringIndex::eval_substring_index;
+    trace_.clear(); owner_.clear_calls();
+    for (int64_t i = 0; i < 3; ++i) { ASSERT_EQ(nullptr, plan().locate_materialized_parameter(i)); }
+  }
+
+  struct Callback {
+    std::vector<int64_t> *trace_;
+    int64_t index_;
+    int ret_;
+  };
+  static int record_null(const ObExpr &expr, ObEvalCtx &, Datum &value)
+  {
+    Callback &callback = *reinterpret_cast<Callback *>(expr.extra_);
+    callback.trace_->push_back(callback.index_);
+    if (callback.ret_ == OB_SUCCESS) { value.set_null(); }
+    return callback.ret_;
+  }
+  void set_callbacks(int64_t failing_index)
+  {
+    for (int64_t i = 0; i < 2; ++i) {
+      callbacks_[i] = {&trace_, i, i == failing_index ? OB_ERR_UNEXPECTED : OB_SUCCESS};
+      expressions_[i].extra_ = reinterpret_cast<uint64_t>(&callbacks_[i]);
+      expressions_[i].eval_func_ = record_null;
+    }
+  }
+  ObExpr &result() { return expressions_[3]; }
+  Datum &input(int64_t i) { return expressions_[i].locate_expr_datum(eval_); }
+  int evaluate(Datum *&value) { return result().eval(eval_, value); }
+  void reset_result() { result().get_eval_info(eval_) = ObEvalInfo{}; }
+
+  alignas(8) std::array<char, 3 * ScalarFrameLayout::slot_size()> frame_;
+  char *frames_[2];
+  ObEvalCtx eval_;
+  ObExpr expressions_[4];
+  ObExpr *args_[3];
+  std::vector<int64_t> trace_;
+  Callback callbacks_[2];
+};
+
+TEST_F(NativeParameterSubstringIndex, null_strings_evaluate_unmaterialized_count_before_reading_it)
+{
+  ASSERT_NO_FATAL_FAILURE(configure());
+  // Exact scalar callback shape of SUBSTRING_INDEX(NULL, NULL, 0): the first
+  // two inputs are generic NULLs and the last is a ready, unprojected alias.
+  Datum *value = nullptr;
+  ASSERT_EQ(OB_SUCCESS, evaluate(value)); ASSERT_NE(nullptr, value);
+  EXPECT_TRUE(value->is_null());
+  const Datum *projection = plan().locate_materialized_parameter(2);
+  ASSERT_NE(nullptr, projection); EXPECT_EQ(0, projection->get_int());
+  EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+  EXPECT_EQ(1, owner_.calls_for(sizeof(Datum)));
+  EXPECT_EQ(nullptr, plan().locate_materialized_parameter(0));
+  EXPECT_EQ(nullptr, plan().locate_materialized_parameter(1));
+
+  input(0).set_string(ObString::make_string("a.b.c"));
+  input(1).set_string(ObString::make_string("."));
+  const SqlType *type = plan().get_native_parameter_type(2);
+  const DatumParameterMetadata metadata = *plan().get_parameter_metadata(2);
+  for (int64_t count : {int64_t(0), int64_t(2), int64_t(-1)}) {
+    Datum next; next.set_int(count);
+    ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(2, next, *type, metadata));
+    reset_result();
+    ASSERT_EQ(OB_SUCCESS, evaluate(value)); ASSERT_FALSE(value->is_null());
+    const ObString expected = ObString::make_string(count == 0 ? "" : count == 2 ? "a.b" : "c");
+    EXPECT_EQ(expected, value->get_string());
+    EXPECT_EQ(projection, plan().locate_materialized_parameter(2));
+  }
+  Datum null_count; null_count.set_null();
+  ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(2, null_count, *type, metadata));
+  reset_result();
+  ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_TRUE(value->is_null());
+  EXPECT_EQ(ObIntType, plan().get_native_parameter_type(2)->kind());
+  EXPECT_EQ(projection, plan().locate_materialized_parameter(2));
+}
+
+TEST_F(NativeParameterSubstringIndex, count_projection_oom_preserves_owner_and_retries)
+{
+  for (int64_t rejected : {int64_t(3 * sizeof(Datum *)), int64_t(sizeof(Datum))}) {
+    SCOPED_TRACE(rejected);
+    ASSERT_NO_FATAL_FAILURE(configure());
+    const SqlType *type = plan().get_native_parameter_type(2);
+    const DatumParameterMetadata metadata = *plan().get_parameter_metadata(2);
+    ObEvalInfo *info = plan().get_parameter_eval_info(2);
+    info->flag_ = 3; info->cnt_ = 17;
+    owner_.fail_size_ = rejected;
+    result().locate_expr_datum(eval_).set_int(71);
+    Datum *value = nullptr;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, evaluate(value));
+    ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null()); // Existing eval error cleanup.
+    EXPECT_FALSE(result().get_eval_info(eval_).evaluated_);
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+    EXPECT_EQ(type, plan().get_native_parameter_type(2));
+    EXPECT_EQ(3, info->flag_); EXPECT_EQ(17, info->cnt_);
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, *plan().get_parameter_metadata(2)));
+    EXPECT_EQ(0, read_parameter_value(plan(), 2).get_int());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(rejected == sizeof(Datum) ? 1 : 0, owner_.calls_for(sizeof(Datum)));
+    owner_.fail_size_ = 0; owner_.clear_calls();
+    // Retry the same failed expression without resetting evaluation state.
+    ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_TRUE(value->is_null());
+    ASSERT_NE(nullptr, plan().locate_materialized_parameter(2));
+    EXPECT_EQ(0, plan().locate_materialized_parameter(2)->get_int());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(1, owner_.calls_for(sizeof(Datum)));
+    EXPECT_EQ(type, plan().get_native_parameter_type(2));
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, *plan().get_parameter_metadata(2)));
+  }
+}
+
+TEST_F(NativeParameterSubstringIndex, preceding_argument_error_does_not_read_or_evaluate_later_alias)
+{
+  for (int64_t failing_index : {int64_t(0), int64_t(1)}) {
+    SCOPED_TRACE(failing_index);
+    ASSERT_NO_FATAL_FAILURE(configure());
+    set_callbacks(failing_index);
+    owner_.reject_all_ = true;
+    Datum *value = nullptr;
+    EXPECT_EQ(OB_ERR_UNEXPECTED, evaluate(value));
+    ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
+    ASSERT_EQ(failing_index + 1, trace_.size());
+    for (int64_t i = 0; i <= failing_index; ++i) { EXPECT_EQ(i, trace_[i]); }
+    EXPECT_TRUE(owner_.sizes_.empty());
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+    owner_.reject_all_ = false;
+    trace_.clear(); set_callbacks(-1);
+    for (int64_t i = 0; i < 2; ++i) { expressions_[i].get_eval_info(eval_).evaluated_ = false; }
+    ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_TRUE(value->is_null());
+    ASSERT_EQ(2, trace_.size()); EXPECT_EQ(0, trace_[0]); EXPECT_EQ(1, trace_[1]);
+    ASSERT_NE(nullptr, plan().locate_materialized_parameter(2));
+    EXPECT_EQ(0, plan().locate_materialized_parameter(2)->get_int());
+  }
+}
+
+class NativeParameterLike : public NativeParameterSubstringIndex
+{
+protected:
+  void configure_like()
+  {
+    ASSERT_NO_FATAL_FAILURE(configure(true));
+    SqlTypeMeta meta; meta.set_int(); meta.set_scale(0); meta.set_collation_type(CS_TYPE_BINARY);
+    result().obj_meta_ = meta;
+    result().datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 1);
+    ASSERT_EQ(OB_SUCCESS, result().prepare_scalar_type(meta, ObAccuracy(1, 0), request_arena_));
+    result().type_ = T_OP_LIKE; result().extra_ = 0;
+    result().eval_func_ = ObExprLike::like_varchar;
+    ASSERT_EQ(ObVarcharType, plan().get_native_parameter_type(2)->kind());
+    EXPECT_EQ(ObString::make_string("\\"), read_parameter_value(plan(), 2).get_string());
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+  }
+};
+
+TEST_F(NativeParameterLike, preceding_argument_error_leaves_unmaterialized_escape_untouched)
+{
+  for (int64_t failing_index : {int64_t(0), int64_t(1)}) {
+    SCOPED_TRACE(failing_index);
+    ASSERT_NO_FATAL_FAILURE(configure_like());
+    set_callbacks(failing_index);
+    owner_.reject_all_ = true;
+    Datum *value = nullptr;
+    EXPECT_EQ(OB_ERR_UNEXPECTED, evaluate(value));
+    ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
+    ASSERT_EQ(failing_index + 1, trace_.size());
+    for (int64_t i = 0; i <= failing_index; ++i) { EXPECT_EQ(i, trace_[i]); }
+    EXPECT_TRUE(owner_.sizes_.empty());
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+    owner_.reject_all_ = false;
+    trace_.clear(); set_callbacks(-1);
+    for (int64_t i = 0; i < 2; ++i) { expressions_[i].get_eval_info(eval_).evaluated_ = false; }
+    ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_TRUE(value->is_null());
+    ASSERT_EQ(2, trace_.size()); EXPECT_EQ(0, trace_[0]); EXPECT_EQ(1, trace_[1]);
+    ASSERT_NE(nullptr, plan().locate_materialized_parameter(2));
+    EXPECT_EQ(ObString::make_string("\\"), plan().locate_materialized_parameter(2)->get_string());
+  }
+}
+
+TEST_F(NativeParameterLike, escape_projection_oom_returns_error_before_locate_and_retries)
+{
+  for (int64_t rejected : {int64_t(3 * sizeof(Datum *)), int64_t(sizeof(Datum))}) {
+    SCOPED_TRACE(rejected);
+    ASSERT_NO_FATAL_FAILURE(configure_like());
+    const SqlType *type = plan().get_native_parameter_type(2);
+    const DatumParameterMetadata metadata = *plan().get_parameter_metadata(2);
+    ObEvalInfo *info = plan().get_parameter_eval_info(2);
+    info->flag_ = 3; info->cnt_ = 17;
+    owner_.fail_size_ = rejected;
+    result().locate_expr_datum(eval_).set_int(71);
+    Datum *value = nullptr;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, evaluate(value));
+    ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
+    EXPECT_FALSE(result().get_eval_info(eval_).evaluated_);
+    EXPECT_EQ(nullptr, plan().locate_materialized_parameter(2));
+    EXPECT_EQ(type, plan().get_native_parameter_type(2));
+    EXPECT_EQ(3, info->flag_); EXPECT_EQ(17, info->cnt_);
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, *plan().get_parameter_metadata(2)));
+    EXPECT_EQ(ObString::make_string("\\"), read_parameter_value(plan(), 2).get_string());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(rejected == sizeof(Datum) ? 1 : 0, owner_.calls_for(sizeof(Datum)));
+    owner_.fail_size_ = 0; owner_.clear_calls();
+    ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_TRUE(value->is_null());
+    const Datum *projection = plan().locate_materialized_parameter(2);
+    ASSERT_NE(nullptr, projection);
+    EXPECT_EQ(ObString::make_string("\\"), projection->get_string());
+    EXPECT_EQ(1, owner_.calls_for(3 * sizeof(Datum *)));
+    EXPECT_EQ(1, owner_.calls_for(sizeof(Datum)));
+    EXPECT_EQ(type, plan().get_native_parameter_type(2));
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, *plan().get_parameter_metadata(2)));
+    input(0).set_string(ObString::make_string("abc"));
+    input(1).set_string(ObString::make_string("a%"));
+    reset_result(); ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_EQ(1, value->get_int());
+    input(0).set_string(ObString::make_string("xyz"));
+    reset_result(); ASSERT_EQ(OB_SUCCESS, evaluate(value)); EXPECT_EQ(0, value->get_int());
+    EXPECT_EQ(projection, plan().locate_materialized_parameter(2));
   }
 }
 } // namespace

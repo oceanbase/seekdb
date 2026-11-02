@@ -46,6 +46,27 @@ class ObSQLSessionInfo;
 class ObPhysicalPlan;
 class ObExecContext;
 struct ObPxDmlRowInfo;
+class ObPhysicalPlanCtx;
+
+// A same-execution binding backup for the existing shallow batch-result holder.
+// Payload spans retain their statement owner; this token cannot extend it.
+class NativeParameterSlotSnapshot
+{
+public:
+  NativeParameterSlotSnapshot() : owner_(nullptr), generation_(0), index_(-1), value_(), attributes_(), word_(0), state_(0) {}
+  int64_t index() const { return index_; }
+  const common::NativeTypedDatum &value() const { return value_; }
+  const common::DatumParameterMetadata &attributes() const { return attributes_; }
+private:
+  friend class ObPhysicalPlanCtx;
+  const ObPhysicalPlanCtx *owner_;
+  uint64_t generation_;
+  int64_t index_;
+  common::NativeTypedDatum value_;
+  common::DatumParameterMetadata attributes_;
+  uint64_t word_;
+  uint8_t state_;
+};
 
 // Sparse actual SQL-array input carried beside its selected scalar slot.
 // Types and spans borrow the receiving execution owner, never wire addresses.
@@ -86,6 +107,7 @@ public:
   int prepare_existing_projections(const ParameterValuePage &source,
                                    common::ObIAllocator &owner);
 private:
+  friend class ObPhysicalPlanCtx;
   explicit ParameterValuePage(int64_t capacity) : capacity_(capacity), projections_(nullptr) {}
   static int64_t eval_offset(int64_t capacity)
   { return (sizeof(ParameterValuePage) + payload_bytes(capacity) + capacity
@@ -278,6 +300,12 @@ public:
   int set_runtime_parameter(int64_t index, const common::Datum &value,
       const common::SqlType &supplied_type, const common::DatumParameterMetadata &attributes);
   int clone_runtime_parameters_to(ObPhysicalPlanCtx &destination) const;
+  // Capture/validation never evaluate, allocate or request a Datum projection.
+  int capture_runtime_parameter_slot(int64_t index, NativeParameterSlotSnapshot &snapshot) const;
+  int validate_runtime_parameter_slot(const NativeParameterSlotSnapshot &snapshot) const;
+  // Call only after every token in the holder has been validated. No failure or
+  // allocation below publication, and current EvalInfo remains unchanged.
+  void restore_runtime_parameter_slot(const NativeParameterSlotSnapshot &snapshot);
   int64_t get_native_group_count() const { return native_group_inputs_.count(); }
   int capture_native_group(int64_t group_index, NativeParameterGroup &output) const;
   int runtime_parameter_legacy_size(int64_t index, int64_t &bytes) const;
@@ -292,6 +320,7 @@ public:
   void reset_datum_param_store()
   {
     native_parameters_ready_ = false;
+    ++parameter_snapshot_generation_;
     native_parameter_metadata_.reuse();
     native_parameter_types_.reuse();
     native_group_inputs_.reuse();
@@ -608,6 +637,7 @@ public:
 private:
   friend class oceanbase::pl::ObPLExecState;
   friend struct NativeExecutionParametersTestPeer;
+  uint64_t parameter_snapshot_generation_ = 1;
   // PL variables use their PL domain owner and do not bind SQL parameter pages.
   // This deliberately private access cannot expose an initialized SQL frame.
   ParamStore &pl_variable_store()

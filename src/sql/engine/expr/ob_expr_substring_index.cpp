@@ -109,27 +109,27 @@ int ObExprSubstringIndex::eval_substring_index(
     const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  Datum &str = expr.locate_param_datum(ctx, 0);
-  Datum &delim = expr.locate_param_datum(ctx, 1);
-  Datum &count = expr.locate_param_datum(ctx, 2);
-  if (OB_FAIL(expr.eval_param_value(ctx))) {
-  } else if (OB_UNLIKELY(str.is_null() || delim.is_null() || count.is_null())) {
+  Datum *str = nullptr;
+  Datum *delim = nullptr;
+  Datum *count = nullptr;
+  if (OB_FAIL(expr.eval_param_value(ctx, str, delim, count))) {
+  } else if (OB_UNLIKELY(str->is_null() || delim->is_null() || count->is_null())) {
     expr_datum.set_null();
-  } else if (0 == str.length() || 0 == delim.length()) {
+  } else if (0 == str->length() || 0 == delim->length()) {
     // return empty string if %str or %delim is empty.
     // Reset null flag to prevent loss of empty string information
     ret = expr_datum.set_string(nullptr, 0);
   } else {
-    const ObString m_delim = delim.get_string();
+    const ObString m_delim = delim->get_string();
     // mysql 5.6 static cast count to int32,
     // actually this is a bug and fixed in mysql 8.0.
-    int64_t count_val = count.get_int();
+    int64_t count_val = count->get_int();
     ObString res_str;
     ObExprKMPSearchCtx *kmp_ctx = NULL;
     const uint64_t op_id = static_cast<uint64_t>(expr.expr_ctx_id_);
     if (OB_FAIL(ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ctx.exec_ctx_, op_id, kmp_ctx))) {
     } else if (OB_FAIL(kmp_ctx->init(m_delim, count_val < 0, ctx.exec_ctx_.get_allocator()))) {
-    } else if (OB_FAIL(kmp_ctx->substring_index_search(str.get_string(), count_val, res_str))) {
+    } else if (OB_FAIL(kmp_ctx->substring_index_search(str->get_string(), count_val, res_str))) {
     } else {
       expr_datum.set_string(res_str);
     }

@@ -862,29 +862,27 @@ int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  Datum &e
 int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.eval_param_value(ctx))) {
-  }
-  Datum &text = expr.locate_param_datum(ctx, 0);
-  Datum &pattern = expr.locate_param_datum(ctx, 1);
-  Datum &escape = expr.locate_param_datum(ctx, 2);
+  Datum *text = nullptr;
+  Datum *pattern = nullptr;
+  Datum *escape = nullptr;
   // the third arg escape must be varchar
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(expr.eval_param_value(ctx, text, pattern, escape))) {
   } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)
              && !ob_is_text_tc(expr.args_[1]->datum_meta_.type_)) {
-    ret = like_varchar_inner(expr, ctx, expr_datum, text, pattern, escape);
+    ret = like_varchar_inner(expr, ctx, expr_datum, *text, *pattern, *escape);
   } else { // text tc
-    ObString text_val = text.get_string();
-    ObString pattern_val = pattern.get_string();
-    ObString escape_str = escape.get_string();
+    ObString text_val = text->get_string();
+    ObString pattern_val = pattern->get_string();
+    ObString escape_str = escape->get_string();
     // Notice: should not change original datums
     // ToDo: @gehao Streaming like interfaces
-    Datum text_inrow = text; // copy datum flags;
-    Datum pattern_inrow = pattern;
+    Datum text_inrow = *text; // copy datum flags;
+    Datum pattern_inrow = *pattern;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, text,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *text,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_val))) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, pattern,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *pattern,
                        expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), pattern_val))) {
     } else {
       if (!text_inrow.is_null() && !text_inrow.is_nop()) {
@@ -893,7 +891,7 @@ int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  Datum &expr_da
       if (!pattern_inrow.is_null() && !pattern_inrow.is_nop()) {
         pattern_inrow.set_string(pattern_val);
       }
-      ret = like_varchar_inner(expr, ctx, expr_datum, text_inrow, pattern_inrow, escape);
+      ret = like_varchar_inner(expr, ctx, expr_datum, text_inrow, pattern_inrow, *escape);
     }
   }
   if (OB_FAIL(ret)) {

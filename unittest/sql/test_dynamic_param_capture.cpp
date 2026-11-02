@@ -26,6 +26,7 @@
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/pl/ob_pl_package_guard.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
+#include "query/engine/basic/ob_batch_result_holder.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "common/wide_integer/ob_wide_integer_helper.h"
 #include "common/sql_mode/ob_sql_mode.h"
@@ -85,7 +86,8 @@ struct Frame {
   ObExpr expr;
   char **frames;
   DatumParameter physical_snapshot;
-  Frame() : arena(), exec(arena), expr(), frames(nullptr), physical_snapshot() {
+  explicit Frame(ObIAllocator *exec_allocator = nullptr)
+      : arena(), exec(exec_allocator == nullptr ? arena : *exec_allocator), expr(), frames(nullptr), physical_snapshot() {
     EXPECT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
     frames = static_cast<char **>(arena.alloc(sizeof(char *)));
     frames[0] = static_cast<char *>(arena.alloc(2048));
@@ -1266,4 +1268,234 @@ TEST(DynamicParamCapture, typed_capture_batch_restore_retires_source_and_batch_o
   const auto *metadata = destination.exec.get_physical_plan_ctx()->get_parameter_metadata(0);
   ASSERT_NE(nullptr, metadata); EXPECT_EQ(17, metadata->raw_text_pos_); EXPECT_EQ(23, metadata->raw_text_len_);
   EXPECT_EQ(0xa5, metadata->res_flags_);
+}
+
+
+namespace {
+class HolderOwner final : public ObIAllocator {
+public:
+  HolderOwner() : arena_("HolderOwner"), calls_(0), fail_call_(0), reject_all_(false) {}
+  void *alloc(int64_t size) override {
+    ++calls_;
+    return reject_all_ || calls_ == fail_call_ ? nullptr : arena_.alloc(size);
+  }
+  void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
+  void free(void *value) override { arena_.free(value); }
+  ObArenaAllocator arena_;
+  int64_t calls_;
+  int64_t fail_call_;
+  bool reject_all_;
+};
+int holder_callback_calls = 0;
+int holder_forbidden_callback(const ObExpr &, ObEvalCtx &, Datum &) {
+  ++holder_callback_calls;
+  return OB_ERR_UNEXPECTED;
+}
+ObExpr holder_alias(const Frame &f) {
+  ObExpr alias = f.expr;
+  alias.type_ = T_QUESTIONMARK;
+  alias.native_parameter_alias_ = true;
+  alias.extra_ = 0;
+  alias.frame_idx_ = 0;
+  alias.datum_off_ = ScalarFrameLayout::datum_offset(0);
+  alias.eval_info_off_ = ScalarFrameLayout::eval_info_offset(0);
+  alias.eval_func_ = nullptr;
+  return alias;
+}
+const Datum *holder_projection(const ObPhysicalPlanCtx &plan) {
+  int64_t page = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(plan.get_original_param_cnt(), 0, page, slot);
+  return ParameterValuePage::from_handle(plan.get_param_frame_ptrs().at(page)).find_materialized(slot);
+}
+void holder_expect_attributes(const DatumParameterMetadata &expected,
+                              const DatumParameterMetadata &actual) {
+  EXPECT_EQ(expected.type_meta_, actual.type_meta_);
+  EXPECT_EQ(expected.type_meta_.get_scale(), actual.type_meta_.get_scale());
+  EXPECT_EQ(expected.accuracy_, actual.accuracy_);
+  EXPECT_EQ(expected.param_meta_, actual.param_meta_);
+  EXPECT_EQ(expected.param_meta_.get_scale(), actual.param_meta_.get_scale());
+  EXPECT_EQ(expected.res_flags_, actual.res_flags_);
+  EXPECT_EQ(expected.raw_text_pos_, actual.raw_text_pos_);
+  EXPECT_EQ(expected.raw_text_len_, actual.raw_text_len_);
+  EXPECT_EQ(expected.flag_.flag_, actual.flag_.flag_);
+  EXPECT_EQ(expected.flag_.extend_flag_, actual.flag_.extend_flag_);
+}
+} // namespace
+
+TEST(DynamicParamCapture, batch_holder_saves_fresh_alias_and_restores_canonical_without_eval) {
+  HolderOwner owner;
+  Frame f(&owner);
+  ObEvalCtx ctx(f.exec); ctx.max_batch_size_ = 3;
+  auto &plan = *f.exec.get_physical_plan_ctx();
+  DatumParameter initial = f.integer(INT64_MIN);
+  initial.set_precision(19); initial.set_scale(3); initial.set_result_flags(0xa5);
+  initial.set_raw_text_info(17, 23); initial.set_param_meta();
+  initial.get_param_flag().flag_ = 0x5a;
+  ASSERT_EQ(OB_SUCCESS, f.bind_status(0, initial));
+  const SqlType *saved_type = plan.get_native_parameter_type(0);
+  const DatumParameterMetadata saved_attributes = *plan.get_parameter_metadata(0);
+  ObExpr alias = holder_alias(f);
+  // Real CG aliases follow earlier frames: their frame_idx is an absolute
+  // directory position, not the owner-relative parameter page number.
+  char **prefixed = static_cast<char **>(f.arena.alloc(2 * sizeof(char *)));
+  ASSERT_NE(nullptr, prefixed);
+  prefixed[0] = f.frames[0]; prefixed[1] = plan.get_param_frame_ptrs().at(0);
+  f.exec.set_frames(prefixed); ctx.frames_ = prefixed; alias.frame_idx_ = 1;
+  ObExpr generic = f.expr; generic.batch_result_ = true;
+  generic.eval_func_ = holder_forbidden_callback;
+  Datum *rows = generic.locate_batch_datums(ctx);
+  for (int i = 0; i < 3; ++i) { new (rows + i) Datum(); rows[i].set_int(11 + i); }
+  ObSEArray<ObExpr *, 3> exprs;
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&generic));
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&alias));
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&alias)); // repeated slot preserves holder order
+  ObBatchResultHolder holder;
+  ASSERT_EQ(OB_SUCCESS, holder.init(exprs, ctx));
+  holder_callback_calls = 0;
+  ASSERT_EQ(nullptr, holder_projection(plan)); // no eval/materialization prewarm
+  int64_t calls = owner.calls_;
+  owner.reject_all_ = true;
+  ASSERT_EQ(OB_SUCCESS, holder.save(3)); // old 725 aborts in locate_native_parameter here
+  EXPECT_EQ(calls, owner.calls_); EXPECT_EQ(nullptr, holder_projection(plan));
+  EXPECT_EQ(0, holder_callback_calls);
+  owner.reject_all_ = false;
+  Datum changed; changed.set_int(99);
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, changed, *saved_type, saved_attributes));
+  for (int i = 0; i < 3; ++i) { rows[i].set_int(90 + i); }
+  auto *info = plan.get_parameter_eval_info(0);
+  info->flag_ = 0xb; info->cnt_ = 7;
+  calls = owner.calls_; owner.reject_all_ = true;
+  ASSERT_EQ(OB_SUCCESS, holder.restore());
+  EXPECT_EQ(calls, owner.calls_); EXPECT_EQ(nullptr, holder_projection(plan));
+  EXPECT_EQ(INT64_MIN, read_parameter_value(plan, 0).get_int());
+  EXPECT_EQ(saved_type, plan.get_native_parameter_type(0));
+  holder_expect_attributes(saved_attributes, *plan.get_parameter_metadata(0));
+  EXPECT_EQ(0xb, info->flag_); EXPECT_EQ(7, info->cnt_);
+  for (int i = 0; i < 3; ++i) { EXPECT_EQ(11 + i, rows[i].get_int()); }
+  ASSERT_EQ(OB_SUCCESS, holder.check_datum_modified());
+  EXPECT_FALSE(holder.is_saved()); EXPECT_EQ(0, holder_callback_calls);
+  owner.reject_all_ = false;
+  holder.destroy();
+}
+
+TEST(DynamicParamCapture, batch_holder_restores_reference_type_metadata_and_existing_projection_noalloc) {
+  HolderOwner owner;
+  Frame f(&owner); ObEvalCtx ctx(f.exec); ctx.max_batch_size_ = 2;
+  auto &plan = *f.exec.get_physical_plan_ctx();
+  SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_full_length(64, LS_BYTE);
+  const SqlType *text_type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, f.arena, text_type));
+  DatumParameter attributes_source;
+  attributes_source.set_type_meta(meta); attributes_source.set_param_meta(meta);
+  attributes_source.set_accuracy(accuracy); attributes_source.set_result_flags(0x3456);
+  attributes_source.set_raw_text_info(31, 47); attributes_source.get_param_flag().flag_ = 0xa5;
+  const DatumParameterMetadata attributes = attributes_source.get_metadata();
+  Datum text; ASSERT_EQ(OB_SUCCESS, text.set_string("a\0b", 3));
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, text, *text_type, attributes));
+  const SqlType *saved_type = plan.get_native_parameter_type(0);
+  const Datum saved = read_parameter_value(plan, 0);
+  const DatumParameterMetadata saved_attributes = *plan.get_parameter_metadata(0);
+  ObExpr alias = holder_alias(f); ObSEArray<ObExpr *, 1> exprs;
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&alias));
+  ObBatchResultHolder holder; ASSERT_EQ(OB_SUCCESS, holder.init(exprs, ctx));
+  ASSERT_EQ(nullptr, holder_projection(plan));
+  ASSERT_EQ(OB_SUCCESS, holder.save(2));
+  const Datum *projection = materialized_parameter(plan, 0); // created after save by a real ABI consumer
+  ASSERT_NE(nullptr, projection);
+  Datum newer; ASSERT_EQ(OB_SUCCESS, newer.set_string("overwritten", 11));
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, newer, *saved_type, saved_attributes));
+  // Generic backing cell is overwritten above, then displaced by NULL and I64.
+  Datum null_value;
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, null_value, *saved_type, saved_attributes));
+  Datum number; number.set_int(77);
+  DatumParameterMetadata int_attributes = f.integer(77).get_metadata();
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, number, f.expr.get_sql_type(), int_attributes));
+  auto *info = plan.get_parameter_eval_info(0); info->flag_ = 0xd; info->cnt_ = 9;
+  int64_t calls = owner.calls_; owner.reject_all_ = true; holder_callback_calls = 0;
+  ASSERT_EQ(OB_SUCCESS, holder.restore());
+  EXPECT_EQ(calls, owner.calls_); EXPECT_EQ(0, holder_callback_calls);
+  const Datum restored = read_parameter_value(plan, 0);
+  EXPECT_EQ(ObString(3, "a\0b"), restored.get_string());
+  EXPECT_EQ(saved.get_reference(), restored.get_reference()); // same statement owner, shallow holder contract
+  EXPECT_EQ(saved_type, plan.get_native_parameter_type(0));
+  holder_expect_attributes(saved_attributes, *plan.get_parameter_metadata(0));
+  EXPECT_EQ(projection, holder_projection(plan)); EXPECT_EQ(restored.get_string(), projection->get_string());
+  EXPECT_EQ(0xd, info->flag_); EXPECT_EQ(9, info->cnt_);
+  ASSERT_EQ(OB_SUCCESS, holder.check_datum_modified());
+  // Save a typed NULL and restore it after a present value/type change as well.
+  owner.reject_all_ = false;
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, null_value, *saved_type, saved_attributes));
+  const DatumParameterMetadata null_metadata = *plan.get_parameter_metadata(0);
+  EXPECT_TRUE(null_metadata.type_meta_.is_null());
+  EXPECT_EQ(ObVarcharType, null_metadata.param_meta_.get_type());
+  EXPECT_EQ(saved_type, plan.get_native_parameter_type(0));
+  EXPECT_EQ(ObVarcharType, plan.get_native_parameter_type(0)->kind());
+  // The NULL setter normalizes only the current physical kind. Preserve all
+  // other attributes independently of the actual snapshot restored below.
+  DatumParameterMetadata expected_null_metadata = saved_attributes;
+  expected_null_metadata.type_meta_.set_null();
+  holder_expect_attributes(expected_null_metadata, null_metadata);
+  ASSERT_EQ(OB_SUCCESS, holder.save(1));
+  ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, number, f.expr.get_sql_type(), int_attributes));
+  calls = owner.calls_; owner.reject_all_ = true;
+  ASSERT_EQ(OB_SUCCESS, holder.restore());
+  EXPECT_TRUE(read_parameter_value(plan, 0).is_null());
+  EXPECT_EQ(saved_type, plan.get_native_parameter_type(0));
+  holder_expect_attributes(null_metadata, *plan.get_parameter_metadata(0));
+  EXPECT_EQ(calls, owner.calls_); EXPECT_TRUE(projection->is_null());
+  owner.reject_all_ = false; holder.destroy();
+}
+
+TEST(DynamicParamCapture, batch_holder_init_oom_is_unpublished_and_retryable) {
+  for (int64_t fail_allocation : {int64_t(1), int64_t(2)}) {
+    Frame f; ObEvalCtx ctx(f.exec); ctx.max_batch_size_ = 2;
+    ObExpr alias = holder_alias(f); ObSEArray<ObExpr *, 1> exprs;
+    ASSERT_EQ(OB_SUCCESS, exprs.push_back(&alias));
+    HolderOwner buffers; buffers.fail_call_ = fail_allocation;
+    ObBatchResultHolder holder;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, holder.init(exprs, ctx, &buffers));
+    EXPECT_FALSE(holder.is_saved());
+    EXPECT_EQ(OB_NOT_INIT, holder.save(1));
+    buffers.fail_call_ = 0;
+    ASSERT_EQ(OB_SUCCESS, holder.init(exprs, ctx, &buffers));
+    ASSERT_EQ(OB_SUCCESS, holder.save(1));
+    EXPECT_TRUE(holder.is_saved());
+    EXPECT_EQ(nullptr, holder_projection(*f.exec.get_physical_plan_ctx()));
+    holder.destroy();
+  }
+}
+
+TEST(DynamicParamCapture, batch_holder_preflights_all_aliases_before_restore_or_replacing_saved_values) {
+  Frame f; ObEvalCtx ctx(f.exec); ctx.max_batch_size_ = 2;
+  auto &plan = *f.exec.get_physical_plan_ctx();
+  DatumParameter initial = f.integer(7); f.bind(initial);
+  ObExpr alias = holder_alias(f); ObExpr last = holder_alias(f);
+  ObExpr generic = f.expr; generic.eval_func_ = holder_forbidden_callback;
+  generic.locate_expr_datum(ctx).set_int(11);
+  ObSEArray<ObExpr *, 3> exprs;
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&generic));
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&alias));
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&last));
+  ObBatchResultHolder holder; ASSERT_EQ(OB_SUCCESS, holder.init(exprs, ctx));
+  ASSERT_EQ(OB_SUCCESS, holder.save(1));
+  DatumParameter changed = f.integer(99); f.bind(changed);
+  generic.locate_expr_datum(ctx).set_int(88);
+  last.extra_ = 123; // a later alias fails before an earlier generic/owner write
+  EXPECT_NE(OB_SUCCESS, holder.restore());
+  EXPECT_EQ(88, generic.locate_expr_datum(ctx).get_int());
+  EXPECT_EQ(99, read_parameter_value(plan, 0).get_int());
+  EXPECT_TRUE(holder.is_saved());
+  EXPECT_NE(OB_SUCCESS, holder.save(1));
+  last.extra_ = 0;
+  ASSERT_EQ(OB_SUCCESS, holder.restore()); // failed save did not replace the first backup
+  EXPECT_EQ(11, generic.locate_expr_datum(ctx).get_int());
+  EXPECT_EQ(7, read_parameter_value(plan, 0).get_int());
+  ASSERT_EQ(OB_SUCCESS, holder.check_datum_modified());
+  ASSERT_EQ(OB_SUCCESS, holder.save(1));
+  f.bind(changed);
+  EXPECT_NE(OB_SUCCESS, holder.check_datum_modified()); // canonical value, not an old projection
+  EXPECT_FALSE(holder.is_saved());
+  EXPECT_EQ(nullptr, holder_projection(plan));
+  holder.destroy();
 }
