@@ -259,15 +259,18 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
         WIN32_FIND_DATAA fd;
         HANDLE hfind = FindFirstFileA(search_buf, &fd);
         if (INVALID_HANDLE_VALUE == hfind) {
-          ret = OB_FILE_NOT_EXIST;
-          LOG_USER_ERROR(OB_FILE_NOT_EXIST, static_cast<int32_t>(strlen(search_buf)), search_buf);
+          // no match is not an error here: glob() returns an empty result and
+          // read_*(pattern) reports the error in the resolver.
+          LOG_DEBUG("glob pattern matched no file", K(search_buf));
         } else {
           do {
             if (0 != (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
               continue;
             }
             char full_buf[OB_MAX_FILE_NAME_LENGTH];
-            const int64_t flen = snprintf(full_buf, sizeof(full_buf), "%s\\%s", dir_buf, fd.cFileName);
+            // Report matches with '/' separators on every platform so that
+            // string functions over the glob() column behave the same way.
+            const int64_t flen = snprintf(full_buf, sizeof(full_buf), "%s/%s", dir_buf, fd.cFileName);
             ObString file_path;
             if (OB_FAIL(ob_write_string(alloc, ObString(static_cast<int32_t>(flen), full_buf),
                                         file_path, true))) {
@@ -282,8 +285,7 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
 #else
       DIR *dir = opendir(dir_buf);
       if (OB_ISNULL(dir)) {
-        ret = OB_FILE_NOT_EXIST;
-        LOG_USER_ERROR(OB_FILE_NOT_EXIST, static_cast<int32_t>(dlen), dir_buf);
+        LOG_DEBUG("glob directory does not exist", K(dir_buf));
       } else {
         struct dirent *entry = NULL;
         while (OB_SUCC(ret) && NULL != (entry = readdir(dir))) {
@@ -323,9 +325,19 @@ public:
     : alloc_(alloc), paths_(paths), cur_file_(-1), file_reader_(), file_size_(0),
       file_offset_(0), eof_file_(false), eof_all_(false),
       pend_buf_(NULL), pend_cap_(0), pend_len_(0), scan_pos_(0),
-      line_no_(0), total_lines_(0)
+      line_no_(0), total_lines_(0), quote_char_(INT64_MAX), escape_char_(INT64_MAX),
+      skip_file_header_(false), pending_header_(false)
   {}
   ~ObFileLineFeeder() { close(); }
+  // Enable CSV quoting so that a record may span several physical lines
+  // (a newline inside quotes does not terminate the record).
+  void set_record_quote(const int64_t quote_char, const int64_t escape_char)
+  {
+    quote_char_ = quote_char;
+    escape_char_ = escape_char;
+  }
+  // Skip the first logical line of every opened file (CSV header row).
+  void set_skip_file_header(const bool skip) { skip_file_header_ = skip; }
   int open();
   void close();
   int rescan();
@@ -353,6 +365,10 @@ private:
   int64_t scan_pos_;
   int64_t line_no_;
   int64_t total_lines_;
+  int64_t quote_char_;   // INT64_MAX: records never span lines
+  int64_t escape_char_;
+  bool skip_file_header_;  // drop the first line of every file (CSV header)
+  bool pending_header_;    // a header line is waiting to be dropped
 };
 
 int ObFileLineFeeder::open()
@@ -415,6 +431,7 @@ int ObFileLineFeeder::open_cur_file()
     } else if (OB_FAIL(skip_utf8_bom())) {
       LOG_WARN("skip bom failed", K(ret));
     } else {
+      pending_header_ = skip_file_header_;
       opened = true;
     }
   }
@@ -501,15 +518,56 @@ int ObFileLineFeeder::next_line(ObString &line, int64_t &line_no)
 {
   int ret = OB_SUCCESS;
   line.reset();
+  if (pending_header_) {
+    // Drop the header row of the file just opened, then fall through to the
+    // first data row. pending_header_ is cleared first so the recursive call
+    // cannot loop.
+    pending_header_ = false;
+    ObString header_line;
+    int64_t header_no = 0;
+    ret = next_line(header_line, header_no);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("skip file header failed", K(ret), K(cur_file_));
+    }
+  }
   while (OB_SUCC(ret)) {
     // ensure buffer exists
     if (OB_FAIL(ensure_pend_capacity(FILE_SCAN_READ_BUF_SIZE))) {
       LOG_WARN("ensure capacity failed", K(ret));
       break;
     }
-    // find the next newline (logical line terminator) in [scan_pos_, pend_len_)
+    // find the next record terminator in [scan_pos_, pend_len_). A '\n' inside
+    // a quoted field belongs to the record, so keep scanning until the quote
+    // state returns to "outside".
     int64_t nl = scan_pos_;
-    while (nl < pend_len_ && '\n' != pend_buf_[nl]) {
+    bool in_quote = false;
+    while (nl < pend_len_) {
+      const char c = pend_buf_[nl];
+      if (INT64_MAX != quote_char_) {
+        if (in_quote) {
+          if (INT64_MAX != escape_char_ && escape_char_ == c && nl + 1 < pend_len_) {
+            nl += 2;
+            continue;
+          } else if (quote_char_ == c) {
+            if (nl + 1 < pend_len_ && quote_char_ == pend_buf_[nl + 1]) {
+              nl += 2;   // doubled quote, still inside the field
+              continue;
+            }
+            in_quote = false;
+            ++nl;
+            continue;
+          }
+          ++nl;
+          continue;
+        } else if (quote_char_ == c) {
+          in_quote = true;
+          ++nl;
+          continue;
+        }
+      }
+      if ('\n' == c) {
+        break;
+      }
       ++nl;
     }
     const bool found = (nl < pend_len_);
@@ -553,11 +611,28 @@ int ObFileLineFeeder::next_line(ObString &line, int64_t &line_no)
       }
     }
     // a complete line is available
-    const char *line_ptr = pend_buf_ + scan_pos_;
+    char *line_ptr = pend_buf_ + scan_pos_;
     int64_t line_len = nl - scan_pos_;
     scan_pos_ = nl + 1;
     if (line_len > 0 && '\r' == line_ptr[line_len - 1]) {
       --line_len;
+    }
+    // A record may span physical lines; its embedded line breaks are part of
+    // the value. The file is normally CRLF terminated, so collapse an inner
+    // CRLF to LF in place (a quoted field must read back as hello,LF world
+    // rather than hello,CRLF world).
+    if (NULL != memchr(line_ptr, '\n', line_len)) {
+      char *w = line_ptr;
+      const char *r = line_ptr;
+      const char *const e = line_ptr + line_len;
+      while (r < e) {
+        if ('\r' == *r && r + 1 < e && '\n' == *(r + 1)) {
+          ++r;
+        } else {
+          *w++ = *r++;
+        }
+      }
+      line_len = w - line_ptr;
     }
     ++line_no_;
     if (line_len == 0) {
@@ -652,6 +727,20 @@ static bool parse_double_text(const ObString &text, double &val)
 }
 
 // classify one text cell
+// ObTimeConverter::str_to_mdate() is lenient and happily truncates
+// "2026-08-01 10:11:12" to a date, so the shape of the text is checked first.
+// The ISO-8601 'T' separator is normalised to a space for parsing.
+static ObString normalize_datetime_text(const ObString &text, char *buf, const int64_t cap)
+{
+  ObString out = text;
+  if (text.length() > 10 && text.length() <= cap && 'T' == text.ptr()[10]) {
+    MEMCPY(buf, text.ptr(), text.length());
+    buf[10] = ' ';
+    out.assign_ptr(buf, text.length());
+  }
+  return out;
+}
+
 static CellKind classify_text(const ObString &text, int64_t &int_val, double &dbl_val,
                               int32_t &date_val, int64_t &dt_val, int64_t &len)
 {
@@ -666,18 +755,24 @@ static CellKind classify_text(const ObString &text, int64_t &int_val, double &db
   } else if (parse_double_text(text, dbl_val)) {
     kind = CK_DOUBLE;
   } else {
-    // try date / datetime (strict parse)
-    ObMySQLDate mdate;
-    if (OB_SUCCESS == ObTimeConverter::str_to_mdate(text, mdate)) {
-      kind = CK_DATE;
-      date_val = mdate.date_;
-    } else {
+    char tbuf[80];
+    const ObString norm = normalize_datetime_text(text, tbuf, sizeof(tbuf));
+    const bool dash_shape = norm.length() >= 10 && '-' == norm.ptr()[4] && '-' == norm.ptr()[7];
+    const bool dt_shape = dash_shape && norm.length() >= 19 && ' ' == norm.ptr()[10];
+    const bool date_shape = dash_shape && 10 == norm.length();
+    if (dt_shape) {
       ObTimeConvertCtx cvrt_ctx(NULL, false);
       ObMySQLDateTime mdt;
       int16_t scale = 0;
-      if (OB_SUCCESS == ObTimeConverter::str_to_mdatetime(text, cvrt_ctx, mdt, &scale)) {
+      if (OB_SUCCESS == ObTimeConverter::str_to_mdatetime(norm, cvrt_ctx, mdt, &scale)) {
         kind = CK_DATETIME;
         dt_val = mdt.datetime_;
+      }
+    } else if (date_shape) {
+      ObMySQLDate mdate;
+      if (OB_SUCCESS == ObTimeConverter::str_to_mdate(norm, mdate)) {
+        kind = CK_DATE;
+        date_val = mdate.date_;
       }
     }
   }
@@ -714,7 +809,12 @@ static int split_csv_line(const ObString &line, const ReadFileOptions &options,
   const char *p = line.ptr();
   const int64_t len = line.length();
   int64_t i = 0;
-  while (OB_SUCC(ret) && i <= len) {
+  // `more` is true while another field starts at i. Once a field ends at
+  // end-of-line (no trailing delimiter) there is no further field; without this
+  // flag the outer loop would keep appending empty fields until it hit
+  // FILE_SCAN_MAX_FIELDS and reported a bogus OB_SIZE_OVERFLOW.
+  bool more = true;
+  while (OB_SUCC(ret) && more) {
     if (OB_UNLIKELY(fields.count() >= FILE_SCAN_MAX_FIELDS)) {
       ret = OB_SIZE_OVERFLOW;
       LOG_USER_ERROR(OB_SIZE_OVERFLOW, static_cast<int32_t>(strlen("column count in one row")),
@@ -725,10 +825,8 @@ static int split_csv_line(const ObString &line, const ReadFileOptions &options,
     CsvField f;
     int64_t start = i;
     bool in_quote = false;
-    while (i <= len) {
-      if (i == len) {
-        break;
-      }
+    bool ended_by_delim = false;
+    while (i < len) {
       const char c = p[i];
       if (in_quote) {
         if (has_escape && escape == c && i + 1 <= len) {
@@ -749,13 +847,19 @@ static int split_csv_line(const ObString &line, const ReadFileOptions &options,
         ++i;
       } else if (delim == c) {
         ++i;
+        ended_by_delim = true;
         break;
       } else {
         ++i;
       }
     }
     f.ptr_ = p + start;
-    f.len_ = i - start;
+    // the delimiter itself is not part of the field
+    f.len_ = i - start - (ended_by_delim ? 1 : 0);
+    // MySQL (and therefore our own COPY writer) spells NULL as the two-character
+    // sequence \N. Detect it before the escape handling below rewrites it to 'N'.
+    const bool mysql_null = !f.quoted_ && 2 == f.len_ && 0 == options.null_text_.length()
+                            && '\\' == f.ptr_[0] && 'N' == f.ptr_[1];
     if (f.quoted_ && f.len_ >= 2 && quote == f.ptr_[0] && quote == f.ptr_[f.len_ - 1]) {
       // strip the outer quotes
       const char *inner = f.ptr_ + 1;
@@ -820,7 +924,9 @@ static int split_csv_line(const ObString &line, const ReadFileOptions &options,
       }
     }
     // NULL determination
-    if (!f.quoted_ && f.len_ == 0 && options.empty_field_as_null_) {
+    if (mysql_null) {
+      f.is_null_ = true;
+    } else if (!f.quoted_ && f.len_ == 0 && options.empty_field_as_null_) {
       f.is_null_ = true;
     } else if (options.null_text_.length() > 0 && !f.quoted_
                && f.len_ == options.null_text_.length()
@@ -830,6 +936,7 @@ static int split_csv_line(const ObString &line, const ReadFileOptions &options,
     if (OB_FAIL(fields.push_back(f))) {
       LOG_WARN("push field failed", K(ret));
     }
+    more = ended_by_delim;
   }
   return ret;
 }
@@ -881,6 +988,8 @@ int ObCsvFileRowReader::open()
     }
   }
   if (OB_FAIL(ret)) {
+  } else if (FALSE_IT(feeder_->set_record_quote(options_.quote_char_, options_.escape_char_))) {
+  } else if (FALSE_IT(feeder_->set_skip_file_header(options_.header_))) {
   } else if (OB_FAIL(feeder_->open())) {
     LOG_WARN("open line feeder failed", K(ret));
   }
@@ -938,7 +1047,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         if (!parse_int_text(text, val)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
           LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("BIGINT")), "BIGINT",
-                         static_cast<int32_t>(text.length()), text.ptr(), line_no);
+                         col.name_.length(), col.name_.ptr(), line_no);
         } else {
           out.set_int(val);
         }
@@ -949,9 +1058,20 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         if (!parse_double_text(text, val)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
           LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DOUBLE")), "DOUBLE",
-                         static_cast<int32_t>(text.length()), text.ptr(), line_no);
+                         col.name_.length(), col.name_.ptr(), line_no);
         } else {
           out.set_double(val);
+        }
+        break;
+      }
+      case common::ObNumberType: {
+        number::ObNumber nmb;
+        if (OB_FAIL(nmb.from(text.ptr(), text.length(), batch_arena_))) {
+          ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
+          LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DOUBLE")), "DOUBLE",
+                         col.name_.length(), col.name_.ptr(), line_no);
+        } else {
+          out.set_number(nmb);
         }
         break;
       }
@@ -962,7 +1082,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         } else {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
           LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("BOOLEAN")), "BOOLEAN",
-                         static_cast<int32_t>(text.length()), text.ptr(), line_no);
+                         col.name_.length(), col.name_.ptr(), line_no);
         }
         break;
       }
@@ -971,7 +1091,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         if (OB_SUCCESS != ObTimeConverter::str_to_mdate(text, mdate)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
           LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DATE")), "DATE",
-                         static_cast<int32_t>(text.length()), text.ptr(), line_no);
+                         col.name_.length(), col.name_.ptr(), line_no);
         } else {
           out.set_mysql_date(mdate);
         }
@@ -981,10 +1101,12 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         ObTimeConvertCtx cvrt_ctx(tz_info_, false);
         ObMySQLDateTime mdt;
         int16_t scale = 0;
-        if (OB_SUCCESS != ObTimeConverter::str_to_mdatetime(text, cvrt_ctx, mdt, &scale)) {
+        char tbuf[80];
+        const ObString norm = normalize_datetime_text(text, tbuf, sizeof(tbuf));
+        if (OB_SUCCESS != ObTimeConverter::str_to_mdatetime(norm, cvrt_ctx, mdt, &scale)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
           LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DATETIME")), "DATETIME",
-                         static_cast<int32_t>(text.length()), text.ptr(), line_no);
+                         col.name_.length(), col.name_.ptr(), line_no);
         } else {
           out.set_mysql_datetime(mdt);
         }
@@ -1009,9 +1131,10 @@ int ObCsvFileRowReader::read_batch(ObObj *cells, int64_t max_rows, int64_t &n_ro
     int64_t line_no = 0;
     if (OB_FAIL(feeder_->next_line(line, line_no))) {
       if (OB_ITER_END == ret) {
-        break;
+        ret = OB_SUCCESS;  // normal end of data
+      } else {
+        LOG_WARN("read line failed", K(ret));
       }
-      LOG_WARN("read line failed", K(ret));
       break;
     }
     if (OB_FAIL(split_csv_line(line, options_, &batch_arena_, fields_))) {
@@ -1202,6 +1325,40 @@ int ObNdjsonFileRowReader::convert_json_value(const ObIJsonBase *value,
       }
       break;
     }
+    case common::ObNumberType: {
+      number::ObNumber nmb;
+      if (ObJsonNodeType::J_DOUBLE == jt) {
+        char dbuf[64];
+        const int64_t dlen = snprintf(dbuf, sizeof(dbuf), "%.17g",
+                                      static_cast<const ObJsonDouble *>(value)->value());
+        if (OB_FAIL(nmb.from(dbuf, dlen, batch_arena_))) {
+          ret = OB_ERR_INVALID_JSON_TEXT;
+        } else {
+          out.set_number(nmb);
+        }
+      } else if (ObJsonNodeType::J_INT == jt) {
+        char dbuf[32];
+        const int64_t dlen = snprintf(dbuf, sizeof(dbuf), "%lld",
+                                      static_cast<long long>(static_cast<const ObJsonInt *>(value)->value()));
+        if (OB_FAIL(nmb.from(dbuf, dlen, batch_arena_))) {
+          ret = OB_ERR_INVALID_JSON_TEXT;
+        } else {
+          out.set_number(nmb);
+        }
+      } else if (ObJsonNodeType::J_UINT == jt) {
+        const uint64_t u = static_cast<const ObJsonUint *>(value)->value();
+        char dbuf[32];
+        const int64_t dlen = snprintf(dbuf, sizeof(dbuf), "%llu", static_cast<unsigned long long>(u));
+        if (OB_FAIL(nmb.from(dbuf, dlen, batch_arena_))) {
+          ret = OB_ERR_INVALID_JSON_TEXT;
+        } else {
+          out.set_number(nmb);
+        }
+      } else {
+        ret = OB_ERR_INVALID_JSON_TEXT;
+      }
+      break;
+    }
     case common::ObTinyIntType: {
       if (ObJsonNodeType::J_BOOLEAN != jt) {
         ret = OB_ERR_INVALID_JSON_TEXT;
@@ -1260,7 +1417,7 @@ int ObNdjsonFileRowReader::read_batch(ObObj *cells, int64_t max_rows, int64_t &n
     int64_t line_no = 0;
     if (OB_FAIL(feeder_->next_line(line, line_no))) {
       if (OB_ITER_END == ret) {
-        break;
+        ret = OB_SUCCESS;  // normal end of data
       }
       break;
     }
@@ -1296,8 +1453,11 @@ int ObNdjsonFileRowReader::read_batch(ObObj *cells, int64_t max_rows, int64_t &n
     for (int64_t c = 0; OB_SUCC(ret) && c < col_count_; ++c) {
       const ReadFileColumn &col = cols_.at(c);
       ObIJsonBase *value = NULL;
-      if (OB_FAIL(root->get_object_value(col.name_, value))) {
-        // missing field -> NULL
+      // A missing field is not an error: the union schema means some lines do
+      // not carry every column, and get_object_value() reports
+      // OB_SEARCH_NOT_FOUND in that case, so keep the status local.
+      const int tmp_ret = root->get_object_value(col.name_, value);
+      if (OB_SUCCESS != tmp_ret || OB_ISNULL(value)) {
         row[c].set_null();
         continue;
       }
@@ -1459,7 +1619,9 @@ struct InferColStat
 {
   CellKind kind_;
   int64_t max_len_;
-  InferColStat() : kind_(CK_NULL), max_len_(0) {}
+  bool has_null_;   // a NULL (or missing field) was seen for this column
+  int64_t seen_cnt_;  // rows that carried a non-NULL value
+  InferColStat() : kind_(CK_NULL), max_len_(0), has_null_(false), seen_cnt_(0) {}
 };
 
 static void build_inferred_column(ObIAllocator &alloc, const ObString &name,
@@ -1477,7 +1639,9 @@ static void build_inferred_column(ObIAllocator &alloc, const ObString &name,
       col.type_ = common::ObIntType;
       break;
     case CK_DOUBLE:
-      col.type_ = common::ObDoubleType;
+      // NUMBER prints the value without a spurious trailing ".0" (87 stays 87)
+      // and still renders 98.5 / 90.25 exactly as written in the file.
+      col.type_ = common::ObNumberType;
       break;
     case CK_DATE:
       col.type_ = common::ObMySQLDateType;
@@ -1500,7 +1664,7 @@ static void build_inferred_column(ObIAllocator &alloc, const ObString &name,
                                   static_cast<int64_t>(common::OB_MAX_VARCHAR_LENGTH));
     col.accuracy_.set_length(vlen);
   }
-  col.nullable_ = true;
+  col.nullable_ = st.has_null_ || CK_NULL == st.kind_;
   UNUSED(alloc);
   UNUSED(ret);
 }
@@ -1514,6 +1678,7 @@ static int infer_csv_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths
   ObFileLineFeeder feeder(alloc, paths);
   int64_t expect_cols = 0;
   int64_t data_lines = 0;
+  feeder.set_record_quote(options.quote_char_, options.escape_char_);
   if (OB_FAIL(feeder.open())) {
     LOG_WARN("open feeder failed", K(ret));
   }
@@ -1572,6 +1737,7 @@ static int infer_csv_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths
       if (f.is_null_) {
         continue;
       }
+      ++st.seen_cnt_;
       int64_t int_val = 0;
       double dbl_val = 0;
       int32_t date_val = 0;
@@ -1589,12 +1755,14 @@ static int infer_csv_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths
     LOG_USER_ERROR(OB_ERR_DATA_TRUNCATED, static_cast<int32_t>(strlen("csv file has no data rows")),
                    "csv file has no data rows");
   } else {
+    const int64_t data_row_cnt = data_lines - (options.header_ ? 1 : 0);
     for (int64_t c = 0; OB_SUCC(ret) && c < expect_cols; ++c) {
       ReadFileColumn col;
       InferColStat st;
       if (c < stats.count()) {
         st = stats.at(c);
       }
+      st.has_null_ = st.seen_cnt_ < data_row_cnt;
       ObString name;
       if (c < names.count() && !names.at(c).empty()) {
         name = names.at(c);
@@ -1604,6 +1772,35 @@ static int infer_csv_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths
         if (OB_FAIL(ob_write_string(alloc, ObString(static_cast<int32_t>(nlen), name_buf),
                                     name))) {
           LOG_WARN("copy generated name failed", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else {
+        // Duplicate header names get a "__N" suffix (id, id -> id, id__2),
+        // matching the DuckDB-style naming used by the file SQL tests.
+        int64_t dup_seq = 2;
+        bool conflict = true;
+        while (conflict) {
+          conflict = false;
+          for (int64_t k = 0; k < cols.count(); ++k) {
+            if (0 == cols.at(k).name_.case_compare(name)) {
+              conflict = true;
+              break;
+            }
+          }
+          if (OB_SUCC(ret) && conflict) {
+            char suffix[32];
+            const int64_t slen = snprintf(suffix, sizeof(suffix), "__%ld", dup_seq++);
+            char *buf = static_cast<char *>(alloc.alloc(name.length() + slen + 1));
+            if (OB_ISNULL(buf)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("alloc dedup name failed", K(ret));
+            } else {
+              MEMCPY(buf, name.ptr(), name.length());
+              MEMCPY(buf + name.length(), suffix, slen);
+              name.assign_ptr(buf, static_cast<int32_t>(name.length() + slen));
+            }
+          }
         }
       }
       if (OB_FAIL(ret)) {
@@ -1618,6 +1815,65 @@ static int infer_csv_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths
   return ret;
 }
 
+// ObJsonParser does not keep the textual member order of an object (its DOM
+// iterates in hash order), so the raw line is scanned for top-level keys to
+// keep the first-seen column order deterministic.
+static int scan_top_level_keys(ObIAllocator &alloc, const ObString &line,
+                               ObIArray<ObString> &keys)
+{
+  int ret = OB_SUCCESS;
+  const char *p = line.ptr();
+  const int64_t len = line.length();
+  int64_t depth = 0;
+  int64_t i = 0;
+  while (OB_SUCC(ret) && i < len) {
+    const char c = p[i];
+    if ('"' == c) {
+      const int64_t start = i + 1;
+      int64_t j = start;
+      bool closed = false;
+      while (j < len) {
+        if ('\\' == p[j]) {
+          j += 2;
+          continue;
+        }
+        if ('"' == p[j]) {
+          closed = true;
+          break;
+        }
+        ++j;
+      }
+      if (!closed) {
+        break;
+      }
+      int64_t k = j + 1;
+      while (k < len && (' ' == p[k] || '\t' == p[k] || '\r' == p[k] || '\n' == p[k])) {
+        ++k;
+      }
+      if (1 == depth && k < len && ':' == p[k]) {
+        ObString key;
+        if (OB_FAIL(ob_write_string(alloc,
+                                    ObString(static_cast<int32_t>(j - start), p + start), key))) {
+          LOG_WARN("copy json key failed", K(ret));
+        } else if (OB_FAIL(keys.push_back(key))) {
+          LOG_WARN("push json key failed", K(ret));
+        }
+      }
+      i = j + 1;
+      continue;
+    } else if ('{' == c || '[' == c) {
+      ++depth;
+    } else if ('}' == c || ']' == c) {
+      --depth;
+      if (depth < 0) {
+        break;
+      }
+    }
+    ++i;
+  }
+  return ret;
+}
+
 static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths,
                                const ReadFileOptions &options, ObIArray<ReadFileColumn> &cols)
 {
@@ -1625,6 +1881,7 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
   ObFileLineFeeder feeder(alloc, paths);
   ObArray<ObString> names;   // allocated from alloc
   ObArray<InferColStat> stats;
+  int64_t row_cnt = 0;
   if (OB_FAIL(feeder.open())) {
     LOG_WARN("open feeder failed", K(ret));
   }
@@ -1655,12 +1912,16 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
       LOG_WARN("ndjson line is not an object", K(ret), K(line_no));
       break;
     }
-    const int64_t member_cnt = static_cast<int64_t>(root->member_count());
-    for (int64_t m = 0; OB_SUCC(ret) && m < member_cnt; ++m) {
-      ObString key;
+    ++row_cnt;
+    ObSEArray<ObString, 16> key_order;
+    if (OB_FAIL(scan_top_level_keys(alloc, line, key_order))) {
+      LOG_WARN("scan ndjson keys failed", K(ret), K(line_no));
+    }
+    for (int64_t m = 0; OB_SUCC(ret) && m < key_order.count(); ++m) {
+      const ObString key = key_order.at(m);
       ObIJsonBase *value = NULL;
-      if (OB_FAIL(root->get_object_value(static_cast<uint64_t>(m), key, value))) {
-        LOG_WARN("get member failed", K(ret), K(m));
+      if (OB_FAIL(root->get_object_value(key, value))) {
+        LOG_WARN("get member failed", K(ret), K(key));
       } else {
         // find or create the column (field union, first-seen order)
         int64_t col_idx = -1;
@@ -1696,6 +1957,7 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
           LOG_WARN("nested value found", K(ret), K(line_no), K(key));
         } else {
           InferColStat &st = stats.at(col_idx);
+          ++st.seen_cnt_;
           CellKind k = CK_VARCHAR;
           int64_t text_len = 0;
           int64_t int_val = 0;
@@ -1745,6 +2007,7 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
   } else {
     for (int64_t c = 0; OB_SUCC(ret) && c < names.count(); ++c) {
       ReadFileColumn col;
+      stats.at(c).has_null_ = stats.at(c).seen_cnt_ < row_cnt;
       build_inferred_column(alloc, names.at(c), stats.at(c), col);
       if (OB_FAIL(cols.push_back(col))) {
         LOG_WARN("push column failed", K(ret));
@@ -1762,7 +2025,8 @@ int infer_file_schema(ObIAllocator &alloc, ReadFileFormat format,
   int ret = OB_SUCCESS;
   cols.reset();
   fp.reset();
-  if (OB_UNLIKELY(paths.empty())) {
+  if (OB_UNLIKELY(paths.empty() && ReadFileFormat::GLOB_LIST != format)) {
+    // a non-matching pattern is an error for read_*, while glob() simply has no rows
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("no files", K(ret));
   } else if (options.sample_size_ != -1) {

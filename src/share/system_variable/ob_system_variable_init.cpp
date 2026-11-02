@@ -9921,7 +9921,6 @@ static struct VarsInit{
       ObSysVars[719].data_type_ = ObIntType ;
       ObSysVars[719].info_ = "Enable the file-as-database feature (read_csv/read_json/read_ndjson/read_parquet/glob)." ;
       ObSysVars[719].flags_ = ObSysVarFlag::GLOBAL_SCOPE | ObSysVarFlag::SESSION_SCOPE ;
-      ObSysVars[719].enum_names_ = "['OFF', 'ON']" ;
     ObSysVars[719].alias_ = "OB_SV_ENABLE_FILE_SQL" ;
     }();
 

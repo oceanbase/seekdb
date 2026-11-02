@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_explain_resolver.h"
+#include "sql/parser/ob_parser.h"
 #include "sql/resolver/ob_resolver.h"
 
 using namespace oceanbase;
@@ -62,7 +63,17 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_ISNULL(child_stmt)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to generate stmt for child stmt");
-      } else {
+      } else if (NULL != parse_tree.children_[EXPLAIN_FORMAT]
+                 && T_SHOW_COLUMNS == parse_tree.children_[EXPLAIN_FORMAT]->type_
+                 && stmt::T_SELECT == child_stmt->get_stmt_type()) {
+        // DESCRIBE <query>: emit the query's output schema instead of a plan
+        if (OB_FAIL(resolve_describe_query(*static_cast<ObSelectStmt *>(child_stmt)))) {
+          LOG_WARN("resolve describe query failed", K(ret));
+        } else {
+          return ret;
+        }
+      }
+      if (OB_SUCC(ret)) {
         explain_stmt->set_explain_query_stmt(static_cast<ObDMLStmt *>(child_stmt));
         ParseNode *format = parse_tree.children_[EXPLAIN_FORMAT];
         if (NULL != format) {
@@ -107,6 +118,10 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
             opt.with_tree_line_ = true;
             break;
           }
+          case T_SHOW_COLUMNS: {
+            // marker of DESCRIBE/DESC; handled above
+            break;
+          }
           default:
             ret = OB_ERROR;
             LOG_WARN("unknown explain format", "format", format->type_);
@@ -145,3 +160,111 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
 
   return ret;
 }
+
+namespace oceanbase
+{
+namespace sql
+{
+
+// Map the result type of a select item to the type name DuckDB prints in
+// DESCRIBE. File SQL columns are inferred as BIGINT / DOUBLE / BOOLEAN / DATE /
+// DATETIME / VARCHAR, so keep the mapping aligned with that inference.
+static const char *describe_type_name(const ObObjType type)
+{
+  const char *name = "VARCHAR";
+  if (ObNullType == type) {
+    // an all-NULL column keeps the NULL type instead of widening to VARCHAR
+    name = "NULL";
+  } else if (ObTinyIntType == type || ObUTinyIntType == type) {
+    name = "BOOLEAN";
+  } else if (ob_is_integer_type(type)) {
+    name = "BIGINT";
+  } else if (ObNumberType == type || ObDoubleType == type || ObFloatType == type
+             || ObONumberFloatType == type) {
+    name = "DOUBLE";
+  } else if (ObMySQLDateType == type) {
+    name = "DATE";
+  } else if (ObMySQLDateTimeType == type || ObDateTimeType == type || ObTimestampType == type) {
+    name = "DATETIME";
+  } else if (ob_is_string_type(type) || ObJsonType == type || ObHexStringType == type) {
+    name = "VARCHAR";
+  }
+  return name;
+}
+
+int ObExplainResolver::build_describe_sql(const ObSelectStmt &sel, ObSqlString &sql)
+{
+  int ret = OB_SUCCESS;
+  const int64_t item_cnt = sel.get_select_item_size();
+  if (OB_UNLIKELY(item_cnt <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("empty select item list for describe", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < item_cnt; ++i) {
+    const SelectItem &item = sel.get_select_item(i);
+    if (OB_ISNULL(item.expr_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null select expr", K(ret), K(i));
+    } else {
+      const ObExprResType &res_type = item.expr_->get_result_type();
+      const char *type_name = describe_type_name(res_type.get_type());
+      const bool not_null = res_type.has_result_flag(NOT_NULL_FLAG);
+      if (i > 0 && OB_FAIL(sql.append(" union all "))) {
+        LOG_WARN("append sql failed", K(ret));
+      } else if (OB_FAIL(sql.append_fmt(
+                   "select '%.*s' as column_name, '%s' as column_type, '%s' as `null`, "
+                   "null as `key`, null as `default`, null as `extra`",
+                   item.alias_name_.length(), item.alias_name_.ptr(), type_name,
+                   not_null ? "NO" : "YES"))) {
+        LOG_WARN("append describe item failed", K(ret), K(i));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExplainResolver::resolve_describe_query(ObSelectStmt &sel)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  ParseResult parse_result;
+  ObStmt *new_stmt = NULL;
+  if (OB_ISNULL(params_.session_info_) || OB_ISNULL(params_.allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid resolver params", K(ret));
+  } else if (OB_FAIL(build_describe_sql(sel, sql))) {
+    LOG_WARN("build describe sql failed", K(ret));
+  } else if (OB_UNLIKELY(sql.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObParser parser(*params_.allocator_, params_.session_info_->get_sql_mode());
+    ParseNode *stmt_node = NULL;
+    if (OB_FAIL(parser.parse(sql.string(), parse_result))) {
+      LOG_WARN("parse describe sql failed", K(ret), K(sql));
+    } else if (OB_ISNULL(parse_result.result_tree_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("empty parse tree for describe sql", K(ret));
+    } else if (OB_ISNULL(parse_result.result_tree_->children_)
+               || OB_UNLIKELY(parse_result.result_tree_->num_child_ != 1)
+               || OB_ISNULL(stmt_node = parse_result.result_tree_->children_[0])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("bad parse tree for describe sql", K(ret), K(sql));
+    } else {
+      ObResolver resolver(params_);
+      if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
+                                   *stmt_node,
+                                   new_stmt))) {
+        LOG_WARN("resolve describe sql failed", K(ret), K(sql));
+      } else if (OB_ISNULL(new_stmt)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null stmt for describe sql", K(ret));
+      } else {
+        stmt_ = new_stmt;
+      }
+    }
+  }
+  return ret;
+}
+
+}  // namespace sql
+}  // namespace oceanbase

@@ -5208,12 +5208,10 @@ public:
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_OB_SPARSE_DROP_RATIO_SEARCH; }
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(718); }
 };
-class ObSysVarEnableFileSql : public ObEnumSysVar
+class ObSysVarEnableFileSql : public ObBoolSysVar
 {
 public:
-  const static char * ENABLE_FILE_SQL_NAMES[];
-public:
-  ObSysVarEnableFileSql() : ObEnumSysVar(ENABLE_FILE_SQL_NAMES, NULL, NULL, NULL, NULL, NULL) {}
+  ObSysVarEnableFileSql() : ObBoolSysVar(NULL, NULL, NULL, NULL, NULL) {}
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_ENABLE_FILE_SQL; }
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(719); }
 };

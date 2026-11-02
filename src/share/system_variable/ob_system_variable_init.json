@@ -10981,13 +10981,9 @@
     "name": "enable_file_sql",
     "default_value": "0",
     "base_value": "0",
-    "data_type": "enum",
+    "data_type": "bool",
     "info": "Enable the file-as-database feature (read_csv/read_json/read_ndjson/read_parquet/glob).",
     "flags": "GLOBAL | SESSION ",
-    "enum_names": [
-      "OFF",
-      "ON"
-    ],
     "publish_version": "1.0.0.0",
     "info_cn": "开启文件即数据库特性（read_csv/read_json/read_ndjson/read_parquet/glob）。",
     "background_cn": "",

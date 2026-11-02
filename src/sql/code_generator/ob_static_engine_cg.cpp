@@ -5486,7 +5486,26 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       spec.cs_type_ = op.get_cs_type();
       spec.parallel_ = op.get_parallel();
       spec.is_overwrite_ = op.get_is_overwrite();
+      spec.with_header_ = op.get_with_header();
       spec.plan_->need_drive_dml_query_ = true;
+      // COPY ... (header): the header line is the list of output column names
+      const ObSelectStmt *sel_stmt = NULL;
+      if (OB_SUCC(ret) && spec.with_header_) {
+        if (OB_ISNULL(sel_stmt = static_cast<const ObSelectStmt *>(op.get_stmt()))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null select stmt for select into", K(ret));
+        } else if (OB_FAIL(spec.header_names_.init(sel_stmt->get_select_item_size()))) {
+          LOG_WARN("init header names failed", K(ret));
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < sel_stmt->get_select_item_size(); ++i) {
+          ObString name;
+          if (OB_FAIL(ob_write_string(alloc, sel_stmt->get_select_item(i).alias_name_, name))) {
+            LOG_WARN("copy header name failed", K(ret), K(i));
+          } else if (OB_FAIL(spec.header_names_.push_back(name))) {
+            LOG_WARN("push header name failed", K(ret), K(i));
+          }
+        }
+      }
     }
   }
   return ret;

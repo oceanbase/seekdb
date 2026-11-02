@@ -40,12 +40,67 @@
 #include "../../../src/sql/parser/sql_parser_mysql_mode_lex.h"
 #include "../../../src/sql/parser/sql_parser_base.h"
 
+// Turn one "name [=] value" COPY option into the parse node that the
+// SELECT ... INTO OUTFILE resolver already understands. The parser is
+// plain C, so the option name is compared with strncasecmp.
+#define COPY_KEY_IS(key_node, lit)\
+  ((key_node)->str_len_ == (int32_t)strlen(lit)\
+   && 0 == strncasecmp((key_node)->str_value_, (lit), (key_node)->str_len_))
+
+#define COPY_MAKE_OPTION(opt, key_node, value_node)\
+  do {\
+    if (COPY_KEY_IS((key_node), "format")) {\
+      if (NULL == (value_node)) {\
+        yyerror(NULL, result, "COPY format needs a name");\
+        (opt) = NULL;\
+      } else {\
+        malloc_non_terminal_node((opt), result->malloc_pool_,\
+                                 T_EXTERNAL_FILE_FORMAT_TYPE, 1, (value_node));\
+      }\
+    } else if (COPY_KEY_IS((key_node), "header")) {\
+      ParseNode *copy_bool = (value_node);\
+      if (NULL == copy_bool) {\
+        malloc_terminal_node(copy_bool, result->malloc_pool_, T_BOOL);\
+        copy_bool->value_ = 1;\
+      }\
+      malloc_non_terminal_node((opt), result->malloc_pool_, T_PARSE_HEADER, 1,\
+                               copy_bool);\
+    } else if (COPY_KEY_IS((key_node), "nullstr")) {\
+      ParseNode *copy_list = NULL;\
+      if (NULL == (value_node)) {\
+        yyerror(NULL, result, "COPY nullstr needs a value");\
+        (opt) = NULL;\
+      } else {\
+        malloc_non_terminal_node(copy_list, result->malloc_pool_, T_EXPR_LIST, 1,\
+                                 (value_node));\
+        malloc_non_terminal_node((opt), result->malloc_pool_,\
+                                 T_NULL_IF_EXETERNAL, 1, copy_list);\
+      }\
+    } else if (COPY_KEY_IS((key_node), "delimiter")\
+               || COPY_KEY_IS((key_node), "delim")) {\
+      malloc_non_terminal_node((opt), result->malloc_pool_,\
+                               T_FIELD_TERMINATED_STR, 1, (value_node));\
+    } else if (COPY_KEY_IS((key_node), "quote")) {\
+      malloc_non_terminal_node((opt), result->malloc_pool_,\
+                               T_OPTIONALLY_CLOSED_STR, 1, (value_node));\
+    } else if (COPY_KEY_IS((key_node), "escape")) {\
+      malloc_non_terminal_node((opt), result->malloc_pool_, T_ESCAPED_STR, 1,\
+                               (value_node));\
+    } else {\
+      yyerror(NULL, result, "unsupported COPY option");\
+      (opt) = NULL;\
+    }\
+  } while (0)
+
 #define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
   (void)(no_use); \
   ParseNode *type_node = NULL; \
   ParseNode *display_node = NULL; \
   if (0 != explain_type) { \
     malloc_terminal_node(type_node, result->malloc_pool_, explain_type); \
+  } else { \
+    /* DESCRIBE/DESC carries a marker node, EXPLAIN carries NULL */ \
+    type_node = no_use; \
   } \
   if (0 != display_type) { \
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
@@ -374,6 +429,7 @@ END_P SET_VAR DELIMITER
         ORGANIZATION
 //-----------------------------non_reserved keyword end---------------------------------------------
 %type <node> sql_stmt stmt_list stmt opt_end_p
+%type <node> copy_to_stmt opt_copy_options copy_option_list copy_option copy_option_key copy_option_value
 %type <node> select_stmt update_stmt delete_stmt
 %type <node> insert_stmt single_table_insert values_clause dml_table_name
 %type <node> create_table_stmt create_table_like_stmt fork_table_stmt fork_database_stmt diff_table_stmt merge_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
@@ -585,6 +641,7 @@ stmt:
   | drop_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | drop_view_stmt          { $$ = $1; check_question_mark($$, result); }
   | explain_stmt            { $$ = $1; question_mark_issue($$, result); }
+  | copy_to_stmt            { $$ = $1; check_question_mark($$, result); }
   | create_outline_stmt     { $$ = $1; question_mark_issue($$, result); }
   | alter_outline_stmt      { $$ = $1; question_mark_issue($$, result); }
   | drop_outline_stmt       { $$ = $1; check_question_mark($$, result); }
@@ -12263,6 +12320,106 @@ $$ = NULL;
  *	explain grammar
  *
  *****************************************************************************/
+// ---------------------------------------------------------------------------
+// COPY (query) TO 'path' (format csv, header, nullstr 'NULL', ...)
+// Desugars into the SELECT ... INTO OUTFILE '<path>' FORMAT (type='csv', ...)
+// node so that it reuses the existing outfile writer.
+// ---------------------------------------------------------------------------
+copy_to_stmt:
+COPY select_with_parens TO STRING_VALUE opt_copy_options
+{
+  ParseNode *format_list = NULL;
+  ParseNode *into = NULL;
+  if ($2->children_[PARSE_SELECT_INTO] != NULL) {
+    yyerror(NULL, result, "COPY query must not contain INTO\n");
+    $$ = NULL;
+  } else {
+    if (NULL != $5) {
+      merge_nodes(format_list, result, T_EXTERNAL_FILE_FORMAT, $5);
+    } else {
+      ParseNode *csv_name = NULL;
+      ParseNode *type_node = NULL;
+      malloc_terminal_node(csv_name, result->malloc_pool_, T_VARCHAR);
+      csv_name->str_value_ = (char *)"csv";
+      csv_name->str_len_ = 3;
+      malloc_non_terminal_node(type_node, result->malloc_pool_, T_EXTERNAL_FILE_FORMAT_TYPE, 1, csv_name);
+      malloc_non_terminal_node(format_list, result->malloc_pool_, T_EXTERNAL_FILE_FORMAT, 1, type_node);
+    }
+    malloc_non_terminal_node(into, result->malloc_pool_, T_INTO_OUTFILE, 3, $4, format_list, NULL);
+    into->value_ = 1;  /* marks a COPY ... TO clause (DuckDB CSV defaults) */
+    $2->children_[PARSE_SELECT_INTO] = into;
+    $$ = $2;
+  }
+}
+;
+
+opt_copy_options:
+/* EMPTY */
+{
+  $$ = NULL;
+}
+| '(' copy_option_list ')'
+{
+  $$ = $2;
+}
+;
+
+copy_option_list:
+copy_option
+{
+  $$ = $1;
+}
+| copy_option_list ',' copy_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+copy_option:
+copy_option_key opt_equal_mark copy_option_value
+{
+  COPY_MAKE_OPTION($$, $1, $3);
+}
+| copy_option_key
+{
+  COPY_MAKE_OPTION($$, $1, NULL);
+}
+;
+
+copy_option_key:
+NAME_OB
+{
+  get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
+}
+| FORMAT
+{
+  get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
+}
+| ESCAPE
+{
+  get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
+}
+;
+
+copy_option_value:
+NAME_OB
+{
+  $$ = $1;
+}
+| STRING_VALUE
+{
+  $$ = $1;
+}
+| INTNUM
+{
+  $$ = $1;
+}
+| BOOL_VALUE
+{
+  $$ = $1;
+}
+;
+
 explain_stmt:
 explain_or_desc relation_factor opt_desc_column_option
 {
@@ -12313,8 +12470,8 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE { malloc_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS); }
+| DESC  { malloc_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS); }
 ;
 
 explainable_stmt:
@@ -16750,9 +16907,16 @@ simple_expr
 {
   $$ = $1;
 }
-| NAME_OB '=' simple_expr
+| NAME_OB COMP_EQ simple_expr
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+| unreserved_keyword COMP_EQ simple_expr
+{
+  /* option names such as `format` are lexed as unreserved keywords */
+  ParseNode *name_node = NULL;
+  get_non_reserved_node(name_node, result->malloc_pool_, @1.first_column, @1.last_column);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, name_node, $3);
 }
 ;
 

@@ -68,7 +68,7 @@ struct ReadFileOptions
   ReadFileOptions()
     : header_(true),
       field_delimiter_(","),
-      quote_char_(INT64_MAX),       // INT64_MAX means "no quote char"
+      quote_char_('"'),             // INT64_MAX means "no quote char"
       escape_char_('\\'),           // INT64_MAX means "no escape char"
       null_text_("\\N"),
       empty_field_as_null_(true),

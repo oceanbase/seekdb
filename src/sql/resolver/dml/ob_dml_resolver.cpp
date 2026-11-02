@@ -11170,8 +11170,17 @@ static int resolve_read_file_arg_obj(const ParseNode &value_node,
     timezone_info = session_info->get_timezone_info();
     nchar_collation = session_info->get_nls_collation_nation();
   }
+  // a unary minus (sample_size = -1) is parsed as T_OP_NEG over a literal;
+  // resolve the literal and negate it here
+  const ParseNode *real_node = &value_node;
+  bool need_negate = false;
+  if (T_OP_NEG == value_node.type_ && 1 == value_node.num_child_
+      && OB_NOT_NULL(value_node.children_[0])) {
+    real_node = value_node.children_[0];
+    need_negate = true;
+  }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObResolverUtils::resolve_const(&value_node, stmt_type, allocator, coll_type,
+    if (OB_FAIL(ObResolverUtils::resolve_const(real_node, stmt_type, allocator, coll_type,
                                                nchar_collation, timezone_info, obj_param,
                                                false /*is_parameterize*/, literal_prefix,
                                                length_semantics,
@@ -11181,6 +11190,24 @@ static int resolve_read_file_arg_obj(const ParseNode &value_node,
                                                enable_mysql_compatible_dates,
                                                session_info->get_min_const_integer_precision()))) {
       LOG_WARN("resolve read file argument failed", K(ret));
+    } else if (need_negate) {
+      if (obj_param.is_int()) {
+        obj_param.set_int(-obj_param.get_int());
+      } else if (obj_param.is_tinyint()) {
+        obj_param.set_tinyint(static_cast<int8_t>(-obj_param.get_tinyint()));
+      } else if (obj_param.is_double()) {
+        obj_param.set_double(-obj_param.get_double());
+      } else if (obj_param.is_number()) {
+        number::ObNumber neg;
+        if (OB_FAIL(obj_param.get_number().negate(neg, allocator))) {
+          LOG_WARN("negate number failed", K(ret));
+        } else {
+          obj_param.set_number(neg);
+        }
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "read_* option", "integer expected");
+      }
     }
   }
   return ret;
@@ -11306,24 +11333,25 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
           } else if (0 == fmt.case_compare("csv")) {
             format = ReadFileFormat::CSV;
           } else {
-            ret = OB_ERR_PARSER_SYNTAX;
-            LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX,
-                           static_cast<int32_t>(fmt.length()), fmt.ptr());
+            ret = OB_ERR_PARSE_SQL;
+            LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unsupported read file format",
+                           static_cast<int32_t>(fmt.length()), fmt.ptr(), 1);
             LOG_WARN("unknown read file format", K(fmt));
           }
         }
       } else {
-        ret = OB_ERR_PARSER_SYNTAX;
-        LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, static_cast<int32_t>(name.length()), name.ptr());
+        ret = OB_ERR_PARSE_SQL;
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unknown read file option",
+                       static_cast<int32_t>(name.length()), name.ptr(), 1);
         LOG_WARN("unknown read file option", K(name));
       }
     } else {
       common::ObObjParam obj_param;
       if (has_path) {
-        ret = OB_ERR_PARSER_SYNTAX;
-        LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX,
+        ret = OB_ERR_PARSE_SQL;
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unexpected argument",
                        static_cast<int32_t>(strlen("more than one path argument")),
-                       "more than one path argument");
+                       "more than one path argument", 1);
       } else if (OB_FAIL(resolve_read_file_arg_obj(*arg, session_info_, *allocator_, obj_param))) {
         // error already logged
       } else if (!obj_param.is_string_type()) {
@@ -11342,7 +11370,9 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
     } else if (ReadFileFormat::GLOB_LIST == format || has_wildcard(path_pattern)) {
       if (OB_FAIL(discover_files(*allocator_, path_pattern, paths))) {
         LOG_WARN("discover files failed", K(ret), K(path_pattern));
-      } else if (paths.empty()) {
+      } else if (paths.empty() && ReadFileFormat::GLOB_LIST != format) {
+        // DuckDB semantics: glob() over a non-matching pattern yields no rows,
+        // while read_*(pattern) that matches nothing is an error.
         ret = OB_FILE_NOT_EXIST;
         LOG_USER_ERROR(OB_FILE_NOT_EXIST, static_cast<int32_t>(path_pattern.length()),
                        path_pattern.ptr());

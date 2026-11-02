@@ -461,11 +461,6 @@ const char *ObSysVarEnableOptimizerRowgoal::ENABLE_OPTIMIZER_ROWGOAL_NAMES[] = {
   "ON",
   0
 };
-const char *ObSysVarEnableFileSql::ENABLE_FILE_SQL_NAMES[] = {
-  "OFF",
-  "ON",
-  0
-};
 
 ObSysVarFactory::ObSysVarFactory()
   : allocator_(ObMemAttr(ObModIds::OB_COMMON_SYS_VAR_FAC)),

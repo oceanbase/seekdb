@@ -21,6 +21,8 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/file/file_directory_utils.h"
+#include <stdio.h>
+
 
 namespace oceanbase
 {
@@ -131,6 +133,10 @@ static int snappy_uncompress(const char *in, int64_t in_len, char *out, int64_t 
 // ---------------------------------------------------------------------------
 // Thrift compact protocol reader (subset needed for parquet metadata)
 // ---------------------------------------------------------------------------
+// Compact type ids: 1 BOOLEAN_TRUE, 2 BOOLEAN_FALSE, 3 BYTE, 4 I16, 5 I32,
+// 6 I64, 7 DOUBLE, 8 BINARY, 9 LIST, 10 SET, 11 MAP, 12 STRUCT.
+static inline bool is_int_type(const uint8_t t) { return 4 == t || 5 == t || 6 == t; }
+
 class ThriftCompactReader
 {
 public:
@@ -160,7 +166,8 @@ public:
         int64_t id = 0;
         if (OB_FAIL(read_zigzag(id))) {
         } else {
-          field_id = static_cast<int16_t>(last_field_id_ + id);
+          // long form carries the absolute field id (not a delta)
+          field_id = static_cast<int16_t>(id);
         }
       } else {
         field_id = static_cast<int16_t>(last_field_id_ + delta);
@@ -172,11 +179,21 @@ public:
     return ret;
   }
 
-  void push_field_scope() { last_field_id_stack_.push_back(0); last_field_id_ = 0; }
+  // Thrift restores the enclosing struct's last-field-id when a nested struct
+  // ends, so the current id (not 0) has to be saved on push.
+  void push_field_scope()
+  {
+    last_field_id_stack_.push_back(last_field_id_);
+    last_field_id_ = 0;
+  }
   void pop_field_scope()
   {
-    last_field_id_stack_.pop_back();
-    last_field_id_ = last_field_id_stack_.at(last_field_id_stack_.count() - 1);
+    if (last_field_id_stack_.empty()) {
+      last_field_id_ = 0;
+    } else {
+      last_field_id_ = last_field_id_stack_.at(last_field_id_stack_.count() - 1);
+      last_field_id_stack_.pop_back();
+    }
   }
 
   int read_byte(uint8_t &val)
@@ -221,6 +238,32 @@ public:
 
   int read_i64(int64_t &val) { return read_zigzag(val); }
 
+  // Unsigned LEB128 varint: used by string/list/map sizes in the compact
+  // protocol (they are NOT zigzag encoded, unlike i16/i32/i64 fields).
+  int read_varint(uint64_t &val)
+  {
+    int ret = OB_SUCCESS;
+    val = 0;
+    int shift = 0;
+    while (true) {
+      if (pos_ >= len_) {
+        ret = OB_ERR_UNEXPECTED;
+        break;
+      }
+      const uint8_t b = static_cast<uint8_t>(buf_[pos_++]);
+      val |= static_cast<uint64_t>(b & 0x7F) << shift;
+      if (0 == (b & 0x80)) {
+        break;
+      }
+      shift += 7;
+      if (shift > 63) {
+        ret = OB_ERR_UNEXPECTED;
+        break;
+      }
+    }
+    return ret;
+  }
+
   int read_double(double &val)
   {
     if (pos_ + 8 > len_) {
@@ -240,13 +283,13 @@ public:
   int read_binary(ObString &val)
   {
     int ret = OB_SUCCESS;
-    int64_t length = 0;
-    if (OB_FAIL(read_zigzag(length))) {
-    } else if (length < 0 || pos_ + length > len_) {
+    uint64_t length = 0;
+    if (OB_FAIL(read_varint(length))) {
+    } else if (length > static_cast<uint64_t>(len_ - pos_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       val.assign_ptr(buf_ + pos_, static_cast<int32_t>(length));
-      pos_ += length;
+      pos_ += static_cast<int64_t>(length);
     }
     return ret;
   }
@@ -261,7 +304,10 @@ public:
       elem_type = byte & 0x0F;
       int64_t size = (byte >> 4) & 0x0F;
       if (0x0F == size) {
-        if (OB_FAIL(read_zigzag(size))) {
+        uint64_t big = 0;
+        if (OB_FAIL(read_varint(big))) {
+        } else {
+          size = static_cast<int64_t>(big);
         }
       }
       count = size;
@@ -274,9 +320,8 @@ public:
   {
     int ret = OB_SUCCESS;
     switch (type) {
-      case 1: {  // bool
-        uint8_t b = 0;
-        ret = read_byte(b);
+      case 1:    // BOOLEAN_TRUE: value lives in the field header
+      case 2: {  // BOOLEAN_FALSE
         break;
       }
       case 3: {  // byte
@@ -284,16 +329,16 @@ public:
         ret = read_byte(b);
         break;
       }
-      case 4: {
-        double d = 0;
-        ret = read_double(d);
-        break;
-      }
+      case 4:
       case 5:
-      case 6:
-      case 7: {
+      case 6: {  // i16 / i32 / i64 are all zigzag varints
         int64_t v = 0;
         ret = read_zigzag(v);
+        break;
+      }
+      case 7: {  // double
+        double d = 0;
+        ret = read_double(d);
         break;
       }
       case 8: {
@@ -315,7 +360,7 @@ public:
       }
       case 11: {  // map
         uint8_t kt = 0, vt = 0;
-        int64_t cnt = 0;
+        uint64_t cnt = 0;
         uint8_t b = 0;
         if (OB_FAIL(read_byte(b))) {
         } else if (0 == b) {
@@ -323,9 +368,9 @@ public:
         } else {
           kt = b & 0x0F;
           vt = (b >> 4) & 0x0F;
-          if (OB_FAIL(read_zigzag(cnt))) {
+          if (OB_FAIL(read_varint(cnt))) {
           } else {
-            for (int64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
+            for (uint64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
               if (OB_FAIL(skip(kt))) {
               } else if (OB_FAIL(skip(vt))) {
               }
@@ -514,7 +559,7 @@ int ObParquetFile::parse_footer()
       if (OB_ISNULL(meta_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc meta buffer failed", K(ret));
-      } else if (OB_FAIL(read_range(file_size_ - 12 - meta_len, meta_len, meta_buf))) {
+      } else if (OB_FAIL(read_range(file_size_ - 8 - meta_len, meta_len, meta_buf))) {
         LOG_WARN("read footer failed", K(ret));
       } else {
         ThriftCompactReader rd(meta_buf, meta_len);
@@ -535,7 +580,6 @@ int ObParquetFile::parse_footer()
           {}
         };
         ObArray<SchemaElem> schema;
-        ObArray<ParquetColumnMeta> chunk_metas;
         ObArray<ParquetRowGroupMeta> row_groups;
         while (OB_SUCC(ret)) {
           int16_t fid = 0;
@@ -544,11 +588,11 @@ int ObParquetFile::parse_footer()
             LOG_WARN("read footer field failed", K(ret));
           } else if (0 == ftype) {
             break;
-          } else if (1 == fid && 7 == ftype) {
+          } else if (1 == fid && is_int_type(ftype)) {
             if (OB_FAIL(rd.read_i32(meta_.version_))) {
               LOG_WARN("read version failed", K(ret));
             }
-          } else if (3 == fid && 7 == ftype) {
+          } else if (3 == fid && is_int_type(ftype)) {
             if (OB_FAIL(rd.read_i64(meta_.num_rows_))) {
               LOG_WARN("read num_rows failed", K(ret));
             }
@@ -567,22 +611,22 @@ int ObParquetFile::parse_footer()
                   if (OB_FAIL(rd.read_field_begin(sfid, sftype))) {
                   } else if (0 == sftype) {
                     break;
-                  } else if (1 == sfid && 7 == sftype) {
+                  } else if (1 == sfid && is_int_type(sftype)) {
                     int32_t t = 0;
                     if (OB_FAIL(rd.read_i32(t))) {
                     } else {
                       elem.type_ = static_cast<ParquetPhysicalType>(t);
                     }
-                  } else if (2 == sfid && 7 == sftype) {
+                  } else if (2 == sfid && is_int_type(sftype)) {
                     if (OB_FAIL(rd.read_i32(elem.type_length_))) {
                     }
-                  } else if (3 == sfid && 7 == sftype) {
+                  } else if (3 == sfid && is_int_type(sftype)) {
                     if (OB_FAIL(rd.read_i32(elem.repetition_type_))) {
                     }
                   } else if (4 == sfid && 8 == sftype) {
                     if (OB_FAIL(rd.read_binary(elem.name_))) {
                     }
-                  } else if (5 == sfid && 7 == sftype) {
+                  } else if (5 == sfid && is_int_type(sftype)) {
                     if (OB_FAIL(rd.read_i32(elem.num_children_))) {
                     }
                   } else if (OB_FAIL(rd.skip(sftype))) {
@@ -602,7 +646,7 @@ int ObParquetFile::parse_footer()
             } else {
               for (int64_t g = 0; OB_SUCC(ret) && g < cnt; ++g) {
                 ParquetRowGroupMeta rg;
-                rg.columns_offset_ = chunk_metas.count();
+                rg.columns_offset_ = meta_.chunk_metas_.count();
                 rd.push_field_scope();
                 while (OB_SUCC(ret)) {
                   int16_t gfid = 0;
@@ -610,7 +654,7 @@ int ObParquetFile::parse_footer()
                   if (OB_FAIL(rd.read_field_begin(gfid, gftype))) {
                   } else if (0 == gftype) {
                     break;
-                  } else if (3 == gfid && 7 == gftype) {
+                  } else if (3 == gfid && is_int_type(gftype)) {
                     if (OB_FAIL(rd.read_i64(rg.num_rows_))) {
                     }
                   } else if (1 == gfid && 9 == gftype) {
@@ -637,28 +681,28 @@ int ObParquetFile::parse_footer()
                               if (OB_FAIL(rd.read_field_begin(mfid, mftype))) {
                               } else if (0 == mftype) {
                                 break;
-                              } else if (1 == mfid && 7 == mftype) {
+                              } else if (1 == mfid && is_int_type(mftype)) {
                                 int32_t t = 0;
                                 if (OB_FAIL(rd.read_i32(t))) {
                                 } else {
                                   cm.physical_type_ = static_cast<ParquetPhysicalType>(t);
                                 }
-                              } else if (4 == mfid && 7 == mftype) {
+                              } else if (4 == mfid && is_int_type(mftype)) {
                                 int32_t codec = 0;
                                 if (OB_FAIL(rd.read_i32(codec))) {
                                 } else {
                                   cm.codec_ = static_cast<ParquetCodec>(codec);
                                 }
-                              } else if (5 == mfid && 7 == mftype) {
+                              } else if (5 == mfid && is_int_type(mftype)) {
                                 if (OB_FAIL(rd.read_i64(cm.num_values_))) {
                                 }
-                              } else if (7 == mfid && 7 == mftype) {
+                              } else if (7 == mfid && is_int_type(mftype)) {
                                 if (OB_FAIL(rd.read_i64(cm.total_compressed_size_))) {
                                 }
-                              } else if (9 == mfid && 7 == mftype) {
+                              } else if (9 == mfid && is_int_type(mftype)) {
                                 if (OB_FAIL(rd.read_i64(cm.data_page_offset_))) {
                                 }
-                              } else if (11 == mfid && 7 == mftype) {
+                              } else if (11 == mfid && is_int_type(mftype)) {
                                 if (OB_FAIL(rd.read_i64(cm.dict_page_offset_))) {
                                 }
                               } else if (3 == mfid && 9 == mftype) {
@@ -683,7 +727,7 @@ int ObParquetFile::parse_footer()
                           }
                         }
                         rd.pop_field_scope();
-                        if (OB_SUCC(ret) && OB_FAIL(chunk_metas.push_back(cm))) {
+                        if (OB_SUCC(ret) && OB_FAIL(meta_.chunk_metas_.push_back(cm))) {
                           LOG_WARN("push chunk meta failed", K(ret));
                         }
                       }
@@ -692,7 +736,7 @@ int ObParquetFile::parse_footer()
                   }
                 }
                 rd.pop_field_scope();
-                rg.column_cnt_ = chunk_metas.count() - rg.columns_offset_;
+                rg.column_cnt_ = meta_.chunk_metas_.count() - rg.columns_offset_;
                 if (OB_SUCC(ret) && OB_FAIL(row_groups.push_back(rg))) {
                   LOG_WARN("push row group failed", K(ret));
                 }
@@ -1291,13 +1335,13 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
         if (OB_FAIL(rd.read_field_begin(fid, ftype))) {
         } else if (0 == ftype) {
           break;
-        } else if (1 == fid && 7 == ftype) {
+        } else if (1 == fid && is_int_type(ftype)) {
           if (OB_FAIL(rd.read_i32(page_type))) {
           }
-        } else if (2 == fid && 7 == ftype) {
+        } else if (2 == fid && is_int_type(ftype)) {
           if (OB_FAIL(rd.read_i32(uncomp_size))) {
           }
-        } else if (3 == fid && 7 == ftype) {
+        } else if (3 == fid && is_int_type(ftype)) {
           if (OB_FAIL(rd.read_i32(comp_size))) {
           }
         } else if (5 == fid && 12 == ftype) {
@@ -1309,16 +1353,16 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
             if (OB_FAIL(rd.read_field_begin(dfid, dftype))) {
             } else if (0 == dftype) {
               break;
-            } else if (1 == dfid && 7 == dftype) {
+            } else if (1 == dfid && is_int_type(dftype)) {
               if (OB_FAIL(rd.read_i32(dp_num_values))) {
               }
-            } else if (2 == dfid && 7 == dftype) {
+            } else if (2 == dfid && is_int_type(dftype)) {
               if (OB_FAIL(rd.read_i32(dp_encoding))) {
               }
-            } else if (3 == dfid && 7 == dftype) {
+            } else if (3 == dfid && is_int_type(dftype)) {
               if (OB_FAIL(rd.read_i32(dp_def_enc))) {
               }
-            } else if (4 == dfid && 7 == dftype) {
+            } else if (4 == dfid && is_int_type(dftype)) {
               if (OB_FAIL(rd.read_i32(dp_rep_enc))) {
               }
             } else if (OB_FAIL(rd.skip(dftype))) {
@@ -1334,10 +1378,10 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
             if (OB_FAIL(rd.read_field_begin(dfid, dftype))) {
             } else if (0 == dftype) {
               break;
-            } else if (1 == dfid && 7 == dftype) {
+            } else if (1 == dfid && is_int_type(dftype)) {
               if (OB_FAIL(rd.read_i32(dict_num_values))) {
               }
-            } else if (2 == dfid && 7 == dftype) {
+            } else if (2 == dfid && is_int_type(dftype)) {
               if (OB_FAIL(rd.read_i32(dict_encoding))) {
               }
             } else if (OB_FAIL(rd.skip(dftype))) {
@@ -1353,42 +1397,39 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
             if (OB_FAIL(rd.read_field_begin(dfid, dftype))) {
             } else if (0 == dftype) {
               break;
-            } else if (1 == dfid && 7 == dftype) {
+            } else if (1 == dfid && is_int_type(dftype)) {
               int32_t t = 0;
               if (OB_FAIL(rd.read_i32(t))) {
               } else {
                 v2_num_values = t;
               }
-            } else if (2 == dfid && 7 == dftype) {
+            } else if (2 == dfid && is_int_type(dftype)) {
               int32_t t = 0;
               if (OB_FAIL(rd.read_i32(t))) {
               } else {
                 v2_num_nulls = t;
               }
-            } else if (4 == dfid && 7 == dftype) {
+            } else if (4 == dfid && is_int_type(dftype)) {
               int32_t t = 0;
               if (OB_FAIL(rd.read_i32(t))) {
               } else {
                 v2_encoding = t;
               }
-            } else if (5 == dfid && 7 == dftype) {
+            } else if (5 == dfid && is_int_type(dftype)) {
               int32_t t = 0;
               if (OB_FAIL(rd.read_i32(t))) {
               } else {
                 v2_def_len = t;
               }
-            } else if (6 == dfid && 7 == dftype) {
+            } else if (6 == dfid && is_int_type(dftype)) {
               int32_t t = 0;
               if (OB_FAIL(rd.read_i32(t))) {
               } else {
                 v2_rep_len = t;
               }
-            } else if (7 == dfid && 1 == dftype) {
-              uint8_t b = 0;
-              if (OB_FAIL(rd.read_byte(b))) {
-              } else {
-                v2_compressed = (0 == (b & 0x0F)) ? false : true;
-              }
+            } else if (7 == dfid && (1 == dftype || 2 == dftype)) {
+              // thrift compact booleans carry the value in the field header
+              v2_compressed = (1 == dftype);
             } else if (OB_FAIL(rd.skip(dftype))) {
             }
           }
@@ -1406,7 +1447,8 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
           LOG_WARN("bad page size", K(ret), K(comp_size), K(pos), K(hdr_size));
         } else {
           char *comp_buf = static_cast<char *>(scratch.alloc(comp_size));
-          char *data_buf = static_cast<char *>(scratch.alloc(uncomp_size > 0 ? uncomp_size : comp_size));
+          const int64_t data_cap = std::max(uncomp_size, comp_size);
+          char *data_buf = static_cast<char *>(scratch.alloc(data_cap > 0 ? data_cap : comp_size));
           if (OB_ISNULL(comp_buf) || OB_ISNULL(data_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("alloc page buffers failed", K(ret));
@@ -1414,7 +1456,14 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
             LOG_WARN("read page data failed", K(ret));
           } else {
             int64_t data_len = uncomp_size;
-            if (PQ_CODEC_UNCOMPRESSED == rg_col_meta.codec_) {
+            if (3 == page_type) {
+              // DATA_PAGE_V2 keeps rep/def levels uncompressed; when the page is
+              // marked compressed only the values region is a compressed block,
+              // which the v2 decoder below handles. Never decompress a v2 page
+              // as a whole here.
+              MEMCPY(data_buf, comp_buf, comp_size);
+              data_len = comp_size;
+            } else if (PQ_CODEC_UNCOMPRESSED == rg_col_meta.codec_) {
               MEMCPY(data_buf, comp_buf, comp_size);
             } else if (PQ_CODEC_SNAPPY == rg_col_meta.codec_) {
               if (OB_FAIL(snappy_uncompress(comp_buf, comp_size, data_buf, uncomp_size, data_len))) {
@@ -1744,8 +1793,12 @@ int ObParquetRowReader::load_next_row_group()
       LOG_WARN("ensure col readers failed", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < needed_cols_.count(); ++i) {
-      const ParquetColumnMeta &rg_col = meta.columns_.at(rg.columns_offset_ + needed_cols_.at(i));
-      if (OB_FAIL(col_readers_.at(i)->decode_row_group(rg, rg_col))) {
+      const int64_t chunk_idx = rg.columns_offset_ + needed_cols_.at(i);
+      if (OB_UNLIKELY(chunk_idx < 0 || chunk_idx >= meta.chunk_metas_.count())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("row group chunk index out of range", K(ret), K(chunk_idx),
+                 K(meta.chunk_metas_.count()));
+      } else if (OB_FAIL(col_readers_.at(i)->decode_row_group(rg, meta.chunk_metas_.at(chunk_idx)))) {
         LOG_WARN("decode row group failed", K(ret), K(i));
       } else if (col_readers_.at(i)->get_values().count() != rg.num_rows_) {
         ret = OB_ERR_UNEXPECTED;
@@ -1769,7 +1822,9 @@ int ObParquetRowReader::read_batch(ObObj *cells, int64_t max_rows, int64_t &n_ro
     if (row_idx_ >= rg_rows_) {
       if (OB_FAIL(load_next_row_group())) {
         if (OB_ITER_END == ret) {
-          // done: emit nothing further
+          // end of the last file: report a short (possibly empty) batch so the
+          // caller can stop on n_rows == 0 instead of seeing an error.
+          ret = OB_SUCCESS;
         }
         break;
       }
@@ -1817,7 +1872,10 @@ int infer_parquet_schema(ObIAllocator &alloc, const ObString &path,
       const ParquetColumnMeta &pc = meta.columns_.at(i);
       ReadFileColumn col;
       ObString name;
-      if (OB_FAIL(ob_write_string(alloc, pc.name_, name))) {
+      if (OB_UNLIKELY(OB_ISNULL(pc.name_.ptr()) || pc.name_.length() <= 0)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("bad parquet column name", K(ret), K(i));
+      } else if (OB_FAIL(ob_write_string(alloc, pc.name_, name))) {
         LOG_WARN("copy name failed", K(ret));
       } else {
         col.name_ = name;
