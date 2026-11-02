@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+load(":features.bzl", "FEATURES")
+
+package(default_visibility = ["//rust:__subpackages__"])
+
+exports_files(["src/bridge.rs","include/callbacks.h"], visibility = ["//rust:__pkg__"])
+
+rust_library(
+    name = "sql_nio",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    version = "0.1.0",
+    crate_features = select(FEATURES),
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    tags = ["no-remote"],
+)

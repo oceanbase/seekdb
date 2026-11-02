@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_topk_hist_estimator.h"
+#include "lib/alloc/alloc_func.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 
 namespace oceanbase

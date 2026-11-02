@@ -18,7 +18,7 @@
 #define OCEANBASE_QUERY_PROTOCOL_OB_MYSQL_RUST_ROW_H_
 
 #include "lib/ob_errno.h"
-#include "nio.h"
+#include "rust/sql_nio.h"
 #include "rpc/obmysql/ob_mysql_row.h"
 
 #include <cstddef>
@@ -27,74 +27,74 @@
 namespace oceanbase {
 namespace query {
 
-static_assert(sizeof(NioMysqlCellView) == 48,
-              "NioMysqlCellView ABI mismatch");
-static_assert(std::is_standard_layout<NioMysqlCellView>::value,
-              "NioMysqlCellView must have standard layout");
-static_assert(std::is_trivially_copyable<NioMysqlCellView>::value,
-              "NioMysqlCellView must be trivially copyable");
-static_assert(offsetof(NioMysqlCellView, value) == 16,
-              "NioMysqlCellView.value ABI mismatch");
-static_assert(offsetof(NioMysqlCellView, year) == 32,
-              "NioMysqlCellView.year ABI mismatch");
-static_assert(offsetof(NioMysqlCellView, kind) == 39,
-              "NioMysqlCellView.kind ABI mismatch");
-static_assert(offsetof(NioMysqlCellView, reserved) == 42,
-              "NioMysqlCellView.reserved ABI mismatch");
-static_assert(sizeof(NioMysqlRowView) == 24,
-              "NioMysqlRowView ABI mismatch");
-static_assert(offsetof(NioMysqlRowView, cells) == 0,
-              "NioMysqlRowView.cells ABI mismatch");
-static_assert(offsetof(NioMysqlRowView, protocol) == 16,
-              "NioMysqlRowView.protocol ABI mismatch");
+static_assert(sizeof(oceanbase::nio::NioMysqlCellView) == 48,
+              "oceanbase::nio::NioMysqlCellView ABI mismatch");
+static_assert(std::is_standard_layout<oceanbase::nio::NioMysqlCellView>::value,
+              "oceanbase::nio::NioMysqlCellView must have standard layout");
+static_assert(std::is_trivially_copyable<oceanbase::nio::NioMysqlCellView>::value,
+              "oceanbase::nio::NioMysqlCellView must be trivially copyable");
+static_assert(offsetof(oceanbase::nio::NioMysqlCellView, value) == 16,
+              "oceanbase::nio::NioMysqlCellView.value ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlCellView, year) == 32,
+              "oceanbase::nio::NioMysqlCellView.year ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlCellView, kind) == 39,
+              "oceanbase::nio::NioMysqlCellView.kind ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlCellView, reserved) == 42,
+              "oceanbase::nio::NioMysqlCellView.reserved ABI mismatch");
+static_assert(sizeof(oceanbase::nio::NioMysqlRowView) == 24,
+              "oceanbase::nio::NioMysqlRowView ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlRowView, cells) == 0,
+              "oceanbase::nio::NioMysqlRowView.cells ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlRowView, protocol) == 16,
+              "oceanbase::nio::NioMysqlRowView.protocol ABI mismatch");
 
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::NULL_VALUE) ==
-                  NIO_MYSQL_CELL_NULL,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::Null),
               "Rust Row NULL kind mismatch");
 static_assert(
     static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::LENENC_BYTES) ==
-        NIO_MYSQL_CELL_LENENC_BYTES,
+        static_cast<uint8_t>(oceanbase::nio::CellKind::LenencBytes),
     "Rust Row byte kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::I8) ==
-                  NIO_MYSQL_CELL_I8,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::I8),
               "Rust Row I8 kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::I16) ==
-                  NIO_MYSQL_CELL_I16,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::I16),
               "Rust Row I16 kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::I32) ==
-                  NIO_MYSQL_CELL_I32,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::I32),
               "Rust Row I32 kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::I64) ==
-                  NIO_MYSQL_CELL_I64,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::I64),
               "Rust Row I64 kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::F32) ==
-                  NIO_MYSQL_CELL_F32_BITS,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::F32Bits),
               "Rust Row F32 kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::F64) ==
-                  NIO_MYSQL_CELL_F64_BITS,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::F64Bits),
               "Rust Row F64 kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::YEAR) ==
-                  NIO_MYSQL_CELL_YEAR,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::Year),
               "Rust Row YEAR kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::DATE) ==
-                  NIO_MYSQL_CELL_DATE,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::Date),
               "Rust Row DATE kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::DATETIME) ==
-                  NIO_MYSQL_CELL_DATETIME,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::Datetime),
               "Rust Row DATETIME kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::TIME) ==
-                  NIO_MYSQL_CELL_TIME,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::Time),
               "Rust Row TIME kind mismatch");
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::BIT) ==
-                  NIO_MYSQL_CELL_BIT,
+                  static_cast<uint8_t>(oceanbase::nio::CellKind::Bit),
               "Rust Row BIT kind mismatch");
 static_assert(
     static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::LEGACY_LENENC_NULL) ==
-        NIO_MYSQL_CELL_LEGACY_LENENC_NULL,
+        static_cast<uint8_t>(oceanbase::nio::CellKind::LegacyLenencNull),
     "Rust Row legacy-NULL kind mismatch");
 
 inline int build_nio_mysql_cell_view(const obmysql::ObMySQLCellValue &value,
-                                     NioMysqlCellView &view) {
+                                     oceanbase::nio::NioMysqlCellView &view) {
   int ret = common::OB_SUCCESS;
   const int64_t bytes_len = value.get_bytes_len();
   if (bytes_len < 0 ||
@@ -104,7 +104,7 @@ inline int build_nio_mysql_cell_view(const obmysql::ObMySQLCellValue &value,
       value.bit_len_ > 255 || value.is_negative_ > 1) {
     ret = common::OB_INVALID_ARGUMENT;
   } else {
-    view = NioMysqlCellView{};
+    view = oceanbase::nio::NioMysqlCellView{};
     view.bytes.data = value.get_bytes();
     view.bytes.len = bytes_len;
     view.value = value.value_;
@@ -118,7 +118,7 @@ inline int build_nio_mysql_cell_view(const obmysql::ObMySQLCellValue &value,
     view.second = value.second_;
     view.kind = static_cast<uint8_t>(value.kind_);
     if (value.is_negative_ != 0) {
-      view.flags |= NIO_MYSQL_CELL_TIME_NEGATIVE;
+      view.flags |= static_cast<uint8_t>(oceanbase::nio::CellFlag::Negative);
     }
     view.bit_len = static_cast<uint8_t>(value.bit_len_);
   }
@@ -131,10 +131,10 @@ get_nio_mysql_row_protocol(const obmysql::MYSQL_PROTOCOL_TYPE protocol,
   int ret = common::OB_SUCCESS;
   switch (protocol) {
   case obmysql::MYSQL_PROTOCOL_TYPE::TEXT:
-    nio_protocol = NIO_MYSQL_ROW_TEXT;
+    nio_protocol = static_cast<uint32_t>(oceanbase::nio::RowProtocol::Text);
     break;
   case obmysql::MYSQL_PROTOCOL_TYPE::BINARY:
-    nio_protocol = NIO_MYSQL_ROW_BINARY;
+    nio_protocol = static_cast<uint32_t>(oceanbase::nio::RowProtocol::Binary);
     break;
   default:
     ret = common::OB_INVALID_ARGUMENT;

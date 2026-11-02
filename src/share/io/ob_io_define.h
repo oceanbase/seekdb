@@ -502,6 +502,7 @@ private:
   virtual int set_block_handle(const ObIOInfo &info);
   virtual int set_fd_cache_handle(const ObIOInfo &io_info);
   int calc_io_offset_and_size_();
+  int prepare_native_io(char *buffer, int64_t size, int64_t offset);
 public:
   common::LinkTask req_node_;
   ObIOResult *io_result_;

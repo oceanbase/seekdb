@@ -27,7 +27,7 @@ const int64_t ObPwjComparer::DEFAULT_ID_ID_BUCKET_NUMBER = 1000;
 int PwjTable::init(const ObShardingInfo &sharding)
 {
   int ret = OB_SUCCESS;
-  phy_table_loc_info_ = sharding.get_phy_table_location_info();
+  table_access_targets_ = sharding.get_access_targets();
   part_level_ = sharding.get_part_level();
   part_type_ = sharding.get_part_func_type();
   subpart_type_ = sharding.get_sub_part_func_type();
@@ -42,7 +42,7 @@ int PwjTable::init(const ObShardingInfo &sharding)
   return ret;
 }
 
-int PwjTable::init(const ObTableSchema &table_schema, const ObCandiTableLoc &phy_tbl_info)
+int PwjTable::init(const ObTableSchema &table_schema, const TableAccessTargets &phy_tbl_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPwjComparer::extract_all_partition_indexes(phy_tbl_info,
@@ -53,7 +53,7 @@ int PwjTable::init(const ObTableSchema &table_schema, const ObCandiTableLoc &phy
                                                            is_partition_single_,
                                                            is_subpartition_single_))) {
   } else {
-    phy_table_loc_info_ = &phy_tbl_info;
+    table_access_targets_ = &phy_tbl_info;
     part_level_ = table_schema.get_part_level();
     part_type_ = table_schema.get_part_option().get_part_func_type();
     partition_array_ = table_schema.get_part_array();
@@ -74,7 +74,7 @@ int PwjTable::init(const ObTableSchema &table_schema, const ObCandiTableLoc &phy
 int PwjTable::assign(const PwjTable &other)
 {
   int ret = OB_SUCCESS;
-  phy_table_loc_info_ = other.phy_table_loc_info_;
+  table_access_targets_ = other.table_access_targets_;
   part_level_ = other.part_level_;
   part_type_ = other.part_type_;
   subpart_type_ = other.subpart_type_;
@@ -102,7 +102,7 @@ int ObPwjComparer::add_table(PwjTable &table, bool &is_match_pwj)
   return ret;
 }
 
-int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_table_location_info,
+int ObPwjComparer::extract_all_partition_indexes(const TableAccessTargets &table_access_targets,
                                                   const ObTableSchema &table_schema,
                                                   ObIArray<uint64_t> &all_tablet_ids,
                                                   ObIArray<int64_t> &all_partition_indexes,
@@ -111,8 +111,8 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
                                                   bool &is_subpartition_single)
 {
   int ret = OB_SUCCESS;
-  const ObCandiTabletLocIArray &phy_partitions =
-      phy_table_location_info.get_phy_part_loc_info_list();
+  const TabletAccessTargetIArray &phy_partitions =
+      table_access_targets.get_tablets();
   ObPartitionLevel part_level = table_schema.get_part_level();
   is_partition_single = false;
   is_subpartition_single = false;
@@ -121,7 +121,7 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
   } else if (share::schema::PARTITION_LEVEL_ONE == part_level) {
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_partitions.count(); ++i) {
       // For the first-level partition table part_id(first-level logical partition id) = partition_id(physical partition id)
-      ObTabletID tablet_id = phy_partitions.at(i).get_partition_location().get_tablet_id();
+      ObTabletID tablet_id = phy_partitions.at(i).get_tablet_id();
       int64_t part_index = -1;
       int64_t subpart_index = -1;
       if (OB_FAIL(table_schema.get_part_idx_by_tablet(tablet_id, part_index, subpart_index))) {
@@ -131,8 +131,8 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
     }
   } else if (share::schema::PARTITION_LEVEL_TWO == part_level) {
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_partitions.count(); ++i) {
-      int64_t partition_id = phy_partitions.at(i).get_partition_location().get_partition_id();
-      ObTabletID tablet_id = phy_partitions.at(i).get_partition_location().get_tablet_id();
+      int64_t partition_id = phy_partitions.at(i).get_partition_id();
+      ObTabletID tablet_id = phy_partitions.at(i).get_tablet_id();
       int64_t part_index = -1;
       int64_t subpart_index = -1;
       if (OB_FAIL(table_schema.get_part_idx_by_tablet(tablet_id, part_index, subpart_index))) {
@@ -327,7 +327,7 @@ int ObStrictPwjComparer::add_table(PwjTable &table, bool &is_match_pwj)
 {
   int ret = OB_SUCCESS;
   is_match_pwj = true;
-  if (OB_ISNULL(table.phy_table_loc_info_)) {
+  if (OB_ISNULL(table.table_access_targets_)) {
     // sharding to check partition wise join maybe reset
     is_match_pwj = false;
   } else if (OB_FAIL(pwj_tables_.push_back(table))) {
@@ -356,29 +356,29 @@ int ObStrictPwjComparer::match_partitioned_tablets(const PwjTable &l_table,
 {
   int ret = OB_SUCCESS;
   is_match = true;
-  const ObCandiTabletLocIArray &left_locations =
-      l_table.phy_table_loc_info_->get_phy_part_loc_info_list();
-  const ObCandiTabletLocIArray &right_locations =
-      r_table.phy_table_loc_info_->get_phy_part_loc_info_list();
+  const TabletAccessTargetIArray &left_accesses =
+      l_table.table_access_targets_->get_tablets();
+  const TabletAccessTargetIArray &right_accesses =
+      r_table.table_access_targets_->get_tablets();
   TabletIdArray *r_array = NULL;
-  if (l_table.ordered_tablet_ids_.count() != left_locations.count()
-      || r_table.ordered_tablet_ids_.count() != right_locations.count()) {
+  if (l_table.ordered_tablet_ids_.count() != left_accesses.count()
+      || r_table.ordered_tablet_ids_.count() != right_accesses.count()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (left_locations.count() != right_locations.count()) {
+  } else if (left_accesses.count() != right_accesses.count()) {
     is_match = false;
   } else if (OB_ISNULL(r_array = tablet_id_group_.alloc_place_holder())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(r_array->prepare_allocate(left_locations.count()))) {
+  } else if (OB_FAIL(r_array->prepare_allocate(left_accesses.count()))) {
   } else {
-    const int64_t N = left_locations.count();
+    const int64_t N = left_accesses.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
       const uint64_t l_tablet_id = l_table.ordered_tablet_ids_.at(i);
       uint64_t r_tablet_id = 0;
       if (OB_FAIL(phy_part_map_.get_refactored(l_tablet_id, r_tablet_id))) {
       } else {
         bool found = false;
-        for (int64_t j = 0; !found && j < right_locations.count(); ++j) {
-          found = right_locations.at(j).get_partition_location().get_tablet_id().id()
+        for (int64_t j = 0; !found && j < right_accesses.count(); ++j) {
+          found = right_accesses.at(j).get_tablet_id().id()
                   == r_tablet_id;
         }
         if (!found) {

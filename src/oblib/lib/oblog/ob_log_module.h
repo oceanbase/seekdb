@@ -143,7 +143,6 @@ DEFINE_LOG_SUB_MOD(LOG)                  // log
 DEFINE_LOG_SUB_MOD(PT)                   // partition_table
 DEFINE_LOG_SUB_MOD(SCHEMA)               // schema
 DEFINE_LOG_SUB_MOD(TRIGGER)              // trigger
-DEFINE_LOG_SUB_MOD(LOCATION)             // location_cache
 LOG_MOD_END(SHARE)
 
 //statement of storage's sub-modules
@@ -675,10 +674,6 @@ LOG_MOD_END(PL)
                                                                 info_string,  ##args)
 #define _SHARE_TRIGGER_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(SHARE, TRIGGER,level,          \
                                                                 _fmt_,  ##args)
-#define SHARE_LOCATION_LOG(level, info_string, args...) OB_SUB_MOD_LOG(SHARE, LOCATION, level,   \
-                                                                info_string,  ##args)
-#define _SHARE_LOCATION_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(SHARE, LOCATION, level,       \
-                                                                _fmt_,  ##args)
 
 #define STORAGE_REDO_LOG(level, info_string, args...) OB_SUB_MOD_LOG(STORAGE, REDO, level,       \
                                                                 info_string,  ##args)
@@ -974,8 +969,6 @@ LOG_MOD_END(PL)
 #define _SHARE_SCHEMA_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _SHARE_SCHEMA_LOG(level, ##args); }
 #define SHARE_TRIGGER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; SHARE_TRIGGER_LOG(level, ##args); }
 #define _SHARE_TRIGGER_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _SHARE_TRIGGER_LOG(level, ##args); }
-#define SHARE_LOCATION_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; SHARE_LOCATION_LOG(level, ##args); }
-#define _SHARE_LOCATION_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _SHARE_LOCATION_LOG(level, ##args); }
 #define STORAGE_REDO_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; STORAGE_REDO_LOG(level, ##args); }
 #define _STORAGE_REDO_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _STORAGE_REDO_LOG(level, ##args); }
 #define STORAGE_COMPACTION_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; STORAGE_COMPACTION_LOG(level, ##args); }

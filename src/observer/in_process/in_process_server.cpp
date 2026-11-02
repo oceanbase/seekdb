@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "in_process_server.h"
+#include "rust/in_process.h"
 #include <string>
 #include <unistd.h>
 #include <utility>

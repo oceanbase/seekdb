@@ -18,7 +18,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/ob_end_trans_callback.cpp",
             "src/sql/ob_end_trans_cb_packet_param.cpp",
-            "src/sql/ob_phy_table_location.cpp",
             "src/sql/ob_query_retry_ctrl.cpp",
             "src/sql/ob_result_set.cpp",
             "src/sql/ob_scanner.cpp",
@@ -611,7 +610,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_greatest.cpp",
             "src/sql/engine/expr/ob_expr_hex.cpp",
             "src/sql/engine/expr/ob_expr_host_ip.cpp",
-            "src/sql/engine/expr/ob_expr_icu_version.cpp",
             "src/sql/engine/expr/ob_expr_ifnull.cpp",
             "src/sql/engine/expr/ob_expr_inet.cpp",
             "src/sql/engine/expr/ob_expr_inner_decode_like.cpp",
@@ -1056,7 +1054,19 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_fd_item.cpp",
             "src/sql/optimizer/ob_index_info_cache.cpp",
             "src/sql/optimizer/ob_insert_log_plan.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_join_order",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_join_order.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_operators",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_log_del_upd.cpp",
             "src/sql/optimizer/ob_log_delete.cpp",
             "src/sql/optimizer/ob_log_distinct.cpp",
@@ -1074,6 +1084,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_material.cpp",
             "src/sql/optimizer/ob_log_monitoring_dump.cpp",
             "src/sql/optimizer/ob_log_operator_factory.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_log_plan",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_log_plan.cpp",
         ],
     ),
@@ -1094,6 +1110,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_topk.cpp",
             "src/sql/optimizer/ob_log_update.cpp",
             "src/sql/optimizer/ob_log_window_function.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_cost",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_logical_operator.cpp",
             "src/sql/optimizer/ob_opt_est_cost.cpp",
             "src/sql/optimizer/ob_opt_est_cost_model.cpp",
@@ -1102,8 +1124,14 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_opt_est_utils.cpp",
             "src/sql/optimizer/ob_opt_selectivity.cpp",
             "src/sql/optimizer/ob_optimizer.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_utils",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_optimizer_util.cpp",
-            "src/sql/optimizer/ob_phy_table_location_info.cpp",
+            "src/sql/optimizer/table_access_targets.cpp",
             "src/sql/optimizer/ob_pwj_comparer.cpp",
             "src/sql/optimizer/ob_px_resource_analyzer.cpp",
             "src/sql/optimizer/ob_raw_expr_add_to_context.cpp",
@@ -1120,7 +1148,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_sharding_info.cpp",
             "src/sql/optimizer/ob_skyline_prunning.cpp",
             "src/sql/optimizer/ob_storage_estimator.cpp",
-            "src/sql/optimizer/ob_table_location.cpp",
+            "src/sql/optimizer/table_access_plan.cpp",
             "src/sql/optimizer/ob_table_partition_info.cpp",
             "src/sql/optimizer/ob_update_log_plan.cpp",
             "src/sql/optimizer/ob_log_stat_collector.cpp",
@@ -1374,6 +1402,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dml/ob_delete_stmt.cpp",
             "src/sql/resolver/dml/ob_dml_resolver.cpp",
             "src/sql/resolver/dml/ob_dml_stmt.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_resolver_dml_statements",
+        language = "c++",
+        srcs = [
             "src/sql/resolver/dml/ob_group_by_checker.cpp",
             "src/sql/resolver/dml/ob_insert_resolver.cpp",
             "src/sql/resolver/dml/ob_insert_stmt.cpp",
@@ -1404,7 +1438,19 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/expr/ob_raw_expr_part_func_checker.cpp",
             "src/sql/resolver/expr/ob_raw_expr_print_visitor.cpp",
             "src/sql/resolver/expr/ob_raw_expr_replacer.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_resolver_expr_impl",
+        language = "c++",
+        srcs = [
             "src/sql/resolver/expr/ob_raw_expr_resolver_impl.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_resolver_expr_utils",
+        language = "c++",
+        srcs = [
             "src/sql/resolver/expr/ob_raw_expr_util.cpp",
             "src/sql/resolver/expr/ob_raw_expr_wrap_enum_set.cpp",
             "src/sql/resolver/expr/ob_shared_expr_resolver.cpp",
@@ -1436,6 +1482,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_range_generator.cpp",
             "src/sql/rewrite/ob_range_graph_generator.cpp",
             "src/sql/rewrite/ob_stmt_comparer.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_joins",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_count_to_exists.cpp",
             "src/sql/rewrite/ob_transform_aggr_subquery.cpp",
             "src/sql/rewrite/ob_transform_min_max.cpp",
@@ -1447,6 +1499,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_left_join_to_anti.cpp",
             "src/sql/rewrite/ob_transform_or_expansion.cpp",
             "src/sql/rewrite/ob_transform_join_limit_pushdown.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_predicates",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_pre_process.cpp",
             "src/sql/rewrite/ob_transform_predicate_move_around.cpp",
             "src/sql/rewrite/ob_transform_project_pruning.cpp",
@@ -1469,7 +1527,19 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_simplify_winfunc.cpp",
             "src/sql/rewrite/ob_transform_subquery_coalesce.cpp",
             "src/sql/rewrite/ob_transform_temp_table.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_utils",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_utils.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_subqueries",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_view_merge.cpp",
             "src/sql/rewrite/ob_transform_where_subquery_pullup.cpp",
             "src/sql/rewrite/ob_transform_win_magic.cpp",

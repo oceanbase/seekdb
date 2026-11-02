@@ -207,7 +207,7 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
                                                                          *child))) {
         } else { /*do nothing.*/ }
       } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
-          coord_info_.pruning_table_location_,
+          coord_info_.pruning_access_plan_,
           ctx, *child))) {
       } else { /*do nothing.*/ }
       if (OB_SUCC(ret)) {
@@ -221,7 +221,7 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
       const bool has_reference_child = IS_HASH_SLAVE_MAPPING(parent->get_in_slave_mapping_type());
       if (parent->is_thread_inited()) {
       } else if (has_reference_child && OB_FAIL(ObPxSqcDistributionUtil::alloc_distribution_of_reference_child(
-            coord_info_.pruning_table_location_, ctx, *parent))) {
+            coord_info_.pruning_access_plan_, ctx, *parent))) {
       } else if (parent->has_temp_table_scan()) {
         if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(ctx, *parent))) {
         }
@@ -230,13 +230,13 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
         }
       } else if (parent->has_scan_op() || parent->has_dml_op()) {
         if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
-                coord_info_.pruning_table_location_, ctx, *parent))) {
+                coord_info_.pruning_access_plan_, ctx, *parent))) {
         }
       } else if (has_reference_child) {
         if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_reference_child_distribution(*parent))) {
         }
       } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
-                     coord_info_.pruning_table_location_, ctx, *parent))) {
+                     coord_info_.pruning_access_plan_, ctx, *parent))) {
       }
       if (OB_SUCC(ret) && !parent->is_scheduled()) {
         if (OB_FAIL(set_temp_table_ctx_for_sqc(ctx, *parent))) {
@@ -248,7 +248,7 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
     } else if (parent->need_access_store() && parent->is_in_slave_mapping()
                && ObPQDistributeMethod::HASH == child->get_dist_method()
                && child->is_out_slave_mapping()) {
-      if (OB_FAIL(ObPxSqcDistributionUtil::check_slave_mapping_location_constraint(*child, *parent))) {
+      if (OB_FAIL(ObPxSqcDistributionUtil::check_slave_mapping_access_constraint(*child, *parent))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -1082,7 +1082,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
                                                                          child))) {
         } else { /*do nohting.*/ }
       } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
-            coord_info_.pruning_table_location_,
+            coord_info_.pruning_access_plan_,
             exec_ctx,
             child))) {
       }
@@ -1098,19 +1098,19 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
     if (!parent.is_scheduled()) {
       const bool has_reference_child = IS_HASH_SLAVE_MAPPING(parent.get_in_slave_mapping_type());
       if (has_reference_child && OB_FAIL(ObPxSqcDistributionUtil::alloc_distribution_of_reference_child(
-            coord_info_.pruning_table_location_, exec_ctx, parent))) {
+            coord_info_.pruning_access_plan_, exec_ctx, parent))) {
       } else if (parent.has_temp_table_scan()) {
         if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(exec_ctx,
                                                                          parent))) {
         } else { /*do nohting.*/ }
       } else if (parent.is_root_dfo()) {
-        // QC/local dfo, directly execute on the local machine and thread, no need to calculate execution location
+        // QC/local dfo, directly execute on the local machine and thread, no need to calculate execution access
         if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_local_distribution(exec_ctx,
                                                                     parent))) {
         }
       } else {
         // DONE (xiaochu): If parent dfo already includes a scan, then there is a case where dfo processes according to scan
-        // The location of the data is allocated, and the data of child dfo needs to be actively shuffled to the machine where the parent resides.
+        // The access of the data is allocated, and the data of child dfo needs to be actively shuffled to the machine where the parent resides.
         // Generally, there are three cases:
         // (1) parent approaches child, suitable for scenarios where parent is a pure compute node
         // (2) parent independent, child data shuffle to parent, suitable for scenarios where parent also needs to read from disk;
@@ -1122,10 +1122,10 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
         // Below only the first and second cases are implemented, the third requirement is unclear, listed as TODO
         if (parent.has_scan_op() || parent.has_dml_op()) { // Refer to Partial Partition Wise Join
           // When TSC exists in DFO or global index maintain op in pdml:
-          // 1. When TSC exists, the location information of sqcs uses the location information from the tsc table
-          // 2. When it is pdml, dml+px situation, sqcs's locations information uses the locations of the DML corresponding table
+          // 1. When TSC exists, the access information of sqcs uses the access information from the tsc table
+          // 2. When it is pdml, dml+px situation, sqcs's accesses information uses the accesses of the DML corresponding table
           if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
-            coord_info_.pruning_table_location_, exec_ctx, parent))) {
+            coord_info_.pruning_access_plan_, exec_ctx, parent))) {
           }
         } else if (parent.is_single()) {
           // Common in PDML scenarios, if parent does not have tsc, the intermediate parent DFO needs to pull data from child DFO to QC locally first, then shuffle it to the upper DFO
@@ -1133,7 +1133,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
           // Walk alloc_by_data_distribution, internally it will allocate a QC local thread to execute
           // or nested PX scenario
           if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
-            coord_info_.pruning_table_location_, exec_ctx, parent))) {
+            coord_info_.pruning_access_plan_, exec_ctx, parent))) {
           }
         } else if (has_reference_child) {
           if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_reference_child_distribution(parent))) {
@@ -1154,7 +1154,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
   } else if (parent.need_access_store() && parent.is_in_slave_mapping()
              && ObPQDistributeMethod::HASH == child.get_dist_method()
              && child.is_out_slave_mapping()) {
-    if (OB_FAIL(ObPxSqcDistributionUtil::check_slave_mapping_location_constraint(child, parent))) {
+    if (OB_FAIL(ObPxSqcDistributionUtil::check_slave_mapping_access_constraint(child, parent))) {
     }
   }
   // Optimization branch: QC and its child dfo data channel allocation as early as possible when certain conditions are met

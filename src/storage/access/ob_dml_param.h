@@ -32,7 +32,7 @@ namespace oceanbase
 namespace sql
 {
 class ObOperator;
-class ObTableLocation;
+class TableAccessPlan;
 class ObEvalCtx;
 class ObEvalInfo;
 using common::ObDatum;

@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <type_traits>
-#include "logger.h"
+#include "rust/logger.h"
 #include "lib/net/ob_addr.h"
 #include "lib/atomic/ob_atomic.h"
 namespace oceanbase

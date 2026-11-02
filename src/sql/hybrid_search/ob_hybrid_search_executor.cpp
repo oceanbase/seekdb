@@ -88,6 +88,10 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   } else if (OB_ISNULL(conn = sql::as_inner_sql_connection(base_conn))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
+    // This connection runs user search SQL on the caller's external session.
+    // Nested-session state isolation does not provide SELECT authorization.
+    const bool saved_check_priv = base_conn->is_check_priv();
+    base_conn->set_check_priv(true);
     sql::ObSQLSessionInfo::StmtSavedValue saved_session;
     sql::ObIInnerSQLConnection::SavedValue saved_conn;
     // Execute on the caller's session. begin/end_nested_session only isolates
@@ -126,6 +130,7 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
         ret = COVER_SUCC(tmp_ret);
       }
     }
+    base_conn->set_check_priv(saved_check_priv);
   }
 
   return ret;

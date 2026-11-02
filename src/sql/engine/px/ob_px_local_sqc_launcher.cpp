@@ -134,10 +134,10 @@ int ObLocalSqcLauncher::pre_setup_op_input(ObPxSqcHandler &sqc_handler)
   sub_coord.set_is_single_tsc_leaf_dfo(sqc.is_single_tsc_leaf_dfo());
   CK(OB_NOT_NULL(ctx) && OB_NOT_NULL(root));
   if (sqc.is_single_tsc_leaf_dfo() &&
-      OB_FAIL(sub_coord.rebuild_sqc_access_table_locations())) {
+      OB_FAIL(sub_coord.rebuild_sqc_tablet_accesses())) {
   } else if (OB_FAIL(sub_coord.pre_setup_op_input(*ctx, *root, sub_coord.get_sqc_ctx(),
-      sqc.get_access_table_locations(),
-      sqc.get_access_table_location_keys()))) {
+      sqc.get_tablet_accesses(),
+      sqc.get_tablet_access_keys()))) {
   }
   return ret;
 }

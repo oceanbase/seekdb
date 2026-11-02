@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include <inttypes.h>
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_vector_index_async_task_util.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"

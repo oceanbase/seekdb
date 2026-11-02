@@ -30,6 +30,7 @@
 #include "sql/optimizer/stat/ob_index_stats_estimator.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/optimizer/ob_optimizer_util.h"
+#include "sql/privilege_check/ob_privilege_check.h"
 
 namespace oceanbase
 {
@@ -37,6 +38,33 @@ using namespace sql;
 using namespace common;
 using namespace share::schema;
 namespace pl {
+
+static int check_stats_table_priv(ObExecContext &ctx,
+                                  const ObTableSchema &table_schema,
+                                  const ObPrivSet required_privs)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard *guard = ctx.get_virtual_table_ctx().schema_guard_;
+  const ObTableSchema *target_table = &table_schema;
+  const ObDatabaseSchema *database = NULL;
+  if (OB_ISNULL(guard) || OB_ISNULL(ctx.get_sql_ctx())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (table_schema.is_index_table()
+             && OB_FAIL(guard->get_table_schema(table_schema.get_data_table_id(), target_table))) {
+  } else if (OB_ISNULL(target_table)) {
+    ret = OB_TABLE_NOT_EXIST;
+  } else if (OB_FAIL(guard->get_database_schema(target_table->get_database_id(), database))) {
+  } else if (OB_ISNULL(database)) {
+    ret = OB_ERR_BAD_DATABASE;
+  } else {
+    ret = ObPrivilegeCheck::check_maintenance_priv(*ctx.get_sql_ctx(),
+                                                  database->get_database_name_str(),
+                                                  target_table->get_table_name_str(),
+                                                  required_privs);
+  }
+  return ret;
+}
+
 /**
  * @brief ObDbmsStat::gather_table_stats
  * @param ctx
@@ -1059,7 +1087,9 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
       param.db_name_ = session->get_database_name();
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDbmsStatsExportImport::create_stat_table(ctx, param))) {
+      if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                      *ctx.get_sql_ctx(), param.db_name_, ObString(), OB_PRIV_CREATE))) {
+      } else if (OB_FAIL(ObDbmsStatsExportImport::create_stat_table(ctx, param))) {
       } else {
       }
     }
@@ -1106,7 +1136,9 @@ int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &
       param.db_name_ = session->get_database_name();
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDbmsStatsExportImport::drop_stat_table(ctx, param))) {
+      if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                      *ctx.get_sql_ctx(), param.db_name_, param.tab_name_, OB_PRIV_DROP))) {
+      } else if (OB_FAIL(ObDbmsStatsExportImport::drop_stat_table(ctx, param))) {
       } else {
       }
     }
@@ -2248,7 +2280,9 @@ int ObDbmsStats::purge_stats(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   UNUSED(result);
   int64_t specify_time = -1;
-  if (OB_FAIL(check_statistic_table_writeable(ctx))) {
+  if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                  *ctx.get_sql_ctx(), ObString(), ObString(), OB_PRIV_SUPER))) {
+  } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else {
     if (!params.at(0).is_null() && !params.at(0).is_datetime()
@@ -2300,7 +2334,9 @@ int ObDbmsStats::alter_stats_history_retention(sql::ObExecContext &ctx,
   number::ObNumber num_retention;
   int64_t new_retention = OPT_DEFAULT_STATS_RETENTION;//default value
   double retention_tmp = 0.0; // bugfix:
-  if (OB_FAIL(check_statistic_table_writeable(ctx))) {
+  if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                  *ctx.get_sql_ctx(), ObString(), ObString(), OB_PRIV_SUPER))) {
+  } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_number(num_retention))) {
   } else if (!params.at(0).is_null() &&
@@ -2398,7 +2434,9 @@ int ObDbmsStats::reset_global_pref_defaults(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   UNUSED(params);
   UNUSED(result);
-  if (OB_FAIL(check_statistic_table_writeable(ctx))) {
+  if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                  *ctx.get_sql_ctx(), ObString(), ObString(), OB_PRIV_SUPER))) {
+  } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsPreferences::reset_global_pref_defaults(ctx))) {
   } else {/*do nothing*/}
@@ -2423,8 +2461,7 @@ int ObDbmsStats::get_prefs(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObString opt_name;
   ObString dummy_name;
-  ObObjParam dummy_param;
-  dummy_param.set_null();
+  const ObTableSchema *table_schema = NULL;
   ObTableStatParam param;
   param.allocator_ = &ctx.get_allocator();
   ObStatPrefs *stat_pref = NULL;
@@ -2436,7 +2473,8 @@ int ObDbmsStats::get_prefs(sql::ObExecContext &ctx,
                                               ctx.get_my_session()->get_dtc_params(),
                                               opt_name))) {
   } else if (!params.at(2).is_null() &&
-             OB_FAIL(parse_table_part_info(ctx, params.at(1), params.at(2), dummy_param, param))) {
+             OB_FAIL(parse_table_info(ctx, params.at(1), params.at(2), false,
+                                      table_schema, param, OB_PRIV_SELECT))) {
   } else if (OB_FAIL(get_new_stat_pref(ctx, *param.allocator_, opt_name, dummy_name, true, stat_pref))) {
   } else if (OB_ISNULL(stat_pref)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2466,7 +2504,9 @@ int ObDbmsStats::set_global_prefs(sql::ObExecContext &ctx,
   ObString opt_value;
   ObSEArray<uint64_t, 4> table_ids;
   ObStatPrefs *stat_pref = NULL;
-  if (OB_FAIL(check_statistic_table_writeable(ctx))) {
+  if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                  *ctx.get_sql_ctx(), ObString(), ObString(), OB_PRIV_SUPER))) {
+  } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_string(opt_name))) {
   } else if (!params.at(0).is_null() &&
@@ -2691,7 +2731,9 @@ int ObDbmsStats::cancel_gather_stats(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObString task_id;
-  if (OB_UNLIKELY(params.at(0).is_null())) {
+  if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                  *ctx.get_sql_ctx(), ObString(), ObString(), OB_PRIV_SUPER))) {
+  } else if (OB_UNLIKELY(params.at(0).is_null())) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "not a valid task id");
   } else if (OB_FAIL(params.at(0).get_string(task_id))) {
@@ -3378,7 +3420,8 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
                                   const ObObjParam &tab_name,
                                   const bool is_index,
                                   const share::schema::ObTableSchema *&table_schema,
-                                  ObTableStatParam &param)
+                                  ObTableStatParam &param,
+                                  const ObPrivSet required_privs)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
@@ -3430,6 +3473,9 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
       } else {/*do nothing*/}
     }
   }
+  if (OB_SUCC(ret) && table_schema != NULL && !table_schema->is_view_table()
+      && OB_FAIL(check_stats_table_priv(ctx, *table_schema, required_privs))) {
+  }
   if (OB_SUCC(ret) && table_schema != NULL && !table_schema->is_view_table()) {
     param.table_id_ = table_schema->get_table_id();
     param.ref_table_type_ = table_schema->get_table_type();
@@ -3472,6 +3518,9 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
   } else {
     
     param.is_temp_table_ = table_schema->is_tmp_table();
+  }
+  if (OB_SUCC(ret) && table_schema != NULL && !table_schema->is_view_table()
+      && OB_FAIL(check_stats_table_priv(ctx, *table_schema, OB_PRIV_SELECT | OB_PRIV_INSERT))) {
   }
   if (OB_SUCC(ret) && table_schema != NULL && !table_schema->is_view_table()) {
     param.table_id_ = table_schema->get_table_id();
@@ -4784,6 +4833,9 @@ int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
                                                 stat_param.db_id_))) {
       } else if (OB_UNLIKELY(OB_INVALID_ID == stat_param.db_id_)) {
         ret = OB_TABLE_NOT_EXIST;
+      } else if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                     *ctx.get_sql_ctx(), stat_param.db_name_, ObString(),
+                     OB_PRIV_SELECT | OB_PRIV_INSERT))) {
       } else if (OB_FAIL(schema_guard->get_table_schemas_in_database(stat_param.db_id_,
                                                                      table_schemas))) {
       } else {

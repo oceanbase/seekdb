@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "sql/rewrite/ob_transform_view_merge.h"
 #include "sql/rewrite/ob_transform_min_max.h"

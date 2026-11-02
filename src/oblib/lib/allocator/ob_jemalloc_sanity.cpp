@@ -47,11 +47,11 @@ int64_t sanity_max_addr = 0;
 namespace oceanbase {
 namespace common {
 
-bool memory_sanity_enabled() noexcept { return is_jemalloc_backend(); }
+bool memory_sanity_enabled() noexcept { return true; }
 
 namespace {
 
-// The former OBMalloc Sanity integration searched the same upper bounds. Its
+// The legacy allocator Sanity integration searched the same upper bounds. Its
 // maximum candidate was [0x0c0000000000, 0x600000000000): about 84 TiB of
 // application address space plus 10.5 TiB of shadow; occupied mappings made it
 // retreat in 128 GiB steps. Preserve that policy instead of the 64 GiB limit
@@ -339,7 +339,10 @@ bool initialize_arena() {
   extent_hooks_t *hook_ptr = &hooks;
   size_t arena_size = sizeof(sanity_arena);
   SanityDisableCheckRangeGuard guard;
-  if (0 != je_mallctl("arenas.create", &sanity_arena, &arena_size, &hook_ptr,
+  // The dedicated arena is created before server startup. Give it the same
+  // runtime decay defaults before publishing any Sanity allocations.
+  if (0 != jemalloc_detail::configure_decay()
+      || 0 != je_mallctl("arenas.create", &sanity_arena, &arena_size, &hook_ptr,
                       sizeof(hook_ptr))) {
     release_region(selected);
     sanity_min_addr = 0;
@@ -505,6 +508,11 @@ bool jemalloc_sanity_enable_background_threads() noexcept {
   // A jemalloc background thread has no guarded allocator-call boundary and
   // legitimately accesses metadata that remains poisoned to application code.
   return true;
+}
+
+int jemalloc_sanity_configure_runtime() noexcept {
+  SanityDisableCheckRangeGuard guard;
+  return jemalloc_detail::configure_decay();
 }
 
 bool memory_sanity_prepare_allocation(int64_t user_size,

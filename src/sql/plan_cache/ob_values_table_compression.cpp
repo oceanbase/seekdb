@@ -15,7 +15,7 @@
  */
  
 #define USING_LOG_PREFIX SQL_PC
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/expr/ob_expr_version.h"

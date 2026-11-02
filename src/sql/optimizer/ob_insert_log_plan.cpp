@@ -217,7 +217,7 @@ int ObInsertLogPlan::generate_osg_share_info(OSGShareInfo *&info)
       info->table_id_ = ref_table_id;
       if (tab_schema->is_partitioned_table()) {
         info->part_level_ = tab_schema->get_part_level();
-        if (OB_FAIL(gen_calc_part_id_expr(table_info.loc_table_id_,
+        if (OB_FAIL(gen_calc_part_id_expr(table_info.target_table_ref_id_,
                                           ref_table_id,
                                           CALC_PARTITION_TABLET_ID,
                                           info->calc_part_id_expr_))) {
@@ -397,7 +397,7 @@ int ObInsertLogPlan::candi_allocate_insert(OSGShareInfo *osg_info)
   OPT_TRACE("force no multi part:", force_no_multi_part);
   OPT_TRACE("force multi part:", force_multi_part);
   if (OB_FAIL(build_lock_row_flag_expr(lock_row_flag_expr))) {
-  } else if (OB_FAIL(calculate_insert_table_location_and_sharding(insert_table_part,
+  } else if (OB_FAIL(calculate_insert_access_targets_and_sharding(insert_table_part,
                                                                   insert_table_sharding))) {
   } else if (OB_FAIL(get_minimal_cost_candidates(candidates_.candidate_plans_,
                                                  candi_plans))) {
@@ -686,7 +686,7 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
       OB_ISNULL(schema_guard = get_optimizer_context().get_schema_guard()) ||
       OB_ISNULL(session_info = get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (0 == insert_table_part->get_phy_tbl_location_info().get_partition_cnt()) {
+  } else if (0 == insert_table_part->get_access_targets().get_tablet_count()) {
     is_multi_part_dml = true;
     OPT_TRACE("insert table has no partition, force use multi part dml");
   } else if (use_parallel_das_dml_) {
@@ -711,7 +711,7 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
   } else if (OB_FALSE_IT(is_one_part_table = ObSQLUtils::is_one_part_table_can_skip_part_calc(*table_schema))) {
   } else if (insert_table_sharding->is_single() &&
              !is_one_part_table &&
-             insert_table_part->get_table_location().is_part_or_subpart_all_partition()) {
+             insert_table_part->get_table_access_plan().is_part_or_subpart_all_partition()) {
     is_multi_part_dml = true;
     OPT_TRACE("insert table has only one partition in partition level, force use multi part dml");
   } else if ((insert_stmt->is_ignore() && !is_one_part_table) ||
@@ -1147,7 +1147,7 @@ int ObInsertLogPlan::prepare_table_dml_info_for_ddl(const ObInsertTableInfo& tab
       } else if (OB_FAIL(index_dml_info->part_ids_.assign(index_part_ids))) {
       } else {
           index_dml_info->table_id_ = table_info.table_id_;
-          index_dml_info->loc_table_id_ = table_info.loc_table_id_;
+          index_dml_info->target_table_ref_id_ = table_info.target_table_ref_id_;
           index_dml_info->ref_table_id_ = index_schema->get_data_table_id();
           index_dml_info->rowkey_cnt_ = index_schema->get_rowkey_column_num();
           index_dml_info->spk_cnt_ = index_schema->get_shadow_rowkey_column_num();
@@ -1157,7 +1157,7 @@ int ObInsertLogPlan::prepare_table_dml_info_for_ddl(const ObInsertTableInfo& tab
     } else {
       // global index or primary table
       index_dml_info->table_id_ = table_info.table_id_;
-      index_dml_info->loc_table_id_ = table_info.loc_table_id_;
+      index_dml_info->target_table_ref_id_ = table_info.target_table_ref_id_;
       index_dml_info->ref_table_id_ = index_schema->get_table_id();
       index_dml_info->rowkey_cnt_ = index_schema->get_rowkey_column_num();
       index_dml_info->spk_cnt_ = index_schema->get_shadow_rowkey_column_num();
@@ -1379,7 +1379,7 @@ int ObInsertLogPlan::build_column_conv_for_shadow_pk(const ObInsertTableInfo& ta
     } else {
       // For char type, compare and hash ignore space
       // For binary type, compare and hash not ignore '\0', so need to padding
-      // '\0' for optimizer calculating partition location. As storage do right
+      // '\0' for optimizer calculating partition access. As storage do right
       // trim of '\0', so don't worry extra space usage.
       //
       // shadow pk can not be partition key, so padding is not need?

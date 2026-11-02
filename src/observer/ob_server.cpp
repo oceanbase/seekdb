@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "share/ob_io_device_helper.h"
-#include "config_bridge.h"
-#include "config_checkers.h"
+#include "rust/config.h"
+#include "rust/config/config_checkers.h"
 #ifndef _WIN32
 #include <unistd.h>
 #include "share/rc/ob_server_runtime.h"
@@ -31,6 +31,8 @@
 #include <thread>
 #include <cstdio>
 #include "observer/ob_server.h"
+#include "lib/alloc/alloc_func.h"
+#include "lib/allocator/ob_jemalloc.h"
 #include "observer/ob_system_package_load_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
@@ -45,7 +47,6 @@ namespace oceanbase { namespace observer { common::ObILobReadService * ObServer:
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
-#include "lib/alloc/memory_dump.h"
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
@@ -703,7 +704,6 @@ ObServer::ObServer()
     server_gtimer_(),
     sql_mem_timer_(),
     ctas_clean_up_timer_(),
-    duty_task_(),
     sql_mem_task_(),
     ctas_clean_up_task_(),
     refresh_cpu_frequency_task_(),
@@ -711,7 +711,7 @@ ObServer::ObServer()
     is_log_dir_empty_(false),
     conn_res_mgr_(),
     disk_usage_report_task_(),
-    log_block_mgr_()
+    log_block_mgr_(startup_result_)
 {
 }
 
@@ -736,11 +736,18 @@ int ObServer::init(const ObServerOptions &opts)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
+  // Daemon startup has already forked. Configure allocator defaults before the
+  // logger or server workers can create further arenas.
+  const int allocator_config_ret = jemalloc_configure_runtime();
+
   // Config loading can fail before the rest of the server is initialized.
   // Start the log writer first so the offending config key is
   // recorded in observer.log.
   if (OB_FAIL(OB_LOGGER.init())) {
     LOG_ERROR("async log init error", KR(ret));
+  }
+  if (OB_SUCC(ret) && 0 != allocator_config_ret) {
+    LOG_WARN("failed to configure jemalloc runtime", K(allocator_config_ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
@@ -840,11 +847,6 @@ int ObServer::init(const ObServerOptions &opts)
     if (OB_SUCC(ret)) {
     if (OB_FAIL(init_io())) {
       LOG_ERROR("init io failed", KR(ret));
-    }
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObMemoryDump::get_instance().init())) {
-      LOG_ERROR("init memory dumper failed", KR(ret));
     }
     }
     if (OB_SUCC(ret)) {
@@ -1128,10 +1130,6 @@ void ObServer::destroy()
     STORAGE_META_SERVICE.destroy();
     FLOG_INFO("server storage meta service destroyed");
 
-    FLOG_INFO("begin to destroy memory dump");
-    ObMemoryDump::get_instance().destroy();
-    FLOG_INFO("memory dump destroyed");
-
     FLOG_INFO("begin to destroy time zone manager");
     timezone_mgr_.destroy();
     FLOG_INFO("time zone manager destroyed");
@@ -1183,6 +1181,7 @@ void ObServer::destroy()
 
     FLOG_INFO("begin to destroy io device");
     ObIODeviceWrapper::get_instance().destroy();
+    log_device_.destroy();
     FLOG_INFO("io device destroyed");
 
     // Release local storage after all metadata users and their timers stop.
@@ -1383,6 +1382,9 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
+    if (OB_SUCC(ret) && !stop_ && OB_FAIL(startup_result_.finish())) {
+      LOG_ERROR("background log allocation failed during startup", KR(ret));
+    }
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1395,6 +1397,7 @@ int ObServer::start()
 
   int64_t start_service_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
+    startup_result_.report_failure(ret);
     LOG_ERROR("failure occurs, stop observer startup", KR(ret));
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_SERVER_START_FAIL, ret,
                         DBA_STEP_INC_INFO(server_start),
@@ -1468,6 +1471,10 @@ int ObServer::wait_for_server_runtime()
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
   while (OB_SUCC(ret) && !stop_ && (!synced || !timestamp_ready)) {
+    if (OB_FAIL(startup_result_.error())) {
+      LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
+      break;
+    }
     synced = server_runtime_controller_.has_synced();
     if (synced && !timestamp_ready) {
       SCN gts;
@@ -1489,7 +1496,7 @@ int ObServer::wait_for_server_runtime()
     LOG_WARN("standby startup replay did not become ready", KR(ret));
   }
   FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(timestamp_ready));
-  if (!stop_ && synced && timestamp_ready) {
+  if (OB_SUCC(ret) && !stop_ && synced && timestamp_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");
@@ -1578,6 +1585,7 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
+  log_block_mgr_.stop();
   net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();
@@ -1674,10 +1682,6 @@ int ObServer::stop()
     } else {
       FLOG_INFO("local management service stopped");
     }
-
-    FLOG_INFO("begin to stop memory dump");
-    ObMemoryDump::get_instance().stop();
-    FLOG_INFO("memory dump stopped");
 
     FLOG_INFO("begin to stop time zone manager");
     timezone_mgr_.stop();
@@ -2046,10 +2050,6 @@ int ObServer::init_pre_setting()
 {
   int ret = OB_SUCCESS;
 
-  ObMallocSampleLimiter::set_interval(config::_max_malloc_sample_interval(),
-                                      config::_min_malloc_sample_interval());
-  enable_memleak_light_backtrace(config::_enable_memleak_light_backtrace());
-
   // oblog configuration
   if (OB_SUCC(ret)) {
     const int max_log_cnt = static_cast<int32_t>(config::max_syslog_file_count());
@@ -2065,14 +2065,11 @@ int ObServer::init_pre_setting()
     }
   }
 
-  // Publish the logical memory budget and derive allocator cache sizing from it.
+  // Publish the logical memory budget.
   if (OB_SUCC(ret)) {
     const int64_t memory_budget = GMEMCONF.get_server_memory_budget();
-    const int64_t reserved_memory = std::min(config::cache_wash_threshold(),
-        static_cast<int64_t>(static_cast<double>(memory_budget) * KVCACHE_FACTOR));
-    LOG_INFO("set memory config", K(memory_budget), K(reserved_memory));
+    LOG_INFO("set memory config", K(memory_budget));
     set_memory_budget(memory_budget);
-    ob_set_reserved_memory(reserved_memory);
   }
   if (OB_SUCC(ret)) {
     const int64_t default_stack_size = 1L << 18; // 256KB
@@ -2146,9 +2143,23 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        if (OB_SUCC(ret) && OB_FAIL(log_block_mgr_.init(
+        share::LocalIOConfig data_io_config;
+        share::LocalIOConfig log_io_config;
+        int io_error = 0;
+        if (OB_FAIL(ret)) {
+        } else if (0 != (io_error = share::probe_local_io(storage_env_.sstable_dir_, data_io_config))) {
+          ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
+          LOG_ERROR("data directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.sstable_dir_);
+        } else if (0 != (io_error = share::probe_local_io(storage_env_.clog_dir_, log_io_config))) {
+          ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
+          LOG_ERROR("log directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.clog_dir_);
+        } else if (OB_FAIL(log_device_.init(storage_env_.clog_dir_,
+                       io_config.disk_io_thread_count_, max_io_depth,
+                       &ObIOManager::get_instance(), &ObDeviceManager::get_instance(), log_io_config))) {
+          LOG_ERROR("log device init failed", KR(ret));
+        } else if (OB_FAIL(log_block_mgr_.init(
             storage_env_.clog_dir_,
-            ObServerUtils::get_log_disk_info_in_config))) {
+            ObServerUtils::get_log_disk_info_in_config, log_io_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
@@ -2173,7 +2184,7 @@ int ObServer::init_io()
                 storage_env_.default_block_size_,
                 storage_env_.data_disk_percentage_,
                 storage_env_.data_disk_size_,
-                STORAGE_META_SERVICE))) {
+                STORAGE_META_SERVICE, data_io_config))) {
           } else if (OB_FAIL(ObIOManager::get_instance().add_device_channel(&LOCAL_DEVICE_INSTANCE,
                                                                             io_config.disk_io_thread_count_,
                                                                             io_config.sync_io_thread_count_,
@@ -2245,8 +2256,7 @@ int ObServer::init_server_runtime()
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(duty_task_.schedule(server_gtimer_))) {
-    } else if (OB_FAIL(sql_mem_task_.schedule(sql_mem_timer_))) {
+    if (OB_FAIL(sql_mem_task_.schedule(sql_mem_timer_))) {
     }
   }
 
@@ -2327,11 +2337,9 @@ int ObServer::init_global_kvcache()
       cache_memory_limit, bucket_num))) {
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
                                                    max_cache_size,
-                                                   lib::ACHUNK_SIZE,
+                                                   ObKVCacheStore::DEFAULT_BLOCK_SIZE,
                                                    0,
                                                    runtime_options))) {
-  } else if (OB_FAIL(ObResourceMgr::get_instance().set_cache_washer(
-      ObKVGlobalCache::get_instance()))) {
   }
 
   return ret;
@@ -2406,7 +2414,6 @@ int ObServer::init_sql()
                                              ObSQLSessionMgr::SCHEDULE_PERIOD, true))) {
   } else {
     LOG_INFO("init sql session mgr done");
-    LOG_INFO("init sql location cache done");
   }
 
   if (OB_SUCC(ret)) {

@@ -12,9 +12,6 @@ libc = "0.2"
 cxx = "=1.0.202"
 log = "0.4"
 
-[build-dependencies]
-cxx-build = "=1.0.202"
-
 [dev-dependencies]
 mio = { version = "1", features = ["os-poll", "net"] }
 

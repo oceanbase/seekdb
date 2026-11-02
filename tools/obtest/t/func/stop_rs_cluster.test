@@ -1,5 +1,0 @@
-####初始化集群
-source include/rs_cluster.test;
-
-## stop
-ob1.stop;

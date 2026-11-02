@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_server_struct.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/alloc/alloc_func.h"
 #include "ob_memstore_freezer.h"

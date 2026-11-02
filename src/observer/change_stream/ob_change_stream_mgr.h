@@ -27,10 +27,6 @@
 #include "lib/atomic/ob_atomic.h"
 namespace oceanbase
 {
-namespace logservice
-{
-class ObILogStorage;
-}
 namespace share
 {
 namespace schema
@@ -49,12 +45,12 @@ public:
   /// Server module init: called after construction to initialize internal state.
   static int server_module_init(
       ObChangeStreamMgr *&mgr,
-      logservice::ObILogStorage &log_storage,
+      palf::PalfEnv &palf_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
 
   int init(
-      logservice::ObILogStorage &log_storage,
+      palf::PalfEnv &palf_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();

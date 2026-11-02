@@ -104,7 +104,7 @@ def _cache_directory() -> Path:
 
 
 def _quote(value: str) -> str:
-    return '"' + value.replace('"', '\\"') + '"'
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _bazel_options(bazel: Path, command: str) -> Tuple[Dict[str, bool], Dict[str, bool]]:
@@ -179,6 +179,12 @@ def _route_options(
 
 def main(arguments: List[str]) -> int:
     root = Path(__file__).resolve().parent
+    os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
+    os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
+    cargo_bin = str((Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin").expanduser().resolve())
+    path = os.environ.get("PATH", os.defpath)
+    if cargo_bin not in path.split(os.pathsep):
+        os.environ["PATH"] = cargo_bin + os.pathsep + path
     if arguments and arguments[0] == "init":
         return subprocess.run([
             sys.executable, str(root / "deps/init/prepare.py"), *arguments[1:],
@@ -221,7 +227,7 @@ def main(arguments: List[str]) -> int:
     # here. Bazel flags on the command line override these defaults.
     status_command = (
         "python bazel/build_metadata.py status"
-        if os.name == "nt" else shlex.join([
+        if os.name == "nt" else " ".join(shlex.quote(argument) for argument in [
             sys.executable,
             str(root / "bazel/build_metadata.py"),
             "status",
@@ -235,6 +241,9 @@ def main(arguments: List[str]) -> int:
     ]
     lines.extend(concurrency_defaults)
     if os.name == "nt":
+        # Starlark can inspect fixed action variables, but not inherited ones.
+        # Native build scripts need both the compiler's PATH and shell tools.
+        lines.append("build --action_env=" + _quote("PATH=" + os.environ.get("PATH", os.defpath)))
         lines.append("build --repo_env=" + _quote(
             "BAZEL_LLVM=" + (root / "deps/3rd/tools/llvm18").resolve().as_posix()
         ))

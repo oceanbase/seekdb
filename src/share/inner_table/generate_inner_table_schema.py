@@ -95,7 +95,6 @@ table_index=[]
 lob_aux_ids = []
 runtime_space_tables = []
 runtime_space_table_names = []
-cluster_distributed_vtables = []
 column_def_enum_array = []
 all_def_keywords = OrderedDict()
 all_agent_virtual_tables = []
@@ -1169,7 +1168,6 @@ def gen_iterate_core_inner_table_def(table_id, table_name, table_type, keywords)
   if 'index' in new_keywords:
     del new_keywords["index"]
 
-  new_keywords["vtable_route_policy"] = 'local'
   new_keywords["in_runtime_space"] = True
   return new_keywords
 
@@ -1235,7 +1233,6 @@ def gen_sys_agent_virtual_table_def(table_id, keywords):
   new_keywords = __gen_agent_vt_base_on_mysql(table_id, keywords, "_SYS_AGENT")
   new_keywords["partition_expr"] = []
   new_keywords["partition_columns"] = []
-  new_keywords["vtable_route_policy"] = "local"
   all_only_sys_table_name[keywords["table_name"]] = True
   all_agent_virtual_tables.append(new_keywords)
   return new_keywords
@@ -1266,8 +1263,6 @@ def gen_agent_virtual_table_def(table_id, keywords):
   new_keywords = __gen_agent_vt_base_on_mysql(table_id, keywords, "_AGENT")
   new_keywords["partition_expr"] = []
   new_keywords["partition_columns"] = []
-  if 'vtable_route_policy' in new_keywords:
-    del(new_keywords["vtable_route_policy"])
   all_agent_virtual_tables.append(new_keywords)
   return new_keywords
 
@@ -1435,7 +1430,7 @@ def generate_unified_local_virtual_table_cpp():
     f.write('#include "lib/oblog/ob_log.h"\n')
     f.write('#include "lib/time/ob_time_utility.h"\n')
     f.write('#include "lib/utility/ob_print_utils.h"\n')
-    f.write('#include \"config_bridge.h\"\n\n')
+    f.write('#include \"rust/config.h\"\n\n')
     f.write('#include <string_view>\n')
     f.write('#include "share/inner_table/local_table_schema.h"\n')
     f.write('namespace oceanbase\n')
@@ -1803,7 +1798,7 @@ def _def_local_virtual_table(table_id, table_name, columns, primary_key, storage
             table_type='VIRTUAL_TABLE', index_using_type='USING_BTREE',
             rowkey_columns=rowkey_columns, normal_columns=normal_columns,
             gm_columns=[], partition_columns=[], partition_expr=[],
-            vtable_route_policy='local', in_runtime_space=False,
+            in_runtime_space=False,
             is_cluster_private=True)
   def_table_schema(**kw)
   kw['storage'] = storage
@@ -1925,7 +1920,6 @@ def def_table_schema(**keywords):
   global index_name_ids
   global runtime_space_tables
   global runtime_space_table_names
-  global cluster_distributed_vtables
   global StringIO
   global ob_virtual_index_table_id
   global ora_virtual_index_table_id
@@ -2024,60 +2018,21 @@ def def_table_schema(**keywords):
   else:
     local_fields = fields
 
-  # Generate partition expr for virtual table.
-  # We support addr_to_partition_id(ip, port) for MySQL virtual tables,
-  # and hash(ip, port) for extended virtual tables.
-  table_id = int(keywords['table_id']);
-  if keywords['partition_columns'] and (is_mysql_virtual_table(table_id) or is_extended_virtual_table(table_id)) and False == keywords['is_real_virtual_table']:
-    cols = keywords['partition_columns']
-
-    # vtable with definition of partition_colums must be distributed
-    if 'vtable_route_policy' not in keywords or 'distributed' != keywords['vtable_route_policy'].lower():
-      raise Exception("vtable route policy must be distributed", keywords['table_name'])
-
-    if len(cols) != 2:
-      raise Exception("only support ip, port partition columns for virtual table", cols)
-    types = []
-    for col in cols:
-      types.append([x[1] for x in keywords['rowkey_columns'] + keywords['normal_columns'] if x[0] == col][0])
-    (ip, port) = types
-    if is_mysql_virtual_table(table_id):
-      if not ip.startswith("varchar:") or not port.startswith("int"):
-        raise Exception("unexpected type of ip and port", cols, types);
-      keywords['partition_expr'] = ['list_columns', ', '.join(cols)]
-    else:
-      if not ip.startswith("varchar:") or not port.startswith("number"):
-        raise Exception("unexpected type of ip and port", cols, types);
-      keywords['partition_expr'] = ['list', ', '.join(cols)]
+  # Virtual tables expose this instance's metadata directly; they have no
+  # address-derived partition expressions or remote routing policy.
+  table_id = int(keywords['table_id'])
+  if keywords['partition_columns'] and (is_mysql_virtual_table(table_id) or is_extended_virtual_table(table_id)):
+    raise Exception("virtual tables cannot define partition columns", keywords['table_name'])
 
   # owner must be defined
   if 'owner' not in keywords or 0 == len(keywords['owner'].strip()):
     raise Exception('owner must be specified')
 
-  # vtable_route_policy' value must be valid
-  if 'vtable_route_policy' in keywords:
-    route_policy = keywords['vtable_route_policy'].lower()
-
-    tid_str = ""
-    if 'index_columns' in keywords:
-      tid_str = table_name2index_tid(keywords['table_name']+ keywords['name_postfix'], keywords['index_name'])
-    else:
-      tid_str = table_name2tid(keywords['table_name']+ keywords['name_postfix'])
-
-    if 'local' != route_policy and 'distributed' != route_policy:
-      raise Exception("vtable route policy is invalid", route_policy)
-    elif not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid) and 'local' != route_policy:
-      raise Exception("vtabl route policy is only work for virtual table", tid)
-    else:
-      if 'local' == route_policy:
-        if 'partition_columns' in keywords and 0 != len(keywords['partition_columns']):
-          raise Exception("partition columns is not valid for local virtual table", keywords.get('partition_columns', []))
-      else:
-        # distributed
-        if 'partition_columns' not in keywords or 2 != len(keywords['partition_columns']):
-          raise Exception("partition columns is not valid for distributed virtual table", keywords.get('partition_columns', []))
-        if not ('in_runtime_space' in keywords and keywords['in_runtime_space']):
-          cluster_distributed_vtables.append(tid_str)
+  # Build the schema's table/index identity independently of access routing.
+  if 'index_columns' in keywords:
+    tid_str = table_name2index_tid(keywords['table_name'] + keywords['name_postfix'], keywords['index_name'])
+  else:
+    tid_str = table_name2tid(keywords['table_name'] + keywords['name_postfix'])
 
   ## Set sys table's (including index and lob tables) tablet_id.
   if is_sys_table(tid) or is_lob_table(tid) or is_sys_index_table(tid):
@@ -2183,7 +2138,7 @@ def def_table_schema(**keywords):
       max_used_column_idx = add_storing_columns(value, max_used_column_idx, **keywords)
     elif field in ('index_name', 'name_postfix',
                    'is_cluster_private', 'is_real_virtual_table',
-                   'owner', 'vtable_route_policy'):
+                   'owner'):
       # do nothing
       log_debug("skip")
     else:
@@ -2519,11 +2474,6 @@ private:
     h_f.write("\n  {0},".format(name))
   h_f.write("  };\n\n")
 
-  h_f.write("const uint64_t cluster_distributed_vtables [] = {")
-  for name in cluster_distributed_vtables:
-    h_f.write("\n  {0},".format(name))
-  h_f.write("  };\n\n")
-
   global restrict_access_virtual_tables
   h_f.write("const uint64_t restrict_access_virtual_tables[] = {\n  "
       + ",\n  ".join(restrict_access_virtual_tables) + "  };\n\n")
@@ -2573,17 +2523,6 @@ static inline bool is_restrict_access_virtual_table(const uint64_t tid)
   h_f.write("static inline bool is_runtime_virtual_table(const uint64_t tid)\n");
   h_f.write("{\n");
   h_f.write("  return common::is_virtual_table(tid) && is_runtime_table(tid);\n");
-  h_f.write("}\n\n");
-
-  h_f.write("static inline bool is_cluster_distributed_vtables(const uint64_t tid)\n");
-  h_f.write("{\n");
-  h_f.write("  bool bret = false;\n");
-  h_f.write("  for (int64_t i = 0; !bret && i < ARRAYSIZEOF(cluster_distributed_vtables); ++i) {\n");
-  h_f.write("    if (tid == cluster_distributed_vtables[i]) {\n");
-  h_f.write("      bret = true;\n");
-  h_f.write("    }\n");
-  h_f.write("  }\n");
-  h_f.write("  return bret;\n");
   h_f.write("}\n\n");
 
   # define lob aux mapping

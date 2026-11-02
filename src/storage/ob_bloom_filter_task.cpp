@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include <algorithm>
 #include "storage/ob_bloom_filter_task.h"
 #include "storage/blocksstable/ob_macro_block_bare_iterator.h"

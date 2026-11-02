@@ -171,7 +171,6 @@ SHARE_UNITY_GROUPS = [
             "src/share/ls/ob_ls_restore_status.cpp",
             "src/share/ob_sys_time_zone_util.cpp",
             "src/share/ls/ob_restore_status.cpp",
-            "src/share/location_cache/ob_location_struct.cpp",
             "src/share/object/ob_obj_cast.cpp",
             "src/share/object/ob_decint_scale_util.cpp",
             "src/share/object/ob_enumset_str_util.cpp",

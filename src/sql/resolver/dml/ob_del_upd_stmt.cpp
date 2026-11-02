@@ -60,7 +60,7 @@ int ObDmlTableInfo::assign(const ObDmlTableInfo &other)
   } else if (OB_FAIL(part_ids_.assign(other.part_ids_))) {
   } else {
     table_id_ = other.table_id_;
-    loc_table_id_ = other.loc_table_id_;
+    target_table_ref_id_ = other.target_table_ref_id_;
     ref_table_id_ = other.ref_table_id_;
     table_name_ = other.table_name_;
     table_type_ = other.table_type_;
@@ -78,7 +78,7 @@ int ObDmlTableInfo::deep_copy(ObIRawExprCopier &expr_copier, const ObDmlTableInf
   } else if (OB_FAIL(part_ids_.assign(other.part_ids_))) {
   } else {
     table_id_ = other.table_id_;
-    loc_table_id_ = other.loc_table_id_;
+    target_table_ref_id_ = other.target_table_ref_id_;
     ref_table_id_ = other.ref_table_id_;
     table_name_ = other.table_name_;
     table_type_ = other.table_type_;
@@ -286,7 +286,7 @@ int ObDelUpdStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dml_table_infos.at(i)->iterate_stmt_expr(visitor))) {
     } else if (dml_table_infos.at(i)->table_id_ != OB_INVALID_ID && 
-               dml_table_infos.at(i)->table_id_ != dml_table_infos.at(i)->loc_table_id_) {
+               dml_table_infos.at(i)->table_id_ != dml_table_infos.at(i)->target_table_ref_id_) {
       // handle updatable view in a speical way
       for (int64_t j = 0; OB_SUCC(ret) && !hit_updatable_view && j < part_expr_items_.count(); ++j) {
         if (OB_FAIL(visitor.visit(part_expr_items_.at(j).part_expr_,
@@ -348,13 +348,13 @@ int ObDelUpdStmt::update_base_tid_cid()
           table_assignments = &static_cast<ObInsertTableInfo*>(dml_table)->assignments_;
         } else { /*do nothing*/ }
 
-        if (OB_SUCC(ret) && dml_table->loc_table_id_ != base_tid) {
+        if (OB_SUCC(ret) && dml_table->target_table_ref_id_ != base_tid) {
           for (int64_t k = 0; OB_SUCC(ret) && k < part_expr_items_.count(); ++k) {
-            if (part_expr_items_.at(k).table_id_ == dml_table->loc_table_id_) {
+            if (part_expr_items_.at(k).table_id_ == dml_table->target_table_ref_id_) {
               part_expr_items_.at(k).table_id_ = base_tid;
             }
           }
-          dml_table->loc_table_id_ = base_tid;
+          dml_table->target_table_ref_id_ = base_tid;
         }
 
       }

@@ -34,6 +34,7 @@ public:
         create_package_arg_() {}
   virtual ~ObCreatePackageStmt() {}
   obcall::ObCreatePackageArg &get_create_package_arg() { return create_package_arg_; }
+  const obcall::ObCreatePackageArg &get_create_package_arg() const { return create_package_arg_; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return create_package_arg_; }
 private:
   obcall::ObCreatePackageArg create_package_arg_;

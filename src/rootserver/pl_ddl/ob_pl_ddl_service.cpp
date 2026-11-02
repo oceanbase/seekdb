@@ -473,7 +473,8 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
               && (0 == MEMCMP(old_package_info->get_source().ptr(),
                               new_package_info.get_source().ptr(),
                               old_package_info->get_source().length()))
-              && old_package_info->get_exec_env() == new_package_info.get_exec_env()) {
+              && old_package_info->get_exec_env() == new_package_info.get_exec_env()
+              && old_package_info->get_flag() == new_package_info.get_flag()) {
             need_create = false;
             LOG_INFO("do not recreate package with same source",
                      K(ret),

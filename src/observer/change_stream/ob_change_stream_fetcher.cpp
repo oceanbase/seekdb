@@ -38,6 +38,7 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "logservice/ob_log_handler.h"
+#include "logservice/palf/palf_env.h"
 #include "logservice/palf/log_io_context.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include <algorithm>
@@ -51,8 +52,11 @@ ObCSFetcher::ObCSFetcher()
   : share::ObThreadPool(1),
     is_inited_(false),
     dispatcher_(nullptr),
-    log_storage_(nullptr),
+    palf_env_(nullptr),
+    read_handle_(),
     iter_(),
+    log_ready_(),
+    wake_armed_(0),
     current_lsn_(),
     min_dep_lsn_(),
     processed_end_lsn_(0),
@@ -75,7 +79,7 @@ ObCSFetcher::~ObCSFetcher()
 
 int ObCSFetcher::init(
     ObCSDispatcher *dispatcher,
-    logservice::ObILogStorage &log_storage,
+    palf::PalfEnv &palf_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -93,7 +97,7 @@ int ObCSFetcher::init(
     LOG_WARN("CSFetcher: fail to init schema_state_cond", KR(ret));
   } else {
     dispatcher_ = dispatcher;
-    log_storage_ = &log_storage;
+    palf_env_ = &palf_env;
     schema_publish_signal_ = &schema_publish_signal;
     observed_schema_publish_epoch_ = schema_publish_signal.current_epoch();
     current_scn_.set_min();
@@ -177,8 +181,8 @@ int ObCSFetcher::init_consumption_position_()
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(logservice::seek_log_iterator(*log_storage_, start_lsn, iter_))) {
-        LOG_WARN("CSFetcher: fail to seek_log_iterator by restart boundary", KR(ret), K(start_lsn));
+      if (OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
+        LOG_WARN("CSFetcher: fail to seek log iterator by restart boundary", KR(ret), K(start_lsn));
       } else {
         current_lsn_ = start_lsn;
         ATOMIC_STORE(&processed_end_lsn_, static_cast<int64_t>(start_lsn.val_));
@@ -236,13 +240,58 @@ int ObCSFetcher::init_consumption_position_()
             LOG_INFO("CSFetcher: schema version initialized by SCN", K(current_schema_version_));
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(
-            *log_storage_, start_lsn, iter_))) {
+        if (OB_SUCC(ret) && OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
         }
       }
     }
   }
   return ret;
+}
+
+int ObCSFetcher::bind_log_()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(palf_env_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(palf_env_->open(read_handle_))) {
+  } else if (OB_FAIL(read_handle_.register_file_size_cb(this))) {
+    LOG_WARN("CSFetcher: fail to register log notification", KR(ret));
+  }
+  return ret;
+}
+
+void ObCSFetcher::unbind_log_()
+{
+  ATOMIC_STORE(&wake_armed_, 0);
+  iter_.destroy();
+  if (read_handle_.is_valid()) {
+    // close unregisters and drains callbacks before the condition can be destroyed.
+    palf_env_->close(read_handle_);
+  }
+}
+
+int ObCSFetcher::next_log_()
+{
+  const uint32_t key_before_arm = log_ready_.get_key();
+  ATOMIC_STORE(&wake_armed_, 1);
+  int ret = OB_SUCCESS;
+  if (has_set_stop()) {
+    ret = OB_CANCELED;
+  } else if (OB_ITER_END == (ret = iter_.next()) && !has_set_stop()) {
+    (void)log_ready_.wait(key_before_arm, CS_FETCHER_ITER_END_SLEEP_US);
+  }
+  ATOMIC_STORE(&wake_armed_, 0);
+  return ret;
+}
+
+int ObCSFetcher::update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn)
+{
+  UNUSED(end_lsn);
+  UNUSED(end_scn);
+  if (ATOMIC_BCAS(&wake_armed_, 1, 0)) {
+    log_ready_.signal();
+  }
+  return OB_SUCCESS;
 }
 
 int ObCSFetcher::start()
@@ -259,6 +308,7 @@ int ObCSFetcher::start()
 void ObCSFetcher::stop()
 {
   ObThreadPool::stop();
+  log_ready_.signal();
   if (OB_NOT_NULL(schema_publish_signal_)) {
     schema_publish_signal_->wake_waiters();
   }
@@ -278,6 +328,7 @@ void ObCSFetcher::destroy()
   if (is_inited_) {
     stop();
     wait();
+    unbind_log_();
     // Clean up any remaining in-flight transactions.
     for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::iterator it = tx_info_.begin();
          it != tx_info_.end(); ++it) {
@@ -289,7 +340,7 @@ void ObCSFetcher::destroy()
     tx_info_.destroy();
     schema_state_cond_.destroy();
     dispatcher_ = nullptr;
-    log_storage_ = nullptr;
+    palf_env_ = nullptr;
     schema_publish_signal_ = nullptr;
     observed_schema_publish_epoch_ = 0;
     current_lsn_.reset();
@@ -578,6 +629,10 @@ int ObCSFetcher::drain_to_idle_(const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   running_mode_ = IDLE; // Stop producing new tasks before taking the barrier.
+  // Stop PALF callbacks and release the active iterator before publishing the
+  // IDLE proof.  A later ACTIVE generation will bind a fresh handle and seek
+  // from the last proven consumption position.
+  unbind_log_();
   pending_ready_schema_version_ = 0;
 
   // Entries not yet handed to Dispatcher cannot complete once Fetcher is IDLE.
@@ -973,7 +1028,8 @@ void ObCSFetcher::run1()
 
   int ret = OB_SUCCESS;
 
-  // Wait until sql_proxy and schema service are ready.
+  // Failed LS creation and recovery can remove PALF before this readiness gate.
+  // After it, runtime teardown keeps PALF alive until the fetcher has joined.
   while (!has_set_stop()) {
     if (OB_ISNULL(GCTX.sql_proxy_) || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
         || OB_ISNULL(GCTX.schema_service_)) {
@@ -1026,10 +1082,14 @@ void ObCSFetcher::run1()
       continue;
     }
 
-    // ACTIVE branch: initialize iterator if not yet ready.
-    // ACTIVE branch: initialize iterator if not yet ready.
+    // ACTIVE entry: register the callback and initialize the iterator together.
     if (!iter_ready) {
-      if (OB_SUCC(init_consumption_position_())) {
+      // Every retry owns a fresh callback registration.  This also makes the
+      // retry path robust if a future error path only invalidates iter_ready.
+      unbind_log_();
+      if (OB_FAIL(bind_log_())) {
+      } else if (OB_FAIL(init_consumption_position_())) {
+      } else {
         iter_ready = true;
         if (pending_ready_schema_version_ > 0) {
           publish_schema_state_(pending_ready_schema_version_, true, false);
@@ -1037,17 +1097,19 @@ void ObCSFetcher::run1()
         }
         FLOG_INFO("CSFetcher: iterator initialized, starting consumption",
                   K(current_lsn_), K(current_scn_));
-      } else {
+      }
+      if (OB_FAIL(ret)) {
+        unbind_log_();
         usleep(CS_FETCHER_INIT_FAIL_SLEEP_US);
         continue;
       }
     }
 
-    if (OB_FAIL(iter_.next())) {
-      if (OB_ITER_END == ret) {
-        usleep(CS_FETCHER_ITER_END_SLEEP_US);
+    if (OB_FAIL(next_log_())) {
+      if (OB_ITER_END == ret || has_set_stop()) {
         continue;
       }
+      unbind_log_();
       iter_ready = false;
       usleep(CS_FETCHER_ITER_ERR_SLEEP_US);
       continue;
@@ -1056,6 +1118,7 @@ void ObCSFetcher::run1()
     palf::LogEntry log_entry;
     palf::LSN lsn;
     if (OB_FAIL(iter_.get_entry(log_entry, lsn))) {
+      unbind_log_();
       iter_ready = false;
       continue;
     }
@@ -1069,6 +1132,7 @@ void ObCSFetcher::run1()
     logservice::ObLogBaseHeader base_header;
     int64_t header_pos = 0;
     if (OB_FAIL(base_header.deserialize(buf, buf_len, header_pos))) {
+      unbind_log_();
       iter_ready = false;
       continue;
     }
@@ -1084,6 +1148,7 @@ void ObCSFetcher::run1()
     transaction::ObTxLogBlock tx_log_block;
     if (OB_FAIL(tx_log_block.init_for_replay(buf, buf_len))) {
       LOG_WARN("CSFetcher: fail to init_for_replay", KR(ret), K(lsn));
+      unbind_log_();
       iter_ready = false;
       continue;
     }
@@ -1210,6 +1275,7 @@ void ObCSFetcher::run1()
     // Publish progress only after every operation in this log entry succeeds.
     // On failure re-seek from the last successfully published end LSN.
     if (OB_FAIL(ret)) {
+      unbind_log_();
       iter_ready = false;
       LOG_WARN("CSFetcher: log entry processing failed, retry from last processed LSN",
                KR(ret), K(lsn), K(current_lsn_));
@@ -1229,6 +1295,7 @@ void ObCSFetcher::run1()
     }
   }
 
+  unbind_log_();
   FLOG_INFO("CSFetcher: stopped",
             "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
             K(current_lsn_), K(current_scn_), K(total_tx_committed_));

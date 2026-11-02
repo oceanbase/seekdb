@@ -220,6 +220,7 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = singleton_unity_groups(
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    "//rust:uuid_generator_headers",
     "//rust:config_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
@@ -283,7 +284,6 @@ grouped_unity_cc_library(
         "//src/share:io",
         "//src/share:json_access",
         "//src/share:lob_runtime",
-        "//src/share:location",
         "//src/share:memory_support",
         "//src/share:module_data_protocol",
         "//src/share:object_cast",
@@ -323,7 +323,7 @@ grouped_unity_cc_library(
         "//bazel/third_party:boost_headers",
         "//bazel/third_party:curl_headers",
         "//bazel/third_party:fast_float_headers",
-        "//bazel/third_party:icu_headers",
+        "//rust:regex_engine_headers",
         "//bazel/third_party:openssl_headers",
     ],
     tags = ["manual"],
@@ -363,7 +363,6 @@ grouped_unity_cc_library(
         "//src/share:interrupt_runtime",
         "//src/share:json_access",
         "//src/share:lob_runtime",
-        "//src/share:location",
         "//src/share:memory_support",
         "//src/share:object_cast",
         "//src/share:object_cast_runtime_interface",

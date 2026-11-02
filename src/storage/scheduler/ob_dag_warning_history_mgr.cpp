@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "storage/scheduler/ob_dag_warning_history_mgr.h"
+#include "lib/alloc/alloc_func.h"
 #include "data_plane/scheduler/ob_dag_warning_history.h"
 #include "share/rc/ob_server_runtime.h"
 

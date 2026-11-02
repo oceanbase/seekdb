@@ -8,4 +8,3 @@ Before contributing, also review the relevant sections of this developer guide:
 - [Build and run seekdb](build-and-run.md)
 - [Write and run unit tests](unittest.md)
 - [Run mysqltest](mysqltest.md)
-- [Coding conventions](coding-convention.md)

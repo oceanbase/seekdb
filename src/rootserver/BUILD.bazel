@@ -395,7 +395,6 @@ grouped_unity_cc_library(
         "//src/share:lob_diff_interface",
         "//src/share:lob_read_service",
         "//src/share:lob_runtime",
-        "//src/share:location",
         "//src/share:log_protocol",
         "//src/share:ls_restore_status",
         "//src/share:max_id_allocation",

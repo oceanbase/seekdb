@@ -52,7 +52,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/oblog/ob_log_level.h"
 #include "lib/utility/ob_defer.h"
-#include "logger.h"
+#include "rust/logger.h"
 #include "lib/utility/ob_common_utility.h"
 #include "lib/oblog/ob_log_dba_event.h"
 

@@ -24,6 +24,7 @@
 #include "lib/ob_define.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_scond.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_thread_pool.h"
@@ -32,14 +33,16 @@
 #include "share/log/palf/lsn.h"
 #include "logservice/palf/log_entry.h"
 #include "logservice/palf/palf_iterator.h"
+#include "logservice/palf/palf_handle.h"
+#include "logservice/palf/palf_callback.h"
 #include "storage/tx/ob_tx_seq.h"
 #include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
-namespace logservice
+namespace palf
 {
-class ObILogStorage;
+class PalfEnv;
 }
 namespace share
 {
@@ -57,7 +60,7 @@ static constexpr int64_t CS_FETCHER_SCHEMA_CHECK_INTERVAL_US = 10 * 1000;
 static constexpr int64_t CS_FETCHER_PROGRESS_LOG_INTERVAL_US = 10 * 1000 * 1000;
 /// Sleep when init checks (sql_proxy not ready, etc.).
 static constexpr int64_t CS_FETCHER_INIT_RETRY_SLEEP_US = 500 * 1000;
-/// Sleep when init_consumption_position_ fails.
+/// Sleep when activating log consumption fails.
 static constexpr int64_t CS_FETCHER_INIT_FAIL_SLEEP_US = 1000 * 1000;
 /// Cond wait timeout in IDLE mode. Keep it no longer than the min_dep_lsn refresh interval.
 static constexpr int64_t CS_FETCHER_IDLE_COND_WAIT_MS = 5 * 1000;
@@ -154,7 +157,7 @@ struct ObCSAsyncSchemaState
 // ObCSFetcher: single-threaded CLOG consumer, assembles by transaction, pushes on commit.
 // ---------------------------------------------------------------------------
 
-class ObCSFetcher : public share::ObThreadPool
+class ObCSFetcher : public share::ObThreadPool, private palf::PalfFSCb
 {
 public:
   ObCSFetcher();
@@ -162,7 +165,7 @@ public:
 
   int init(
       ObCSDispatcher *dispatcher,
-      logservice::ObILogStorage &log_storage,
+      palf::PalfEnv &palf_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
@@ -202,9 +205,15 @@ protected:
   void run1() override;
 
 private:
+  ObCSFetcher(const ObCSFetcher &) = delete;
+  ObCSFetcher &operator=(const ObCSFetcher &) = delete;
   enum RunningMode { IDLE = 0, ACTIVE = 1 };
 
   int init_consumption_position_();
+  int bind_log_();
+  void unbind_log_();
+  int next_log_();
+  int update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn) override;
   int calc_min_dep_lsn_(palf::LSN &min_lsn);
   void try_update_min_dep_lsn_();
   void publish_min_dep_lsn_(const palf::LSN &min_lsn);
@@ -233,8 +242,11 @@ private:
 
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
-  logservice::ObILogStorage *log_storage_;
+  palf::PalfEnv *palf_env_;
+  palf::PalfHandle read_handle_;
   palf::PalfBufferIterator iter_;
+  common::SimpleCond log_ready_;
+  int32_t wake_armed_;
   palf::LSN current_lsn_;
   palf::LSN min_dep_lsn_;          // Atomically published; only Fetcher writes.
   int64_t processed_end_lsn_;

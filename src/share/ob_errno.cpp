@@ -2164,19 +2164,12 @@ static const _error _error_OB_RS_NOT_MASTER = {
       .str_error             = "The RootServer is not the master",
       .str_user_error        = "The RootServer is not the master"
 };
-static const _error _error_OB_LOCATION_NOT_EXIST = {
-      .error_name            = "OB_LOCATION_NOT_EXIST",
+static const _error _error_OB_ACCESS_TARGET_NOT_EXIST = {
+      .error_name            = "OB_ACCESS_TARGET_NOT_EXIST",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "location not exist",
-      .str_user_error        = "location not exist"
-};
-static const _error _error_OB_LOCATION_LEADER_NOT_EXIST = {
-      .error_name            = "OB_LOCATION_LEADER_NOT_EXIST",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "location leader not exist",
-      .str_user_error        = "location leader not exist"
+      .str_error             = "access target does not exist",
+      .str_user_error        = "access target does not exist"
 };
 static const _error _error_OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT = {
       .error_name            = "OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT",
@@ -2198,13 +2191,6 @@ static const _error _error_OB_GOT_SIGNAL_ABORTING = {
       .sqlstate              = "01000",
       .str_error             = "Got signal. Aborting!",
       .str_user_error        = "%s: Got signal %d. Aborting!"
-};
-static const _error _error_OB_GET_LOCATION_TIME_OUT = {
-      .error_name            = "OB_GET_LOCATION_TIME_OUT",
-      .mysql_errno           = 4012,
-      .sqlstate              = "HY000",
-      .str_error             = "Timeout",
-      .str_user_error        = "Timeout"
 };
 static const _error _error_OB_RUN_JOB_NOT_SUCCESS = {
       .error_name            = "OB_RUN_JOB_NOT_SUCCESS",
@@ -2311,19 +2297,12 @@ static const _error _error_OB_LS_NOT_EXIST = {
       .str_error             = "log stream does not exist",
       .str_user_error        = "log stream does not exist"
 };
-static const _error _error_OB_LS_LOCATION_NOT_EXIST = {
-      .error_name            = "OB_LS_LOCATION_NOT_EXIST",
+static const _error _error_OB_LOG_STREAM_ACCESS_NOT_READY = {
+      .error_name            = "OB_LOG_STREAM_ACCESS_NOT_READY",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "log stream location does not exist",
-      .str_user_error        = "log stream location does not exist"
-};
-static const _error _error_OB_LS_LOCATION_LEADER_NOT_EXIST = {
-      .error_name            = "OB_LS_LOCATION_LEADER_NOT_EXIST",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "log stream location leader does not exist",
-      .str_user_error        = "log stream location leader does not exist"
+      .str_error             = "log stream access is not ready",
+      .str_user_error        = "log stream access is not ready"
 };
 static const _error _error_OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST = {
       .error_name            = "OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST",
@@ -11157,12 +11136,10 @@ struct ObStrErrorInit
     _errors[-OB_TASK_EXPIRED] = &_error_OB_TASK_EXPIRED;
     _errors[-OB_MACHINE_RESOURCE_NOT_ENOUGH] = &_error_OB_MACHINE_RESOURCE_NOT_ENOUGH;
     _errors[-OB_RS_NOT_MASTER] = &_error_OB_RS_NOT_MASTER;
-    _errors[-OB_LOCATION_NOT_EXIST] = &_error_OB_LOCATION_NOT_EXIST;
-    _errors[-OB_LOCATION_LEADER_NOT_EXIST] = &_error_OB_LOCATION_LEADER_NOT_EXIST;
+    _errors[-OB_ACCESS_TARGET_NOT_EXIST] = &_error_OB_ACCESS_TARGET_NOT_EXIST;
     _errors[-OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT] = &_error_OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
     _errors[-OB_SESSION_ENTRY_EXIST] = &_error_OB_SESSION_ENTRY_EXIST;
     _errors[-OB_GOT_SIGNAL_ABORTING] = &_error_OB_GOT_SIGNAL_ABORTING;
-    _errors[-OB_GET_LOCATION_TIME_OUT] = &_error_OB_GET_LOCATION_TIME_OUT;
     _errors[-OB_RUN_JOB_NOT_SUCCESS] = &_error_OB_RUN_JOB_NOT_SUCCESS;
     _errors[-OB_NEED_REMOVE_UNNEED_TABLE] = &_error_OB_NEED_REMOVE_UNNEED_TABLE;
     _errors[-OB_NO_NEED_MERGE] = &_error_OB_NO_NEED_MERGE;
@@ -11178,8 +11155,7 @@ struct ObStrErrorInit
     _errors[-OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX] = &_error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX;
     _errors[-OB_ERR_ATLER_TABLE_ILLEGAL_FK] = &_error_OB_ERR_ATLER_TABLE_ILLEGAL_FK;
     _errors[-OB_LS_NOT_EXIST] = &_error_OB_LS_NOT_EXIST;
-    _errors[-OB_LS_LOCATION_NOT_EXIST] = &_error_OB_LS_LOCATION_NOT_EXIST;
-    _errors[-OB_LS_LOCATION_LEADER_NOT_EXIST] = &_error_OB_LS_LOCATION_LEADER_NOT_EXIST;
+    _errors[-OB_LOG_STREAM_ACCESS_NOT_READY] = &_error_OB_LOG_STREAM_ACCESS_NOT_READY;
     _errors[-OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST] = &_error_OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST;
     _errors[-OB_TABLET_EXIST] = &_error_OB_TABLET_EXIST;
     _errors[-OB_TABLET_NOT_EXIST] = &_error_OB_TABLET_NOT_EXIST;

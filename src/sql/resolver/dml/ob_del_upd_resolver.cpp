@@ -1992,7 +1992,7 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
       } else {
         // For char type, compare and hash ignore space
         // For binary type, compare and hash not ignore '\0', so need to padding
-        // '\0' for optimizer calculating partition location. As storage do right
+        // '\0' for optimizer calculating partition targets. As storage do right
         // trim of '\0', so don't worry extra space usage.
         if (ObObjMeta::is_binary(tbl_col->get_data_type(),
                                  tbl_col->get_collation_type())) {
@@ -2695,7 +2695,7 @@ int ObDelUpdResolver::generate_insert_table_info(const TableItem &table_item,
     // LOG_WARN("failed to prune columns for ddl", K(ret));
   } else {
     table_info.table_id_ = table_item.table_id_;
-    table_info.loc_table_id_ = base_table_item.table_id_;
+    table_info.target_table_ref_id_ = base_table_item.table_id_;
     table_info.ref_table_id_ = base_table_item.ref_id_;
     table_info.table_name_ = table_schema->get_table_name_str();
   }

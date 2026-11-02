@@ -53,6 +53,7 @@ inline int gettimeofday(struct timeval* tp, void* tzp) {
 #endif
 #include <algorithm>
 #include <typeinfo>
+#include <type_traits>
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer (includes spinlock compat)
 #include "lib/utility/utility.h"
 #include "lib/oblog/ob_log.h"
@@ -92,22 +93,64 @@ extern bool parsenode_equal(const _ParseNode *node1, const _ParseNode *node2, in
 }
 #endif
 
-// Helper functions to initialize pthread types dynamically.
-// On macOS, pthread types need explicit initialization (memset is not sufficient).
-// These are now available on all platforms for consistency.
-inline void init_hash_lock(pthread_rwlock_t &lock) { pthread_rwlock_init(&lock, NULL); }
-inline void init_hash_lock(pthread_mutex_t &lock) { pthread_mutex_init(&lock, NULL); }
-template <typename T> inline void init_hash_lock(T &lock) { (void)lock; }
-
-inline void init_hash_cond(pthread_cond_t &cond) { pthread_cond_init(&cond, NULL); }
-template <typename T> inline void init_hash_cond(T &cond) { (void)cond; }
-
 namespace oceanbase
 {
 namespace common
 {
 namespace hash
 {
+// Keep native synchronization lifetime inside the owning wrapper, rather than
+// making the container decide which platforms need resource cleanup.
+inline int init_hash_sync(pthread_rwlock_t &value) { return pthread_rwlock_init(&value, NULL); }
+inline int init_hash_sync(pthread_mutex_t &value) { return pthread_mutex_init(&value, NULL); }
+#if !defined(__APPLE__)
+// macOS implements pthread_spinlock_t as an alias of pthread_mutex_t.
+inline int init_hash_sync(pthread_spinlock_t &value) { return pthread_spin_init(&value, PTHREAD_PROCESS_PRIVATE); }
+#endif
+inline int init_hash_sync(pthread_cond_t &value) { return pthread_cond_init(&value, NULL); }
+template <typename T> inline int init_hash_sync(T &) { return 0; }
+
+inline void destroy_hash_sync(pthread_rwlock_t &value) { pthread_rwlock_destroy(&value); }
+inline void destroy_hash_sync(pthread_mutex_t &value) { pthread_mutex_destroy(&value); }
+#if !defined(__APPLE__)
+inline void destroy_hash_sync(pthread_spinlock_t &value) { pthread_spin_destroy(&value); }
+#endif
+inline void destroy_hash_sync(pthread_cond_t &value) { pthread_cond_destroy(&value); }
+template <typename T> inline void destroy_hash_sync(T &) {}
+
+template <typename T>
+class HashSyncIniter
+{
+public:
+  explicit HashSyncIniter(T &value) : initialized_(0 == init_hash_sync(value)) {}
+  bool lock_succ() const { return initialized_; }
+private:
+  bool initialized_;
+};
+
+template <typename T, typename Initer = HashSyncIniter<T> >
+class HashSync
+{
+public:
+  HashSync() : value_(), initialized_(Initer(value_).lock_succ()) {}
+  ~HashSync()
+  {
+    if (initialized_) {
+      destroy_hash_sync(value_);
+    }
+  }
+  bool is_initialized() const { return initialized_; }
+  T &get()
+  {
+    abort_unless(initialized_);
+    return value_;
+  }
+private:
+  T value_;
+  bool initialized_;
+  DISALLOW_COPY_AND_ASSIGN(HashSync);
+};
+
 /**
  * Discard error code alias, please use the OB_HASH_XXX macros directly.
  *
@@ -510,6 +553,7 @@ public:
   {
     UNUSED(lock);
   }
+  bool lock_succ() const { return true; }
 private:
   NullIniter();
 };
@@ -1003,7 +1047,7 @@ class BigArrayTemp
   class Block
   {
   public:
-    Block() : array_(NULL), allocer_(NULL) {}
+    Block() : array_(NULL), allocer_(NULL), item_count_(0) {}
     ~Block() { destroy(); }
   public:
     int create(const int64_t array_size, Allocer *allocer)
@@ -1018,24 +1062,27 @@ class BigArrayTemp
                        array_size);
         ret = -1;
       } else {
-#if defined(__APPLE__) || defined(_WIN32)
         for (int64_t i = 0; i < array_size; ++i) {
           new (&array_[i]) T();
         }
-#else
-        memset(array_, 0, array_size * sizeof(T));
-#endif
         allocer_ = allocer;
+        item_count_ = array_size;
       }
       return ret;
     }
     void destroy()
     {
       if (NULL != allocer_ && NULL != array_) {
+        if (!std::is_trivially_destructible<T>::value) {
+          for (int64_t i = 0; i < item_count_; ++i) {
+            array_[i].~T();
+          }
+        }
         allocer_->free(array_);
       }
       array_ = NULL;
       allocer_ = NULL;
+      item_count_ = 0;
     }
   public:
     T &operator[](const int64_t pos)
@@ -1051,6 +1098,7 @@ class BigArrayTemp
   private:
     T *array_;
     Allocer *allocer_;
+    int64_t item_count_;
   };
 public:
   typedef BigArrayTag ArrayTag;
@@ -1084,7 +1132,9 @@ public:
                        array_size_);
         ret = -1;
       } else {
-        memset(blocks_, 0, blocks_num_ * sizeof(Block));
+        for (int64_t i = 0; i < blocks_num_; ++i) {
+          new (&blocks_[i]) Block();
+        }
         for (int64_t i = 0; i < blocks_num_; i++) {
           if (0 != blocks_[i].create(array_size_, &allocer_)) {
             ret = -1;
@@ -1102,7 +1152,7 @@ public:
   {
     if (NULL != blocks_) {
       for (int64_t i = 0; i < blocks_num_; i++) {
-        blocks_[i].destroy();
+        blocks_[i].~Block();
       }
       allocer_.free(blocks_);
     }
@@ -1220,18 +1270,10 @@ int do_create(Array &array, const int64_t total_size, const int64_t array_size, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     _OB_LOG(WARN, "alloc memory failed,size:%ld", total_size * item_size);
   } else {
-#if defined(__APPLE__) || defined(_WIN32)
-    // On macOS/Windows, we must call constructors to initialize complex types like pthread_rwlock_t
-    // because memset(0) is not sufficient for dynamic initialization.
-    // On Windows PThreads4W, pthread_mutex_t is a pointer and PTHREAD_MUTEX_INITIALIZER is -1 (not 0).
     typedef typename std::remove_pointer<Array>::type ItemType;
     for (int64_t i = 0; i < total_size; ++i) {
       new (&array[i]) ItemType();
     }
-#else
-    //BACKTRACE(WARN, total_size * item_size > 65536, "hashutil create init size=%ld", total_size * item_size);
-    memset(array, 0, total_size * item_size);
-#endif
   }
   return ret;
 }
@@ -1255,21 +1297,28 @@ bool do_inited(const Array &array, NormalPointerTag)
 }
 
 template <class Array, class BucketAllocator>
-void destroy(Array &array, BucketAllocator &alloc)
+void destroy(Array &array, BucketAllocator &alloc, const int64_t item_count)
 {
-  do_destroy(array, typename ArrayTraits<Array>::ArrayTag(), alloc);
+  do_destroy(array, typename ArrayTraits<Array>::ArrayTag(), alloc, item_count);
 }
 
 template <class Array, class BucketAllocator>
-void do_destroy(Array &array, BigArrayTag, BucketAllocator &)
+void do_destroy(Array &array, BigArrayTag, BucketAllocator &, const int64_t item_count)
 {
+  UNUSED(item_count);
   array.destroy();
 }
 
 template <class Array, class BucketAllocator>
-void do_destroy(Array &array, NormalPointerTag, BucketAllocator &alloc)
+void do_destroy(Array &array, NormalPointerTag, BucketAllocator &alloc, const int64_t item_count)
 {
   if (NULL != array) {
+    typedef typename std::remove_pointer<Array>::type ItemType;
+    if (!std::is_trivially_destructible<ItemType>::value) {
+      for (int64_t i = 0; i < item_count; ++i) {
+        array[i].~ItemType();
+      }
+    }
     alloc.free(array);
     array = NULL;
   }
@@ -1386,9 +1435,7 @@ class SimpleAllocer
 public:
   SimpleAllocer() : leak_check_(true), block_remainder_(NULL), block_free_list_(NULL)
                   , blocks_(NULL), nblocks_(0), nblocks_limit_(0)
-  {
-    lock_initer initer(lock_);
-  }
+  {}
   ~SimpleAllocer()
   {
     Block *cur = blocks_;
@@ -1413,7 +1460,11 @@ public:
   int reserve(int64_t node_num)
   {
     int ret = OB_SUCCESS;
-    mutexlocker locker(lock_);
+    if (!lock_.is_initialized()) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "allocator lock is not initialized");
+      return OB_NOT_INIT;
+    }
+    mutexlocker locker(lock_.get());
     int needed = node_num / NODE_NUM;
     while (nblocks_ > needed) {
       Block *next  = blocks_->next;
@@ -1439,7 +1490,11 @@ public:
   T *alloc(TYPES&... args)
   {
     T *ret = NULL;
-    mutexlocker locker(lock_);
+    if (!lock_.is_initialized()) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "allocator lock is not initialized");
+      return NULL;
+    }
+    mutexlocker locker(lock_.get());
     if (NULL != block_free_list_) {
       Block *block = block_free_list_;
       Node *node = block->node_free_list;
@@ -1484,7 +1539,11 @@ public:
   }
   void free(T *data)
   {
-    mutexlocker locker(lock_);
+    if (!lock_.is_initialized()) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "allocator lock is not initialized");
+      return;
+    }
+    mutexlocker locker(lock_.get());
     if (NULL == data) {
       HASH_WRITE_LOG_RET(HASH_WARNING, OB_INVALID_ARGUMENT, "invalid param null pointer");
     } else {
@@ -1572,7 +1631,7 @@ private:
   Block *blocks_;
   int64_t nblocks_;
   int64_t nblocks_limit_;
-  lock_type lock_;
+  HashSync<lock_type, lock_initer> lock_;
   Allocer allocer_;
 };
 }
