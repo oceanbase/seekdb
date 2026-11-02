@@ -2662,10 +2662,8 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
     } else if (expr->get_expr_type() == T_OP_OR || expr->get_expr_type() == T_OP_AND) {
       ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
       ObSEArray<ObRawExpr *, 4> param_conds;
-      if (op_expr->get_param_count() > 100) {
-        /* use too much resource and need add lots of constraints */
-      } else if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
-      } else if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, param_conds))) {
+      if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
+      } else if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, param_conds, 100))) {
       } else if (param_conds.count() == op_expr->get_param_count()) {
         //do nothing
       } else if (param_conds.count() == 1) {
@@ -2688,7 +2686,8 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
 }
 
 int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
-                                                       ObIArray<ObRawExpr*> &exprs)
+                                                       ObIArray<ObRawExpr*> &exprs,
+                                                       int64_t comparison_limit)
 {
   int ret = OB_SUCCESS;
   const int64_t param_count = exprs.count();
@@ -2696,16 +2695,21 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObQuestionmarkEqualCtx cmp_ctx(false);
-    for (int64_t i = param_count - 1; OB_SUCC(ret) && i >= 1; i--) {
+    // Compare against a bounded prefix of retained expressions for large AND/OR
+    // lists. Do not skip the whole list at the size boundary: repeated predicates
+    // beyond that boundary would otherwise reach execution unchanged.
+    int64_t retained_count = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
+      bool duplicate = false;
       if (OB_ISNULL(exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       }
-      for (int64_t j = 0; OB_SUCC(ret) && j < i; j++) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < retained_count && j < comparison_limit; ++j) {
         if (OB_ISNULL(exprs.at(j))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (exprs.at(i)->same_as(*exprs.at(j), &cmp_ctx)) {
-          if (OB_FAIL(exprs.remove(i))) {
-          } else if (!cmp_ctx.equal_pairs_.empty()) {
+          duplicate = true;
+          if (!cmp_ctx.equal_pairs_.empty()) {
             if (OB_FAIL(append(ctx_->equal_param_constraints_, cmp_ctx.equal_pairs_))) {
             } else {
               cmp_ctx.equal_pairs_.reset();
@@ -2716,6 +2720,13 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
           cmp_ctx.equal_pairs_.reset();
         }
       }
+      if (OB_SUCC(ret) && !duplicate) {
+        exprs.at(retained_count++) = exprs.at(i);
+      }
+    }
+    // Compact once, rather than shifting the tail for every duplicate.
+    while (OB_SUCC(ret) && exprs.count() > retained_count) {
+      exprs.pop_back();
     }
   }
   return ret;
