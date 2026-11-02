@@ -801,6 +801,7 @@ public:
                                           const char *stmt_name);
 private:
 
+  static int check_secure_path_root(const common::ObString &secure_file_priv, const common::ObString &full_path);
   static double strntod(const char *str, size_t str_len, ObItemType type,
                         char **endptr, int *err);
   static bool is_synonymous_type(ObObjType type1, ObObjType type2);

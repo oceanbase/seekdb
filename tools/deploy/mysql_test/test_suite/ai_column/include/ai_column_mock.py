@@ -150,7 +150,7 @@ def serve(port):
                 response = {
                     "data": [
                         {"index": index, "embedding": vector(value, index)}
-                        for index, value in enumerate(values)
+                        for index, value in reversed(list(enumerate(values)))
                     ]
                 }
             else:

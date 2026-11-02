@@ -6830,6 +6830,21 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
       select_into->set_escaped_cht(into_item->escaped_cht_);
       select_into->set_cs_type(into_item->cs_type_);
       select_into->set_external_properties(into_item->external_properties_);
+      if (OB_SUCC(ret)) {
+        ObSEArray<common::ObString, 16> header_names;
+        for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_select_item_size(); ++i) {
+          const SelectItem &select_item = stmt->get_select_item(i);
+          const ObString &col_name = select_item.alias_name_.empty()
+                                     ? select_item.expr_name_ : select_item.alias_name_;
+          if (OB_FAIL(header_names.push_back(col_name))) {
+            LOG_WARN("failed to push header name", K(ret));
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(select_into->set_header_names(header_names))) {
+          LOG_WARN("failed to set header names", K(ret));
+        }
+      }
       select_into->set_child(ObLogicalOperator::first_child, old_top);
       // compute property
       if (OB_FAIL(select_into->compute_property())) {

@@ -21,6 +21,12 @@ values (1, 'vec-zero'), (2, 'vec-ten'), (3, 'vec-twenty');
 select 1 = 1 as initial_embeddings_ready;
 initial_embeddings_ready
 1
+select id, json_extract(ai_embed('p0_vector_embed', content, cast(null as signed)), '$[0]') + 0 as first_coordinate
+from ai_column_p0_vector.docs order by id;
+id	first_coordinate
+1	0
+2	10
+3	20
 select id, emb from ai_column_p0_vector.docs order by id;
 id	emb
 1	[0,0,0,0]

@@ -43,6 +43,8 @@ while ($retry)
   }
 }
 eval select $ready = 1 as initial_embeddings_ready;
+select id, json_extract(ai_embed('p0_vector_embed', content, cast(null as signed)), '$[0]') + 0 as first_coordinate
+from ai_column_p0_vector.docs order by id;
 select id, emb from ai_column_p0_vector.docs order by id;
 create vector index idx_p0_ai_emb on ai_column_p0_vector.docs(emb)
   with(distance=l2, type=hnsw, lib=vsag, m=10,
@@ -72,8 +74,8 @@ let $retry = 150;
 let $ready = 0;
 while ($retry)
 {
-  let $ready = `select emb = [0,0,0,0]
-                from ai_column_p0_vector.docs where id = 2`;
+  let $ready = `select count(*) = 1
+                from ai_column_p0_vector.docs where id = 2 and emb = [0,0,0,0]`;
   if ($ready == 1)
   {
     let $retry = 0;

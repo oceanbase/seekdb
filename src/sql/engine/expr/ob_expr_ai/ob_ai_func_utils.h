@@ -244,6 +244,7 @@ public:
   static int get_json_boolean(ObIAllocator &allocator, bool value, ObJsonBoolean *&boolean_node);
   static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
+  static int get_json_value_as_string(ObIAllocator &allocator, ObIJsonBase *node, ObJsonString *&str_node);
   static int compact_json_object(ObIAllocator &allocator, ObJsonObject *obj_node, ObJsonObject *compact_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
@@ -353,6 +354,10 @@ public:
    virtual ~ObAIFuncModel() {}
    // completion
    int call_completion(ObString &prompt, ObJsonObject *config, ObString &result);
+   // completion with an explicit system message (the AI worker uses it to inject
+   // the result type instruction)
+   int call_completion_with_system(ObString &system_prompt, ObString &content,
+                                   ObJsonObject *config, ObString &result);
    int call_completion_vector(ObArray<ObString> &prompts, ObJsonObject *config, ObArray<ObString> &results);
    // dense_embedding
    int call_dense_embedding(ObString &content, ObJsonObject *config, ObString &result);

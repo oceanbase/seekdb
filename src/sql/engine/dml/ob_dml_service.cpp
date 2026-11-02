@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "config_bridge.h"
 #include "sql/engine/dml/ob_dml_service.h"
+#include "sql/engine/dml/ob_ai_column_dml.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_das_insert_op.h"
@@ -2154,7 +2155,14 @@ int ObDMLService::handle_after_processing_multi_row(ObDMLModifyRowsList *dml_mod
         if (OB_NOT_NULL(modify_row.full_row_) && OB_FAIL(modify_row.full_row_->to_expr(modify_row.dml_ctdef_->full_row_, op.get_eval_ctx()))) {
         } else if (OB_NOT_NULL(modify_row.old_row_) && OB_FAIL(modify_row.old_row_->to_expr(dml_ctdef.old_row_, op.get_eval_ctx()))) {
         } else if (OB_NOT_NULL(modify_row.new_row_) && OB_FAIL(modify_row.new_row_->to_expr(dml_ctdef.new_row_, op.get_eval_ctx()))) {
-        } else if (op.need_foreign_key_checks()) {
+        }
+        if (OB_SUCC(ret) && t_insert == dml_event
+            && OB_FAIL(ObAiColumnDml::process_insert(op, static_cast<const ObInsCtDef &>(dml_ctdef)))) {
+        } else if (OB_SUCC(ret) && t_update == dml_event
+                   && OB_FAIL(ObAiColumnDml::process_update(op, static_cast<const ObUpdCtDef &>(dml_ctdef)))) {
+        } else if (OB_SUCC(ret) && t_delete == dml_event
+                   && OB_FAIL(ObAiColumnDml::process_delete(op, static_cast<const ObDelCtDef &>(dml_ctdef)))) {
+        } else if (OB_SUCC(ret) && op.need_foreign_key_checks()) {
           if (t_update == dml_event && !reinterpret_cast<ObUpdRtDef &>(dml_rtdef).is_row_changed_) {
           } else {
             // if check foreign key in batch, build fk check tasks here
@@ -2218,6 +2226,12 @@ int ObDMLService::handle_after_processing_single_row(ObDMLModifyRowNode &modify_
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(TriggerHandle::do_handle_after_row(op, dml_ctdef.trig_ctdef_, dml_rtdef.trig_rtdef_, dml_event))) {
+    } else if (OB_SUCC(ret) && t_insert == dml_event
+               && OB_FAIL(ObAiColumnDml::process_insert(op, static_cast<const ObInsCtDef &>(dml_ctdef)))) {
+    } else if (OB_SUCC(ret) && t_update == dml_event
+               && OB_FAIL(ObAiColumnDml::process_update(op, static_cast<const ObUpdCtDef &>(dml_ctdef)))) {
+    } else if (OB_SUCC(ret) && t_delete == dml_event
+               && OB_FAIL(ObAiColumnDml::process_delete(op, static_cast<const ObDelCtDef &>(dml_ctdef)))) {
     }
   }
   return ret;

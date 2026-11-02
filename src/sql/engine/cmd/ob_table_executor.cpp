@@ -20,6 +20,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_table_executor.h"
+#include "sql/engine/cmd/ob_ai_column_ddl_util.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/runtime/ob_query_runtime_environment.h"
@@ -507,6 +508,15 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
           ctx.get_query_runtime_environment());
     }
   }
+  if (OB_SUCC(ret) && stmt.get_ai_column_defs().count() > 0) {
+    int tmp_ret = ObAiColumnDdlUtil::persist_ai_columns(res.table_id_,
+                                                       stmt.get_ai_column_defs(),
+                                                       &table_schema);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to persist ai column definition", K(tmp_ret), K(res.table_id_));
+      ret = tmp_ret;
+    }
+  }
   return ret;
 }
 
@@ -878,6 +888,18 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       "table_info", table_info_buffer,
       "schema_version", res.schema_version_);
     SQL_ENG_LOG(INFO, "finish alter table execute.", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(first_stmt));
+  }
+  if (OB_SUCC(ret) && stmt.get_ai_column_defs().count() > 0) {
+    const uint64_t ai_table_id = OB_INVALID_ID == alter_table_arg.table_id_
+                                 ? alter_table_arg.alter_table_schema_.get_table_id()
+                                 : alter_table_arg.table_id_;
+    int tmp_ret = ObAiColumnDdlUtil::persist_ai_columns(ai_table_id,
+                                                       stmt.get_ai_column_defs(),
+                                                       &alter_table_arg.alter_table_schema_);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to persist ai column definition", K(tmp_ret), K(ai_table_id));
+      ret = tmp_ret;
+    }
   }
   return ret;
 }
