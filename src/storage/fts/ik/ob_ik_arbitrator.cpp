@@ -301,10 +301,18 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
 int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
-
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
-  cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+  const int64_t cal_bucket_num = MIN(MAX(ctx.fulltext_len() / 100, 10), 100);
+  if (chains_.created()) {
+    // the arbitrator is reused across the word batches of one document, so
+    // recycle the chain map and the chain memory instead of rebuilding them
+    // for every batch
+    if (OB_FAIL(chains_.reuse())) {
+      LOG_WARN("reuse chain map failed", K(ret));
+    } else {
+      alloc_.reuse();
+    }
+  } else if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+    LOG_WARN("create chain map failed", K(ret));
   }
   return ret;
 }
@@ -321,6 +329,12 @@ int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
   } else if (OB_FAIL(chains_.set_refactored(chain->min_offset(), chain))) {
   }
   return ret;
+}
+
+void ObIKArbitrator::reset()
+{
+  chains_.destroy();
+  alloc_.reset();
 }
 
 ObIKArbitrator::~ObIKArbitrator()

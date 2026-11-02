@@ -38,6 +38,9 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  // clear the per batch state but keep the allocated memory for the next batch
+  void reset();
+
 private:
   int prepare(TokenizeContext &ctx);
 
