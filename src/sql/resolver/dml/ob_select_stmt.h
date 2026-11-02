@@ -547,6 +547,8 @@ public:
   inline void set_implicit_distinct(bool v) { is_implicit_distinct_ = v; }
   inline void reset_implicit_distinct() { is_implicit_distinct_ = false; }
   int is_query_deterministic(bool &is_deterministic) const;
+  bool has_approx_clause() const { return has_approx_clause_; }
+  void set_has_approx_clause(bool value) { has_approx_clause_ = value; }
 private:
   SetOperator set_op_;
   /* these var is only used for recursive union */
@@ -592,6 +594,8 @@ private:
   // denote if the duplicate value of this stmt will not change the query result
   // optimizer can assign or remove DISTINCT for this stmt 
   bool is_implicit_distinct_;
+  // Syntax-level flag available while resolving WHERE, before vector index validation.
+  bool has_approx_clause_;
 };
 }
 }

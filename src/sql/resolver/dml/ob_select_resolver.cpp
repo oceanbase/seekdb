@@ -866,6 +866,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   /* resolve from clause */
   OZ( resolve_from_clause(parse_tree.children_[PARSE_SELECT_FROM]) );
   /* resolve where clause */
+  select_stmt->set_has_approx_clause(nullptr != parse_tree.children_[PARSE_SELECT_APPROX]);
   OZ( resolve_where_clause(parse_tree.children_[PARSE_SELECT_WHERE]) );
 
   if (OB_SUCC(ret)) {
