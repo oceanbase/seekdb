@@ -89,8 +89,13 @@ int read_file_format_from_str(const ObString &name, ReadFileFormat &format)
   } else if (0 == name.case_compare("glob")) {
     format = ReadFileFormat::GLOB_LIST;
   } else {
+    char format_name[64];
+    const int64_t format_name_len = std::min(static_cast<int64_t>(name.length()),
+                                             static_cast<int64_t>(sizeof(format_name) - 1));
+    MEMCPY(format_name, name.ptr(), format_name_len);
+    format_name[format_name_len] = '\0';
     ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, static_cast<int32_t>(name.length()), name.ptr());
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, format_name);
   }
   return ret;
 }
@@ -241,8 +246,7 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
       LOG_WARN("pattern must contain a file name part", K(ret), K(pattern));
     } else if (has_wildcard(dir_part)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, static_cast<int32_t>(strlen("wildcard in directory part")),
-                     "wildcard in directory part");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "wildcard in directory part");
     } else {
       char dir_buf[OB_MAX_FILE_NAME_LENGTH];
       const int64_t dlen = std::min(static_cast<int64_t>(dir_part.length()), static_cast<int64_t>(sizeof(dir_buf) - 1));
@@ -639,6 +643,7 @@ int ObFileLineFeeder::next_line(ObString &line, int64_t &line_no)
       continue;  // blank line
     }
     line.assign_ptr(line_ptr, static_cast<int32_t>(line_len));
+    line_no = line_no_;
     ++total_lines_;
     // compact the buffer if a large portion has been consumed
     if (scan_pos_ >= FILE_SCAN_READ_BUF_SIZE) {
@@ -1024,18 +1029,27 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
 {
   int ret = OB_SUCCESS;
   out.reset();
-  if (f.is_null_ || common::ObNullType == col.type_) {
+  // A field that the line does not carry at all (f.ptr_ == NULL) is NULL, like
+  // an empty unquoted field.
+  if (f.is_null_ || (NULL == f.ptr_ && 0 == f.len_) || common::ObNullType == col.type_) {
     out.set_null();
   } else {
     const ObString text(static_cast<int32_t>(f.len_), f.ptr_);
     switch (col.type_) {
       case common::ObVarcharType: {
-        char *buf = static_cast<char *>(batch_arena_.alloc(f.len_));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc varchar failed", K(ret));
-        } else {
-          MEMCPY(buf, f.ptr_, f.len_);
+        // alloc(0) returns NULL, so an empty value must not be allocated; it
+        // would be reported as an out-of-memory error.
+        char *buf = NULL;
+        if (f.len_ > 0) {
+          buf = static_cast<char *>(batch_arena_.alloc(f.len_));
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("alloc varchar failed", K(ret));
+          } else {
+            MEMCPY(buf, f.ptr_, f.len_);
+          }
+        }
+        if (OB_SUCC(ret)) {
           out.set_varchar(ObString(static_cast<int32_t>(f.len_), buf));
           out.set_collation_type(common::ObCharset::get_default_collation(
               common::ObCharset::get_default_charset()));
@@ -1285,12 +1299,18 @@ int ObNdjsonFileRowReader::convert_json_value(const ObIJsonBase *value,
       } else {
         const ObJsonString *str_node = static_cast<const ObJsonString *>(value);
         const ObString &s = str_node->value();
-        char *buf = static_cast<char *>(batch_arena_.alloc(s.length()));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc varchar failed", K(ret));
-        } else {
-          MEMCPY(buf, s.ptr(), s.length());
+        // alloc(0) returns NULL: an empty JSON string must not be allocated.
+        char *buf = NULL;
+        if (s.length() > 0) {
+          buf = static_cast<char *>(batch_arena_.alloc(s.length()));
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("alloc varchar failed", K(ret));
+          } else {
+            MEMCPY(buf, s.ptr(), s.length());
+          }
+        }
+        if (OB_SUCC(ret)) {
           out.set_varchar(ObString(static_cast<int32_t>(s.length()), buf));
           out.set_collation_type(common::ObCharset::get_default_collation(
               common::ObCharset::get_default_charset()));
@@ -1603,9 +1623,7 @@ int create_file_row_reader(ObIAllocator &alloc, ReadFileFormat format,
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                     static_cast<int32_t>(strlen(read_file_format_to_str(format))),
-                     read_file_format_to_str(format));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, read_file_format_to_str(format));
       break;
     }
   }
@@ -1753,7 +1771,7 @@ static int infer_csv_schema(ObIAllocator &alloc, const ObIArray<ObString> &paths
   } else if (expect_cols == 0) {
     ret = OB_ERR_DATA_TRUNCATED;
     LOG_USER_ERROR(OB_ERR_DATA_TRUNCATED, static_cast<int32_t>(strlen("csv file has no data rows")),
-                   "csv file has no data rows");
+                   "csv file has no data rows", 0);
   } else {
     const int64_t data_row_cnt = data_lines - (options.header_ ? 1 : 0);
     for (int64_t c = 0; OB_SUCC(ret) && c < expect_cols; ++c) {
@@ -2003,7 +2021,7 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
     ret = OB_ERR_DATA_TRUNCATED;
     LOG_USER_ERROR(OB_ERR_DATA_TRUNCATED,
                    static_cast<int32_t>(strlen("ndjson file has no data rows")),
-                   "ndjson file has no data rows");
+                   "ndjson file has no data rows", 0);
   } else {
     for (int64_t c = 0; OB_SUCC(ret) && c < names.count(); ++c) {
       ReadFileColumn col;
@@ -2031,8 +2049,7 @@ int infer_file_schema(ObIAllocator &alloc, ReadFileFormat format,
     LOG_WARN("no files", K(ret));
   } else if (options.sample_size_ != -1) {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, static_cast<int32_t>(strlen("sample_size other than -1")),
-                   "sample_size other than -1");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "sample_size other than -1");
   } else if (ReadFileFormat::GLOB_LIST == format) {
     ReadFileColumn col;
     ObString name;

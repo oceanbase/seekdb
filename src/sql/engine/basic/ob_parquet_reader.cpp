@@ -763,9 +763,7 @@ int ObParquetFile::parse_footer()
               cm.max_def_level_ = (1 == se.repetition_type_) ? 1 : 0;
               if (2 == se.repetition_type_) {
                 ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                               static_cast<int32_t>(strlen("repeated (list) parquet columns")),
-                               "repeated (list) parquet columns");
+                LOG_USER_ERROR(OB_NOT_SUPPORTED, "repeated (list) parquet columns");
                 LOG_WARN("repeated schema element not supported", K(ret), K(se.name_));
               } else if (OB_FAIL(meta_.columns_.push_back(cm))) {
                 LOG_WARN("push column failed", K(ret));
@@ -1012,11 +1010,18 @@ int ObParquetColumnReader::make_obj_from_physical(const char *&buf, const char *
         if (buf + len > end) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          char *copy = static_cast<char *>(alloc_.alloc(len));
-          if (OB_ISNULL(copy)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            MEMCPY(copy, buf, len);
+          // alloc(0) returns NULL: an empty BYTE_ARRAY value must not be
+          // allocated, otherwise it is reported as an out-of-memory error.
+          char *copy = NULL;
+          if (len > 0) {
+            copy = static_cast<char *>(alloc_.alloc(len));
+            if (OB_ISNULL(copy)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else {
+              MEMCPY(copy, buf, len);
+            }
+          }
+          if (OB_SUCC(ret)) {
             out.set_varchar(ObString(static_cast<int32_t>(len), copy));
             out.set_collation_type(common::ObCharset::get_default_collation(
                 common::ObCharset::get_default_charset()));
@@ -1028,9 +1033,7 @@ int ObParquetColumnReader::make_obj_from_physical(const char *&buf, const char *
     }
     default:
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                     static_cast<int32_t>(strlen("this parquet physical type")),
-                     "this parquet physical type");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "this parquet physical type");
       break;
   }
   return ret;
@@ -1188,9 +1191,7 @@ int ObParquetColumnReader::decode_page_v1(const char *page, int64_t page_len,
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                   static_cast<int32_t>(strlen("this parquet value encoding")),
-                   "this parquet value encoding");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this parquet value encoding");
     LOG_WARN("unsupported encoding", K(ret), K(enc));
   }
   return ret;
@@ -1276,9 +1277,7 @@ int ObParquetColumnReader::decode_page_v2(const char *page, int64_t page_len,
         }
       } else {
         ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                       static_cast<int32_t>(strlen("this parquet value encoding")),
-                       "this parquet value encoding");
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this parquet value encoding");
       }
     }
   }
@@ -1471,9 +1470,7 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
               }
             } else {
               ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                             static_cast<int32_t>(strlen("this parquet compression codec")),
-                             "this parquet compression codec");
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "this parquet compression codec");
               LOG_WARN("unsupported codec", K(ret), K(rg_col_meta.codec_));
             }
             if (OB_SUCC(ret)) {
@@ -1516,9 +1513,7 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
                   }
                 } else if (PQ_CODEC_SNAPPY != rg_col_meta.codec_) {
                   ret = OB_NOT_SUPPORTED;
-                  LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                                 static_cast<int32_t>(strlen("compressed parquet v2 data pages")),
-                                 "compressed parquet v2 data pages");
+                  LOG_USER_ERROR(OB_NOT_SUPPORTED, "compressed parquet v2 data pages");
                 } else {
                   // v2 compressed: rep/def levels are stored uncompressed at
                   // the page start, only the values region is compressed
@@ -1576,9 +1571,7 @@ int ObParquetColumnReader::decode_row_group(const ParquetRowGroupMeta &rg,
                         }
                       } else {
                         ret = OB_NOT_SUPPORTED;
-                        LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                                       static_cast<int32_t>(strlen("this parquet value encoding")),
-                                       "this parquet value encoding");
+                        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this parquet value encoding");
                       }
                       if (OB_SUCC(ret)) {
                         int64_t vi = 0;
@@ -1899,9 +1892,7 @@ int infer_parquet_schema(ObIAllocator &alloc, const ObString &path,
             break;
           default:
             ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                           static_cast<int32_t>(strlen("this parquet physical type")),
-                           "this parquet physical type");
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this parquet physical type");
             LOG_WARN("unsupported parquet type", K(ret), K(pc.physical_type_), K(pc.name_));
             break;
         }
