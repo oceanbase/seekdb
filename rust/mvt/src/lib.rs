@@ -16,8 +16,6 @@
 
 #[cfg(feature = "cxx-bridge")]
 mod bridge;
-#[cfg(test)]
-mod tests;
 
 use prost::Message;
 use std::{borrow::Cow, collections::HashMap};

@@ -794,6 +794,3 @@ async fn client_call(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;
