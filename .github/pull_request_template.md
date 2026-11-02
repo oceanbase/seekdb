@@ -1,33 +1,33 @@
 <!--
 Thank you for contributing to **OceanBase SeekDB**!
 
-**If this pull request have a significant impact, please make sure you have discussed with OceanBase group.**
+**If this pull request has a significant impact, please discuss it with the OceanBase team first.**
 -->
 
 ### Task Description
 
 <!--
-The problem you resolved by this pull request.
-You can link the issue via the "close #xxx" or "ref #xxx".
+Describe the problem this pull request resolves.
+Link the related issue using "close #xxx" or "ref #xxx".
 -->
 
 ### Solution Description
 
-<!-- Please clearly and consice descipt the solution. -->
+<!-- Please clearly and concisely describe the solution. -->
 
 ### Passed Regressions
 
-<!-- Unittest, mysql test or test it manually? -->
+<!-- List the unit tests, mysqltests, or manual checks performed. -->
 
 ### Upgrade Compatibility
 
-<!-- Please make sure this is compatible with old version or you should give us upgrading solution. -->
+<!-- State whether this change is backward compatible; otherwise, describe the upgrade path. -->
 
 ### Other Information
 
-<!-- Any information helping to review this pull request. -->
+<!-- Add any other information that may help reviewers. -->
 
 ### Release Note
 <!--
-A concise release note can help users to understand how your pull request makes difference.
+A concise release note helps users understand the difference this pull request makes.
 -->
