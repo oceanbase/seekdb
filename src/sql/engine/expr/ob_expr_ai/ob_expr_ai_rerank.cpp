@@ -213,12 +213,39 @@ int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &c
   ObJsonArray *doc_array = nullptr;
   ObJsonArray *result_array = nullptr;
   ObJsonArray *sorted_document_array = nullptr;
+  int64_t batch_size = 20;
   if (OB_FAIL(get_doc_array_from_documents_array_with_key(allocator, document_array, doc_key, doc_array))) {
   } else {
-    ObAIFuncModel model(allocator, info, endpoint_info);
-    if (OB_FAIL(model.call_rerank(query, doc_array, result_array))) {
-    } else if (OB_FAIL(sort_document_array_by_model_result(allocator, document_array, result_array, sorted_document_array))) {
-    } 
+    ObJsonArray *accumulated_results = nullptr;
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, accumulated_results))) {
+    } else {
+      int64_t doc_count = doc_array->element_count();
+      for (int64_t i = 0; OB_SUCC(ret) && i < doc_count; i += batch_size) {
+        int64_t end_idx = i + batch_size;
+        if (end_idx > doc_count) {
+          end_idx = doc_count;
+        }
+        ObJsonArray *batch_doc_array = nullptr;
+        ObJsonArray *batch_result_array = nullptr;
+        if (OB_FAIL(construct_batch_document_array(allocator, doc_array, i, end_idx, batch_doc_array))) {
+        } else {
+          ObAIFuncModel model(allocator, info, endpoint_info);
+          if (OB_FAIL(model.call_rerank(query, batch_doc_array, batch_result_array))) {
+          } else if (OB_FAIL(batch_result_add_base(allocator, batch_result_array, i))) {
+          } else {
+            for (int64_t j = 0; OB_SUCC(ret) && j < batch_result_array->element_count(); j++) {
+              if (OB_FAIL(accumulated_results->append(batch_result_array->get_value(j)))) {
+              }
+            }
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      result_array = accumulated_results;
+      if (OB_FAIL(sort_document_array_by_model_result(allocator, document_array, result_array, sorted_document_array))) {
+      }
+    }
   }
   if (OB_SUCC(ret)) {
     ObString raw_str;
