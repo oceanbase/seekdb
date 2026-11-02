@@ -56,6 +56,13 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         OPT_TRACE("flatten condition:", is_happened);
       }
     }  
+    if (OB_SUCC(ret) && stmt->has_vec_approx()) {
+      if (OB_FAIL(simplify_vector_range_conditions(stmt, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("simplify vector range conditions:", is_happened);
+      }
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {
@@ -302,6 +309,93 @@ int ObTransformPreProcess::add_all_rowkey_columns_to_stmt(const ObTableSchema &t
       } else if (OB_FAIL(rowkey->formalize(ctx_->session_info_))) {
       } else if (OB_FAIL(rowkey->pull_relation_id())) {
       }
+    }
+  }
+  return ret;
+}
+
+
+// ANN statements deliberately disable general rewrite rules. Prune only
+// comparable signed-integer bounds in the flattened WHERE conjunction here.
+// Keep structural rewrites disabled and constrain every parameter used to
+// decide implication, so a cached plan cannot retain the wrong bound.
+int ObTransformPreProcess::simplify_vector_range_conditions(ObDMLStmt *stmt,
+                                                           bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  struct Bound {
+    ObRawExpr *column_ = nullptr;
+    ObRawExpr *value_expr_ = nullptr;
+    int64_t value_ = 0;
+    bool upper_ = false;
+    bool strict_ = false;
+  };
+  ObSEArray<Bound, 8> bounds;
+  ObSEArray<ObRawExpr *, 8> kept;
+  ObPhysicalPlanCtx *plan_ctx = nullptr;
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_->exec_ctx_)
+      || OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    auto &conditions = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      Bound bound;
+      ObRawExpr *expr = conditions.at(i);
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (expr->get_param_count() == 2
+                 && (T_OP_LT == expr->get_expr_type() || T_OP_LE == expr->get_expr_type()
+                     || T_OP_GT == expr->get_expr_type() || T_OP_GE == expr->get_expr_type())) {
+        ObRawExpr *column = expr->get_param_expr(0);
+        ObRawExpr *value_expr = expr->get_param_expr(1);
+        // Do not speculate about casts, strings, unsigned values or arithmetic.
+        if (column != nullptr && value_expr != nullptr && column->is_column_ref_expr()
+            && ob_is_int_tc(column->get_data_type())
+            && (value_expr->get_expr_type() == T_QUESTIONMARK
+                || value_expr->get_expr_type() == T_INT)) {
+          const ObObj *value = &static_cast<ObConstRawExpr *>(value_expr)->get_value();
+          if (value_expr->get_expr_type() == T_QUESTIONMARK) {
+            const int64_t index = value->get_unknown();
+            value = index >= 0 && index < plan_ctx->get_param_store().count()
+                ? &plan_ctx->get_param_store().at(index) : nullptr;
+          }
+          if (value != nullptr && value->is_int()) {
+            bound.column_ = column;
+            bound.value_expr_ = value_expr;
+            bound.value_ = value->get_int();
+            bound.upper_ = T_OP_LT == expr->get_expr_type() || T_OP_LE == expr->get_expr_type();
+            bound.strict_ = T_OP_LT == expr->get_expr_type() || T_OP_GT == expr->get_expr_type();
+          }
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(bounds.push_back(bound))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < bounds.count(); ++i) {
+      const Bound &bound = bounds.at(i);
+      int64_t stronger = -1;
+      for (int64_t j = 0; bound.column_ != nullptr && stronger < 0 && j < bounds.count(); ++j) {
+        const Bound &other = bounds.at(j);
+        if (i != j && other.column_ == bound.column_ && other.upper_ == bound.upper_) {
+          const bool tighter = bound.upper_ ? other.value_ < bound.value_ : other.value_ > bound.value_;
+          const bool equal_tighter = other.value_ == bound.value_
+              && ((other.strict_ && !bound.strict_) || (other.strict_ == bound.strict_ && j < i));
+          if (tighter || equal_tighter) {
+            stronger = j;
+          }
+        }
+      }
+      if (stronger < 0) {
+        if (OB_FAIL(kept.push_back(conditions.at(i)))) {
+        }
+      } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(bound.value_expr_, ctx_))) {
+      } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(bounds.at(stronger).value_expr_, ctx_))) {
+      } else {
+        trans_happened = true;
+      }
+    }
+    if (OB_SUCC(ret) && trans_happened && OB_FAIL(conditions.assign(kept))) {
     }
   }
   return ret;
