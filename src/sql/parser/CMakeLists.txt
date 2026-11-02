@@ -44,6 +44,8 @@ set(ob_extra_sql_parser_object_list
   ob_parser.cpp
   ob_parser.h
   ob_parser_utils.h
+  ob_file_sql_rewriter.cpp
+  ob_file_sql_rewriter.h
 )
 
 # ob_sql_server_parser_object is the static library for observer
