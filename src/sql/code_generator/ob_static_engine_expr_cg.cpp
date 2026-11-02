@@ -23,6 +23,10 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_util.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
+#include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/ob_sql_context.h"
 
 namespace oceanbase
 {
@@ -51,6 +55,452 @@ struct ObExprCallDepth
   int64_t max_call_depth_;
   int64_t checked_parent_cnt_;
 };
+
+namespace
+{
+struct NativePointExprs
+{
+  ObExpr *lanes[NativeI64PointLayout::LANE_COUNT] = {};
+  ObExpr *pack = nullptr;
+  int64_t parameters[NativeI64PointLayout::KEY_COUNT] = {};
+};
+
+bool native_point_member(const ObExpr *expr, ObExpr *const *members, int64_t count)
+{
+  bool found = false;
+  for (int64_t i = 0; expr != nullptr && !found && i < count; ++i) {
+    found = expr == members[i];
+  }
+  return found;
+}
+
+bool native_point_i64_type(const ObExpr &expr)
+{
+  return expr.sql_type_ != nullptr && expr.get_sql_type().kind() == ObIntType
+      && expr.get_sql_type().canonical_representation() == DatumRepresentation::Inline64;
+}
+
+bool native_point_exprs_in(const ObIArray<ObExpr *> &exprs, ObExpr *const *members, int64_t count)
+{
+  bool supported = true;
+  for (int64_t i = 0; supported && i < exprs.count(); ++i) {
+    supported = native_point_member(exprs.at(i), members, count);
+  }
+  return supported;
+}
+
+bool native_point_filter_tree(const ObPushdownFilterNode *node,
+                              const NativePointExprs &graph, int64_t depth = 0)
+{
+  bool supported = node == nullptr;
+  if (node != nullptr && depth < 8) {
+    if (node->type_ == AND_FILTER) {
+      supported = !static_cast<const ObPushdownAndFilterNode *>(node)->is_runtime_filter_root_node_
+          && node->n_child_ > 0 && node->n_child_ <= 3 && node->childs_ != nullptr;
+      for (uint32_t i = 0; supported && i < node->n_child_; ++i) {
+        supported = node->childs_[i] != nullptr
+            && native_point_filter_tree(node->childs_[i], graph, depth + 1);
+      }
+    } else if (node->n_child_ == 0 && node->type_ == WHITE_FILTER) {
+      const auto &white = *static_cast<const ObPushdownWhiteFilterNode *>(node);
+      supported = white.get_op_type() == WHITE_OP_EQ
+          && native_point_member(white.expr_, graph.lanes + 3, 3)
+          && native_point_exprs_in(white.column_exprs_, graph.lanes, 3);
+    } else if (node->n_child_ == 0 && node->type_ == BLACK_FILTER) {
+      const auto &black = *static_cast<const ObPushdownBlackFilterNode *>(node);
+      supported = black.mono_ == MON_NON && black.assist_exprs_.empty()
+          && native_point_exprs_in(black.column_exprs_, graph.lanes, 3)
+          && native_point_exprs_in(black.filter_exprs_, graph.lanes + 3, 3)
+          && (black.tmp_expr_ == nullptr || native_point_member(black.tmp_expr_, graph.lanes + 3, 3));
+    }
+  }
+  return supported;
+}
+
+// Validate the complete operator/Expr/storage graph before changing any offset.
+// In particular, a matching SQL type alone never grants a native lane.
+int collect_native_i64_point(ObPhysicalPlan &plan, const ObExecContext &exec,
+                             NativePointExprs &graph, bool &supported)
+{
+  int ret = OB_SUCCESS;
+  supported = false;
+  const ObOpSpec *root = plan.get_root_op_spec();
+  const ObPhysicalPlanCtx *parameters = exec.get_physical_plan_ctx();
+  const ObSqlCtx *sql = exec.get_sql_ctx();
+  if (!plan.is_local_plan() || !plan.is_plain_select() || plan.is_use_pdml()
+      || plan.get_px_dop() > 1 || plan.get_das_dop() > 1 || plan.has_nested_sql()
+      || plan.contain_pl_udf_or_trigger() || plan.contains_temp_table()
+      || plan.is_use_temp_table() || plan.has_link_sfd() || plan.get_is_batched_multi_stmt()
+      || sql == nullptr || sql->is_cursor_ || sql->is_from_pl_ || parameters == nullptr
+      || parameters->get_parameter_count() != 3 || parameters->get_native_group_count() != 0
+      || root == nullptr || root->get_type() != PHY_TABLE_SCAN || root->get_child_cnt() != 0
+      || root->need_check_output_datum_ || !root->startup_filters_.empty()) {
+    return ret;
+  }
+  const auto &scan = *static_cast<const ObTableScanSpec *>(root);
+  const auto &ctdef = scan.tsc_ctdef_;
+  const auto &das = ctdef.scan_ctdef_;
+  const auto &pd = das.pd_expr_spec_;
+  // A local SELECT creates a serial ObDASRef. DML/PX/lookup/attach, cursor,
+  // partition and rescan forms have different copy/retention consumers.
+  if (scan.use_dist_das() || scan.should_scan_index() || scan.gi_above_ || scan.batch_scan_flag_
+      || scan.report_col_checksum_ || scan.is_spatial_ddl_ || scan.is_fts_ddl_
+      || scan.is_fts_index_aux_ || scan.is_multivalue_ddl_ || scan.is_spiv_ddl_
+      || scan.can_be_paused_ || scan.is_scan_resumable_
+      || scan.limit_ != nullptr || scan.offset_ != nullptr
+      || scan.part_level_ != share::schema::PARTITION_LEVEL_ZERO
+      || scan.part_expr_ != nullptr || scan.subpart_expr_ != nullptr
+      || !scan.part_dep_cols_.empty() || !scan.subpart_dep_cols_.empty()
+      || scan.pdml_partition_id_ != nullptr || !scan.ddl_output_cids_.empty()
+      || ctdef.lookup_ctdef_ != nullptr || ctdef.lookup_access_meta_ != nullptr
+      || ctdef.attach_spec_.attach_ctdef_ != nullptr || ctdef.das_dppr_tbl_ != nullptr
+      || ctdef.calc_part_id_expr_ != nullptr || !ctdef.global_index_rowkey_exprs_.empty()
+      || !ctdef.bnlj_param_idxs_.empty() || ctdef.snapshot_item_.snapshot_query_expr_ != nullptr
+      || ctdef.use_index_merge_ || ctdef.ordering_used_by_parent_
+      || !das.is_get_ || scan.get_rowkey_cnt() != 3 || das.is_index_merge_
+      || das.table_param_.has_virtual_column() || das.table_param_.is_partition_table()
+      || das.table_param_.is_spatial_index() || das.table_param_.is_fts_index()
+      || das.table_param_.is_vec_index() || das.table_param_.is_multivalue_index()
+      || das.group_id_expr_ != nullptr || das.trans_info_expr_ != nullptr
+      || !das.aggregate_column_ids_.empty() || !das.group_by_column_ids_.empty()
+      || das.ir_scan_type_ != ObTSCIRScanType::OB_NOT_A_SPEC_SCAN
+      || das.doc_id_idx_ >= 0 || das.vec_vid_idx_ >= 0 || das.multivalue_idx_ >= 0
+      || !das.domain_id_idxs_.empty() || !das.domain_types_.empty() || !das.domain_tids_.empty()
+      || !pd.pd_storage_aggregate_output_.empty() || !pd.ext_file_column_exprs_.empty()
+      || !pd.ext_column_convert_exprs_.empty() || pd.trans_info_expr_ != nullptr
+      || pd.access_exprs_.empty() || pd.access_exprs_.count() > 3
+      || das.access_column_ids_.count() != pd.access_exprs_.count()) {
+    return ret;
+  }
+  bool range_supported = false;
+  if (OB_FAIL(ctdef.pre_range_graph_.get_native_bigint_point_parameters(
+      parameters->get_parameter_count(), graph.parameters, range_supported))) {
+    return ret;
+  } else if (!range_supported) {
+    return ret;
+  }
+  ObExprFrameInfo &info = plan.get_expr_frame_info();
+  if (!info.dynamic_frame_.empty() || !info.ser_expr_marks_.empty()
+      || info.native_i64_point_layout_ != nullptr) { return ret; }
+  const bool subset = pd.access_exprs_.count() < 3;
+  bool produced[3] = {};
+  int64_t access_columns[3] = {};
+  int64_t key_positions[3] = { -1, -1, -1 };
+  if (subset) {
+    // Range-only columns remain in the complete Expr graph even when storage
+    // only produces the two distinct columns of a repeated output projection.
+    int64_t column_count = 0;
+    for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+      ObExpr *expr = &info.rt_exprs_.at(i);
+      if (expr->type_ == T_REF_COLUMN) {
+        if (column_count == 3) { return ret; }
+        graph.lanes[column_count++] = expr;
+      }
+    }
+    if (column_count != 3) { return ret; }
+  } else {
+    for (int64_t i = 0; i < 3; ++i) { graph.lanes[i] = pd.access_exprs_.at(i); }
+  }
+  for (int64_t i = 0; i < 3; ++i) {
+    ObExpr *column = graph.lanes[i];
+    if (column == nullptr || column->type_ != T_REF_COLUMN || column->arg_cnt_ != 0
+        || column->native_parameter_alias_ || !native_point_i64_type(*column)
+        || column->eval_func_ != nullptr || column->eval_batch_func_ != nullptr
+        || column->res_buf_len_ != 0) { return ret; }
+    for (int64_t j = 0; j < i; ++j) { if (graph.lanes[j] == column) { return ret; } }
+  }
+  for (int64_t i = 0; i < pd.access_exprs_.count(); ++i) {
+    int64_t column = -1;
+    for (int64_t c = 0; c < 3; ++c) {
+      if (pd.access_exprs_.at(i) == graph.lanes[c]) { column = c; }
+    }
+    if (column < 0 || produced[column]) { return ret; }
+    produced[column] = true;
+    access_columns[i] = column;
+  }
+  for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+    ObExpr &expr = info.rt_exprs_.at(i);
+    if (expr.type_ == T_OP_EQ) {
+      if (expr.arg_cnt_ != 2 || expr.args_ == nullptr || expr.sql_type_ == nullptr
+          || (expr.get_sql_type().kind() != ObInt32Type && expr.get_sql_type().kind() != ObIntType)
+          || expr.get_sql_type().canonical_representation() != DatumRepresentation::Inline64
+          || expr.res_buf_len_ != 0 || expr.native_parameter_alias_) { return ret; }
+      int64_t column_index = -1;
+      const ObExpr *parameter = nullptr;
+      for (int64_t c = 0; c < 3; ++c) {
+        if (expr.args_[0] == graph.lanes[c]) { column_index = c; parameter = expr.args_[1]; }
+        if (expr.args_[1] == graph.lanes[c]) { column_index = c; parameter = expr.args_[0]; }
+      }
+      bool parameter_index = false;
+      int64_t key_position = -1;
+      for (int64_t p = 0; parameter != nullptr && p < 3; ++p) {
+        if (static_cast<int64_t>(parameter->extra_) == graph.parameters[p]) {
+          parameter_index = true;
+          key_position = p;
+        }
+      }
+      if (column_index < 0 || parameter == nullptr || !parameter->native_parameter_alias_
+          || parameter->type_ != T_QUESTIONMARK || parameter->eval_func_ != nullptr
+          || parameter->is_batch_result() || !native_point_i64_type(*parameter)
+          || !parameter_index || graph.lanes[3 + column_index] != nullptr) { return ret; }
+      graph.lanes[3 + column_index] = &expr;
+      key_positions[column_index] = key_position;
+    } else if (expr.type_ == T_OP_OUTPUT_PACK) {
+      if (graph.pack != nullptr || expr.args_ == nullptr || expr.arg_cnt_ <= 1) { return ret; }
+      // build_pack_expr puts a constant format selector before the data columns.
+      const ObExpr *format = expr.args_[0];
+      if (format == nullptr || format->type_ != T_INT || format->arg_cnt_ != 0
+          || format->is_batch_result() || !native_point_i64_type(*format)
+          || format->frame_idx_ >= info.const_frame_.count()
+          || format->frame_idx_ >= info.const_frame_ptrs_.count()
+          || info.const_frame_ptrs_.at(format->frame_idx_) == nullptr
+          || uint64_t(format->datum_off_) + sizeof(Datum)
+              > info.const_frame_.at(format->frame_idx_).frame_size_) { return ret; }
+      const Datum &encoding = *reinterpret_cast<const Datum *>(
+          info.const_frame_ptrs_.at(format->frame_idx_) + format->datum_off_);
+      if (encoding.state() != Datum::State::Present
+          || (encoding.get_int() != 0 && encoding.get_int() != 1)) { return ret; }
+      for (uint32_t a = 1; a < expr.arg_cnt_; ++a) {
+        if (!native_point_member(expr.args_[a], graph.lanes, 3)) { return ret; }
+      }
+      graph.pack = &expr;
+    } else if (!native_point_member(&expr, graph.lanes, 3)) {
+      if (expr.native_parameter_alias_) {
+        if (expr.type_ != T_QUESTIONMARK || !native_point_i64_type(expr)
+            || expr.eval_func_ != nullptr || expr.is_batch_result() || expr.extra_ >= 3) { return ret; }
+      } else if (expr.frame_idx_ >= info.const_frame_.count() || expr.arg_cnt_ != 0) {
+        return ret;
+      }
+    }
+  }
+  const uint32_t datum_begin = info.const_frame_.count() + info.param_frame_.count();
+  for (int64_t i = 0; i < 6; ++i) {
+    const ObExpr *expr = graph.lanes[i];
+    if (expr == nullptr || expr->frame_idx_ < datum_begin
+        || expr->is_batch_result() != graph.lanes[0]->is_batch_result()
+        || (expr->is_batch_result() && plan.get_batch_size() <= 0)) { return ret; }
+    for (uint32_t p = 0; p < expr->parent_cnt_; ++p) {
+      if (!native_point_member(expr->parents_[p], graph.lanes + 3, 3)
+          && expr->parents_[p] != graph.pack) { return ret; }
+    }
+  }
+  for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+    const ObExpr &expr = info.rt_exprs_.at(i);
+    if (expr.native_parameter_alias_) {
+      for (uint32_t p = 0; p < expr.parent_cnt_; ++p) {
+        if (!native_point_member(expr.parents_[p], graph.lanes + 3, 3)) { return ret; }
+      }
+    }
+  }
+  if (graph.pack != nullptr && (graph.pack->parent_cnt_ != 0 || graph.pack->frame_idx_ < datum_begin)) {
+    return ret;
+  }
+  if (subset) {
+    // Table read-info starts with all schema rowkeys, in key order. Match each
+    // produced Expr through its EQ parameter and the precise range's key
+    // position; ObExpr::extra_ does not carry a column ID for REF_COLUMN.
+    const auto &columns = scan.get_columns_desc();
+    if (columns.count() < 3) { return ret; }
+    for (int64_t c = 0; c < 3; ++c) {
+      if (key_positions[c] < 0) { return ret; }
+      for (int64_t other = 0; other < c; ++other) {
+        if (key_positions[c] == key_positions[other]
+            || graph.parameters[c] == graph.parameters[other]) { return ret; }
+      }
+    }
+    for (int64_t i = 0; i < pd.access_exprs_.count(); ++i) {
+      if (das.access_column_ids_.at(i)
+          != columns.at(key_positions[access_columns[i]]).col_id_) { return ret; }
+      bool returned = false;
+      for (int64_t r = 0; r < das.result_output_.count(); ++r) {
+        returned |= das.result_output_.at(r) == pd.access_exprs_.at(i);
+      }
+      if (!returned) { return ret; }
+    }
+  }
+  // The fixed six-lane descriptor retains the whole range graph. Only storage-
+  // produced columns and their EQs may be reached by execution consumers.
+  NativePointExprs consumers = graph;
+  for (int64_t c = 0; c < 3; ++c) {
+    if (!produced[c]) {
+      consumers.lanes[c] = nullptr;
+      consumers.lanes[3 + c] = nullptr;
+    }
+  }
+  if (graph.pack != nullptr) {
+    for (uint32_t a = 1; a < graph.pack->arg_cnt_; ++a) {
+      if (!native_point_member(graph.pack->args_[a], consumers.lanes, 3)) { return ret; }
+    }
+  }
+  if (root->output_.empty()
+      || !native_point_exprs_in(root->filters_, consumers.lanes + 3, 3)
+      || !native_point_exprs_in(pd.pushdown_filters_, consumers.lanes + 3, 3)
+      || !native_point_exprs_in(das.result_output_, consumers.lanes, 3)
+      || !native_point_exprs_in(das.rowkey_exprs_, consumers.lanes, 3)
+      || !native_point_filter_tree(pd.pd_storage_filters_.get_pushdown_filter(), consumers)) { return ret; }
+  for (int64_t i = 0; i < root->output_.count(); ++i) {
+    const ObExpr *expr = root->output_.at(i);
+    if (expr == nullptr
+        || (!native_point_member(expr, consumers.lanes, 3) && expr != graph.pack)) { return ret; }
+  }
+  const ObIArray<ObExpr *> *calc[] = { &root->calc_exprs_, &pd.calc_exprs_ };
+  for (int64_t a = 0; a < 2; ++a) {
+    for (int64_t i = 0; i < calc[a]->count(); ++i) {
+      const ObExpr *expr = calc[a]->at(i);
+      if (expr == nullptr || (!native_point_member(expr, consumers.lanes, 6)
+          && !(a == 0 && expr == graph.pack) && !expr->native_parameter_alias_)) { return ret; }
+    }
+  }
+  supported = true;
+  return ret;
+}
+
+void publish_native_point_offsets(ObExpr &destination, const ObExpr &source)
+{
+  destination.frame_idx_ = source.frame_idx_;
+  destination.datum_off_ = source.datum_off_;
+  destination.eval_info_off_ = source.eval_info_off_;
+  destination.eval_flags_off_ = source.eval_flags_off_;
+  destination.pvt_skip_off_ = source.pvt_skip_off_;
+  destination.dyn_buf_header_offset_ = source.dyn_buf_header_offset_;
+  destination.res_buf_off_ = source.res_buf_off_;
+}
+} // namespace
+
+int ObStaticEngineExprCG::finalize_native_i64_point(ObPhysicalPlan &plan, const ObExecContext &exec)
+{
+  int ret = OB_SUCCESS;
+  NativePointExprs graph;
+  bool supported = false;
+  if (OB_FAIL(collect_native_i64_point(plan, exec, graph, supported)) || !supported) { return ret; }
+  ObExprFrameInfo &info = plan.get_expr_frame_info();
+  NativeI64PointLayout staged = {};
+  ObExpr layouts[6];
+  ObExpr pack;
+  ObSEArray<ObFrameInfo, NativeI64PointLayout::LANE_COUNT + 1> frames;
+  const int64_t capacity = graph.lanes[0]->is_batch_result() ? plan.get_batch_size() : 1;
+  const bool batch = graph.lanes[0]->is_batch_result();
+  const int64_t bitmap = batch ? ObBitVector::memory_size(capacity) : 0;
+  if (capacity <= 0 || capacity > MAX_FRAME_SIZE / int64_t(sizeof(Datum))) { return OB_SUCCESS; }
+  const uint32_t first_frame = info.const_frame_.count() + info.param_frame_.count()
+      + info.dynamic_frame_.count();
+  for (int64_t i = 0; i < 3; ++i) { staged.parameter_indexes[i] = graph.parameters[i]; }
+  for (int64_t i = 0; i < 6; ++i) {
+    layouts[i] = *graph.lanes[i];
+    bool found = false;
+    for (int64_t j = 0; !found && j < info.rt_exprs_.count(); ++j) {
+      if (&info.rt_exprs_.at(j) == graph.lanes[i]) { staged.expr_indexes[i] = j; found = true; }
+    }
+    if (!found) { return OB_ERR_UNEXPECTED; }
+  }
+  for (int64_t begin = 0; OB_SUCC(ret) && begin < 6;) {
+    const int64_t per_generic = batch ? capacity * sizeof(Datum) + 2 * bitmap
+        + align_frame_part(sizeof(ObEvalInfo)) : ScalarFrameLayout::slot_size();
+    const int64_t count = MIN(int64_t(6) - begin,
+        (MAX_FRAME_SIZE - int64_t(sizeof(NativeI64FrameHeader))) / per_generic);
+    if (count <= 0) { return OB_SUCCESS; }
+    const uint32_t frame_index = first_frame + staged.frame_count;
+    int64_t generic = sizeof(NativeI64FrameHeader);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      layouts[i].frame_idx_ = frame_index;
+      layouts[i].datum_off_ = generic;
+      generic += capacity * sizeof(Datum);
+      layouts[i].pvt_skip_off_ = batch ? generic : 0;
+      generic += bitmap;
+      if (!batch) {
+        layouts[i].eval_info_off_ = generic;
+        generic = align_frame_part(generic + sizeof(ObEvalInfo));
+      }
+    }
+    if (batch) {
+      for (int64_t i = begin; i < begin + count; ++i) {
+        layouts[i].eval_info_off_ = generic;
+        generic += align_frame_part(sizeof(ObEvalInfo));
+      }
+    }
+    for (int64_t i = begin; i < begin + count; ++i) {
+      layouts[i].eval_flags_off_ = batch ? generic : 0;
+      generic += bitmap;
+      layouts[i].dyn_buf_header_offset_ = 0;
+      layouts[i].res_buf_off_ = 0;
+    }
+    int64_t compact = sizeof(NativeI64FrameHeader);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].capacity = capacity;
+      staged.lanes[i].value_off = compact;
+      compact += capacity * sizeof(int64_t);
+    }
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].state_off = compact;
+      compact += capacity;
+    }
+    compact = align_frame_part(compact);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].eval_info_off = compact;
+      compact += batch ? align_frame_part(sizeof(ObEvalInfo)) : sizeof(ObEvalInfo);
+    }
+    compact = align_frame_part(compact);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].eval_flags_off = batch ? compact : 0;
+      compact += bitmap;
+    }
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].pvt_skip_off = batch ? compact : 0;
+      compact += bitmap;
+    }
+    staged.frames[staged.frame_count++] = { frame_index, static_cast<uint32_t>(generic),
+                                          static_cast<uint32_t>(compact) };
+    if (OB_FAIL(frames.push_back(ObFrameInfo(count, frame_index, generic, 0, generic)))) {
+    }
+    begin += count;
+  }
+  if (OB_SUCC(ret) && graph.pack != nullptr) {
+    pack = *graph.pack;
+    const int64_t count = get_expr_datums_count(pack, plan.get_batch_size());
+    const int64_t skip = get_expr_skip_vector_size(pack, plan.get_batch_size());
+    const int64_t flags = get_expr_bitmap_vector_size(pack, plan.get_batch_size());
+    int64_t bytes = count * sizeof(Datum);
+    pack.frame_idx_ = first_frame + staged.frame_count;
+    pack.datum_off_ = 0;
+    pack.pvt_skip_off_ = bytes;
+    bytes = align_frame_part(bytes + skip);
+    pack.eval_info_off_ = bytes;
+    bytes += align_frame_part(sizeof(ObEvalInfo));
+    pack.eval_flags_off_ = bytes;
+    bytes += flags;
+    pack.dyn_buf_header_offset_ = bytes;
+    bytes += dynamic_buf_header_size(pack, plan.get_batch_size());
+    pack.res_buf_off_ = bytes;
+    bytes += align_frame_part(count * pack.res_buf_len_);
+    if (bytes > UINT32_MAX) { return OB_SUCCESS; }
+    if (OB_FAIL(frames.push_back(ObFrameInfo(1, pack.frame_idx_, bytes, 0, bytes)))) {
+    }
+  }
+  NativeI64PointLayout *owned = nullptr;
+  if (OB_SUCC(ret)) {
+    owned = static_cast<NativeI64PointLayout *>(plan.get_allocator().alloc(sizeof(*owned)));
+    if (owned == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  }
+  // Constants and parameter pages have already been built. They keep their
+  // original frame numbers and offsets; only the unallocated datum group moves.
+  // FixedArray cannot grow an existing allocation. This plan is still being
+  // constructed: an allocation failure discards it before cache publication.
+  if (OB_SUCC(ret)) {
+    info.datum_frame_.reset();
+    ret = info.datum_frame_.assign(frames);
+  }
+  if (OB_SUCC(ret)) {
+    new (owned) NativeI64PointLayout(staged);
+    for (int64_t i = 0; i < 6; ++i) {
+      publish_native_point_offsets(*graph.lanes[i], layouts[i]);
+      graph.lanes[i]->native_i64_layout_ = &owned->lanes[i];
+    }
+    if (graph.pack != nullptr) { publish_native_point_offsets(*graph.pack, pack); }
+    info.native_i64_point_layout_ = owned;
+  }
+  return ret;
+}
+
 // 1. Expand all raw exprs
 //    cg: c1 + 1, c1 + c2  ==>  c1, 1, c1 + 1, c2, c1 + c2
 // 2. Construct ObExpr, and set the corresponding ObExpr to the corresponding ObRawExpr

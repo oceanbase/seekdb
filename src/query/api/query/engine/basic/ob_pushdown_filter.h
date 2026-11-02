@@ -86,6 +86,82 @@ class ObIMicroBlockRowScanner;
 };
 namespace sql
 {
+// Execution-local writable destination. Exactly one alternative is cached;
+// compact pages never acquire a persistent Datum array or projection here.
+class ObExprFrameWriteTarget
+{
+public:
+  ObExprFrameWriteTarget() : datums_(nullptr), capacity_(0), native_(false), batch_(false) {}
+  int prepare(const ObExpr &expr, ObEvalCtx &ctx)
+  {
+    ObExprFrameWriteTarget candidate;
+    bool native = false;
+    int ret = expr.get_native_i64_mode(ctx, native);
+    if (OB_SUCC(ret) && expr.native_parameter_alias_) { ret = common::OB_INVALID_ARGUMENT; }
+    if (OB_SUCC(ret) && native) {
+      NativeI64Lane lane;
+      if (OB_SUCC(ret = expr.get_native_i64_lane(ctx, lane))) {
+        if (lane.values == nullptr || lane.states == nullptr || lane.capacity == 0) {
+          return common::OB_ERR_UNEXPECTED;
+        }
+        candidate.lane_ = lane;
+        candidate.capacity_ = lane.capacity;
+        candidate.batch_ = lane.batch;
+        candidate.native_ = true;
+      }
+    } else if (OB_SUCC(ret)) {
+      if (OB_FAIL(expr.get_frame_value_capacity(candidate.capacity_))) {
+      } else {
+        candidate.datums_ = expr.locate_batch_datums(ctx);
+        candidate.batch_ = expr.is_batch_result();
+        if (candidate.datums_ == nullptr) { ret = common::OB_INVALID_ARGUMENT; }
+      }
+    }
+    if (OB_SUCC(ret)) { *this = candidate; }
+    return ret;
+  }
+  bool is_native() const { return native_; }
+  TO_STRING_KV(K_(capacity), K_(native), K_(batch));
+  int import_legacy(const common::DatumCopyPlan &plan, const common::ObDatum &source, int64_t row) const
+  {
+    if (capacity_ == 0) { return common::OB_NOT_INIT; }
+    if (row < 0 || (batch_ && row >= capacity_)) { return common::OB_INVALID_ARGUMENT; }
+    const int64_t index = batch_ ? row : 0;
+    if (!native_) {
+      // Keep the original generic writer: no extra Datum construction/copy.
+      return plan.import_legacy(source, datums_[index]);
+    }
+    common::Datum value;
+    int ret = plan.import_legacy(source, value);
+    if (OB_SUCC(ret) && !value.is_present() && !value.is_null()) { ret = common::OB_INVALID_ARGUMENT; }
+    if (OB_SUCC(ret)) {
+      if (value.is_present()) { lane_.values[index] = value.get_int(); }
+      lane_.states[index] = static_cast<uint8_t>(value.state());
+    }
+    return ret;
+  }
+  int set_i64(int64_t row, int64_t value) const
+  {
+    if (capacity_ == 0) { return common::OB_NOT_INIT; }
+    if (row < 0 || (batch_ && row >= capacity_)) { return common::OB_INVALID_ARGUMENT; }
+    const int64_t index = batch_ ? row : 0;
+    if (native_) {
+      lane_.values[index] = value;
+      lane_.states[index] = static_cast<uint8_t>(common::Datum::State::Present);
+    } else { datums_[index].set_int(value); }
+    return common::OB_SUCCESS;
+  }
+private:
+  union {
+    common::Datum *datums_;
+    NativeI64Lane lane_;
+  };
+  uint32_t capacity_;
+  bool native_;
+  bool batch_;
+};
+static_assert(sizeof(ObExprFrameWriteTarget) == 32, "Producer destination metadata is 32 bytes, not a value mirror");
+
 // Prepared legacy operations are confined to decoder predicate parameters.
 const common::ObDatumBasicFuncs *storage_predicate_functions(const ObExpr &expr);
 
@@ -887,7 +963,7 @@ public:
         n_eval_infos_(0),
         eval_infos_(nullptr),
         n_datum_eval_flags_(0),
-        datum_eval_flags_(nullptr)
+        datum_eval_flags_(nullptr), column_targets_(alloc)
   {}
   virtual ~ObPhysicalFilterExecutor();
   int filter(blocksstable::ObStorageDatum *datums, int64_t col_cnt, const sql::ObBitVector &skip_bit, bool &ret_val);
@@ -897,6 +973,7 @@ public:
                        K_(n_eval_infos), KP_(eval_infos));
 protected:
   int init_eval_param(const int32_t cur_eval_info_cnt, const int64_t eval_expr_cnt);
+  int prepare_column_write_targets();
   void clear_evaluated_flags();
   void clear_evaluated_infos();
 protected:
@@ -904,6 +981,7 @@ protected:
   ObEvalInfo **eval_infos_;
   int32_t n_datum_eval_flags_;
   ObBitVector **datum_eval_flags_;
+  common::ObFixedArray<ObExprFrameWriteTarget, common::ObIAllocator> column_targets_;
 };
 
 class ObBlackFilterExecutor : public ObPhysicalFilterExecutor

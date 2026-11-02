@@ -120,6 +120,10 @@ public:
   // @param [out] expr_info information related to frame and rt_exprs
   int generate(const ObRawExprUniqueSet &all_raw_exprs, ObExprFrameInfo &expr_info);
 
+  // Called after every operator and storage consumer has been generated. A
+  // supported graph gets immutable alternatives; execution chooses one page.
+  static int finalize_native_i64_point(ObPhysicalPlan &plan, const ObExecContext &exec_ctx);
+
   int generate(ObRawExpr *expr,
                ObRawExprUniqueSet &flattened_raw_exprs,
                ObExprFrameInfo &expr_info);

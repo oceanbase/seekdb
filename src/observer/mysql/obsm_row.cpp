@@ -78,10 +78,11 @@ bool DatumMysqlRow::can_encode_inline_bigint_field(const ObField &field)
 bool DatumMysqlRow::can_encode_inline(const oceanbase::sql::ResultRowView &row,
                                       int64_t idx, const ObField &field)
 {
-  const Datum *value = nullptr;
-  const SqlType *type = nullptr;
-  return OB_SUCCESS == row.get_inline_value(idx, value, type)
-      && type->kind() == ObIntType && can_encode_inline_bigint_field(field)
+  // This chooses the protocol adapter from plan/field metadata only. The
+  // fallible caller-owned value read happens in build_cell_value below.
+  return row.is_datum_row() && idx >= 0 && idx < row.count()
+      && row.expr(idx).get_sql_type().kind() == ObIntType
+      && can_encode_inline_bigint_field(field)
       && row.expr(idx).obj_meta_.get_type() == ObIntType
       && row.expr(idx).obj_datum_map_ == OBJ_DATUM_8BYTE_DATA;
 }
@@ -93,12 +94,12 @@ int DatumMysqlRow::build_cell_value(int64_t idx, ObIAllocator &scratch_allocator
   if (OB_UNLIKELY(idx < 0 || idx >= row_.count())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (-3 == obj_indexes_[idx]) {
-    const Datum *value = nullptr;
+    Datum value;
     const SqlType *type = nullptr;
     if (OB_FAIL(row_.get_inline_value(idx, value, type))) {
     } else {
       ret = ObSMUtils::build_inline_bigint_cell_value(
-          *value, *type, type_, scratch_allocator, out, &fields_.at(idx));
+          value, *type, type_, scratch_allocator, out, &fields_.at(idx));
     }
   } else if (obj_indexes_[idx] < 0 && !row_.has_legacy_datums()) {
     ret = OB_STATE_NOT_MATCH;

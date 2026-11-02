@@ -58,7 +58,7 @@ private:
   {
     int32_t obj_idx_;
     int32_t expr_idx_;
-    common::Datum *datum_;
+    sql::ObExprFrameWriteTarget target_;
     sql::ObEvalInfo *eval_info_;
     sql::ObBitVector *eval_flags_;
 
@@ -66,6 +66,7 @@ private:
     Item() = default;
     DECLARE_TO_STRING;
   };
+  static_assert(sizeof(Item) == 56, "Projection cache includes its 32-byte selected destination");
 
   bool has_virtual_;
   sql::ObPushdownOperator *op_;

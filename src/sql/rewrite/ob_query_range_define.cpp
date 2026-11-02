@@ -761,9 +761,8 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &paramete
   return try_get_native_bigint_point(&parameters, nullptr, values, supported);
 }
 
-int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *parameters,
-                                                const ObPhysicalPlanCtx *plan_ctx,
-                                                int64_t (&values)[3], bool &supported) const
+int ObPreRangeGraph::get_native_bigint_point_parameters(int64_t parameter_count,
+    int64_t (&indexes)[3], bool &supported) const
 {
   supported = false;
   const ObRangeNode *node = node_head_;
@@ -781,8 +780,6 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *paramete
     return OB_SUCCESS;
   }
 
-  if ((parameters == nullptr) == (plan_ctx == nullptr)) { return OB_ERR_UNEXPECTED; }
-  const int64_t count = plan_ctx != nullptr ? plan_ctx->get_parameter_count() : parameters->count();
   int64_t candidate[3];
   for (int64_t i = 0; i < 3; ++i) {
     const ObRangeColumnMeta *meta = column_metas_.at(i);
@@ -792,20 +789,34 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *paramete
       return OB_SUCCESS;
     }
     const ObRangeMap::ExprFinalInfo &info = range_map_.expr_final_infos_.at(index);
-    // A single param bit excludes constants, casts, NULL-safe comparisons,
-    // row-expression modifiers and execution parameters in this first pilot.
-    if (info.flags_ != 1 || info.param_idx_ < 0 || info.param_idx_ >= count) {
+    // Only the simple parameter bit: no casts, NULL-safe comparison, execution
+    // parameters, or row modifiers can enter either native path.
+    if (info.flags_ != 1 || info.param_idx_ < 0 || info.param_idx_ >= parameter_count) {
       return OB_SUCCESS;
     }
+    candidate[i] = info.param_idx_;
+  }
+  for (int64_t i = 0; i < 3; ++i) { indexes[i] = candidate[i]; }
+  supported = true;
+  return OB_SUCCESS;
+}
+
+int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *parameters,
+                                                const ObPhysicalPlanCtx *plan_ctx,
+                                                int64_t (&values)[3], bool &supported) const
+{
+  supported = false;
+  if ((parameters == nullptr) == (plan_ctx == nullptr)) { return OB_ERR_UNEXPECTED; }
+  const int64_t count = plan_ctx != nullptr ? plan_ctx->get_parameter_count() : parameters->count();
+  int64_t indexes[3], candidate[3];
+  bool shape = false;
+  const int ret = get_native_bigint_point_parameters(count, indexes, shape);
+  if (ret != OB_SUCCESS || !shape) { return ret; }
+  for (int64_t i = 0; i < 3; ++i) {
     if (plan_ctx != nullptr) {
-      // This accessor validates the current execution binding and complete Type.
-      // No compatibility descriptor or construction payload remains after init.
-      if (!plan_ctx->read_native_bigint_parameter(info.param_idx_, candidate[i])) {
-        return OB_SUCCESS;
-      }
+      if (!plan_ctx->read_native_bigint_parameter(indexes[i], candidate[i])) { return OB_SUCCESS; }
     } else {
-      // Explicit construction-only input. Its physical metadata selects inline I64.
-      const DatumParameter &input = parameters->at(info.param_idx_);
+      const DatumParameter &input = parameters->at(indexes[i]);
       if (input.get_type() != ObIntType || !input.datum_.is_present()
           || input.datum_.length() != 0
           || input.datum_.reference_flags() != Datum::NoReferenceFlags) {
@@ -814,7 +825,6 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *paramete
       candidate[i] = input.datum_.get_int();
     }
   }
-
   for (int64_t i = 0; i < 3; ++i) { values[i] = candidate[i]; }
   supported = true;
   return OB_SUCCESS;

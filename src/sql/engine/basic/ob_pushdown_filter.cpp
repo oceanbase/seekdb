@@ -1784,6 +1784,26 @@ ObPhysicalFilterExecutor::~ObPhysicalFilterExecutor()
   }
 }
 
+int ObPhysicalFilterExecutor::prepare_column_write_targets()
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObExpr *> *exprs = get_column_exprs();
+  if (exprs == nullptr) { return OB_ERR_UNEXPECTED; }
+  const bool allocate = column_targets_.count() != exprs->count();
+  if (allocate) {
+    column_targets_.reset();
+    ret = column_targets_.init(exprs->count());
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < exprs->count(); ++i) {
+    ObExprFrameWriteTarget target;
+    if (exprs->at(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(target.prepare(*exprs->at(i), op_.get_eval_ctx()))) {
+    } else if (allocate) { ret = column_targets_.push_back(target); }
+    else { column_targets_.at(i) = target; }
+  }
+  return ret;
+}
+
 int ObPhysicalFilterExecutor::filter(blocksstable::ObStorageDatum *datums, int64_t col_cnt, const sql::ObBitVector &skip_bit, bool &filtered)
 {
   int ret = OB_SUCCESS;
@@ -1794,8 +1814,8 @@ int ObPhysicalFilterExecutor::filter(blocksstable::ObStorageDatum *datums, int64
     ObEvalCtx &eval_ctx = op_.get_eval_ctx();
     for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs->count(); ++i) {
       const ObExpr &expr = *column_exprs->at(i);
-      Datum &expr_datum = expr.locate_datum_for_write(eval_ctx);
-      if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(datums[i], expr_datum))) {
+      if (OB_FAIL(column_targets_.at(i).import_legacy(
+                     expr.get_datum_copy_plan(), datums[i], eval_ctx.get_batch_idx()))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(filter(eval_ctx, skip_bit, filtered))) {
@@ -1831,6 +1851,8 @@ int ObPhysicalFilterExecutor::init_evaluated_datums(bool &is_valid)
     if (OB_FAIL(init_eval_param(cur_eval_info_cnt, eval_exprs.count()))) {
     }
     FOREACH_CNT_X(e, eval_exprs, OB_SUCC(ret)) {
+      bool native = false;
+      if (OB_FAIL((*e)->get_native_i64_mode(op_.get_eval_ctx(), native))) { break; }
       eval_infos_[n_eval_infos_++] = &(*e)->get_eval_info(op_.get_eval_ctx());
       if (op_.is_vectorized() && (*e)->is_batch_result()) {
         datum_eval_flags_[n_datum_eval_flags_++] = &(*e)->get_evaluated_flags(op_.get_eval_ctx());
@@ -1840,6 +1862,7 @@ int ObPhysicalFilterExecutor::init_evaluated_datums(bool &is_valid)
       clear_evaluated_infos();
     }
   }
+  if (OB_SUCC(ret)) { ret = prepare_column_write_targets(); }
   return ret;
 }
 
@@ -1943,11 +1966,11 @@ int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
         col_obj_meta = filter_.expr_->args_[i]->obj_meta_;
         continue;
       } else {
-        Datum *datum = NULL;
+        Datum datum;
         DatumValue decoder_value;
         const ObExpr &arg = *filter_.expr_->args_[i];
-        if (OB_FAIL(arg.eval(eval_ctx, datum))) {
-        } else if (OB_FAIL(own_decoder_parameter(arg, *datum, allocator_, decoder_value))) {
+        if (OB_FAIL(arg.eval_value(eval_ctx, datum))) {
+        } else if (OB_FAIL(own_decoder_parameter(arg, datum, allocator_, decoder_value))) {
         } else if (OB_FAIL(datum_params_.push_back(decoder_value))) {
         } else {
           param_obj_meta = filter_.expr_->args_[i]->obj_meta_;
@@ -1992,7 +2015,7 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
   } else {
     col_obj_meta = filter_.expr_->args_[0]->obj_meta_;
     null_param_contained_ = false;
-    Datum *datum = nullptr;
+    Datum datum;
     for (int i = 0; OB_SUCC(ret) && i < filter_.expr_->args_[1]->arg_cnt_; ++i) {
       const ObExpr *cur_arg = filter_.expr_->args_[1]->args_[i];
       if (OB_ISNULL(cur_arg)) {
@@ -2002,8 +2025,8 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
       }
       if (OB_SUCC(ret)) {
         DatumValue decoder_value;
-        if (OB_FAIL(cur_arg->eval(eval_ctx, datum))) {
-        } else if (OB_FAIL(own_decoder_parameter(*cur_arg, *datum, allocator_, decoder_value))) {
+        if (OB_FAIL(cur_arg->eval_value(eval_ctx, datum))) {
+        } else if (OB_FAIL(own_decoder_parameter(*cur_arg, datum, allocator_, decoder_value))) {
         } else if (is_null_param(decoder_value, param_obj_meta)) {
           // skip null in filter IN
         } else if (OB_FAIL(add_to_param_set_and_array(decoder_value, cur_arg))) {
@@ -2224,10 +2247,10 @@ int ObWhiteFilterExecutor::filter(ObEvalCtx &eval_ctx, const sql::ObBitVector &s
   int ret = OB_SUCCESS;
   filtered = false;
   UNUSED(skip_bit);
-  Datum *cmp_res = nullptr;
-  if (OB_FAIL(filter_.expr_->eval(eval_ctx, cmp_res))) {
+  Datum cmp_res;
+  if (OB_FAIL(filter_.expr_->eval_value(eval_ctx, cmp_res))) {
   } else {
-    filtered = is_row_filtered(*cmp_res);
+    filtered = is_row_filtered(cmp_res);
   }
   clear_evaluated_flags();
   return ret;
@@ -2252,11 +2275,11 @@ int ObBlackFilterExecutor::filter(ObEvalCtx &eval_ctx, const sql::ObBitVector &s
   int ret = OB_SUCCESS;
   filtered = false;
   UNUSED(skip_bit);
-  Datum *cmp_res = nullptr;
+  Datum cmp_res;
   FOREACH_CNT_X(e, filter_.filter_exprs_, OB_SUCC(ret) && !filtered) {
-    if (OB_FAIL((*e)->eval(eval_ctx, cmp_res))) {
+    if (OB_FAIL((*e)->eval_value(eval_ctx, cmp_res))) {
     } else {
-      filtered = is_row_filtered(*cmp_res);
+      filtered = is_row_filtered(cmp_res);
     }
   }
   clear_evaluated_flags();
@@ -2289,14 +2312,14 @@ int ObBlackFilterExecutor::judge_greater_or_less(
   } else if (OB_ISNULL(assist_expr) || OB_ISNULL(column_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    Datum &expr_datum = column_expr->locate_datum_for_write(eval_ctx);
-    if (OB_FAIL(column_expr->get_datum_copy_plan().import_legacy(datum, expr_datum))) {
+    if (OB_FAIL(column_targets_.at(0).import_legacy(
+                   column_expr->get_datum_copy_plan(), datum, eval_ctx.get_batch_idx()))) {
     } else {
       UNUSED(skip_bit);
-      Datum *cmp_res = nullptr;
-      if (OB_FAIL(assist_expr->eval(eval_ctx, cmp_res))) {
+      Datum cmp_res;
+      if (OB_FAIL(assist_expr->eval_value(eval_ctx, cmp_res))) {
       } else {
-        ret_val = !is_row_filtered(*cmp_res);
+        ret_val = !is_row_filtered(cmp_res);
       }
     }
     clear_evaluated_flags();
@@ -2314,6 +2337,7 @@ int ObBlackFilterExecutor::get_datums_from_column(common::ObIArray<blocksstable:
   int ret = OB_SUCCESS;
   const int64_t capacity = op_.get_batch_size();
   const int64_t columns = filter_.column_exprs_.count();
+  if (OB_FAIL(prepare_column_write_targets())) { return ret; }
   int64_t payload = 0;
   for (int64_t col = 0; col < columns; ++col) {
     payload += std::max<int64_t>(64, filter_.column_exprs_.at(col)->res_buf_len_) * capacity;
@@ -2351,24 +2375,27 @@ int ObBlackFilterExecutor::eval_exprs_batch(ObBitVector &skip, const int64_t bsi
   ObEvalCtx &eval_ctx = op_.get_eval_ctx();
   for (int64_t col = 0; OB_SUCC(ret) && col < filter_.column_exprs_.count(); ++col) {
     ObExpr &expr = *filter_.column_exprs_.at(col);
-    Datum *native = expr.locate_batch_datums(eval_ctx);
+    const ObExprFrameWriteTarget &target = column_targets_.at(col);
     for (int64_t row = 0; OB_SUCC(ret) && row < bsize; ++row) {
-      ret = expr.get_datum_copy_plan().import_legacy(
-          decoder_datums_[col * decoder_capacity_ + row], native[row]);
+      if (target.is_native() && skip.at(row)) { continue; }
+      ret = target.import_legacy(expr.get_datum_copy_plan(),
+          decoder_datums_[col * decoder_capacity_ + row], row);
     }
     if (OB_SUCC(ret)) { expr.get_eval_info(eval_ctx).projected_ = true; }
   }
   FOREACH_CNT_X(e, filter_.filter_exprs_, OB_SUCC(ret) && !skip.is_all_true(bsize)) {
     if (OB_FAIL((*e)->eval_batch(eval_ctx, skip, bsize))) {
     } else if (!(*e)->is_batch_result()) {
-      const Datum &d = (*e)->locate_expr_datum(eval_ctx);
-      if (is_row_filtered(d)) {
-        skip.set_all(bsize);
-      }
+      Datum value;
+      if (OB_FAIL((*e)->read_value(eval_ctx, 0, value))) {
+      } else if (is_row_filtered(value)) { skip.set_all(bsize); }
     } else {
-      const Datum *datums = (*e)->locate_batch_datums(eval_ctx);
-      for (int64_t i = 0; i < bsize; ++i) {
-        if (!skip.at(i) && is_row_filtered(datums[i])) { skip.set(i); }
+      for (int64_t i = 0; OB_SUCC(ret) && i < bsize; ++i) {
+        if (!skip.at(i)) {
+          Datum value;
+          if (OB_FAIL((*e)->read_value(eval_ctx, i, value))) {
+          } else if (is_row_filtered(value)) { skip.set(i); }
+        }
       }
     }
   }
@@ -2938,15 +2965,35 @@ int ObPushdownOperator::deep_copy(const sql::ObExprPtrIArray *exprs, const int64
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs->count(); i++) {
       sql::ObExpr &expr = *exprs->at(i);
-      Datum &datum = expr.locate_expr_datum(eval_ctx_, batch_idx);
-      const DatumCopyPlan plan = expr.get_datum_copy_plan();
-      int64_t bytes = 0;
-      if (OB_FAIL(plan.carrier_span_size(datum, bytes))) {
-      } else if (bytes > 0) {
-        char *buffer = expr.get_reference_res_mem(eval_ctx_, bytes, batch_idx);
-        int64_t position = 0;
-        if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-        else { ret = plan.copy_carrier_span_borrowing_resources(datum, datum, buffer, bytes, position); }
+      bool native = false;
+      if (OB_FAIL(expr.get_native_i64_mode(eval_ctx_, native))) {
+      } else if (expr.native_parameter_alias_) {
+        // The parameter owner already owns its descriptor/span for the whole
+        // statement. No scan-row payload can retire this canonical binding.
+        Datum value;
+        ret = expr.read_value(eval_ctx_, batch_idx, value);
+      } else if (native) {
+        NativeI64Lane lane;
+        if (OB_FAIL(expr.get_native_i64_lane(eval_ctx_, lane))) {
+        } else if (batch_idx < 0 || (lane.batch && batch_idx >= lane.capacity)) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          const uint8_t state = lane.states[lane.batch ? batch_idx : 0];
+          if (state != static_cast<uint8_t>(Datum::State::Present)
+              && state != static_cast<uint8_t>(Datum::State::Null)) { ret = OB_ERR_UNEXPECTED; }
+        }
+        // Signed I64/NULL has no reference span to clone.
+      } else {
+        Datum &datum = expr.locate_expr_datum(eval_ctx_, batch_idx);
+        const DatumCopyPlan plan = expr.get_datum_copy_plan();
+        int64_t bytes = 0;
+        if (OB_FAIL(plan.carrier_span_size(datum, bytes))) {
+        } else if (bytes > 0) {
+          char *buffer = expr.get_reference_res_mem(eval_ctx_, bytes, batch_idx);
+          int64_t position = 0;
+          if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+          else { ret = plan.copy_carrier_span_borrowing_resources(datum, datum, buffer, bytes, position); }
+        }
       }
     }
   }

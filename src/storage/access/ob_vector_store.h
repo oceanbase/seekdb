@@ -20,6 +20,7 @@
 #include "lib/container/ob_bitmap.h"
 #include "storage/access/ob_table_param.h"
 #include "query/engine/expr/ob_expr.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "ob_block_batched_row_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "ob_pushdown_aggregate.h"
@@ -112,6 +113,8 @@ protected:
   // same batch lifetime as the old decoder's output.
   common::ObFixedArray<char *, common::ObIAllocator> decoder_buffers_;
   common::ObFixedArray<const common::DatumCopyPlan *, common::ObIAllocator> copy_plans_;
+  common::ObFixedArray<sql::ObExprFrameWriteTarget, common::ObIAllocator> output_targets_;
+  sql::ObExprFrameWriteTarget group_idx_target_;
   sql::ObExpr *group_idx_expr_;
   common::ObFixedArray<blocksstable::ObStorageDatum, common::ObIAllocator> default_datums_;
   ObGroupByCellBase *group_by_cell_;

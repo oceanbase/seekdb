@@ -399,6 +399,11 @@ public:
 
   virtual ~ObPreRangeGraph() { reset(); }
 
+  // Static counterpart of the raw-point reader, shared with closed-graph CG.
+  // Values and their NULL state are checked separately for each execution.
+  int get_native_bigint_point_parameters(int64_t parameter_count,
+      int64_t (&indexes)[3], bool &supported) const;
+
   int try_get_native_bigint_point(const common::DatumParamStore &parameters,
                                   int64_t (&values)[3], bool &supported) const override;
   int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,

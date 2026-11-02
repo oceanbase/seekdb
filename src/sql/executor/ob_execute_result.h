@@ -53,12 +53,20 @@ public:
   // Expr, including Decimal precision, collation and complex-domain metadata.
   bool is_inline_datum_row() const { return is_datum_row(); }
   bool inline_row_valid() const { return is_datum_row(); }
-  int get_inline_value(int64_t i, const common::Datum *&value, const common::SqlType *&type) const
+  // Values are copied into caller storage; references still borrow the row owner.
+  // Both outputs remain unchanged on failure. No Datum projection is requested.
+  int get_inline_value(int64_t i, common::Datum &value, const common::SqlType *&type) const
   {
     int ret = OB_SUCCESS;
     if (!is_datum_row()) { ret = OB_STATE_NOT_MATCH; }
     else if (i < 0 || i >= count_) { ret = OB_SIZE_OVERFLOW; }
-    else { value = &datum(i); type = &expr(i).get_sql_type(); }
+    else {
+      common::Datum candidate;
+      if (OB_SUCC(ret = expr(i).read_value(*ctx_, idx_, candidate))) {
+        value = candidate;
+        type = &expr(i).get_sql_type();
+      }
+    }
     return ret;
   }
   int get_legacy_value(int64_t i, common::ObDatum &value) const;
@@ -74,13 +82,6 @@ public:
   const common::ObNewRow *legacy_row() const { return legacy_; }
   int64_t count() const { return is_datum_row() ? count_ : (legacy_ ? legacy_->get_count() : 0); }
   const ObExpr &expr(int64_t i) const { return *exprs_[i]; }
-  const common::Datum &datum(int64_t i) const
-  {
-    OB_ASSERT(is_datum_row());
-    const ObExpr &e = expr(i);
-    return batch_ ? e.locate_batch_datums(*ctx_)[e.is_batch_result() ? idx_ : 0]
-                  : e.locate_expr_datum(*ctx_);
-  }
 private:
   const common::ObNewRow *legacy_;
   ObExpr *const *exprs_;

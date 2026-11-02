@@ -65,6 +65,24 @@ public:
   uint32_t zero_init_size_;
 };
 
+struct NativeI64PointLayout
+{
+  static constexpr int64_t KEY_COUNT = 3;
+  static constexpr int64_t LANE_COUNT = 6;
+  struct Frame
+  {
+    uint32_t index;
+    uint32_t generic_size;
+    uint32_t compact_size;
+  };
+  int64_t parameter_indexes[KEY_COUNT];
+  uint32_t expr_indexes[LANE_COUNT];
+  NativeI64ExprLayout lanes[LANE_COUNT];
+  Frame frames[LANE_COUNT];
+  uint32_t frame_count;
+};
+static_assert(sizeof(NativeI64PointLayout) == 272, "complete local point layout metadata");
+
 struct ObExprFrameInfo
 {
   OB_UNIS_VERSION_V(1);
@@ -82,6 +100,7 @@ public:
       dynamic_frame_(allocator),
       datum_frame_(allocator),
       ser_expr_marks_(allocator),
+      native_i64_point_layout_(nullptr),
       allocator_(allocator)
   {
   }
@@ -96,6 +115,7 @@ public:
       dynamic_frame_(allocator),
       datum_frame_(allocator),
       ser_expr_marks_(allocator),
+      native_i64_point_layout_(nullptr),
       allocator_(allocator)
   {
   }
@@ -111,7 +131,9 @@ public:
   int alloc_frame(common::ObIAllocator &exec_allocator,
                   const ObIArray<char *> &param_frame_ptrs,
                   uint64_t &frame_cnt,
-                  char **&frames) const;
+                  char **&frames, bool compact_i64 = false) const;
+
+  int choose_native_i64_layout(const ObExecContext &exec_ctx, bool &compact) const;
 
   int get_expr_idx_in_frame(ObExpr *expr, int64_t &expr_idx) const;
 
@@ -148,6 +170,8 @@ public:
 
   // mark need serialize exrps in mark serialization
   common::ObFixedArray<bool, common::ObIAllocator> ser_expr_marks_;
+  // Immutable plan metadata only; no alternate execution pages are retained.
+  const NativeI64PointLayout *native_i64_point_layout_;
   common::ObIAllocator &allocator_;
 };
 

@@ -1002,7 +1002,10 @@ int ObOperator::get_next_row()
           || spec_.get_phy_plan()->is_contains_assignment()) {
         Datum *res = NULL;
         FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
-          if (OB_FAIL((*e)->eval(eval_ctx_, res))) {
+          Datum caller_value;
+          if ((*e)->native_i64_layout_ != nullptr
+              ? OB_FAIL((*e)->eval_value(eval_ctx_, caller_value))
+              : OB_FAIL((*e)->eval(eval_ctx_, res))) {
           } else {
             (*e)->get_eval_info(eval_ctx_).projected_ = true;
           }
@@ -1210,7 +1213,17 @@ int ObOperator::filter_row(ObEvalCtx &eval_ctx, const ObIArray<ObExpr *> &exprs,
   filtered = false;
   FOREACH_CNT_X(e, exprs, OB_SUCC(ret)) {
     OB_ASSERT(NULL != *e);
-    if (OB_FAIL((*e)->eval(eval_ctx, datum))) {
+    bool native = false;
+    if ((*e)->native_i64_layout_ != nullptr && OB_FAIL((*e)->get_native_i64_mode(eval_ctx, native))) {
+    } else if (native) {
+      int64_t value = 0;
+      Datum::State state = Datum::State::Null;
+      if (OB_FAIL((*e)->eval_i64(eval_ctx, value, state))) {
+      } else if (state == Datum::State::Null || value == 0) {
+        filtered = true;
+        break;
+      }
+    } else if (OB_FAIL((*e)->eval(eval_ctx, datum))) {
     } else {
       OB_ASSERT(ob_is_int_tc((*e)->datum_meta_.type_));
       if (datum->is_null() || 0 == datum->get_int()) {
@@ -1248,7 +1261,28 @@ int ObOperator::filter_batch_rows(const ObExprPtrIArray &exprs,
   bool tmp_all_active = true;
   FOREACH_CNT_X(e, exprs, OB_SUCC(ret) && !all_filtered) {
     OB_ASSERT(ob_is_int_tc((*e)->datum_meta_.type_));
-    if (OB_FAIL((*e)->eval_batch(eval_ctx_, skip, bsize))) {
+    bool native = false;
+    if ((*e)->native_i64_layout_ != nullptr && OB_FAIL((*e)->get_native_i64_mode(eval_ctx_, native))) {
+    } else if (OB_FAIL((*e)->eval_batch(eval_ctx_, skip, bsize))) {
+    } else if (native) {
+      NativeI64Lane lane{};
+      if (OB_FAIL((*e)->get_native_i64_lane(eval_ctx_, lane))) {
+      } else {
+        int64_t output_rows = 0;
+        for (int64_t i = 0; OB_SUCC(ret) && i < bsize; ++i) {
+          if (!skip.at(i)) {
+            const int64_t index = lane.batch ? i : 0;
+            if (index >= lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+            else if (lane.states[index] != static_cast<uint8_t>(Datum::State::Null)
+                     && lane.states[index] != static_cast<uint8_t>(Datum::State::Present)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (lane.states[index] == static_cast<uint8_t>(Datum::State::Null) || lane.values[index] == 0) {
+              skip.set(i); tmp_all_active = false;
+            } else { ++output_rows; }
+          }
+        }
+        if (OB_SUCC(ret)) { all_filtered = output_rows == 0; }
+      }
     } else if (!(*e)->is_batch_result()) {
       const Datum &d = (*e)->locate_expr_datum(eval_ctx_);
       if (d.is_null() || 0 == d.get_int()) {
@@ -1463,8 +1497,8 @@ int ObBatchRowIter::get_next_row(ObEvalCtx &eval_ctx, const ObOpSpec &spec)
     }
     if (idx_ >= brs_->size_) {
       if (!brs_->end_) {
-        brs_holder_.restore();
-        if (OB_FAIL(op_->get_next_batch(max_row_cnt, brs_))) {
+        if (OB_FAIL(brs_holder_.restore())) {
+        } else if (OB_FAIL(op_->get_next_batch(max_row_cnt, brs_))) {
         } else {
           idx_ = 0;
           if (0 == brs_->size_ && brs_->end_) {
@@ -1485,11 +1519,29 @@ int ObBatchRowIter::get_next_row(ObEvalCtx &eval_ctx, const ObOpSpec &spec)
   for (auto i = 0; OB_SUCC(ret) && i < spec.output_.count(); i++) {
     ObExpr *expr = spec.output_.at(i);
     if (expr->is_batch_result() && 0 != cur_idx()) {
-      Datum *datums = expr->locate_batch_datums(eval_ctx);
-      datums[0] = datums[cur_idx()];
-      LOG_DEBUG("copy datum to datum[0], details: ", K(cur_idx()), K(datums[0]),
-               K(expr->locate_batch_datums(eval_ctx)),
-               KPC(expr->locate_batch_datums(eval_ctx)), K(expr), KPC(expr));
+      bool native = false;
+      if (OB_FAIL(expr->get_native_i64_mode(eval_ctx, native))) {
+      } else if (native) {
+        NativeI64Lane lane;
+        if (OB_FAIL(expr->get_native_i64_lane(eval_ctx, lane))) {
+        } else if (cur_idx() < 0 || cur_idx() >= lane.capacity) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          const Datum::State state = static_cast<Datum::State>(lane.states[cur_idx()]);
+          if (state != Datum::State::Present && state != Datum::State::Null) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            if (state == Datum::State::Present) { lane.values[0] = lane.values[cur_idx()]; }
+            lane.states[0] = static_cast<uint8_t>(state);
+            LOG_DEBUG("copy native batch value to row zero", K(cur_idx()), K(state), KPC(expr));
+          }
+        }
+      } else {
+        Datum *datums = expr->locate_batch_datums(eval_ctx);
+        datums[0] = datums[cur_idx()];
+        LOG_DEBUG("copy datum to datum[0], details: ", K(cur_idx()), K(datums[0]),
+                 KP(datums), KPC(datums), K(expr), KPC(expr));
+      }
     } // non batch expr always point to offset 0, do nothing for else brach
   }
 

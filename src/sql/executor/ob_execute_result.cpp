@@ -89,8 +89,12 @@ int ResultRowView::get_legacy_value(int64_t i, ObDatum &value) const
   if (!is_datum_row() || legacy_scratch_ == nullptr) { ret = OB_NOT_INIT; }
   else if (i < 0 || i >= count_) { ret = OB_SIZE_OVERFLOW; }
   else {
-    ret = expr(i).get_datum_copy_plan().legacy_view(datum(i), value,
-                                                   legacy_scratch_ + i * 64, 64);
+    Datum caller_value;
+    if (OB_FAIL(expr(i).read_value(*ctx_, idx_, caller_value))) {
+    } else {
+      ret = expr(i).get_datum_copy_plan().legacy_view(caller_value, value,
+                                                    legacy_scratch_ + i * 64, 64);
+    }
   }
   return ret;
 }
@@ -167,14 +171,14 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
       const int64_t idx = spec.is_vectorized() ? br_it_.cur_idx() : 0;
       for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
         ObExpr &expr = *spec.output_.at(i);
-        Datum *datum = nullptr;
-        if (!spec.is_vectorized()) { ret = expr.eval(eval_ctx, datum); }
-        else { datum = expr.locate_batch_datums(eval_ctx) + (expr.is_batch_result() ? idx : 0); }
+        Datum datum;
+        if (!spec.is_vectorized()) { ret = expr.eval_value(eval_ctx, datum); }
+        else { ret = expr.read_value(eval_ctx, idx, datum); }
         ObDatum legacy;
         DatumValue projected;
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(expr.get_datum_copy_plan().legacy_view(
-                       *datum, legacy, legacy_cell_scratch_ + i * 64, 64))) {
+                       datum, legacy, legacy_cell_scratch_ + i * 64, 64))) {
         } else if (OB_FAIL(ResultRowView::project_value(
                        legacy, expr.get_sql_type().legacy_meta(), expr.obj_datum_map_,
                        native_cell_metas_[i], projected))) {
@@ -214,9 +218,9 @@ int ObExecuteResult::open() const
     // Such as "select c1,(@rownum:= @rownum+1) as CCBH from t1,(SELECT@rownum:=0) B"
     const ExprFixedArray &var_init_exprs = static_engine_root_->get_spec().plan_->var_init_exprs_;
     for (int64_t i = 0; OB_SUCC(ret) && i < var_init_exprs.count(); i++) {
-      Datum *datum = NULL;
+      Datum datum;
       ObExpr *expr = var_init_exprs.at(i);
-      if (OB_FAIL(expr->eval(static_engine_root_->get_eval_ctx(), datum))) {
+      if (OB_FAIL(expr->eval_value(static_engine_root_->get_eval_ctx(), datum))) {
       }
     }
   }

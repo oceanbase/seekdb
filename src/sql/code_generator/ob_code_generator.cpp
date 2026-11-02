@@ -39,6 +39,10 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_exprs(log_plan, phy_plan))) {
   } else if (OB_FAIL(generate_operators(log_plan, phy_plan))) {
+  } else if (OB_ISNULL(log_plan.get_optimizer_context().get_exec_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObStaticEngineExprCG::finalize_native_i64_point(
+      phy_plan, *log_plan.get_optimizer_context().get_exec_ctx()))) {
   }
 
   return ret;

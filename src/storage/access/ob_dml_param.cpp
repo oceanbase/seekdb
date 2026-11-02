@@ -42,7 +42,7 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
         Item &item = outputs_.at(i);
         item.obj_idx_ = projector.at(i);
         item.expr_idx_ = i;
-        item.datum_ = expr->locate_batch_datums(op.get_eval_ctx());
+        if (OB_FAIL(item.target_.prepare(*expr, op.get_eval_ctx()))) { break; }
         item.eval_info_ = &expr->get_eval_info(op.get_eval_ctx());
         item.eval_flags_ = expr->is_batch_result()
             ? &expr->get_evaluated_flags(op.get_eval_ctx()) : nullptr;
@@ -59,7 +59,7 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
 {
   int ret = OB_SUCCESS;
   const int64_t batch_idx = op_->is_vectorized() ? op_->get_eval_ctx().get_batch_idx() : 0;
-  // Every column is imported into the sole native Expr frame. Storage NOPs
+  // Every column is imported into its sole selected execution frame. Storage NOPs
   // retain the existing default/virtual-column path; there is no second output
   // owner that can bypass this projection or generic expression evaluation.
   for (int64_t i = 0; OB_SUCC(ret) && i < outputs_.count(); ++i) {
@@ -70,8 +70,8 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
       nop_pos[nop_cnt++] = item.expr_idx_;
       if (item.eval_flags_ != nullptr) { item.eval_flags_->unset(idx); }
       else { item.eval_info_->evaluated_ = false; }
-    } else if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(
-                   datums[item.obj_idx_], item.datum_[idx]))) {
+    } else if (OB_FAIL(item.target_.import_legacy(
+                   expr.get_datum_copy_plan(), datums[item.obj_idx_], idx))) {
     } else {
       item.eval_info_->evaluated_ = true;
       item.eval_info_->projected_ = true;
@@ -110,7 +110,7 @@ DEF_TO_STRING(ObRow2ExprsProjector::Item)
 {
   int64_t pos = 0;
   J_OBJ_START();
-  J_KV(K(obj_idx_), K(expr_idx_), K(datum_), K(eval_info_));
+  J_KV(K(obj_idx_), K(expr_idx_), "native_i64", target_.is_native(), K(eval_info_));
   J_OBJ_END();
   return pos;
 }

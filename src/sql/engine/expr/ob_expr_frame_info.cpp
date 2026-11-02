@@ -19,6 +19,7 @@
 #include "native_frame_value_codec.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/px/ob_px_util.h"
+#include "sql/ob_sql_context.h"
 #include <algorithm>
 
 namespace oceanbase
@@ -38,6 +39,132 @@ namespace
 {
 constexpr int32_t NATIVE_FRAME_WIRE_VERSION = 2;
 constexpr int32_t PHYSICAL_ARRAY_FRAME_WIRE_VERSION = 1;
+
+const NativeI64PointLayout::Frame *find_native_i64_frame(
+    const ObExprFrameInfo &expressions, uint32_t index)
+{
+  const NativeI64PointLayout *layout = expressions.native_i64_point_layout_;
+  const NativeI64PointLayout::Frame *result = nullptr;
+  if (layout != nullptr) {
+    for (uint32_t i = 0; i < layout->frame_count; ++i) {
+      if (layout->frames[i].index == index) { result = &layout->frames[i]; }
+    }
+  }
+  return result;
+}
+
+int validate_native_i64_layout(const ObExprFrameInfo &expressions)
+{
+  const NativeI64PointLayout *layout = expressions.native_i64_point_layout_;
+  if (layout == nullptr) {
+    for (int64_t i = 0; i < expressions.rt_exprs_.count(); ++i) {
+      if (expressions.rt_exprs_.at(i).native_i64_layout_ != nullptr) { return OB_ERR_UNEXPECTED; }
+    }
+    return OB_SUCCESS;
+  }
+  if (layout->frame_count == 0 || layout->frame_count > NativeI64PointLayout::LANE_COUNT
+      || expressions.is_mark_serialize()) { return OB_ERR_UNEXPECTED; }
+  const int64_t prefix = expressions.const_frame_.count() + expressions.param_frame_.count()
+      + expressions.dynamic_frame_.count();
+  for (int64_t i = 0; i < NativeI64PointLayout::KEY_COUNT; ++i) {
+    if (layout->parameter_indexes[i] < 0) { return OB_ERR_UNEXPECTED; }
+  }
+  for (int64_t i = 0; i < NativeI64PointLayout::LANE_COUNT; ++i) {
+    if (layout->expr_indexes[i] >= expressions.rt_exprs_.count()) { return OB_ERR_UNEXPECTED; }
+    const ObExpr &expr = expressions.rt_exprs_.at(layout->expr_indexes[i]);
+    if (expr.native_i64_layout_ != &layout->lanes[i] || expr.sql_type_ == nullptr
+        || expr.native_parameter_alias_ || expr.res_buf_len_ != 0
+        || expr.dyn_buf_header_offset_ != 0
+        || (i < NativeI64PointLayout::KEY_COUNT ? expr.type_ != T_REF_COLUMN : expr.type_ != T_OP_EQ)
+        || layout->lanes[i].capacity == 0
+        || (!expr.is_batch_result() && layout->lanes[i].capacity != 1)
+        || find_native_i64_frame(expressions, expr.frame_idx_) == nullptr) { return OB_ERR_UNEXPECTED; }
+    for (int64_t j = 0; j < i; ++j) {
+      if (layout->expr_indexes[j] == layout->expr_indexes[i]) { return OB_ERR_UNEXPECTED; }
+    }
+  }
+  for (uint32_t f = 0; f < layout->frame_count; ++f) {
+    const auto &frame = layout->frames[f];
+    if (frame.index < prefix || frame.index - prefix >= expressions.datum_frame_.count()
+        || expressions.datum_frame_.at(frame.index - prefix).frame_idx_ != frame.index
+        || expressions.datum_frame_.at(frame.index - prefix).frame_size_ != frame.generic_size) {
+      return OB_ERR_UNEXPECTED;
+    }
+    for (uint32_t previous = 0; previous < f; ++previous) {
+      if (layout->frames[previous].index == frame.index) { return OB_ERR_UNEXPECTED; }
+    }
+    for (int mode = 0; mode < 2; ++mode) {
+      struct Region { uint64_t begin; uint64_t end; } regions[1 + 5 * NativeI64PointLayout::LANE_COUNT];
+      int64_t count = 1, lanes = 0;
+      regions[0] = {0, sizeof(NativeI64FrameHeader)};
+      const uint64_t bytes = mode == 0 ? frame.generic_size : frame.compact_size;
+      for (int64_t i = 0; i < expressions.rt_exprs_.count(); ++i) {
+        const ObExpr &expr = expressions.rt_exprs_.at(i);
+        if (expr.frame_idx_ != frame.index) { continue; }
+        const NativeI64ExprLayout *lane = expr.native_i64_layout_;
+        if (lane == nullptr || lanes == NativeI64PointLayout::LANE_COUNT) { return OB_ERR_UNEXPECTED; }
+        bool owned = false;
+        for (int64_t k = 0; k < NativeI64PointLayout::LANE_COUNT; ++k) {
+          owned |= layout->expr_indexes[k] == i && lane == &layout->lanes[k];
+        }
+        if (!owned) { return OB_ERR_UNEXPECTED; }
+        ++lanes;
+        const uint64_t value_off = mode == 0 ? expr.datum_off_ : lane->value_off;
+        const uint64_t eval_off = mode == 0 ? expr.eval_info_off_ : lane->eval_info_off;
+        const uint64_t flags_off = mode == 0 ? expr.eval_flags_off_ : lane->eval_flags_off;
+        const uint64_t skip_off = mode == 0 ? expr.pvt_skip_off_ : lane->pvt_skip_off;
+        const uint64_t bitmap = ObBitVector::memory_size(lane->capacity);
+        if (value_off % 8 != 0 || eval_off % alignof(ObEvalInfo) != 0
+            || (expr.is_batch_result() && (flags_off % 8 != 0 || skip_off % 8 != 0))
+            || (mode == 0 && expr.is_batch_result()
+                && expr.pvt_skip_off_ != expr.datum_off_ + sizeof(Datum) * lane->capacity)) {
+          return OB_ERR_UNEXPECTED;
+        }
+        regions[count++] = {value_off, value_off + (mode == 0 ? sizeof(Datum) : sizeof(int64_t)) * lane->capacity};
+        regions[count++] = {eval_off, eval_off + sizeof(ObEvalInfo)};
+        if (expr.is_batch_result()) {
+          regions[count++] = {flags_off, flags_off + bitmap};
+          regions[count++] = {skip_off, skip_off + bitmap};
+        }
+        if (mode != 0) { regions[count++] = {lane->state_off, uint64_t(lane->state_off) + lane->capacity}; }
+      }
+      if (lanes == 0 || bytes % 8 != 0) { return OB_ERR_UNEXPECTED; }
+      for (int64_t i = 0; i < count; ++i) {
+        if (regions[i].end < regions[i].begin || regions[i].end > bytes) { return OB_ERR_UNEXPECTED; }
+        for (int64_t j = 0; j < i; ++j) {
+          if (regions[i].begin < regions[j].end && regions[j].begin < regions[i].end) { return OB_ERR_UNEXPECTED; }
+        }
+      }
+    }
+  }
+  for (int64_t i = 0; i < expressions.rt_exprs_.count(); ++i) {
+    const ObExpr &expr = expressions.rt_exprs_.at(i);
+    if (expr.native_i64_layout_ != nullptr && find_native_i64_frame(expressions, expr.frame_idx_) == nullptr) {
+      return OB_ERR_UNEXPECTED;
+    }
+  }
+  return OB_SUCCESS;
+}
+
+void initialize_native_i64_frame(const ObExprFrameInfo &expressions,
+    const NativeI64PointLayout::Frame &description, char *frame, bool compact)
+{
+  MEMSET(frame, 0, compact ? description.compact_size : description.generic_size);
+  new (frame) NativeI64FrameHeader{NativeI64FrameHeader::MAGIC, NativeI64FrameHeader::VERSION,
+                                  static_cast<uint8_t>(compact), 0};
+  for (int64_t i = 0; i < NativeI64PointLayout::LANE_COUNT; ++i) {
+    const ObExpr &expr = expressions.rt_exprs_.at(expressions.native_i64_point_layout_->expr_indexes[i]);
+    if (expr.frame_idx_ != description.index) { continue; }
+    const NativeI64ExprLayout &lane = *expr.native_i64_layout_;
+    for (uint32_t row = 0; row < lane.capacity; ++row) {
+      if (compact) {
+        new (frame + lane.value_off + sizeof(int64_t) * row) int64_t(0);
+        new (frame + lane.state_off + row) uint8_t(static_cast<uint8_t>(Datum::State::Null));
+      } else { new (frame + expr.datum_off_ + sizeof(Datum) * row) Datum(); }
+    }
+    new (frame + (compact ? lane.eval_info_off : expr.eval_info_off_)) ObEvalInfo{};
+  }
+}
 
 bool wire_expr_selected(const ObExprFrameInfo &expressions, int64_t index, uint32_t frame_index)
 {
@@ -74,11 +201,11 @@ int wire_expr_extent(const ObFrameInfo &info, const ObExpr &expr, uint64_t &coun
   count = 1;
   int ret = OB_SUCCESS;
   if (expr.sql_type_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
-  else if (expr.is_batch_result()) {
-    if (expr.pvt_skip_off_ <= expr.datum_off_
-        || (expr.pvt_skip_off_ - expr.datum_off_) % sizeof(Datum) != 0) {
+  else {
+    uint32_t capacity = 0;
+    if (OB_SUCCESS != expr.get_generic_frame_value_capacity(capacity)) {
       ret = OB_DESERIALIZE_ERROR;
-    } else { count = (expr.pvt_skip_off_ - expr.datum_off_) / sizeof(Datum); }
+    } else { count = capacity; }
   }
   if (OB_SUCC(ret) && (expr.datum_off_ % alignof(Datum) != 0
       || expr.datum_off_ > info.frame_size_
@@ -395,9 +522,9 @@ int NativeFrameCodec::group_size(bool plan_part, const ObIArray<ObFrameInfo> &gr
     const ObExprFrameInfo &expressions, char *const *frames, int64_t frame_count,
     bool no_data, int64_t &size)
 {
-  int ret = OB_SUCCESS;
+  int ret = validate_native_i64_layout(expressions);
   int64_t candidate = 5;
-  if (plan_part) {
+  if (OB_SUCC(ret) && plan_part) {
     int64_t bytes = 0;
     if (OB_FAIL(metadata_size(group, bytes))) {
     } else { ret = add_wire_size(bytes, candidate); }
@@ -408,6 +535,17 @@ int NativeFrameCodec::group_size(bool plan_part, const ObIArray<ObFrameInfo> &gr
     if (OB_FAIL(validate_wire_frame(info, frame_count))) {
     } else if (frames == nullptr || (info.frame_size_ > 0 && frames[info.frame_idx_] == nullptr)) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (find_native_i64_frame(expressions, info.frame_idx_) != nullptr) {
+      const auto &header = *reinterpret_cast<const NativeI64FrameHeader *>(frames[info.frame_idx_]);
+      if (header.magic != NativeI64FrameHeader::MAGIC || header.version != NativeI64FrameHeader::VERSION
+          || header.reserved != 0 || header.compact > 1) { ret = OB_ERR_UNEXPECTED; }
+      else if (header.compact != 0 && !no_data) {
+        // Full native payload wire is not part of this local SELECT slice.
+        // Cursor/PL executes the real generic alternative before reaching here.
+        ret = OB_NOT_SUPPORTED;
+      }
+    }
+    if (OB_FAIL(ret)) {
     } else if (OB_FAIL(wire_record_count(info, expressions, no_data, records))) {
     } else if (OB_FAIL(add_wire_size(8, candidate))) {
     } else if (!no_data) {
@@ -471,12 +609,19 @@ int NativeFrameCodec::initialize_frame(const ObFrameInfo &info,
     const ObExprFrameInfo &expressions, char *frame)
 {
   int64_t unused = 0;
-  int ret = wire_record_count(info, expressions, true, unused);
+  int ret = validate_native_i64_layout(expressions);
+  if (OB_SUCC(ret)) { ret = wire_record_count(info, expressions, true, unused); }
   if (OB_SUCC(ret) && (info.frame_size_ > INT64_MAX || (info.frame_size_ > 0 && frame == nullptr))) {
     ret = OB_INVALID_ARGUMENT;
   }
   if (OB_SUCC(ret)) {
     if (info.frame_size_ > 0) { MEMSET(frame, 0, info.frame_size_); }
+    if (find_native_i64_frame(expressions, info.frame_idx_) != nullptr) {
+      // A decoded frame always has the ordinary wire representation. A local
+      // clone may still own both plan descriptions, so publish its generic tag.
+      new (frame) NativeI64FrameHeader{NativeI64FrameHeader::MAGIC,
+          NativeI64FrameHeader::VERSION, 0, 0};
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < expressions.rt_exprs_.count(); ++i) {
       if (first_wire_expr(expressions, i, info.frame_idx_)) {
         const ObExpr &expr = expressions.rt_exprs_.at(i);
@@ -802,6 +947,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
 {
   int ret = OB_SUCCESS;
   need_ctx_cnt_ = other.need_ctx_cnt_;
+  native_i64_point_layout_ = nullptr;
 
   if (OB_FAIL(rt_exprs_.assign(other.rt_exprs_))) {
   } else if (OB_FAIL(const_frame_.assign(other.const_frame_))) {
@@ -813,6 +959,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
     if (OB_SUCC(ret)) {
       // deep copy extra info & inner function ptrs
       for (int i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
+        rt_exprs_.at(i).native_i64_layout_ = nullptr;
         if (other.rt_exprs_.at(i).type_ == T_INVALID && other.rt_exprs_.at(i).sql_type_ == nullptr) {
           continue; // genuine ObEmptyExpr placeholder in a partial PX plan
         }
@@ -897,6 +1044,44 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
     }
   } // end for
 
+  if (OB_SUCC(ret) && other.native_i64_point_layout_ != nullptr) {
+    if (OB_FAIL(validate_native_i64_layout(other))) {
+    } else {
+      auto *copy = static_cast<NativeI64PointLayout *>(allocator.alloc(sizeof(NativeI64PointLayout)));
+      if (copy == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else {
+        new (copy) NativeI64PointLayout(*other.native_i64_point_layout_);
+        for (int64_t i = 0; i < NativeI64PointLayout::LANE_COUNT; ++i) {
+          rt_exprs_.at(copy->expr_indexes[i]).native_i64_layout_ = &copy->lanes[i];
+        }
+        native_i64_point_layout_ = copy;
+        ret = validate_native_i64_layout(*this);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprFrameInfo::choose_native_i64_layout(const ObExecContext &exec_ctx, bool &compact) const
+{
+  int ret = validate_native_i64_layout(*this);
+  if (OB_FAIL(ret)) { return ret; }
+  bool candidate = native_i64_point_layout_ != nullptr;
+  const ObPhysicalPlanCtx *plan = exec_ctx.get_physical_plan_ctx();
+  const ObSqlCtx *sql_ctx = exec_ctx.get_sql_ctx();
+  candidate = candidate && plan != nullptr && plan->native_parameters_ready()
+      && plan->get_native_group_count() == 0 && sql_ctx != nullptr
+      && !sql_ctx->is_cursor_ && !sql_ctx->is_from_pl_;
+  for (int64_t i = 0; candidate && i < NativeI64PointLayout::KEY_COUNT; ++i) {
+    const int64_t index = native_i64_point_layout_->parameter_indexes[i];
+    const SqlType *type = plan->get_native_parameter_type(index);
+    Datum::State state = Datum::State::Null;
+    candidate = type != nullptr && type->kind() == ObIntType
+        && type->canonical_representation() == DatumRepresentation::Inline64
+        && plan->read_native_parameter_state(index, state)
+        && (state == Datum::State::Present || state == Datum::State::Null);
+  }
+  compact = candidate;
   return ret;
 }
 
@@ -906,12 +1091,14 @@ int ObExprFrameInfo::pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator
   uint64_t frame_cnt = 0;
   char **frames = NULL;
   ObPhysicalPlanCtx *phy_ctx = NULL;
+  bool compact_i64 = false;
   if (NULL == (phy_ctx = exec_ctx.get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(choose_native_i64_layout(exec_ctx, compact_i64))) {
   } else if (OB_FAIL(alloc_frame(allocator != NULL ? *allocator : exec_ctx.get_allocator(),
                                  phy_ctx->get_param_frame_ptrs(),
                                  frame_cnt,
-                                 frames))) {
+                                 frames, compact_i64))) {
   } else {
     exec_ctx.set_frame_cnt(frame_cnt);
     exec_ctx.set_frames(frames);
@@ -925,9 +1112,11 @@ int ObExprFrameInfo::pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator
 // actual Expr offset; a vector frame is not an array of scalar slots.
 int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
                                  const ObIArray<char *> &param_frame_ptrs,
-                                 uint64_t &frame_cnt, char **&frames) const
+                                 uint64_t &frame_cnt, char **&frames, bool compact_i64) const
 {
-  int ret = OB_SUCCESS;
+  int ret = validate_native_i64_layout(*this);
+  if (OB_FAIL(ret)) { return ret; }
+  if (compact_i64 && native_i64_point_layout_ == nullptr) { return OB_INVALID_ARGUMENT; }
   const uint64_t count = const_frame_.count() + param_frame_.count()
       + dynamic_frame_.count() + datum_frame_.count();
   char **candidate = nullptr;
@@ -957,8 +1146,15 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
       if (OB_FAIL(validate_wire_frame(info, count))) {
       } else if (candidate[info.frame_idx_] != nullptr) { ret = OB_INVALID_ARGUMENT; }
       else {
-        char *frame = static_cast<char *>(exec_allocator.alloc(info.frame_size_));
+        const auto *description = find_native_i64_frame(*this, info.frame_idx_);
+        const int64_t bytes = description != nullptr && compact_i64
+            ? description->compact_size : info.frame_size_;
+        char *frame = static_cast<char *>(exec_allocator.alloc(bytes));
         if (frame == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else if (description != nullptr) {
+          initialize_native_i64_frame(*this, *description, frame, compact_i64);
+          candidate[info.frame_idx_] = frame;
+        }
         else if (OB_FAIL(initialize_execution_frame(info, *this, frame, exec_allocator))) {
         } else { candidate[info.frame_idx_] = frame; }
       }
@@ -1024,6 +1220,7 @@ OB_DEF_SERIALIZE(ObExprFrameInfo)
 OB_DEF_DESERIALIZE(ObExprFrameInfo)
 {
   int ret = OB_SUCCESS;
+  native_i64_point_layout_ = nullptr;
   int32_t expr_cnt = 0;
   OB_UNIS_DECODE(need_ctx_cnt_);
   ObIArray<ObExpr> &exprs = const_cast<ObArray<ObExpr> &>(rt_exprs_);

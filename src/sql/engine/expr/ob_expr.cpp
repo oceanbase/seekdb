@@ -172,6 +172,9 @@ OB_DEF_SERIALIZE(ObExpr)
 OB_DEF_DESERIALIZE(ObExpr)
 {
   int ret = OB_SUCCESS;
+  // Native lane descriptions belong to a local plan owner and are never wire
+  // pointers. The encoded offsets always describe the generic alternative.
+  native_i64_layout_ = nullptr;
   // Marked PX arrays explicitly encode ObEmptyExpr for unselected positions.
   // Only an actually empty body is a placeholder; a nonempty truncated Expr
   // must still fail while decoding its mandatory native metadata below.
@@ -270,6 +273,7 @@ ObExpr::ObExpr()
     type_(T_INVALID),
     datum_meta_(),
     sql_type_(nullptr),
+    native_i64_layout_(nullptr),
     obj_meta_(),
     max_length_(UINT32_MAX),
     obj_datum_map_(OBJ_DATUM_NULL),
@@ -714,6 +718,296 @@ void *ObExprStrResAlloc::alloc(const int64_t size)
   return mem;
 }
 
+int ObExpr::get_native_i64_mode(ObEvalCtx &ctx, bool &native) const
+{
+  if (native_i64_layout_ == nullptr) {
+    native = false;
+    return OB_SUCCESS;
+  }
+  if (ctx.frames_ == nullptr || ctx.frames_[frame_idx_] == nullptr
+      || native_i64_layout_->capacity == 0 || native_parameter_alias_) {
+    return OB_ERR_UNEXPECTED;
+  }
+  const auto &header = *reinterpret_cast<const NativeI64FrameHeader *>(ctx.frames_[frame_idx_]);
+  if (header.magic != NativeI64FrameHeader::MAGIC
+      || header.version != NativeI64FrameHeader::VERSION
+      || header.compact > 1 || header.reserved != 0) {
+    return OB_ERR_UNEXPECTED;
+  }
+  native = header.compact != 0;
+  return OB_SUCCESS;
+}
+
+int ObExpr::get_native_i64_lane(ObEvalCtx &ctx, NativeI64Lane &lane) const
+{
+  bool native = false;
+  int ret = get_native_i64_mode(ctx, native);
+  if (OB_SUCC(ret) && !native) { ret = OB_STATE_NOT_MATCH; }
+  if (OB_SUCC(ret)) {
+    char *frame = ctx.frames_[frame_idx_];
+    const NativeI64ExprLayout &layout = *native_i64_layout_;
+    lane = {reinterpret_cast<int64_t *>(frame + layout.value_off),
+            reinterpret_cast<uint8_t *>(frame + layout.state_off), layout.capacity, is_batch_result()};
+  }
+  return ret;
+}
+
+namespace
+{
+// An EQ operand is either a borrowed scan lane or a single read of the compact
+// parameter owner. No generic descriptor or projection is created here.
+struct NativeI64Operand
+{
+  NativeI64Lane lane_{};
+  int64_t scalar_ = 0;
+  Datum::State scalar_state_ = Datum::State::Null;
+  bool parameter_ = false;
+
+  int prepare(const ObExpr &expr, ObEvalCtx &ctx)
+  {
+    int ret = OB_SUCCESS;
+    if (expr.native_parameter_alias_) {
+      const ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+      const SqlType *type = plan == nullptr ? nullptr : plan->get_native_parameter_type(expr.extra_);
+      if (expr.type_ != T_QUESTIONMARK || expr.is_batch_result() || expr.eval_func_ != nullptr
+          || type == nullptr || type->kind() != ObIntType
+          || type->canonical_representation() != DatumRepresentation::Inline64
+          || !plan->read_native_parameter_state(expr.extra_, scalar_state_)
+          || (scalar_state_ != Datum::State::Null && scalar_state_ != Datum::State::Present)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (scalar_state_ == Datum::State::Present
+                 && !plan->read_native_bigint_parameter(expr.extra_, scalar_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else { parameter_ = true; }
+    } else if (expr.type_ != T_REF_COLUMN || expr.sql_type_ == nullptr
+               || expr.get_sql_type().kind() != ObIntType || expr.arg_cnt_ != 0) {
+      ret = OB_ERR_UNEXPECTED;
+    } else { ret = expr.get_native_i64_lane(ctx, lane_); }
+    return ret;
+  }
+
+  int read(int64_t row, int64_t &value, Datum::State &state) const
+  {
+    const int64_t index = lane_.batch ? row : 0;
+    if (row < 0 || (!parameter_ && index >= lane_.capacity)) { return OB_INVALID_ARGUMENT; }
+    const Datum::State actual = parameter_ ? scalar_state_ : static_cast<Datum::State>(lane_.states[index]);
+    if (actual != Datum::State::Null && actual != Datum::State::Present) { return OB_ERR_UNEXPECTED; }
+    if (actual == Datum::State::Present) { value = parameter_ ? scalar_ : lane_.values[index]; }
+    state = actual;
+    return OB_SUCCESS;
+  }
+};
+
+int read_native_eq(const NativeI64Operand &left, const NativeI64Operand &right,
+                   int64_t row, int64_t &value, Datum::State &state)
+{
+  int64_t l = 0, r = 0;
+  Datum::State ls = Datum::State::Null, rs = Datum::State::Null;
+  int ret = left.read(row, l, ls);
+  if (OB_SUCC(ret)) { ret = right.read(row, r, rs); }
+  if (OB_SUCC(ret)) {
+    state = ls == Datum::State::Null || rs == Datum::State::Null
+        ? Datum::State::Null : Datum::State::Present;
+    if (state == Datum::State::Present) { value = l == r ? 1 : 0; }
+  }
+  return ret;
+}
+}
+
+int ObExpr::eval_i64(ObEvalCtx &ctx, int64_t &value, Datum::State &state) const
+{
+  int ret = OB_SUCCESS;
+  int64_t candidate = 0;
+  Datum::State candidate_state = Datum::State::Null;
+  bool native = false;
+  if (native_parameter_alias_) {
+    NativeI64Operand operand;
+    if (OB_FAIL(operand.prepare(*this, ctx))) {
+    } else { ret = operand.read(0, candidate, candidate_state); }
+  } else if (OB_FAIL(get_native_i64_mode(ctx, native))) {
+  } else if (!native) {
+    Datum *datum = nullptr;
+    if (sql_type_ == nullptr || !ob_is_int_tc(get_sql_type().kind())) { ret = OB_INVALID_ARGUMENT; }
+    else if (OB_FAIL(eval(ctx, datum))) {
+    } else if (datum == nullptr || (!datum->is_null() && !datum->is_present())) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      candidate_state = datum->state();
+      if (candidate_state == Datum::State::Present) { candidate = datum->get_int(); }
+    }
+  } else {
+    NativeI64Lane lane{};
+    if (OB_FAIL(get_native_i64_lane(ctx, lane))) {
+    } else {
+      const int64_t row = is_batch_result() ? ctx.get_batch_idx() : 0;
+      if (row < 0 || row >= lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+      else if (type_ == T_REF_COLUMN) {
+        candidate_state = static_cast<Datum::State>(lane.states[row]);
+        if (candidate_state == Datum::State::Present) { candidate = lane.values[row]; }
+        else if (candidate_state != Datum::State::Null) { ret = OB_ERR_UNEXPECTED; }
+      } else if (type_ != T_OP_EQ || arg_cnt_ != 2 || args_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        ObEvalInfo &info = get_eval_info(ctx);
+        ObBitVector *flags = is_batch_result() ? &get_evaluated_flags(ctx) : nullptr;
+        if (!info.projected_ && (!info.evaluated_ || (flags != nullptr && !flags->at(row)))) {
+          NativeI64Operand left, right;
+          if (OB_ISNULL(args_[0]) || OB_ISNULL(args_[1])) { ret = OB_ERR_UNEXPECTED; }
+          else if (OB_FAIL(left.prepare(*args_[0], ctx))) {
+          } else if (OB_FAIL(right.prepare(*args_[1], ctx))) {
+          } else if (OB_FAIL(read_native_eq(left, right, row, candidate, candidate_state))) {
+          } else {
+            const int64_t size = is_batch_result()
+                ? (ctx.get_batch_size() > 0 ? ctx.get_batch_size() : lane.capacity) : 1;
+            if (size > lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+            else {
+              if (!info.evaluated_) {
+                if (flags != nullptr) { flags->reset(size); }
+                MEMSET(lane.states, static_cast<uint8_t>(Datum::State::Null), size);
+                info.cnt_ = size; info.point_to_frame_ = true; info.notnull_ = false;
+              }
+              if (candidate_state == Datum::State::Present) { lane.values[row] = candidate; }
+              lane.states[row] = static_cast<uint8_t>(candidate_state);
+              if (flags != nullptr) { flags->set(row); }
+              info.evaluated_ = true;
+            }
+          }
+        } else {
+          candidate_state = static_cast<Datum::State>(lane.states[row]);
+          if (candidate_state == Datum::State::Present) { candidate = lane.values[row]; }
+          else if (candidate_state != Datum::State::Null) { ret = OB_ERR_UNEXPECTED; }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (candidate_state == Datum::State::Present) { value = candidate; }
+    state = candidate_state;
+  }
+  return ret;
+}
+
+int ObExpr::do_eval_native_i64_batch(ObEvalCtx &ctx, const ObBitVector &skip, int64_t size) const
+{
+  int ret = OB_SUCCESS;
+  NativeI64Lane lane{};
+  if (size < 0) { ret = OB_INVALID_ARGUMENT; }
+  else if (OB_FAIL(get_native_i64_lane(ctx, lane))) {
+  } else if (!is_batch_result()) {
+    int64_t value = 0; Datum::State state = Datum::State::Null;
+    ret = eval_i64(ctx, value, state);
+  } else if (size > lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+  else if (type_ == T_REF_COLUMN || get_eval_info(ctx).projected_) {
+    // Scan producers publish these values and their flags directly.
+  } else if (type_ != T_OP_EQ || arg_cnt_ != 2 || args_ == nullptr
+             || args_[0] == nullptr || args_[1] == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else {
+    NativeI64Operand left, right;
+    if (OB_FAIL(left.prepare(*args_[0], ctx))) {
+    } else if (OB_FAIL(right.prepare(*args_[1], ctx))) {
+    } else {
+      ObEvalInfo &info = get_eval_info(ctx);
+      ObBitVector &flags = get_evaluated_flags(ctx);
+      if (!info.evaluated_) {
+        flags.reset(size);
+        MEMSET(lane.states, static_cast<uint8_t>(Datum::State::Null), size);
+        info.evaluated_ = true; info.point_to_frame_ = true; info.notnull_ = false; info.cnt_ = size;
+      }
+      for (int64_t row = 0; OB_SUCC(ret) && row < size; ++row) {
+        if (!skip.at(row) && !flags.at(row)) {
+          int64_t value = 0; Datum::State state = Datum::State::Null;
+          if (OB_FAIL(read_native_eq(left, right, row, value, state))) {
+          } else {
+            if (state == Datum::State::Present) { lane.values[row] = value; }
+            lane.states[row] = static_cast<uint8_t>(state);
+            flags.set(row);
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+        MEMSET(lane.states, static_cast<uint8_t>(Datum::State::Null), size);
+        flags.reset(size); info.evaluated_ = false;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExpr::get_generic_frame_value_capacity(uint32_t &out) const
+{
+  uint32_t capacity = 1;
+  if (is_batch_result()) {
+    if (pvt_skip_off_ <= datum_off_
+        || (pvt_skip_off_ - datum_off_) % sizeof(Datum) != 0) {
+      return OB_INVALID_ARGUMENT;
+    }
+    capacity = static_cast<uint32_t>((pvt_skip_off_ - datum_off_) / sizeof(Datum));
+  }
+  out = capacity;
+  return OB_SUCCESS;
+}
+
+int ObExpr::get_frame_value_capacity(uint32_t &out) const
+{
+  if (native_i64_layout_ != nullptr) {
+    if (native_i64_layout_->capacity == 0) { return OB_ERR_UNEXPECTED; }
+    out = native_i64_layout_->capacity;
+    return OB_SUCCESS;
+  }
+  return get_generic_frame_value_capacity(out);
+}
+
+int ObExpr::read_value(ObEvalCtx &ctx, int64_t row, Datum &caller_value) const
+{
+  if (row < 0) { return OB_INVALID_ARGUMENT; }
+  if (native_parameter_alias_) {
+    const ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+    if (type_ != T_QUESTIONMARK || is_batch_result() || eval_func_ != nullptr
+        || plan == nullptr || !plan->native_parameters_ready()) { return OB_INVALID_ARGUMENT; }
+    return plan->read_native_parameter(extra_, caller_value);
+  }
+  bool native = false;
+  int ret = get_native_i64_mode(ctx, native);
+  Datum candidate;
+  if (OB_SUCC(ret) && native) {
+    NativeI64Lane lane{};
+    if (OB_FAIL(get_native_i64_lane(ctx, lane))) {
+    } else {
+      const int64_t index = lane.batch ? row : 0;
+      if (index >= lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+      else if (lane.states[index] == static_cast<uint8_t>(Datum::State::Null)) { candidate.set_null(); }
+      else if (lane.states[index] == static_cast<uint8_t>(Datum::State::Present)) { candidate.set_int(lane.values[index]); }
+      else { ret = OB_ERR_UNEXPECTED; }
+    }
+  } else if (OB_SUCC(ret)) {
+    uint32_t capacity = 0;
+    if (OB_FAIL(get_frame_value_capacity(capacity))) {
+    } else if (is_batch_result() && row >= capacity) { ret = OB_INVALID_ARGUMENT; }
+    else { candidate = locate_expr_datum(ctx, row); }
+  }
+  if (OB_SUCC(ret)) { caller_value = candidate; }
+  return ret;
+}
+
+int ObExpr::eval_value(ObEvalCtx &ctx, Datum &caller_value) const
+{
+  if (native_parameter_alias_) { return read_value(ctx, 0, caller_value); }
+  bool native = false;
+  int ret = get_native_i64_mode(ctx, native);
+  Datum candidate;
+  if (OB_SUCC(ret) && native) {
+    int64_t value = 0; Datum::State state = Datum::State::Null;
+    if (OB_FAIL(eval_i64(ctx, value, state))) {
+    } else if (state == Datum::State::Null) { candidate.set_null(); }
+    else { candidate.set_int(value); }
+  } else if (OB_SUCC(ret)) {
+    Datum *value = nullptr;
+    if (OB_FAIL(eval(ctx, value))) {
+    } else if (value == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else { candidate = *value; }
+  }
+  if (OB_SUCC(ret)) { caller_value = candidate; }
+  return ret;
+}
+
 int ObExpr::eval_native_parameter(ObEvalCtx &ctx, Datum *&datum) const
 {
   ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
@@ -777,10 +1071,13 @@ int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx,
   }
   const SqlType &type = expr.get_sql_type();
   NativeTypedDatum candidate;
-  candidate.datum_ = expr.locate_expr_datum(ctx);
   candidate.type_ = &type;
   int64_t span = 0;
-  int ret = DatumCopyPlan(type).carrier_span_size(candidate.datum_, span);
+  int ret = OB_SUCCESS;
+  if (expr.native_i64_layout_ != nullptr) {
+    ret = expr.read_value(ctx, ctx.get_batch_idx(), candidate.datum_);
+  } else { candidate.datum_ = expr.locate_expr_datum(ctx); }
+  if (OB_SUCC(ret)) { ret = DatumCopyPlan(type).carrier_span_size(candidate.datum_, span); }
   if (OB_SUCC(ret)) {
     DatumParameterMetadata metadata;
     metadata.type_meta_ = expr.obj_meta_;
@@ -936,8 +1233,10 @@ DEF_TO_STRING(ObToStringExpr)
     J_KV("batch_idx", c_.get_batch_idx());
     J_OBJ_END();
   } else {
-    Datum *datum = NULL;
-    const int ret = e_.eval(c_, datum);
+    Datum value;
+    Datum *datum = nullptr;
+    const int ret = e_.native_i64_layout_ == nullptr ? e_.eval(c_, datum) : e_.eval_value(c_, value);
+    if (ret == OB_SUCCESS && e_.native_i64_layout_ != nullptr) { datum = &value; }
     if (ret != OB_SUCCESS || datum == nullptr) {
       databuff_printf(buf, buf_len, pos, "{expr_eval_error:%d}",
           ret != OB_SUCCESS ? ret : OB_ERR_UNEXPECTED);

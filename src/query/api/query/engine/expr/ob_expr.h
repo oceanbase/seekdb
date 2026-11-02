@@ -392,6 +392,40 @@ extern const int64_t ARGS_IDX_THREE;
 extern const int64_t ARGS_IDX_FOUR;
 extern const int64_t ARGS_IDX_FIVE;
 
+// Plan-owned offsets for the compact alternative. The ordinary ObExpr offsets
+// continue to describe its real Datum16 fallback. Neither owns execution data.
+struct NativeI64ExprLayout
+{
+  uint32_t value_off;
+  uint32_t state_off;
+  uint32_t eval_info_off;
+  uint32_t eval_flags_off;
+  uint32_t pvt_skip_off;
+  uint32_t capacity;
+};
+
+struct NativeI64Lane
+{
+  int64_t *values;
+  uint8_t *states;
+  uint32_t capacity;
+  bool batch;
+};
+
+// Only an Expr with an explicit prepared descriptor may inspect this header.
+// Ordinary frame payload bytes are never probed for a magic value.
+struct alignas(8) NativeI64FrameHeader
+{
+  static constexpr uint32_t MAGIC = 0x49363446;
+  static constexpr uint16_t VERSION = 1;
+  uint32_t magic;
+  uint16_t version;
+  uint8_t compact;
+  uint8_t reserved;
+};
+static_assert(sizeof(NativeI64FrameHeader) == 8, "candidate frame header ABI");
+static_assert(sizeof(NativeI64ExprLayout) == 24, "prepared I64 lane offsets");
+
 struct ObExpr
 {
   OB_UNIS_VERSION(2);
@@ -460,6 +494,27 @@ public:
   }
 
   OB_INLINE int eval(ObEvalCtx &ctx, common::Datum *&datum) const;
+  // Checked mode reads preserve their output on failure. A malformed candidate
+  // header is an error, never a request to interpret compact bytes as Datum.
+  int get_native_i64_mode(ObEvalCtx &ctx, bool &native) const;
+  bool uses_native_i64(ObEvalCtx &ctx) const
+  {
+    bool native = false;
+    const int ret = get_native_i64_mode(ctx, native);
+    OB_ASSERT(ret == common::OB_SUCCESS);
+    return native;
+  }
+  int get_native_i64_lane(ObEvalCtx &ctx, NativeI64Lane &lane) const;
+  // Prepared value-slot bounds, independent of a consumer operator's batch size.
+  // These metadata-only queries preserve out on failure. A runtime caller must
+  // first validate candidate mode/header with get_native_i64_mode().
+  int get_frame_value_capacity(uint32_t &out) const;
+  // Always the generic Datum16 offsets, even if a native descriptor exists.
+  // Frame allocation and wire validation use this same extent calculation.
+  int get_generic_frame_value_capacity(uint32_t &out) const;
+  int eval_i64(ObEvalCtx &ctx, int64_t &value, common::Datum::State &state) const;
+  int read_value(ObEvalCtx &ctx, int64_t row, common::Datum &caller_value) const;
+  int eval_value(ObEvalCtx &ctx, common::Datum &caller_value) const;
   int eval_native_parameter(ObEvalCtx &ctx, common::Datum *&datum) const;
   common::Datum &locate_native_parameter(ObEvalCtx &ctx) const;
   ObEvalInfo &native_parameter_eval_info(ObEvalCtx &ctx) const;
@@ -478,6 +533,7 @@ public:
   Datum &locate_expr_datum(ObEvalCtx &ctx) const
   {
     if (native_parameter_alias_) { return locate_native_parameter(ctx); }
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
     // performance critical, do not check pointer validity.
     return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_)[get_datum_idx(ctx)];
   }
@@ -485,12 +541,14 @@ public:
   Datum &locate_expr_datum(ObEvalCtx &ctx, const int64_t batch_idx) const
   {
     if (native_parameter_alias_) { return locate_native_parameter(ctx); }
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
     int64_t idx = batch_idx_mask_ & batch_idx;
     return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_)[idx];
   }
 
   DatumVector locate_expr_datumvector(ObEvalCtx &ctx) const
   {
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
     DatumVector datumsvector;
     datumsvector.set_batch(is_batch_result());
     datumsvector.datums_ = native_parameter_alias_ ? &locate_native_parameter(ctx)
@@ -500,6 +558,7 @@ public:
 
   Datum *locate_batch_datums(ObEvalCtx &ctx) const
   {
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
     return native_parameter_alias_ ? &locate_native_parameter(ctx)
         : reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
   }
@@ -512,18 +571,24 @@ public:
 
   ObBitVector &get_evaluated_flags(ObEvalCtx &ctx) const
   {
-    return *to_bit_vector(ctx.frames_[frame_idx_] + eval_flags_off_);
+    const uint32_t off = native_i64_layout_ != nullptr && uses_native_i64(ctx)
+        ? native_i64_layout_->eval_flags_off : eval_flags_off_;
+    return *to_bit_vector(ctx.frames_[frame_idx_] + off);
   }
 
   ObBitVector &get_pvt_skip(ObEvalCtx &ctx) const
   {
-    return *to_bit_vector(ctx.frames_[frame_idx_] + pvt_skip_off_);
+    const uint32_t off = native_i64_layout_ != nullptr && uses_native_i64(ctx)
+        ? native_i64_layout_->pvt_skip_off : pvt_skip_off_;
+    return *to_bit_vector(ctx.frames_[frame_idx_] + off);
   }
 
   ObEvalInfo &get_eval_info(ObEvalCtx &ctx) const
   {
-    return native_parameter_alias_ ? native_parameter_eval_info(ctx)
-        : *reinterpret_cast<ObEvalInfo *>(ctx.frames_[frame_idx_] + eval_info_off_);
+    if (native_parameter_alias_) { return native_parameter_eval_info(ctx); }
+    const uint32_t off = native_i64_layout_ != nullptr && uses_native_i64(ctx)
+        ? native_i64_layout_->eval_info_off : eval_info_off_;
+    return *reinterpret_cast<ObEvalInfo *>(ctx.frames_[frame_idx_] + off);
   }
 
   OB_INLINE char *get_rev_buf(ObEvalCtx &ctx) const
@@ -751,6 +816,7 @@ private:
   void clear_datum_descriptors(char *frame, const int64_t size) const;
   int eval_one_datum_of_batch(ObEvalCtx &ctx, common::Datum *&datum) const;
   int do_eval_batch(ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size) const;
+  int do_eval_native_i64_batch(ObEvalCtx &ctx, const ObBitVector &skip, int64_t size) const;
 
 public:
   typedef int (*EvalFunc) (const ObExpr &expr,
@@ -773,6 +839,7 @@ public:
   ObDatumMeta datum_meta_;
   // Owned by the plan; clone/deserialize must reconstruct this descriptor.
   const common::SqlType *sql_type_;
+  const NativeI64ExprLayout *native_i64_layout_;
   // Value metadata used for legacy conversion boundaries.
   common::SqlTypeMeta obj_meta_;
   // max length of datum value. can be less than 0
@@ -1038,6 +1105,12 @@ OB_INLINE int ObExpr::eval_batch_param_value(ObEvalCtx &ctx, const ObBitVector &
 
 OB_INLINE int ObExpr::eval(ObEvalCtx &ctx, common::Datum *&datum) const
 {
+  if (native_i64_layout_ != nullptr) {
+    bool native = false;
+    const int ret = get_native_i64_mode(ctx, native);
+    if (ret != common::OB_SUCCESS) { return ret; }
+    if (native) { return common::OB_ERR_UNEXPECTED; }
+  }
   if (native_parameter_alias_) { return eval_native_parameter(ctx, datum); }
   // performance critical, do not check %frame_idx_ and %frame again. (checked in CG)
 	int ret = common::OB_SUCCESS;
@@ -1071,6 +1144,12 @@ OB_INLINE int ObExpr::eval_batch(ObEvalCtx &ctx,
                                  const ObBitVector &skip,
                                  const int64_t size) const
 {
+  if (native_i64_layout_ != nullptr) {
+    bool native = false;
+    const int ret = get_native_i64_mode(ctx, native);
+    if (ret != common::OB_SUCCESS) { return ret; }
+    if (native) { return do_eval_native_i64_batch(ctx, skip, size); }
+  }
   // A parameter's first generic ABI request can allocate. This failure must
   // reach the caller even for an all-skipped batch: callers locate the result
   // after success, unlike the old const callback dry-run error contract.

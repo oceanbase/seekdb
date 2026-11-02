@@ -443,19 +443,18 @@ void ObDASScanOp::reset_access_datums_ptr(const ObDASBaseCtDef *ctdef, ObEvalCtx
   if (ctdef != nullptr) {
     if (ctdef->op_type_== DAS_OP_TABLE_SCAN) {
       const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(ctdef);
+      // Datum and native I64 values already live in the execution frame.
+      // Only restore its ownership marker; no discarded legacy Datum* is needed.
       FOREACH_CNT(e, scan_ctdef->pd_expr_spec_.access_exprs_) {
-        (*e)->locate_datums_for_update(eval_ctx, capacity);
         ObEvalInfo &info = (*e)->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }
       FOREACH_CNT(e, scan_ctdef->pd_expr_spec_.pd_storage_aggregate_output_) {
-        (*e)->locate_datums_for_update(eval_ctx, capacity);
         ObEvalInfo &info = (*e)->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }
       if (scan_ctdef->trans_info_expr_ != nullptr) {
         ObExpr *trans_expr = scan_ctdef->trans_info_expr_;
-        trans_expr->locate_datums_for_update(eval_ctx, capacity);
         ObEvalInfo &info = trans_expr->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }

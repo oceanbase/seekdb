@@ -120,6 +120,15 @@ int ObBatchResultHolder::save(int64_t size)
       int ret = parameters_ == nullptr ? OB_STATE_NOT_MATCH : holder_alias_plan(*expr, *eval_ctx_, plan);
       if (OB_SUCC(ret)) { ret = plan->capture_runtime_parameter_slot(expr->extra_, snapshot); }
       if (OB_FAIL(ret)) { return ret; }
+    } else if (expr->native_i64_layout_ != nullptr) {
+      bool native = false;
+      int ret = expr->get_native_i64_mode(*eval_ctx_, native);
+      const int64_t count = expr->is_batch_result() ? size : 1;
+      for (int64_t row = 0; OB_SUCC(ret) && native && row < count; ++row) {
+        Datum value;
+        ret = expr->read_value(*eval_ctx_, row, value);
+      }
+      if (OB_FAIL(ret)) { return ret; }
     }
   }
   int64_t off = 0;
@@ -130,6 +139,12 @@ int ObBatchResultHolder::save(int64_t size)
       ObPhysicalPlanCtx *plan = eval_ctx_->exec_ctx_.get_physical_plan_ctx();
       const int ret = plan->capture_runtime_parameter_slot(expr.extra_, parameters_[i]);
       OB_ASSERT(ret == OB_SUCCESS);
+    } else if (expr.native_i64_layout_ != nullptr && expr.uses_native_i64(*eval_ctx_)) {
+      for (int64_t row = 0; row < count; ++row) {
+        const int ret = expr.read_value(*eval_ctx_, row, datums_[off + row]);
+        OB_ASSERT(ret == OB_SUCCESS);
+      }
+      if (parameters_ != nullptr) { parameters_[i] = NativeParameterSlotSnapshot(); }
     } else {
       MEMCPY(datums_ + off, expr.locate_batch_datums(*eval_ctx_), sizeof(Datum) * count);
       if (parameters_ != nullptr) { parameters_[i] = NativeParameterSlotSnapshot(); }
@@ -148,6 +163,7 @@ int ObBatchResultHolder::restore()
   if (exprs_->count() != expr_count_) { return OB_INVALID_ARGUMENT; }
   // Every alias, owner and location must still be valid before a generic frame
   // or the first canonical parameter is written. Commit cannot allocate/fail.
+  int64_t validated_off = 0;
   for (int64_t i = 0; i < expr_count_; ++i) {
     const ObExpr *expr = exprs_->at(i);
     if (expr == nullptr) { return OB_INVALID_ARGUMENT; }
@@ -161,7 +177,23 @@ int ObBatchResultHolder::restore()
       if (OB_FAIL(ret)) { return ret; }
     } else if (parameters_ != nullptr && parameters_[i].index() >= 0) {
       return OB_STATE_NOT_MATCH;
+    } else if (expr->native_i64_layout_ != nullptr) {
+      bool native = false;
+      int ret = expr->get_native_i64_mode(*eval_ctx_, native);
+      const int64_t count = expr->is_batch_result() ? saved_size_ : 1;
+      NativeI64Lane lane;
+      if (OB_SUCC(ret) && native) { ret = expr->get_native_i64_lane(*eval_ctx_, lane); }
+      if (OB_SUCC(ret) && native && count > lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+      for (int64_t row = 0; OB_SUCC(ret) && native && row < count; ++row) {
+        const Datum &value = datums_[validated_off + row];
+        int64_t span = 0;
+        if (value.state() != Datum::State::Present && value.state() != Datum::State::Null) {
+          ret = OB_ERR_UNEXPECTED;
+        } else { ret = expr->get_datum_copy_plan().carrier_span_size(value, span); }
+      }
+      if (OB_FAIL(ret)) { return ret; }
     }
+    validated_off += expr->is_batch_result() ? saved_size_ : 1;
   }
   int64_t off = 0;
   for (int64_t i = 0; i < expr_count_; ++i) {
@@ -169,6 +201,15 @@ int ObBatchResultHolder::restore()
     const int64_t count = expr.is_batch_result() ? saved_size_ : 1;
     if (expr.native_parameter_alias_) {
       eval_ctx_->exec_ctx_.get_physical_plan_ctx()->restore_runtime_parameter_slot(parameters_[i]);
+    } else if (expr.native_i64_layout_ != nullptr && expr.uses_native_i64(*eval_ctx_)) {
+      NativeI64Lane lane;
+      const int ret = expr.get_native_i64_lane(*eval_ctx_, lane);
+      OB_ASSERT(ret == OB_SUCCESS);
+      for (int64_t row = 0; row < count; ++row) {
+        const Datum &value = datums_[off + row];
+        if (!value.is_null()) { lane.values[row] = value.get_int(); }
+        lane.states[row] = static_cast<uint8_t>(value.state());
+      }
     } else { MEMCPY(expr.locate_batch_datums(*eval_ctx_), datums_ + off, sizeof(Datum) * count); }
     off += count;
   }
@@ -197,6 +238,25 @@ int ObBatchResultHolder::check_datum_modified()
           if (OB_SUCC(ret)) { ret = plan->read_native_parameter(expr->extra_, current); }
           if (OB_SUCC(ret) && MEMCMP(&current, &parameters_[i].value().datum_, sizeof(Datum)) != 0) {
             ret = OB_ERR_UNEXPECTED;
+          }
+        } else if (expr->native_i64_layout_ != nullptr) {
+          bool native = false;
+          ret = expr->get_native_i64_mode(*eval_ctx_, native);
+          if (OB_SUCC(ret) && parameters_ != nullptr && parameters_[i].index() >= 0) {
+            ret = OB_STATE_NOT_MATCH;
+          }
+          if (OB_SUCC(ret) && !native) {
+            if (MEMCMP(expr->locate_batch_datums(*eval_ctx_), datums_ + off, sizeof(Datum) * count) != 0) {
+              ret = OB_ERR_UNEXPECTED;
+            }
+          }
+          for (int64_t row = 0; OB_SUCC(ret) && native && row < count; ++row) {
+            Datum current;
+            if (OB_FAIL(expr->read_value(*eval_ctx_, row, current))) {
+            } else if (current.state() != datums_[off + row].state()
+                || (!current.is_null() && current.get_int() != datums_[off + row].get_int())) {
+              ret = OB_ERR_UNEXPECTED;
+            }
           }
         } else if ((parameters_ != nullptr && parameters_[i].index() >= 0)
             || MEMCMP(expr->locate_batch_datums(*eval_ctx_), datums_ + off, sizeof(Datum) * count) != 0) {

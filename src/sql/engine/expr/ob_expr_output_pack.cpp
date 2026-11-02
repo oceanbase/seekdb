@@ -147,9 +147,17 @@ int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, Datum
       || OB_ISNULL(sql_ctx = ctx.exec_ctx_.get_sql_ctx())
       || OB_ISNULL(schema_guard = sql_ctx->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-  } else if (OB_FAIL(process_oneline(expr, ctx, session, alloc,
-                                     extra_info, schema_guard, expr_datum))) {
+  } else {
+    // Evaluate in the original argument order, without requesting a retaining
+    // Datum* ABI from a compact Expr or an ordinary parameter owner.
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      Datum value;
+      ret = expr.args_[i]->eval_value(ctx, value);
+    }
+    if (OB_SUCC(ret)) {
+      ret = process_oneline(expr, ctx, session, alloc,
+                            extra_info, schema_guard, expr_datum);
+    }
   }
   return ret;
 }
@@ -171,8 +179,14 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
       || OB_ISNULL(sql_ctx = ctx.exec_ctx_.get_sql_ctx())
       || OB_ISNULL(schema_guard = sql_ctx->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size))) {
   } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      // An alias is already an owner binding. read_value below consumes it
+      // without allocating a generic parameter projection.
+      if (!expr.args_[i]->native_parameter_alias_) {
+        ret = expr.args_[i]->eval_batch(ctx, skip, batch_size);
+      }
+    }
     ObEvalCtx::BatchInfoScopeGuard guard(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
@@ -400,7 +414,8 @@ int ObExprOutputPack::build_row_values(
   const ObDataTypeCastParams dtc_params =
       ObBasicSessionInfo::create_dtc_params(session);
   for (int64_t column_idx = 1; OB_SUCC(ret) && column_idx < expr.arg_cnt_; ++column_idx) {
-    Datum &datum = expr.locate_param_datum(ctx, column_idx);
+    Datum datum;
+    OZ(expr.args_[column_idx]->read_value(ctx, ctx.get_batch_idx(), datum));
     const SqlTypeMeta &meta = expr.args_[column_idx]->obj_meta_;
     const ObField &field = extra_info->param_fields_.at(column_idx - 1);
     common::ObDatum legacy;
@@ -477,7 +492,8 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
   int64_t len = 0;
   int64_t blob_len = 0;
   obmysql::MYSQL_PROTOCOL_TYPE encode_type;
-  Datum &type_datum = expr.locate_param_datum(ctx, 0);
+  Datum type_datum;
+  if (OB_FAIL(expr.args_[0]->read_value(ctx, ctx.get_batch_idx(), type_datum))) { return ret; }
   encode_type = (type_datum.get_int() == 0)
               ? obmysql::MYSQL_PROTOCOL_TYPE::BINARY : obmysql::MYSQL_PROTOCOL_TYPE::TEXT;
   const int64_t cell_count = expr.arg_cnt_ - 1;

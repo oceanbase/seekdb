@@ -40,6 +40,8 @@ ObVectorStore::ObVectorStore(
     col_params_(*context_.stmt_allocator_),
     decoder_buffers_(*context_.stmt_allocator_),
     copy_plans_(*context_.stmt_allocator_),
+    output_targets_(*context_.stmt_allocator_),
+    group_idx_target_(),
     group_idx_expr_(nullptr),
     default_datums_(context_.stmt_allocator_),
     group_by_cell_(nullptr),
@@ -72,6 +74,8 @@ void ObVectorStore::reset()
     context_.stmt_allocator_->free(plan);
   }
   copy_plans_.reset();
+  output_targets_.reset();
+  group_idx_target_ = sql::ObExprFrameWriteTarget();
   col_params_.reset();
   group_idx_expr_ = nullptr;
   iter_param_ = nullptr;
@@ -108,6 +112,7 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
     } else if (OB_FAIL(col_params_.init(expr_count))) {
     } else if (OB_FAIL(decoder_buffers_.init(expr_count))) {
     } else if (OB_FAIL(copy_plans_.init(expr_count))) {
+    } else if (OB_FAIL(output_targets_.init(expr_count))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_count; i++) {
       common::ObDatum *datums = nullptr;
@@ -116,6 +121,7 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
       if (param.iter_param_.need_fill_group_idx() &&
           T_PSEUDO_GROUP_ID == param.output_exprs_->at(i)->type_) {
         group_idx_expr_ = param.output_exprs_->at(i);
+        ret = group_idx_target_.prepare(*group_idx_expr_, eval_ctx_);
       } else if (OB_FAIL(check_agg_mask(out_cols_projector.at(i), agg_col_mask, is_agg_mask))) {
       } else if ((nullptr == output_sel_mask || output_sel_mask->at(i)) && !is_agg_mask) {
         if (OB_FAIL(exprs_.push_back(param.output_exprs_->at(i)))) {
@@ -155,6 +161,11 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
           }
         }
 
+        if (OB_SUCC(ret)) {
+          sql::ObExprFrameWriteTarget target;
+          if (OB_FAIL(target.prepare(*expr, eval_ctx_))) {
+          } else { ret = output_targets_.push_back(target); }
+        }
         if (OB_FAIL(ret)) {
         } else if (out_cols_projector.at(i) >= out_cols_param->count()) {
           ret = OB_ERR_UNEXPECTED;
@@ -576,9 +587,9 @@ int ObVectorStore::import_decoded_rows(int64_t count)
   if (count < 0 || count > batch_size_) { ret = OB_INVALID_ARGUMENT; }
   for (int64_t col = 0; OB_SUCC(ret) && col < exprs_.count(); ++col) {
     sql::ObExpr &expr = *exprs_.at(col);
-    common::Datum *destination = expr.locate_batch_datums(eval_ctx_);
+    const sql::ObExprFrameWriteTarget &target = output_targets_.at(col);
     for (int64_t row = 0; OB_SUCC(ret) && row < count; ++row) {
-      ret = copy_plans_.at(col)->import_legacy(datum_infos_.at(col).datum_ptr_[row], destination[row]);
+      ret = target.import_legacy(*copy_plans_.at(col), datum_infos_.at(col).datum_ptr_[row], row);
     }
     if (OB_SUCC(ret) && count > 0) { expr.set_evaluated_projected(eval_ctx_); }
   }
@@ -589,9 +600,8 @@ int ObVectorStore::fill_group_idx(const int64_t group_idx)
 {
   int ret = OB_SUCCESS;
   if (nullptr != group_idx_expr_) {
-    common::Datum *group_idx_datums = group_idx_expr_->locate_batch_datums(eval_ctx_);
-    for (int64_t i = 0; i < count_; ++i) {
-      group_idx_datums[i].set_int(group_idx);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+      ret = group_idx_target_.set_i64(i, group_idx);
     }
   }
   return ret;

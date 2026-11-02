@@ -185,21 +185,25 @@ TEST(SessionNativeResult,inline_view_borrows_the_authoritative_native_frame_unti
   native.set_int(INT64_MIN);
   ASSERT_TRUE(view.is_datum_row());
   ASSERT_TRUE(view.is_inline_datum_row());
-  const Datum *value = nullptr;
+  Datum value;
   const SqlType *value_type = nullptr;
   ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
-  EXPECT_EQ(&native, value);
+  EXPECT_EQ(native.get_int(), value.get_int());
   EXPECT_EQ(&frame.expr.get_sql_type(), value_type);
-  EXPECT_EQ(INT64_MIN, value->get_int());
+  EXPECT_EQ(INT64_MIN, value.get_int());
   DatumValue old_view;
   ASSERT_EQ(OB_SUCCESS, view.get_value(0, old_view));
   EXPECT_EQ(INT64_MIN, old_view.get_int());
   EXPECT_EQ(OB_SIZE_OVERFLOW, view.get_inline_value(1, value, value_type));
-  // There is one frame, so ordinary row reuse is directly visible. Consumers
-  // needing a snapshot must explicitly clone, as the owner test below does.
+  EXPECT_EQ(INT64_MIN, value.get_int());
+  EXPECT_EQ(&frame.expr.get_sql_type(), value_type);
+  // The row remains borrowed, while each getter copies into caller storage.
+  // A fresh read observes row reuse; the preceding caller capture stays intact.
   native.set_int(99);
   EXPECT_TRUE(view.inline_row_valid());
-  EXPECT_EQ(99, value->get_int());
+  EXPECT_EQ(INT64_MIN, value.get_int());
+  ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
+  EXPECT_EQ(99, value.get_int());
   view.set_legacy(nullptr);
   EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_inline_value(0, value, value_type));
   EXPECT_EQ(OB_NOT_INIT, view.get_value(0, old_view));
@@ -210,16 +214,16 @@ TEST(SessionNativeResult,inline_typed_null_and_fallback_setters_do_not_retain_ol
   ResultRowView view;
   ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, view));
   frame.expr.locate_expr_datum(frame.producer.get_eval_ctx()).set_null();
-  const Datum *value = nullptr;
+  Datum value;
   const SqlType *value_type = nullptr;
   ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
-  EXPECT_TRUE(value->is_null());
+  EXPECT_TRUE(value.is_null());
   EXPECT_EQ(ObIntType, value_type->kind());
   alignas(8) char scratch[64];
   view.set_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false, scratch);
   EXPECT_TRUE(view.is_inline_datum_row());
   ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
-  EXPECT_TRUE(value->is_null());
+  EXPECT_TRUE(value.is_null());
   view.set_legacy(nullptr);
   EXPECT_FALSE(view.is_datum_row());
   EXPECT_EQ(0, view.count());
