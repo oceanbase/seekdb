@@ -44,7 +44,7 @@
              return self.parse_numbered_backref(ix + 1);
          } else if matches!(b, b'k') && !in_class {
              // Named backref: \k<name>
-@@ -946,6 +981,40 @@
+@@ -946,6 +981,50 @@
                      nest += 1;
                      class.push('[');
                      let mut end = ix + 1;
@@ -79,6 +79,16 @@
 +                            if !ascii_posix && !unicode_prop {
 +                                // A smaller backend property table cannot establish ICU invalidity.
 +                                return Err(Error::ParseError(ix, ParseError::UnsupportedProperty));
++                            }
++                            if !ascii_posix {
++                                // Consume the complete POSIX token as one Unicode property.
++                                // Undo the nested opening bracket already recorded above.
++                                class.pop();
++                                nest -= 1;
++                                let escape = if raw.starts_with('^') { "P" } else { "p" };
++                                class.push_str(&format!("\\{}{{{}}}", escape, name));
++                                ix = name_end + 2;
++                                continue;
 +                            }
 +                        }
 +                    }
