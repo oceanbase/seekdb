@@ -1,4 +1,4 @@
-<div align="center">
+<div align="Center">
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*pKqtRILxGioAAAAAQLAAAAgAejCYAQ/original" width="420">
