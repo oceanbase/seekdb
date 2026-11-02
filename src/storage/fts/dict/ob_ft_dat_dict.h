@@ -68,6 +68,12 @@ public:
   int find(const ObFTSingleWord &word, ObFTWordCode &code) const;
 
 private:
+  // The bucket index is computed with a mask instead of a modulo, so the
+  // capacity is always a power of two. The map is built in memory for every
+  // process, the layout of the block is not persisted, so the capacity can
+  // be rounded up freely.
+  static constexpr uint32_t MIN_CAPACITY = 128;
+
   struct Header header_;
 } __attribute__((packed));
 
