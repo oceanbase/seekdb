@@ -538,8 +538,7 @@ int ObParquetFile::read_range(int64_t offset, int64_t length, char *buf)
 int ObParquetFile::parse_footer()
 {
   int ret = OB_SUCCESS;
-  // read footer: 8 bytes magic + 4 bytes len + 4 bytes magic
-  const int64_t footer_len_size = 8;
+  // the 8 trailing bytes are: 4 byte metadata length, then the PAR1 magic
   char tail[8];
   if (OB_FAIL(read_range(file_size_ - 8, 8, tail))) {
     LOG_WARN("read footer tail failed", K(ret));

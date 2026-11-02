@@ -18,6 +18,10 @@
 
 #include "sql/engine/basic/ob_file_sql_scan.h"
 
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <sys/stat.h>
 #include <sys/types.h>
 #ifdef _WIN32
@@ -252,6 +256,11 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
       const int64_t dlen = std::min(static_cast<int64_t>(dir_part.length()), static_cast<int64_t>(sizeof(dir_buf) - 1));
       MEMCPY(dir_buf, dir_part.ptr(), dlen);
       dir_buf[dlen] = '\0';
+      // Matches are collected first and sorted afterwards: readdir() returns
+      // entries in filesystem order (ext4 uses hash order, NTFS happens to be
+      // name order), so without a sort glob() and read_*(pattern) would return
+      // rows in a platform dependent order.
+      common::ObSEArray<ObString, 32> matches;
 #ifdef _WIN32
       char search_buf[OB_MAX_FILE_NAME_LENGTH];
       if (OB_UNLIKELY(dlen + name_part.length() + 3 > OB_MAX_FILE_NAME_LENGTH)) {
@@ -279,7 +288,7 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
             if (OB_FAIL(ob_write_string(alloc, ObString(static_cast<int32_t>(flen), full_buf),
                                         file_path, true))) {
               LOG_WARN("copy path failed", K(ret));
-            } else if (OB_FAIL(out_paths.push_back(file_path))) {
+            } else if (OB_FAIL(matches.push_back(file_path))) {
               LOG_WARN("push back path failed", K(ret));
             }
           } while (OB_SUCC(ret) && FindNextFileA(hfind, &fd));
@@ -293,26 +302,47 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
       } else {
         struct dirent *entry = NULL;
         while (OB_SUCC(ret) && NULL != (entry = readdir(dir))) {
-          if (DT_DIR == entry->d_type) {
+          char full_buf[OB_MAX_FILE_NAME_LENGTH];
+          const int64_t flen = snprintf(full_buf, sizeof(full_buf), "%s/%s", dir_buf, entry->d_name);
+          if (OB_UNLIKELY(flen <= 0 || flen >= static_cast<int64_t>(sizeof(full_buf)))) {
+            ret = OB_BUF_NOT_ENOUGH;
+            LOG_WARN("path too long", K(ret), K(dir_buf), K(entry->d_name));
+            continue;
+          }
+          // d_type is DT_UNKNOWN on several filesystems (overlayfs, some XFS
+          // setups) and is not portable, so ask the filesystem directly and
+          // keep regular files only.
+          struct stat st;
+          if (0 != stat(full_buf, &st) || !S_ISREG(st.st_mode)) {
             continue;
           }
           const int64_t nlen = strlen(entry->d_name);
           if (!wild_match(name_part.ptr(), name_part.length(), entry->d_name, nlen)) {
             continue;
           }
-          char full_buf[OB_MAX_FILE_NAME_LENGTH];
-          const int64_t flen = snprintf(full_buf, sizeof(full_buf), "%s/%s", dir_buf, entry->d_name);
           ObString file_path;
           if (OB_FAIL(ob_write_string(alloc, ObString(static_cast<int32_t>(flen), full_buf),
                                       file_path, true))) {
             LOG_WARN("copy path failed", K(ret));
-          } else if (OB_FAIL(out_paths.push_back(file_path))) {
+          } else if (OB_FAIL(matches.push_back(file_path))) {
             LOG_WARN("push back path failed", K(ret));
           }
         }
         closedir(dir);
       }
 #endif
+      if (OB_SUCC(ret) && matches.count() > 1) {
+        // A byte wise sort keeps the result identical on every platform and
+        // matches the order DuckDB reports for a glob.
+        ObString *first = &matches.at(0);
+        std::sort(first, first + matches.count(),
+                  [](const ObString &l, const ObString &r) { return l.compare(r) < 0; });
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < matches.count(); ++i) {
+        if (OB_FAIL(out_paths.push_back(matches.at(i)))) {
+          LOG_WARN("push back path failed", K(ret));
+        }
+      }
     }
   }
   return ret;

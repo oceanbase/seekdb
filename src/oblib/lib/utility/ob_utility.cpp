@@ -27,8 +27,9 @@ typedef SSIZE_T ssize_t;
 static inline ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
   HANDLE h = (HANDLE)_get_osfhandle(fd);
   if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-  // _open/open 返回的是同步句柄，传 OVERLAPPED 会让 WriteFile 以
-  // ERROR_INVALID_PARAMETER 失败，因此先定位文件指针再写。
+  // _open() returns a synchronous handle, so passing an OVERLAPPED structure
+  // makes WriteFile() fail with ERROR_INVALID_PARAMETER. Seek explicitly and
+  // then write with a NULL OVERLAPPED.
   LARGE_INTEGER pos;
   pos.QuadPart = offset;
   if (!SetFilePointerEx(h, pos, NULL, FILE_BEGIN)) { errno = EIO; return -1; }
@@ -39,7 +40,7 @@ static inline ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t o
 static inline ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
   HANDLE h = (HANDLE)_get_osfhandle(fd);
   if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-  // 同上：同步句柄不支持 OVERLAPPED 读，改用 SetFilePointerEx + ReadFile。
+  // Same as ob_pwrite(): a synchronous handle cannot use OVERLAPPED reads.
   LARGE_INTEGER pos;
   pos.QuadPart = offset;
   if (!SetFilePointerEx(h, pos, NULL, FILE_BEGIN)) { errno = EIO; return -1; }
