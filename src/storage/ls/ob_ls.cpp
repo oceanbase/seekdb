@@ -714,6 +714,14 @@ int ObLS::register_common_service()
   if (OB_SUCC(ret) &&
       OB_FAIL(register_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE))) {
   }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(local_log_handler_set_.register_handler(
+        OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE, &lock_table_))) {
+    } else if (OB_FAIL(checkpoint_executor_.register_handler(
+        OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE, &lock_table_))) {
+      local_log_handler_set_.unregister_handler(OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE);
+    }
+  }
   return ret;
 }
 
@@ -830,6 +838,8 @@ void ObLS::unregister_common_service_()
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE);
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE);
   unregister_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE);
+  checkpoint_executor_.unregister_handler(OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE);
+  local_log_handler_set_.unregister_handler(OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE);
 }
 
 void ObLS::unregister_local_services_()
