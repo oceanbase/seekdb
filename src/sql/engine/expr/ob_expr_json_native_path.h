@@ -29,6 +29,7 @@ namespace sql
 {
 class ObExecContext;
 class MultimodeAlloctor;
+class ObJsonParamCacheCtx;
 
 struct JsonPathMatches
 {
@@ -65,6 +66,14 @@ int get_native_json_query(const ObExpr &expr,
                           uint16_t index,
                           std::optional<rust::Box<common::json::Query>> &query,
                           bool &is_null);
+int get_native_json_path(const ObExpr &expr,
+                         ObEvalCtx &ctx,
+                         MultimodeAlloctor &allocator,
+                         ObJsonParamCacheCtx *param_ctx,
+                         uint16_t index,
+                         const common::json::Path *&path,
+                         bool &is_null,
+                         bool &is_cover_by_error);
 JsonPathCache *get_native_path_cache_ctx(const uint64_t &id, ObExecContext *exec_ctx);
 int find_and_add_native_path_cache(JsonPathCache *path_cache,
                                    const common::json::Path *&res_path,

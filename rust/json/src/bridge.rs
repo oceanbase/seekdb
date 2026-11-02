@@ -96,6 +96,14 @@ pub mod ffi {
         single_length: u64,
     }
 
+    struct PathValueResult {
+        status: Status,
+        byte_offset: u64,
+        match_count: u64,
+        value_type: u8,
+        binary: Vec<u8>,
+    }
+
     struct BoolResult {
         status: Status,
         byte_offset: u64,
@@ -146,6 +154,7 @@ pub mod ffi {
         fn add_path(self: &mut Query, path: &Path) -> Status;
         fn finish(self: &mut Query) -> BinaryResult;
         fn query(self: &Query, path: &Path, auto_wrap: bool, first_only: bool) -> PathQueryResult;
+        fn query_value(self: &Query, path: &Path, wrap_result: bool) -> PathValueResult;
         fn object_keys(self: &Query) -> BinaryResult;
         fn object_keys_at_path(self: &Query, path: &Path) -> BinaryResult;
         fn contains(self: &Query, candidate: &Query) -> BoolResult;
@@ -226,6 +235,37 @@ impl Query {
                 byte_offset: *byte_offset,
                 match_count: 0,
                 single_length: 0,
+            },
+        }
+    }
+
+    fn query_value(&self, path: &Path, wrap_result: bool) -> ffi::PathValueResult {
+        let result = match &self.state {
+            Ok(document) => document.query_output(path, wrap_result),
+            Err((status, byte_offset)) => {
+                return ffi::PathValueResult {
+                    status: *status,
+                    byte_offset: *byte_offset,
+                    match_count: 0,
+                    value_type: 0,
+                    binary: Vec::new(),
+                }
+            }
+        };
+        match result {
+            Ok(output) => ffi::PathValueResult {
+                status: ffi::Status::Ok,
+                byte_offset: 0,
+                match_count: output.match_count as u64,
+                value_type: output.value_type.map_or(0, |value_type| value_type as u8),
+                binary: output.binary.unwrap_or_default(),
+            },
+            Err(error) => ffi::PathValueResult {
+                status: ffi::Status::InvalidBinary,
+                byte_offset: error.byte_offset as u64,
+                match_count: 0,
+                value_type: 0,
+                binary: Vec::new(),
             },
         }
     }

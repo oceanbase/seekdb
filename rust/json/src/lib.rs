@@ -21,14 +21,16 @@ pub mod compare;
 mod decimal;
 pub mod path;
 mod search;
+pub mod sql_path;
 
 pub use binary::{
     BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType,
 };
 pub use compare::{CompareError, CompareResult};
 pub use decimal::Decimal;
-pub use path::{Path, PathError, PathErrorKind, PathStep, Query, QueryOptions};
+pub use path::{Path, PathError, PathErrorKind, PathStep, Query, QueryOptions, QueryOutput};
 pub use search::SearchOptions;
+pub use sql_path::SqlPath;
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;

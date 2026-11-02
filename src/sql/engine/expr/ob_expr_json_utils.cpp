@@ -1518,7 +1518,7 @@ int ObJsonUtil::get_json_path(ObExpr* expr,
   ObJsonPathCache ctx_cache(&temp_allocator);
   ObJsonPath* j_path = nullptr;
   ObString j_path_text;
-  ObJsonPathCache* path_cache = path_cache = param_ctx->get_path_cache();
+  ObJsonPathCache* path_cache = param_ctx->get_path_cache();
   // parse json path 
   if (!param_ctx->is_first_exec_ && param_ctx->is_json_path_const_ 
       && OB_NOT_NULL(path_cache)) {

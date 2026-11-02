@@ -35,6 +35,17 @@ namespace oceanbase
 namespace sql
 {
 
+ObJsonParamCacheCtx::ObJsonParamCacheCtx(common::ObIAllocator *allocator)
+  : ObExprOperatorCtx(),
+    path_cache_(allocator),
+    native_path_cache_(std::make_unique<JsonPathCache>()),
+    is_first_exec_(true),
+    is_json_path_const_(false),
+    json_param_()
+{}
+
+ObJsonParamCacheCtx::~ObJsonParamCacheCtx() = default;
+
 uint32_t ObJsonExprHelper::get_json_text_depth_limit(uint32_t configured)
 {
   const uint32_t limit = configured < JSON_DOCUMENT_MAX_DEPTH ? JSON_DOCUMENT_MAX_DEPTH : configured;
@@ -143,6 +154,50 @@ int get_native_json_query(const ObExpr &expr,
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_WARN("fail to parse JSON", K(ret), K((*query)->byte_offset()));
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+    }
+  }
+  return ret;
+}
+
+int get_native_json_path(const ObExpr &expr,
+                         ObEvalCtx &ctx,
+                         MultimodeAlloctor &allocator,
+                         ObJsonParamCacheCtx *param_ctx,
+                         uint16_t index,
+                         const common::json::Path *&path,
+                         bool &is_null,
+                         bool &is_cover_by_error)
+{
+  INIT_SUCC(ret);
+  ObExpr *path_expr = expr.args_[index];
+  ObObjType type = path_expr->datum_meta_.type_;
+  ObString path_text;
+  JsonPathCache *path_cache = param_ctx->get_native_path_cache();
+  path = NULL;
+  if (!param_ctx->is_first_exec_ && param_ctx->is_json_path_const_ && OB_NOT_NULL(path_cache)) {
+    ret = path_cache->find_and_add(path_text, 0, true, path);
+  } else {
+    ObDatum *path_datum = NULL;
+    if (OB_FAIL(allocator.eval_arg(path_expr, ctx, path_datum))) {
+      is_cover_by_error = false;
+    } else if (type == ObNullType || path_datum->is_null()) {
+      is_null = true;
+    } else if (!ob_is_string_type(type)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("input type error", K(type));
+    } else {
+      path_text = path_datum->get_string();
+      if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
+              path_expr, ctx, allocator, path_text, is_null))) {
+      } else if (path_text.length() == 0) {
+        is_null = true;
+      } else if (OB_FAIL(ObJsonExprHelper::convert_string_collation_type(
+                     path_expr->datum_meta_.cs_type_, CS_TYPE_UTF8MB4_BIN,
+                     &ctx.exec_ctx_.get_allocator(), path_text, path_text))) {
+      } else if (OB_FAIL(find_and_add_native_path_cache(
+                     path_cache, path, path_text, 0, true, param_ctx->is_json_path_const_))) {
+        is_cover_by_error = false;
+      }
     }
   }
   return ret;

@@ -121,6 +121,30 @@ json_contains_path('{"雪":{"x":true},"a.b":9}', 'one', '$.雪.x', '$."a.b"')
 select json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a');
 json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a')
 1
+select json_value('{"a":1}', '$.a' returning signed);
+json_value('{"a":1}', '$.a' returning signed)
+1
+select json_value('{"a":"雪"}', '$.a' returning char);
+json_value('{"a":"雪"}', '$.a' returning char)
+雪
+select json_value('{"a":true}', '$.a' returning signed);
+json_value('{"a":true}', '$.a' returning signed)
+1
+select json_value('{"a":null}', '$.a' returning signed);
+json_value('{"a":null}', '$.a' returning signed)
+NULL
+select json_value('{"a":2}', '$.missing' returning signed default 99 on empty);
+json_value('{"a":2}', '$.missing' returning signed default 99 on empty)
+99
+select json_value('{"a":[1,2]}', '$.a[1]' returning signed);
+json_value('{"a":[1,2]}', '$.a[1]' returning signed)
+2
+select json_value('{"a":[1,2]}', '$.a[*]' returning signed default 88 on error);
+json_value('{"a":[1,2]}', '$.a[*]' returning signed default 88 on error)
+88
+select json_value('{"a":3}', '$.a' returning signed);
+json_value('{"a":3}', '$.a' returning signed)
+3
 select json_length(cast('{"a":1}' as json), '$**');
 ERROR 42000: Invalid JSON path expression.
 select json_contains_path(cast('{"a":1}' as json), 'one', '$.0a');

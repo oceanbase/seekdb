@@ -45,6 +45,13 @@ pub struct Query {
     pub(crate) document: BinaryDocument<Vec<u8>>,
 }
 
+#[derive(Clone, Debug)]
+pub struct QueryOutput {
+    pub match_count: usize,
+    pub value_type: Option<JsonType>,
+    pub binary: Option<Vec<u8>>,
+}
+
 impl Query {
     pub fn from_binary(input: Vec<u8>) -> BinaryResult<Self> {
         Ok(Self {
@@ -62,6 +69,32 @@ impl Query {
 
     pub fn query(&self, path: &Path, options: QueryOptions) -> BinaryResult<Vec<BinaryValue<'_>>> {
         path.query(self.document.root()?, options)
+    }
+
+    pub fn query_output(&self, path: &Path, wrap_result: bool) -> BinaryResult<QueryOutput> {
+        let matches = self.query(
+            path,
+            QueryOptions {
+                auto_wrap: true,
+                first_only: false,
+            },
+        )?;
+        let value_type = match matches.first() {
+            Some(value) => Some(value.json_type()?),
+            None => None,
+        };
+        let binary = if wrap_result && !matches.is_empty() {
+            Some(binary::serialize_array(&matches)?)
+        } else if matches.len() == 1 {
+            Some(binary::serialize_value(matches[0])?)
+        } else {
+            None
+        };
+        Ok(QueryOutput {
+            match_count: matches.len(),
+            value_type,
+            binary,
+        })
     }
 
     pub fn extract(&self, paths: &[Path]) -> BinaryResult<Option<Vec<u8>>> {

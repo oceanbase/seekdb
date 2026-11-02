@@ -686,6 +686,109 @@ fn search_wildcards_preserve_utf8_and_escape_rules() {
 }
 
 #[test]
+fn query_output_preserves_match_metadata_and_wraps_in_rust() {
+    let document = Query::from_text(br#"{"a":[1,2],"b":3}"#, ParseOptions::default()).unwrap();
+    let array_path = Path::parse_mysql(b"$.a[*]").unwrap();
+    let unwrapped = document.query_output(&array_path, false).unwrap();
+    assert_eq!(unwrapped.match_count, 2);
+    assert_eq!(unwrapped.value_type, Some(JsonType::Int));
+    assert!(unwrapped.binary.is_none());
+
+    let wrapped = document.query_output(&array_path, true).unwrap();
+    assert_eq!(wrapped.match_count, 2);
+    let wrapped = Query::from_binary(wrapped.binary.unwrap()).unwrap();
+    let values = wrapped
+        .query(
+            &Path::parse_mysql(b"$[*]").unwrap(),
+            QueryOptions::default(),
+        )
+        .unwrap();
+    assert_eq!(values.len(), 2);
+    assert_eq!(values[0].number().unwrap(), crate::Number::I64(1));
+    assert_eq!(values[1].number().unwrap(), crate::Number::I64(2));
+
+    let single = document
+        .query_output(&Path::parse_mysql(b"$.b").unwrap(), false)
+        .unwrap();
+    assert_eq!(single.match_count, 1);
+    let single = Query::from_binary(single.binary.unwrap()).unwrap();
+    assert_eq!(
+        single.document.root().unwrap().number().unwrap(),
+        crate::Number::I64(3)
+    );
+
+    let missing = document
+        .query_output(&Path::parse_mysql(b"$.missing").unwrap(), true)
+        .unwrap();
+    assert_eq!(missing.match_count, 0);
+    assert_eq!(missing.value_type, None);
+    assert!(missing.binary.is_none());
+}
+
+#[test]
+fn sql_json_path_parser_builds_complete_ast() {
+    use crate::sql_path::{
+        ArraySelector, Comparison, FilterExpr, FilterLiteral, ItemMethod, Operand, PathRoot,
+        SqlPathStep,
+    };
+
+    let path = crate::SqlPath::parse(
+        br#"strict $..book[0,2 to 4,last]?(!(@.price < 10) && @.title like_regex "^A")."a.b".ceiling()"#,
+    )
+    .unwrap();
+    assert_eq!(path.root(), PathRoot::Root);
+    assert!(!path.is_lax());
+    assert!(path.can_match_many());
+    assert_eq!(path.last_method(), Some(ItemMethod::Ceiling));
+    assert!(matches!(path.steps()[0], SqlPathStep::Descendant));
+    assert_eq!(path.steps()[1], SqlPathStep::Member("book".into()));
+    let SqlPathStep::Array(selectors) = &path.steps()[2] else {
+        panic!("expected array selectors")
+    };
+    assert_eq!(selectors.len(), 3);
+    assert!(matches!(selectors[1], ArraySelector::Range(_, _)));
+    let SqlPathStep::Filter(filter) = &path.steps()[3] else {
+        panic!("expected filter")
+    };
+    let FilterExpr::And(negated, regex) = filter else {
+        panic!("expected conjunction")
+    };
+    assert!(matches!(**negated, FilterExpr::Not(_)));
+    let FilterExpr::Compare(
+        Comparison::LikeRegex,
+        Operand::Path(title),
+        Operand::Literal(FilterLiteral::String(pattern)),
+    ) = &**regex
+    else {
+        panic!("expected regular-expression predicate")
+    };
+    assert_eq!(pattern, "^A");
+    assert_eq!(title.root(), PathRoot::Current);
+    assert!(!title.is_lax());
+    assert_eq!(path.steps()[4], SqlPathStep::Member("a.b".into()));
+
+    let exists =
+        crate::SqlPath::parse(br#"lax $?(! exists(@.missing) || exists(@.a[0]))"#).unwrap();
+    let SqlPathStep::Filter(FilterExpr::Or(not_exists, exists)) = &exists.steps()[0] else {
+        panic!("expected existence predicates")
+    };
+    assert!(matches!(&**not_exists, FilterExpr::Exists(_, true)));
+    assert!(matches!(&**exists, FilterExpr::Exists(_, false)));
+    let invalid_paths: &[&[u8]] = &[
+        &b"$."[..],
+        &b"$.."[..],
+        &b"$.abs().a"[..],
+        &b"$.unknown()"[..],
+        &b"$[1,]"[..],
+        &b"$?(@.a == )"[..],
+        &b"$?(@.a == 1"[..],
+    ];
+    for invalid in invalid_paths {
+        assert!(crate::SqlPath::parse(invalid).is_err(), "{:?}", invalid);
+    }
+}
+
+#[test]
 fn containment_membership_and_overlap_preserve_sql_semantics() {
     let query = |text: &str| Query::from_text(text.as_bytes(), ParseOptions::default()).unwrap();
     let target = query(r#"{"a":[1,{"b":2},[3,4]],"c":{"d":5}}"#);

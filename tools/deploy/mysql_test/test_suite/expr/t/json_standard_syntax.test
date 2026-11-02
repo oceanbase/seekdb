@@ -40,6 +40,14 @@ select json_contains_path('{"a":[0,1,2,3],"b":{"a":5}}', 'all', '$.a', '$.b.a');
 select json_contains_path(cast('{"a":1}' as json), 'all', '$.a', '$.missing');
 select json_contains_path('{"雪":{"x":true},"a.b":9}', 'one', '$.雪.x', '$."a.b"');
 select json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a');
+select json_value('{"a":1}', '$.a' returning signed);
+select json_value('{"a":"雪"}', '$.a' returning char);
+select json_value('{"a":true}', '$.a' returning signed);
+select json_value('{"a":null}', '$.a' returning signed);
+select json_value('{"a":2}', '$.missing' returning signed default 99 on empty);
+select json_value('{"a":[1,2]}', '$.a[1]' returning signed);
+select json_value('{"a":[1,2]}', '$.a[*]' returning signed default 88 on error);
+select json_value('{"a":3}', '$.a' returning signed);
 --error ER_INVALID_JSON_PATH
 select json_length(cast('{"a":1}' as json), '$**');
 --error ER_INVALID_JSON_PATH

@@ -41,6 +41,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class JsonPathCache;
 const static int32_t OB_LITERAL_MAX_INT_LEN = 21;
 
 struct ObJsonExprParam {
@@ -96,18 +97,14 @@ public:
 class ObJsonParamCacheCtx : public ObExprOperatorCtx
 {
   public:
-  ObJsonParamCacheCtx(common::ObIAllocator *allocator)
-    : ObExprOperatorCtx(),
-      path_cache_(allocator),
-      is_first_exec_(true),
-      is_json_path_const_(false),
-      json_param_()
-  {}
-  virtual ~ObJsonParamCacheCtx() {}
+  ObJsonParamCacheCtx(common::ObIAllocator *allocator);
+  virtual ~ObJsonParamCacheCtx() override;
   ObJsonPathCache *get_path_cache() { return &path_cache_; }
+  JsonPathCache *get_native_path_cache() { return native_path_cache_.get(); }
 
 private:
   ObJsonPathCache path_cache_;
+  std::unique_ptr<JsonPathCache> native_path_cache_;
 public:
   bool is_first_exec_;
   bool is_json_path_const_;
