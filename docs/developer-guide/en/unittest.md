@@ -1,6 +1,6 @@
 # Write and run unit tests
 
-C++ unit tests use explicit Bazel `cc_test` targets, normally with Google Test. The allocator backend smoke is standalone so it can also run on Windows and Android without a target Google Test runtime.
+C++ unit tests use Google Test and explicit Bazel `cc_test` targets. The current checkout contains two allocator tests under `unittest/oblib/`.
 
 ## Build tests on Linux
 
@@ -24,24 +24,6 @@ List the checked-in test targets with:
 ./build.py test //unittest/oblib:test_malloc_backend --test_output=errors
 ./build.py test --sanity //unittest/oblib:test_jemalloc_hook --test_output=errors
 ```
-
-## Validate the bundled allocator
-
-```bash
-./build.py test //unittest/oblib:test_jemalloc_backend --test_output=errors
-```
-
-The backend smoke checks the explicit jemalloc allocation domain, aligned
-allocation and cross-thread release on Linux, macOS, Windows and Android. It
-also verifies runtime decay settings for arena 0, defaults inherited by a newly
-created arena, and repeated configuration. Linux and
-Android also check automatic idle-page reclamation and background worker
-restart. Windows and macOS verify that background threads are unavailable and remain
-disabled. On Android, build with `--config=android` and run the binary on the
-matching device; see [Android](android.md).
-
-`test_jemalloc_hook` separately verifies the glibc interposition contract. The
-Windows and Android backend tests keep CRT/libc allocations in their own domain.
 
 ## Add a test
 

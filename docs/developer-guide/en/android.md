@@ -41,21 +41,6 @@ Server startup configures decay through `je_mallctl` for new arenas and arena 0,
 then enables background workers before the logger starts its workers. Bootstrap
 allocations use jemalloc's original defaults.
 
-Build the allocator test with the same Android toolchain, then run the resulting
-binary on the device:
-
-```bash
-python3 build.py build --config=android //unittest/oblib:test_jemalloc_backend
-adb push build/bin/unittest/oblib/test_jemalloc_backend /data/local/tmp/
-adb shell chmod +x /data/local/tmp/test_jemalloc_backend
-adb shell /data/local/tmp/test_jemalloc_backend
-```
-
-Validate on both 4 KiB and 16 KiB devices (`adb shell getconf PAGE_SIZE`). The
-test covers realloc, alignment, cross-thread release, background reclamation
-and worker restart. ELF alignment and allocator page size must both support the
-device page size.
-
 ## Strip and deploy
 
 Use the NDK strip tool because the macOS `strip` command cannot process Android ELF binaries:

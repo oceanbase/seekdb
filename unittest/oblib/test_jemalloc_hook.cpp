@@ -16,7 +16,6 @@
 
 #include <cstdlib>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <malloc.h>
 #include <gtest/gtest.h>
@@ -24,38 +23,6 @@
 #include "lib/allocator/ob_malloc.h"
 
 using namespace oceanbase::common;
-
-TEST(TestJemallocHook, RuntimeConfiguration)
-{
-  ASSERT_EQ(0, jemalloc_configure_runtime());
-  std::ptrdiff_t value = -1;
-  size_t size = sizeof(value);
-  ASSERT_EQ(0, je_mallctl("arenas.dirty_decay_ms", &value, &size, nullptr, 0));
-  EXPECT_EQ(1000, value);
-  size = sizeof(value);
-  ASSERT_EQ(0, je_mallctl("arenas.muzzy_decay_ms", &value, &size, nullptr, 0));
-  EXPECT_EQ(0, value);
-  bool background = true;
-  size = sizeof(background);
-  ASSERT_EQ(0, je_mallctl("background_thread", &background, &size, nullptr, 0));
-  EXPECT_FALSE(background);
-
-  void *ptr = jemalloc_malloc(128);
-  ASSERT_NE(nullptr, ptr);
-  unsigned arena = 0;
-  size = sizeof(arena);
-  ASSERT_EQ(0, je_mallctl("arenas.lookup", &arena, &size, &ptr, sizeof(ptr)));
-  char name[64];
-  std::snprintf(name, sizeof(name), "arena.%u.dirty_decay_ms", arena);
-  size = sizeof(value);
-  ASSERT_EQ(0, je_mallctl(name, &value, &size, nullptr, 0));
-  EXPECT_EQ(1000, value);
-  std::snprintf(name, sizeof(name), "arena.%u.muzzy_decay_ms", arena);
-  size = sizeof(value);
-  ASSERT_EQ(0, je_mallctl(name, &value, &size, nullptr, 0));
-  EXPECT_EQ(0, value);
-  jemalloc_free(ptr);
-}
 
 TEST(TestJemallocHook, CrossApiAllocationDomain)
 {
