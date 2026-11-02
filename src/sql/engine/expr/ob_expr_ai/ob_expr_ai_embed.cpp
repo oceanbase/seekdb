@@ -184,7 +184,7 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr,
   ObArray<int64_t> row_indexes;
   ObArray<ObString> models;
   ObArray<int64_t> dims;
-  ObArray<bool> has_dims;
+  ObArray<int64_t> has_dims;
   for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; i++) {
     ObDatum *model_arg = model_vec.at(i);
     ObDatum *content_arg = content_vec.at(i);
@@ -201,7 +201,7 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr,
     } else if (OB_FAIL(models.push_back(model_arg->get_string()))) {
     } else if (OB_FAIL(dims.push_back(OB_NOT_NULL(dim_arg) && !dim_arg->is_null()
                                       ? dim_arg->get_int() : 0))) {
-    } else if (OB_FAIL(has_dims.push_back(OB_NOT_NULL(dim_arg) && !dim_arg->is_null()))) {
+    } else if (OB_FAIL(has_dims.push_back(OB_NOT_NULL(dim_arg) && !dim_arg->is_null() ? 1 : 0))) {
     }
   }
 
@@ -210,20 +210,20 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr,
     for (int64_t i = 1; same_request && i < contents.count(); i++) {
       same_request = 0 == models.at(0).compare(models.at(i))
                      && has_dims.at(0) == has_dims.at(i)
-                     && (!has_dims.at(0) || dims.at(0) == dims.at(i));
+                     && (0 == has_dims.at(0) || dims.at(0) == dims.at(i));
     }
     if (same_request) {
       ObArray<ObString> results;
       if (OB_FAIL(inner_eval_ai_embed(temp_allocator, models.at(0), contents,
-                                      has_dims.at(0), dims.at(0), results))) {
+                                      0 != has_dims.at(0), dims.at(0), results))) {
       } else if (results.count() != contents.count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected embedding result count", K(ret), K(results.count()),
                  K(contents.count()));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < results.count(); i++) {
-          if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx,
-                       res_datum.at(row_indexes.at(i)), results.at(i)))) {
+          if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res_datum.at(row_indexes.at(i)),
+                                                       row_indexes.at(i), results.at(i)))) {
           } else {
             eval_flags.set(row_indexes.at(i));
           }
@@ -237,12 +237,12 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr,
         ObArray<ObString> one_result;
         if (OB_FAIL(one_content.push_back(contents.at(i)))) {
         } else if (OB_FAIL(inner_eval_ai_embed(temp_allocator, models.at(i), one_content,
-                                                has_dims.at(i), dims.at(i), one_result))) {
+                                               0 != has_dims.at(i), dims.at(i), one_result))) {
         } else if (one_result.count() != 1) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected embedding result count", K(ret), K(one_result.count()));
         } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx,
-                     res_datum.at(row_indexes.at(i)), one_result.at(0)))) {
+                     res_datum.at(row_indexes.at(i)), row_indexes.at(i), one_result.at(0)))) {
         } else {
           eval_flags.set(row_indexes.at(i));
         }

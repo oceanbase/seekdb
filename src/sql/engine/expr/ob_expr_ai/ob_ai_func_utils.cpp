@@ -1190,6 +1190,27 @@ int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   return ret;
 }
 
+int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum *res,
+                                     const int64_t datum_idx, ObString &res_str)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(res)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("result datum is null", K(ret));
+  } else {
+    ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, res);
+    int64_t res_len = res_str.length();
+    if (OB_FAIL(text_result.init_with_batch_idx(res_len, datum_idx))) {
+      LOG_WARN("failed to init text result", K(ret), K(datum_idx));
+    } else if (OB_FAIL(text_result.append(res_str))) {
+      LOG_WARN("failed to append text result", K(ret));
+    } else {
+      text_result.set_result();
+    }
+  }
+  return ret;
+}
+
 int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
                                     share::schema::ObSchemaGetterGuard &guard,
                                     ObAIFuncExprInfo *&info)
