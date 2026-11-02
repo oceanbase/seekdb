@@ -320,6 +320,12 @@ static constexpr double DEFAULT_SINDI_SELECTIVITY_RATE = 0.1;
 static const uint64_t MAX_HNSW_BRUTE_FORCE_SIZE = 20000;
 static const uint64_t MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY = 1000000;
 static const uint64_t MAX_HNSW_PRE_ROW_CNT_WITH_IDX = 300000;
+// Brute-force pre-filter pays a full scan to build the candidate set, so it only
+// pays off when the predicate actually prunes rows. A predicate that keeps
+// (almost) every row - e.g. a tautology such as a range covering the whole
+// domain - should use the iterative (in-filter) HNSW path instead, matching the
+// selectivity discipline already applied to the other pre-filter branches.
+static constexpr double MAX_HNSW_BRUTE_FORCE_SELECTIVITY = 0.9;
 static constexpr double DEFAULT_IVFPQ_SELECTIVITY_RATE = 0.9;
   ObVecIdxExtraInfo()
     : vec_idx_type_(ObVecIndexType::VEC_INDEX_INVALID),
