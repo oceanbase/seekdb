@@ -114,12 +114,7 @@ int ObITextAnalyzer::add_normalizer(
     if (OB_SUCC(ret)) {
       ObTokenNormalizer *normalizer = static_cast<ObTokenNormalizer *>(token_stream);
       if (OB_FAIL(normalizer->init(ctx.cs_, *get_tail_token_stream()))) {
-      } else {
-        if (ObTokenNormalizer::ENG_BASIC_NORM == type) {
-          static_cast<ObBasicEnglishNormalizer *>(normalizer)->set_output_allocator(*allocator_);
-        }
-        if (OB_FAIL(analyze_pipeline_.push_back(normalizer))) {
-        }
+      } else if (OB_FAIL(analyze_pipeline_.push_back(normalizer))) {
       }
     }
   }
