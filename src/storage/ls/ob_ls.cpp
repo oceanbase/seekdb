@@ -424,7 +424,6 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   int ret = OB_SUCCESS;
   palf::LSN end_lsn;
   bool is_done = false;
-  logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
   logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
   }
@@ -436,8 +435,6 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
     } else if (!is_done) {
       ob_usleep(50 * 1000);
     }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(apply_service->start_local_append())) {
   }
   if (OB_SUCC(ret) && OB_FAIL(log_service->finish_replay(deadline_us))) {
     LOG_WARN("finish local replay failed", K(ret));
@@ -1218,7 +1215,7 @@ int ObLS::replay_get_tablet_no_check(
     if (OB_TABLET_NOT_EXIST != ret) {
     } else if (scn <= tablet_change_checkpoint_scn) {
       ret = OB_OBSOLETE_CLOG_NEED_SKIP;
-    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_replay_info().get_max_replayed_scn(max_scn))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_max_replayed_scn(max_scn))) {
     }
     // double check for this scenario:
     // 1. get_tablet return OB_TABLET_NOT_EXIST

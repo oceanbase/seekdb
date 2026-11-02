@@ -87,7 +87,7 @@ int get_local_position(
     LOG_WARN("failed to get local log end lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_end_scn(end_scn))) {
     LOG_WARN("failed to get local log end scn", KR(ret), K(end_lsn));
-  } else if (OB_FAIL(log_service->get_replay_info().get_max_replayed_scn(sync_scn))) {
+  } else if (OB_FAIL(log_service->get_max_replayed_scn(sync_scn))) {
     LOG_WARN("failed to get local replay progress", KR(ret), K(end_lsn), K(end_scn));
   }
   return ret;

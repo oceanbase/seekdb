@@ -483,42 +483,19 @@ int ObLogHandler::restore_submit_replay_log()
 bool ObLogHandler::is_replay_enabled() const
 {
   RLockGuard guard(lock_);
-  return is_inited_ && log_service_->get_replay_info().is_enabled();
+  return is_inited_ && log_service_->is_replay_enabled();
 }
 
 int ObLogHandler::get_max_decided_scn(SCN &scn)
 {
   int ret = OB_SUCCESS;
-  SCN max_replayed_scn;
-  SCN max_applied_scn;
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (is_in_stop_state_) {
-    // and replay service return 4109 uniformly
+  } else if (is_in_stop_state_ || is_offline()) {
     ret = OB_STATE_NOT_MATCH;
-  } else if (is_offline()) {
-    ret = OB_STATE_NOT_MATCH;
-    CLOG_LOG(WARN, "log handle is offline");
-  } else if (OB_FAIL(apply_service_->get_max_applied_scn(max_applied_scn))) {
-  } else if (OB_FAIL(log_service_->get_replay_info().get_max_replayed_scn(max_replayed_scn))) {
-    if (OB_STATE_NOT_MATCH != ret) {
-      CLOG_LOG(WARN, "failed to get_max_replayed_scn", K(ret));
-    } else if (palf_reach_time_interval(1000 * 1000, get_max_decided_scn_debug_time_)) {
-      CLOG_LOG(ERROR, "failed to get_max_replayed_scn, replay status is not enabled", K(ret));
-    }
-    if (OB_STATE_NOT_MATCH == ret && max_applied_scn.is_valid()) {
-      //Replay is not enabled, but the maximum consecutive callback point obtained in the apply service is valid
-      ret = OB_SUCCESS;
-      scn = max_applied_scn > SCN::min_scn() ? max_applied_scn : SCN::min_scn();
-      if (palf_reach_time_interval(1000 * 1000, get_max_decided_scn_debug_time_)) {
-        CLOG_LOG(INFO, "replay is not enabled, get_max_decided_scn from apply", K(ret),
-                K(max_replayed_scn), K(max_applied_scn), K(scn));
-      }
-    }
   } else {
-    scn = std::max(max_replayed_scn, max_applied_scn) > SCN::min_scn() ?
-             std::max(max_replayed_scn, max_applied_scn) : SCN::min_scn();
+    ret = log_service_->get_max_decided_scn(scn);
   }
   return ret;
 }
@@ -585,7 +562,7 @@ int ObLogHandler::is_replay_fatal_error(bool &has_fatal_error)
     ret = OB_NOT_RUNNING;
   } else {
     RLockGuard guard(lock_);
-    if (OB_FAIL(log_service_->get_replay_info().has_fatal_error(has_fatal_error))) {
+    if (OB_FAIL(log_service_->has_replay_fatal_error(has_fatal_error))) {
     }
   }
   return ret;

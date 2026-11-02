@@ -41,7 +41,10 @@ ObLogService::ObLogService() :
   alloc_mgr_(NULL),
   apply_service_(),
   replay_lock_(),
-  replay_info_(),
+  replay_status_lock_(),
+  replay_status_(nullptr),
+  replay_enabled_(false),
+  replay_finished_(false),
   replay_service_(nullptr),
   replay_thread_quota_(1),
   log_storage_(NULL),
@@ -167,19 +170,28 @@ int ObLogService::enable_replay(const LSN &lsn, const SCN &scn)
     replay_service_ = OB_NEW(ObLogReplayService, "ReplayService");
     if (nullptr == replay_service_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(replay_service_->init(&replay_info_, palf_env_, log_storage_,
+    } else if (OB_FAIL(replay_service_->init(palf_env_, log_storage_,
                                             alloc_mgr_, replay_thread_quota_))) {
     } else if (OB_FAIL(replay_service_->start())) {
     } else if (OB_FAIL(replay_service_->create_status())) {
     }
   }
   if (OB_SUCC(ret)) {
-    ret = replay_service_->enable(lsn, scn);
+    ObReplayStatusGuard status_guard;
+    if (OB_FAIL(replay_service_->get_replay_status(status_guard))) {
+    } else {
+      // Publish before enable can dispatch tasks that query their own replay progress.
+      {
+        ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
+        replay_status_ = status_guard.get_replay_status();
+        replay_enabled_ = true;
+        replay_finished_ = false;
+      }
+      ret = replay_service_->enable(lsn, scn);
+    }
   }
   if (OB_FAIL(ret)) {
     destroy_replay_();
-  } else {
-    replay_info_.set_enabled(true);
   }
   return ret;
 }
@@ -193,7 +205,11 @@ int ObLogService::disable_replay()
 
 void ObLogService::destroy_replay_()
 {
-  replay_info_.set_enabled(false);
+  {
+    ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
+    replay_status_ = nullptr;
+    replay_enabled_ = false;
+  }
   if (nullptr != replay_service_) {
     replay_service_->stop();
     replay_service_->wait();
@@ -207,11 +223,22 @@ int ObLogService::finish_replay(const int64_t deadline_us)
   lib::ObMutexGuard guard(replay_lock_);
   int ret = OB_SUCCESS;
   if (nullptr != replay_service_) {
+    ObReplayStatusGuard status_guard;
+    SCN recovered_scn;
     if (OB_FAIL(replay_service_->finish(deadline_us))) {
+    } else if (OB_FAIL(replay_service_->get_replay_status(status_guard))) {
+    } else if (OB_FAIL(status_guard.get_replay_status()->get_max_replayed_scn(recovered_scn))) {
+    } else if (OB_FAIL(apply_service_.start_local_append(recovered_scn))) {
     } else {
+      // Apply owns the continuous completion watermark before readers lose the status.
+      {
+        ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
+        replay_status_ = nullptr;
+        replay_finished_ = true;
+      }
       OB_DELETE(ObLogReplayService, "ReplayService", replay_service_);
       replay_service_ = nullptr;
-      CLOG_LOG(INFO, "replay executor released", "replay_info_bytes", sizeof(replay_info_));
+      CLOG_LOG(INFO, "replay executor released", K(recovered_scn));
     }
   }
   return ret;
@@ -219,7 +246,95 @@ int ObLogService::finish_replay(const int64_t deadline_us)
 
 int ObLogService::is_replay_done(const LSN &lsn, bool &done)
 {
-  return replay_info_.is_replay_done(lsn, done);
+  ObReplayStatusGuard guard;
+  {
+    ObLockGuard<ObSpinLock> status_lock(replay_status_lock_);
+    done = replay_finished_;
+    if (done) {
+      return OB_SUCCESS;
+    } else if (nullptr == replay_status_) {
+      return OB_STATE_NOT_MATCH;
+    }
+    guard.set_replay_status(replay_status_);
+  }
+  return guard.get_replay_status()->is_replay_done(lsn, done);
+}
+
+int ObLogService::get_replay_status_(ObReplayStatusGuard &guard) const
+{
+  ObLockGuard<ObSpinLock> lock(replay_status_lock_);
+  if (nullptr == replay_status_) {
+    return OB_STATE_NOT_MATCH;
+  }
+  guard.set_replay_status(replay_status_);
+  return OB_SUCCESS;
+}
+
+bool ObLogService::is_replay_enabled() const
+{
+  ObLockGuard<ObSpinLock> lock(replay_status_lock_);
+  return replay_enabled_;
+}
+
+bool ObLogService::is_replay_finished() const
+{
+  ObLockGuard<ObSpinLock> lock(replay_status_lock_);
+  return replay_finished_;
+}
+
+int ObLogService::get_max_replayed_scn(SCN &scn)
+{
+  ObReplayStatusGuard guard;
+  int ret = get_replay_status_(guard);
+  if (OB_SUCC(ret)) {
+    ret = guard.get_replay_status()->get_max_replayed_scn(scn);
+  }
+  return ret;
+}
+
+int ObLogService::get_min_unreplayed_scn(SCN &scn)
+{
+  ObReplayStatusGuard guard;
+  int ret = get_replay_status_(guard);
+  if (OB_SUCC(ret)) {
+    ret = guard.get_replay_status()->get_min_unreplayed_scn(scn);
+  }
+  return ret;
+}
+
+int ObLogService::get_max_decided_scn(SCN &scn)
+{
+  ObReplayStatusGuard guard;
+  SCN replayed_scn;
+  SCN applied_scn;
+  int ret = get_replay_status_(guard);
+  if (OB_SUCC(ret)) {
+    ret = guard.get_replay_status()->get_max_replayed_scn(replayed_scn);
+  }
+  // Read apply after replay: retirement publishes its watermark before detaching the status.
+  if (OB_SUCCESS == ret || OB_STATE_NOT_MATCH == ret) {
+    const int apply_ret = apply_service_.get_max_applied_scn(applied_scn);
+    if (OB_SUCCESS != apply_ret) {
+      ret = apply_ret;
+    } else if (OB_SUCCESS == ret || applied_scn.is_valid()) {
+      ret = OB_SUCCESS;
+      scn = std::max(SCN::min_scn(), std::max(replayed_scn, applied_scn));
+    }
+  }
+  return ret;
+}
+
+int ObLogService::has_replay_fatal_error(bool &has_error)
+{
+  ObReplayStatusGuard guard;
+  int ret = get_replay_status_(guard);
+  has_error = false;
+  if (OB_STATE_NOT_MATCH == ret) {
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    has_error = guard.get_replay_status()->has_fatal_error();
+  }
+  return ret;
 }
 
 int ObLogService::block_submit_replay()
@@ -412,19 +527,7 @@ int ObLogService::update_replayable_point(const SCN &replayable_point)
   } else if (nullptr != replay_service_) {
     ret = replay_service_->update_replayable_point(replayable_point);
   } else {
-    replay_info_.update_replayable_point(replayable_point);
-  }
-  return ret;
-}
-
-int ObLogService::get_replayable_point(SCN &replayable_point)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else {
-    replayable_point = replay_info_.get_replayable_point();
+    ret = OB_STATE_NOT_MATCH;
   }
   return ret;
 }
@@ -534,12 +637,18 @@ int ObLogService::stat_apply(LSApplyStat &apply_stat)
 int ObLogService::stat_replay(LSReplayStat &replay_stat)
 {
   int ret = OB_SUCCESS;
+  ObReplayStatusGuard guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else {
+  } else if (OB_SUCC(ret = get_replay_status_(guard))) {
+    ret = guard.get_replay_status()->stat(replay_stat);
+  }
+  if (OB_STATE_NOT_MATCH == ret) {
+    // No row after retirement: do not keep or fabricate a historical submit cursor.
+    ret = OB_ITER_END;
+  } else if (OB_SUCC(ret)) {
     palf::PalfHandleGuard handle;
-    if (OB_FAIL(replay_info_.stat(replay_stat))) {
-    } else if (OB_FAIL(open_palf(handle))) {
+    if (OB_FAIL(open_palf(handle))) {
     } else {
       ret = handle.get_palf_handle()->get_end_lsn(replay_stat.end_lsn_);
     }
@@ -584,13 +693,10 @@ int ObLogService::create_ls_(const palf::PalfBaseInfo &palf_base_info,
 
 int ObLogService::diagnose_replay(ReplayDiagnoseInfo &diagnose_info)
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(replay_info_.diagnose(diagnose_info))) {
-  } else {
-    // do nothing
+  ObReplayStatusGuard guard;
+  int ret = get_replay_status_(guard);
+  if (OB_SUCC(ret)) {
+    ret = guard.get_replay_status()->diagnose(diagnose_info);
   }
   return ret;
 }

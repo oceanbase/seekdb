@@ -128,19 +128,19 @@ void ObReplayServiceSubmitTask::destroy()
 
 int ObReplayServiceSubmitTask::get_next_to_submit_log_info(LSN &lsn, SCN &scn) const
 {
-  replay_status_->get_replay_info().get_next_to_submit_log_info(lsn, scn);
+  replay_status_->get_next_to_submit_log_info(lsn, scn);
   return OB_SUCCESS;
 }
 
 int ObReplayServiceSubmitTask::get_base_lsn(LSN &lsn) const
 {
-  lsn = replay_status_->get_replay_info().get_base_lsn();
+  lsn = replay_status_->get_base_lsn();
   return OB_SUCCESS;
 }
 
 int ObReplayServiceSubmitTask::get_base_scn(SCN &scn) const
 {
-  scn = replay_status_->get_replay_info().get_base_scn();
+  scn = replay_status_->get_base_scn();
   return OB_SUCCESS;
 }
 
@@ -159,13 +159,13 @@ bool ObReplayServiceSubmitTask::has_remained_submit_log(const SCN &replayable_po
 
 int ObReplayServiceSubmitTask::update_submit_log_meta_info(const LSN &lsn, const SCN &scn)
 {
-  return replay_status_->get_replay_info().update_submit_log_meta_info(lsn, scn);
+  return replay_status_->update_submit_log_meta_info(lsn, scn);
 }
 
 int ObReplayServiceSubmitTask::need_skip(const SCN &scn, bool &need_skip)
 {
   int ret = OB_SUCCESS;
-  const SCN base_scn = replay_status_->get_replay_info().get_base_scn();
+  const SCN base_scn = replay_status_->get_base_scn();
   if (OB_UNLIKELY(!base_scn.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -188,7 +188,7 @@ int ObReplayServiceSubmitTask::next_log(const SCN &replayable_point,
   LSN unused_cursor;
   SCN next_to_submit_scn;
   get_next_to_submit_log_info(unused_cursor, next_to_submit_scn);
-  const SCN base_scn = replay_status_->get_replay_info().get_base_scn();
+  const SCN base_scn = replay_status_->get_base_scn();
   if (OB_SUCCESS != (tmp_ret = iterator_.next(replayable_point, next_min_scn,
                                               iterate_end_by_replayable_point))) {
     if (OB_ITER_END == tmp_ret) {
@@ -211,7 +211,7 @@ int ObReplayServiceSubmitTask::next_log(const SCN &replayable_point,
         CLOG_LOG(ERROR, "failed to update next_to_submit_scn", K(type_), K(replayable_point),
                  K(next_min_scn), K(next_to_submit_scn), K(ret), K(iterator_));
       } else {
-        ret = replay_status_->get_replay_info().update_submit_scn(next_min_scn);
+        ret = replay_status_->update_submit_scn(next_min_scn);
         CLOG_LOG(INFO, "update next_to_submit_scn", K(type_), K(replayable_point),
                  K(next_min_scn), K(next_to_submit_scn), K(ret), K(iterator_));
       }
@@ -285,7 +285,7 @@ int64_t ObReplayServiceReplayTask::idx() const
 
 void ObReplayServiceReplayTask::update_progress_()
 {
-  ReplayInfo::LogInfo head;
+  ObReplayStatus::LogInfo head;
   if (auto *task = static_cast<ObLogReplayTask *>(top())) {
     head.lsn_ = task->lsn_;
     head.scn_ = task->scn_;
@@ -295,7 +295,7 @@ void ObReplayServiceReplayTask::update_progress_()
     head.replay_cost_ = task->replay_cost_;
     head.retry_cost_ = task->retry_cost_;
   }
-  replay_status_->get_replay_info().set_queue_head(idx_, head);
+  replay_status_->set_queue_head(idx_, head);
 }
 
 ObLink *ObReplayServiceReplayTask::pop()
@@ -453,7 +453,16 @@ ObReplayStatus::ObReplayStatus():
     rwlock_(common::ObLatchIds::REPLAY_STATUS_LOCK),
     local_replay_lock_(common::ObLatchIds::REPLAY_STATUS_LOCK),
     rp_sv_(NULL),
-    replay_info_(nullptr),
+    progress_lock_(),
+    next_to_submit_lsn_(),
+    next_to_submit_scn_(),
+    base_lsn_(),
+    base_scn_(),
+    queue_heads_(),
+    error_(),
+    replayable_point_(SCN::min_scn()),
+    pending_size_(0),
+    pending_count_(0),
     submit_log_task_(),
     palf_env_(NULL),
     palf_handle_(),
@@ -470,14 +479,14 @@ ObReplayStatus::~ObReplayStatus()
 }
 
 int ObReplayStatus::init(PalfEnv *palf_env,
-                         ObLogReplayService *rp_sv, ReplayInfo *replay_info)
+                         ObLogReplayService *rp_sv)
 {
   //TODO: use replica type init need_replay
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "replay status has already been inited", K(ret));
-  } else if (OB_ISNULL(palf_env) || OB_ISNULL(rp_sv) || OB_ISNULL(replay_info)) {
+  } else if (OB_ISNULL(palf_env) || OB_ISNULL(rp_sv)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(rp_sv), KP(palf_env), K(ret));
   } else if (OB_FAIL(palf_env->open(palf_handle_))) {
@@ -487,7 +496,6 @@ int ObReplayStatus::init(PalfEnv *palf_env,
     check_enable_debug_time_ = OB_INVALID_TIMESTAMP;
     palf_env_ = palf_env;
     rp_sv_ = rp_sv;
-    replay_info_ = replay_info;
     IGNORE_RETURN new (&fs_cb_) ObReplayFsCb(this);
     is_inited_ = true;
     if (OB_FAIL(palf_handle_.register_file_size_cb(&fs_cb_))) {
@@ -554,13 +562,16 @@ int ObReplayStatus::enable_(const LSN &base_lsn, const SCN &base_scn)
 {
   int ret = OB_SUCCESS;
   // Processing submit_task requires setting the enable state first
-  is_active_ = true;
+  {
+    ObLockGuard<ObSpinLock> guard(progress_lock_);
+    is_active_ = true;
+  }
   is_submit_blocked_ = false;
-  if (0 != replay_info_->get_pending_count()) {
+  if (0 != get_pending_count()) {
     //Defense check for reuse scenario
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "remain pending task when enable replay status", K(ret), KPC(this));
-  } else if (FALSE_IT(replay_info_->init_progress(base_lsn, base_scn))) {
+  } else if (FALSE_IT(init_progress(base_lsn, base_scn))) {
   } else if (OB_FAIL(submit_log_task_.init(base_lsn, base_scn, this))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < REPLAY_TASK_QUEUE_SIZE; ++i) {
@@ -610,7 +621,10 @@ int ObReplayStatus::disable()
 int ObReplayStatus::disable_()
 {
   int ret = OB_SUCCESS;
-  is_active_ = false;
+  {
+    ObLockGuard<ObSpinLock> guard(progress_lock_);
+    is_active_ = false;
+  }
   submit_log_task_.reset();
   for (int64_t i = 0; i < REPLAY_TASK_QUEUE_SIZE; ++i) {
     task_queues_[i].reset();
@@ -664,7 +678,7 @@ bool ObReplayStatus::need_submit_log() const
 bool ObReplayStatus::is_idle() const
 {
   RLockGuard guard(rwlock_);
-  bool idle = replay_info_->get_pending_count() == 0 && submit_log_task_.is_idle();
+  bool idle = get_pending_count() == 0 && submit_log_task_.is_idle();
   for (int64_t i = 0; idle && i < REPLAY_TASK_QUEUE_SIZE; ++i) {
     idle = task_queues_[i].is_idle();
   }
@@ -699,11 +713,6 @@ int ObReplayStatus::update_end_offset(const LSN &lsn)
   } else if (OB_FAIL(submit_task_to_replay_service_(submit_log_task_))) {
   }
   return ret;
-}
-
-int ObReplayStatus::get_min_unreplayed_lsn(LSN &lsn)
-{
-  return replay_info_->get_min_unreplayed_lsn(lsn);
 }
 
 int ObReplayStatus::get_replay_process(int64_t &submitted_log_size,
@@ -837,7 +846,7 @@ void ObReplayStatus::inc_pending_task(const int64_t log_size)
   } else if (OB_ISNULL(rp_sv_)) {
     CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "rp sv is NULL", K(log_size), KPC(this));
   } else {
-    rp_sv_->inc_pending_task_size(log_size);
+    inc_pending_size(log_size);
   }
 }
 
@@ -848,7 +857,7 @@ void ObReplayStatus::dec_pending_task(const int64_t log_size)
   } else if (OB_ISNULL(rp_sv_)) {
     CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "rp sv is NULL", K(log_size), KPC(this));
   } else {
-    rp_sv_->dec_pending_task_size(log_size);
+    dec_pending_size(log_size);
   }
 }
 
@@ -948,17 +957,6 @@ int ObReplayStatus::check_replay_barrier(ObLogReplayTask *replay_task,
   return ret;
 }
 
-void ObReplayStatus::set_err_info(const palf::LSN &lsn,
-                                  const SCN &scn,
-                                  const ObLogBaseType &log_type,
-                                  const int64_t replay_hint,
-                                  const bool is_submit_err,
-                                  const int64_t err_ts,
-                                  const int err_ret)
-{
-  replay_info_->set_err_info(lsn, scn, log_type, replay_hint, is_submit_err, err_ts, err_ret);
-}
-
 int ObReplayStatus::submit_task_to_replay_service_(ObReplayServiceTask &task)
 {
   int ret = OB_SUCCESS;
@@ -985,6 +983,249 @@ int ObReplayStatus::trigger_fetch_log()
     // do nothing
   }
   return ret;
+}
+
+void ObReplayStatus::init_progress(const LSN &lsn, const SCN &scn)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  next_to_submit_lsn_ = base_lsn_ = lsn;
+  next_to_submit_scn_ = SCN::min_scn();
+  base_scn_ = scn;
+  for (auto &head : queue_heads_) {
+    head = LogInfo();
+  }
+  error_ = ErrorInfo();
+  replayable_point_.atomic_store(SCN::min_scn());
+}
+
+void ObReplayStatus::get_next_to_submit_log_info(LSN &lsn, SCN &scn) const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  lsn = next_to_submit_lsn_;
+  scn = next_to_submit_scn_;
+}
+
+LSN ObReplayStatus::get_base_lsn() const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  return base_lsn_;
+}
+
+SCN ObReplayStatus::get_base_scn() const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  return base_scn_;
+}
+
+int ObReplayStatus::update_submit_log_meta_info(const LSN &lsn, const SCN &scn)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  int ret = OB_SUCCESS;
+  if (lsn <= next_to_submit_lsn_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    // Publish the cursor only after the corresponding task's queue head.
+    next_to_submit_lsn_ = lsn;
+    if (scn < base_scn_) {
+      // A block-aligned base may contain prefix logs covered by the checkpoint.
+    } else if (SCN::scn_inc(scn) <= next_to_submit_scn_) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      next_to_submit_scn_ = SCN::scn_inc(scn);
+    }
+  }
+  return ret;
+}
+
+int ObReplayStatus::update_submit_scn(const SCN &scn)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  int ret = OB_SUCCESS;
+  if (scn < next_to_submit_scn_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    next_to_submit_scn_ = scn;
+  }
+  return ret;
+}
+
+void ObReplayStatus::set_queue_head(const int64_t index, const LogInfo &head)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  queue_heads_[index] = head;
+}
+
+void ObReplayStatus::set_queue_first_handle_ts(const int64_t index, const int64_t timestamp)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  queue_heads_[index].first_handle_ts_ = timestamp;
+}
+
+ObReplayStatus::LogInfo ObReplayStatus::get_min_unreplayed_log_info_() const
+{
+  LogInfo result;
+  result.lsn_ = next_to_submit_lsn_;
+  result.scn_ = std::max(next_to_submit_scn_, base_scn_);
+  if (next_to_submit_scn_ > base_scn_) {
+    for (const auto &head : queue_heads_) {
+      if (head.lsn_.is_valid() && head.lsn_ < result.lsn_ && head.scn_ < result.scn_) {
+        result = head;
+      }
+    }
+  }
+  return result;
+}
+
+int ObReplayStatus::get_min_unreplayed_lsn(LSN &lsn)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  lsn = get_min_unreplayed_log_info_().lsn_;
+  return OB_SUCCESS;
+}
+
+int ObReplayStatus::get_min_unreplayed_scn(SCN &scn) const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  if (!is_active_) {
+    return OB_STATE_NOT_MATCH;
+  }
+  scn = get_min_unreplayed_log_info_().scn_;
+  return OB_SUCCESS;
+}
+
+int ObReplayStatus::is_replay_done(const LSN &end_lsn, bool &done) const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  done = false;
+  if (!is_active_) {
+    return OB_STATE_NOT_MATCH;
+  }
+  done = get_min_unreplayed_log_info_().lsn_ >= end_lsn;
+  return OB_SUCCESS;
+}
+
+int ObReplayStatus::get_max_replayed_scn(SCN &scn) const
+{
+  int ret = OB_SUCCESS;
+  SCN min_scn;
+  if (OB_SUCC(ret = get_min_unreplayed_scn(min_scn))) {
+    scn = min_scn > SCN::base_scn() ? SCN::scn_dec(min_scn) : SCN::min_scn();
+  }
+  return ret;
+}
+
+int ObReplayStatus::stat(LSReplayStat &stat) const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  if (!is_active_) {
+    return OB_STATE_NOT_MATCH;
+  }
+  stat.enabled_ = is_active_;
+  stat.pending_cnt_ = ATOMIC_LOAD(&pending_count_);
+  stat.unsubmitted_lsn_ = next_to_submit_lsn_;
+  stat.unsubmitted_scn_ = next_to_submit_scn_;
+  // LogService fills the live PALF tail without retaining the replay executor.
+  stat.end_lsn_.reset();
+  return OB_SUCCESS;
+}
+
+void ObReplayStatus::set_err_info(const LSN &lsn, const SCN &scn,
+                             const ObLogBaseType &type, const int64_t hint,
+                             const bool is_submit_err, const int64_t timestamp,
+                             const int ret)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  error_.log_.lsn_ = lsn;
+  error_.log_.scn_ = scn;
+  error_.log_.log_type_ = type;
+  error_.log_.replay_hint_ = hint;
+  error_.log_.first_handle_ts_ = timestamp;
+  error_.is_submit_err_ = is_submit_err;
+  error_.err_ret_ = ret;
+}
+
+int ObReplayStatus::diagnose(ReplayDiagnoseInfo &info) const
+{
+  LogInfo log;
+  bool enabled = false, submit_error = false;
+  int replay_ret = OB_SUCCESS;
+  {
+    ObLockGuard<ObSpinLock> guard(progress_lock_);
+    if (!is_active_) {
+      return OB_STATE_NOT_MATCH;
+    }
+    enabled = is_active_;
+    log = get_min_unreplayed_log_info_();
+    info.max_replayed_lsn_ = log.lsn_;
+    info.max_replayed_scn_ = log.scn_ > SCN::base_scn()
+        ? SCN::scn_dec(log.scn_) : SCN::min_scn();
+    if (OB_SUCCESS != error_.err_ret_) {
+      log = error_.log_;
+      replay_ret = error_.err_ret_;
+      submit_error = error_.is_submit_err_;
+    } else if (log.retry_cost_ > 0 || log.replay_cost_ > 0) {
+      replay_ret = OB_EAGAIN;
+    }
+  }
+  char type[MAX_SERVICE_TYPE_BUF_LENGTH] = {};
+  int ret = log_base_type_to_string(log.log_type_, type, sizeof(type));
+  info.diagnose_str_.reset();
+  if (OB_SUCC(ret)) {
+    ret = info.diagnose_str_.append_fmt(
+        "is_enabled:%s; ret:%d; min_unreplayed_lsn:%ld; min_unreplayed_scn:%lu; "
+        "replay_hint:%ld; log_type:%s; replay_cost:%ld; retry_cost:%ld; first_handle_time:%ld;",
+        enabled ? "true" : "false", replay_ret, log.lsn_.val_,
+        log.scn_.get_val_for_inner_table_field(), log.replay_hint_,
+        submit_error ? "REPLAY_SUBMIT" : type, log.replay_cost_, log.retry_cost_, log.first_handle_ts_);
+  }
+  return ret;
+}
+
+bool ObReplayStatus::is_fatal_error(const int ret)
+{
+  return OB_SUCCESS != ret && OB_ALLOCATE_MEMORY_FAILED != ret && OB_EAGAIN != ret
+      && OB_NOT_RUNNING != ret && OB_IO_ERROR != ret && OB_DISK_HUNG != ret;
+}
+
+bool ObReplayStatus::has_fatal_error() const
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  return is_active_ && is_fatal_error(error_.err_ret_);
+}
+
+void ObReplayStatus::inc_pending_size(const int64_t size)
+{
+  ATOMIC_INC(&pending_count_);
+  ATOMIC_AAF(&pending_size_, size);
+}
+
+void ObReplayStatus::dec_pending_size(const int64_t size)
+{
+  ATOMIC_DEC(&pending_count_);
+  const int64_t remaining = ATOMIC_SAF(&pending_size_, size);
+  if (remaining < 0) {
+    CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "negative pending replay size", K(remaining), K(size));
+  }
+}
+
+int64_t ObReplayStatus::get_pending_size() const
+{
+  return ATOMIC_LOAD(&pending_size_);
+}
+
+int64_t ObReplayStatus::get_pending_count() const
+{
+  return ATOMIC_LOAD(&pending_count_);
+}
+
+void ObReplayStatus::update_replayable_point(const SCN &scn)
+{
+  replayable_point_.inc_update(scn);
+}
+
+SCN ObReplayStatus::get_replayable_point() const
+{
+  return replayable_point_.atomic_load();
 }
 
 } // namespace logservice

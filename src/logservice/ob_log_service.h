@@ -113,7 +113,6 @@ public:
   int open_palf(palf::PalfHandleGuard &palf_handle);
 
   int update_replayable_point(const share::SCN &replayable_point);
-  int get_replayable_point(share::SCN &replayable_point);
 
   // @brief get palf disk usage
   // @param [out] used_size_byte
@@ -163,7 +162,12 @@ public:
   int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
-  const ReplayInfo &get_replay_info() const { return replay_info_; }
+  bool is_replay_enabled() const;
+  bool is_replay_finished() const;
+  int get_max_decided_scn(share::SCN &scn);
+  int get_max_replayed_scn(share::SCN &scn);
+  int get_min_unreplayed_scn(share::SCN &scn);
+  int has_replay_fatal_error(bool &has_error);
   int enable_replay(const palf::LSN &lsn, const share::SCN &scn);
   int disable_replay();
   int finish_replay(int64_t deadline_us);
@@ -184,6 +188,7 @@ public:
 
 private:
   void destroy_replay_();
+  int get_replay_status_(ObReplayStatusGuard &guard) const;
   int create_ls_(const palf::PalfBaseInfo &palf_base_info,
                  ObLogHandler &log_handler);
   int get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size);
@@ -198,7 +203,11 @@ private:
 
   ObLogApplyService apply_service_;
   lib::ObMutex replay_lock_;
-  ReplayInfo replay_info_;
+  mutable common::ObSpinLock replay_status_lock_;
+  // Protected by replay_status_lock_; only published while the executor exists.
+  ObReplayStatus *replay_status_;
+  bool replay_enabled_;
+  bool replay_finished_;
   ObLogReplayService *replay_service_;
   int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;

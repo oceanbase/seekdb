@@ -24,7 +24,6 @@
 #include "share/scn.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_iterator.h"
-#include "logservice/replayservice/replay_info.h"
 #include "logservice/palf/palf_handle.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_spin_rwlock.h"
@@ -45,6 +44,31 @@ class PalfEnv;
 namespace logservice
 {
 class ObLogReplayService;
+struct LSReplayStat
+{
+  palf::LSN end_lsn_;
+  bool enabled_;
+  palf::LSN unsubmitted_lsn_;
+  share::SCN unsubmitted_scn_;
+  int64_t pending_cnt_;
+  TO_STRING_KV(K(end_lsn_), K(enabled_), K(unsubmitted_lsn_),
+               K(unsubmitted_scn_), K(pending_cnt_));
+};
+
+struct ReplayDiagnoseInfo
+{
+  ReplayDiagnoseInfo() { reset(); }
+  ~ReplayDiagnoseInfo() { reset(); }
+  palf::LSN max_replayed_lsn_;
+  share::SCN max_replayed_scn_;
+  common::ObSqlString diagnose_str_;
+  TO_STRING_KV(K(max_replayed_lsn_), K(max_replayed_scn_));
+  void reset() {
+    max_replayed_lsn_.reset();
+    max_replayed_scn_.reset();
+  }
+};
+
 // replay status contains several task types, their meanings are as follows:
 // 1.ObReplayServiceTask: base class task, used to submit to the global queue of replay service
 // 2.ObLogReplayTask: The specific replay task generated for each log entry, each sub-log in the aggregated log corresponds to an independent ObLogReplayTask
@@ -332,6 +356,8 @@ private:
 class ObReplayStatus
 {
   friend class ObReplayServiceSubmitTask;
+  friend class ObReplayServiceReplayTask;
+  friend class ObLogReplayService;
 public:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
@@ -341,13 +367,13 @@ public:
   ObReplayStatus();
   ~ObReplayStatus();
   int init(palf::PalfEnv *palf_env,
-           ObLogReplayService *rp_sv, ReplayInfo *replay_info);
+           ObLogReplayService *rp_sv);
   void destroy();
 public:
   int enable(const palf::LSN &base_lsn,
              const share::SCN &base_scn);
   int disable();
-  // Internal execution gate; closing it does not clear ReplayInfo's enabled state.
+  // Internal execution gate; LogService owns the logical enabled state.
   bool is_active() const;
   // for replay service when holding rdlock
   bool is_active_without_lock() const;
@@ -421,14 +447,19 @@ public:
                     const bool is_submit_err,
                     const int64_t err_ts,
                     const int err_ret);
-  bool has_fatal_error() const
-  {
-    bool error = false;
-    replay_info_->has_fatal_error(error);
-    return error;
-  }
-  bool is_fatal_error(const int ret) const { return ReplayInfo::is_fatal_error(ret); }
-  ReplayInfo &get_replay_info() { return *replay_info_; }
+  bool has_fatal_error() const;
+  static bool is_fatal_error(int ret);
+  int is_replay_done(const palf::LSN &end_lsn, bool &done) const;
+  int get_max_replayed_scn(share::SCN &scn) const;
+  int get_min_unreplayed_scn(share::SCN &scn) const;
+  int stat(LSReplayStat &stat) const;
+  int diagnose(ReplayDiagnoseInfo &info) const;
+  void inc_pending_size(int64_t size);
+  void dec_pending_size(int64_t size);
+  int64_t get_pending_size() const;
+  int64_t get_pending_count() const;
+  void update_replayable_point(const share::SCN &scn);
+  share::SCN get_replayable_point() const;
   bool need_check_memstore(const palf::LSN &lsn)
   {
     return (lsn - last_check_memstore_lsn_) > LS_CHECK_MEMSTORE_INTERVAL_THRESHOLD;
@@ -478,7 +509,42 @@ private:
   mutable RWLock local_replay_lock_;
 
   ObLogReplayService *rp_sv_;
-  ReplayInfo *replay_info_;
+  struct LogInfo
+  {
+    palf::LSN lsn_;
+    share::SCN scn_;
+    int64_t replay_hint_ = 0;
+    ObLogBaseType log_type_ = ObLogBaseType::INVALID_LOG_BASE_TYPE;
+    int64_t first_handle_ts_ = 0;
+    int64_t replay_cost_ = 0;
+    int64_t retry_cost_ = 0;
+  };
+  struct ErrorInfo
+  {
+    LogInfo log_;
+    bool is_submit_err_ = false;
+    int err_ret_ = common::OB_SUCCESS;
+  };
+  void init_progress(const palf::LSN &base_lsn, const share::SCN &base_scn);
+  void get_next_to_submit_log_info(palf::LSN &lsn, share::SCN &scn) const;
+  palf::LSN get_base_lsn() const;
+  share::SCN get_base_scn() const;
+  int update_submit_log_meta_info(const palf::LSN &lsn, const share::SCN &scn);
+  int update_submit_scn(const share::SCN &scn);
+  void set_queue_head(int64_t index, const LogInfo &head);
+  void set_queue_first_handle_ts(int64_t index, int64_t timestamp);
+  LogInfo get_min_unreplayed_log_info_() const; // caller holds progress_lock_
+  mutable common::ObSpinLock progress_lock_;
+  palf::LSN next_to_submit_lsn_;
+  share::SCN next_to_submit_scn_;
+  palf::LSN base_lsn_;
+  share::SCN base_scn_;
+  LogInfo queue_heads_[common::REPLAY_TASK_QUEUE_SIZE];
+  ErrorInfo error_;
+  share::SCN replayable_point_;
+  int64_t pending_size_;
+  int64_t pending_count_;
+
   // be sure to clear these queues when the partition is offline to prevent old replay task is replayed in situation of migrating out and then migrating in
   ObReplayServiceReplayTask task_queues_[common::REPLAY_TASK_QUEUE_SIZE];
   ObReplayServiceSubmitTask submit_log_task_;
