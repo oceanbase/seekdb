@@ -32,6 +32,7 @@
 #include "ob_trans_ctx_mgr.h"
 #include "ob_trans_memory_stat.h"
 #include "ob_tx_version_mgr.h"
+#include "storage/tx/async_index_log_signal.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/container/ob_iarray.h"
 #include "share/ob_server_struct.h"
@@ -143,6 +144,7 @@ public:
   ObTxTimestampWaiter &get_tx_timestamp_waiter() { return tx_timestamp_waiter_; }
   share::schema::ObMultiVersionSchemaService *get_schema_service() { return schema_service_; }
   ObTxVersionMgr &get_tx_version_mgr() { return tx_version_mgr_; }
+  AsyncIndexLogSignal &get_async_index_log_signal() { return async_index_log_signal_; }
   int register_mds_into_tx(ObTxDesc &tx_desc,
                            const ObTxDataSourceType &type,
                            const char *buf,
@@ -207,6 +209,7 @@ private:
   // tenant level atomic inc seq, just for debug
   int64_t tx_debug_seq_;
   ObReadOnlyTxChecker read_only_checker_;
+  AsyncIndexLogSignal async_index_log_signal_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransService);
 };

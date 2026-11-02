@@ -101,6 +101,7 @@ STORAGE_PUBLIC_HEADER_ROOTS = [
     "truncate_info/ob_truncate_info_array.h",
     "truncate_info/ob_truncate_partition_filter.h",
     "truncate_info/ob_truncate_tablet_arg.h",
+    "tx/async_index_log_signal.h",
     "tx/ob_id_service.h",
     "tx/ob_multi_data_source.h",
     "tx/ob_timestamp_access.h",

@@ -596,3 +596,18 @@ cc_library(
     tags = ["manual"],
     visibility = ["//unittest/storage/tx:__pkg__"],
 )
+
+cc_library(
+    name = "async_index_log_signal_test_headers",
+    testonly = True,
+    hdrs = [
+        "tx/async_index_log_signal.h",
+        "tx/ob_trans_submit_log_cb.h",
+    ],
+    deps = [
+        ":storage_runtime_interface",
+        "//src/logservice:logservice",
+    ] + _STORAGE_INTERFACE_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/storage/tx:__pkg__"],
+)

@@ -1408,6 +1408,7 @@ int ObServer::obs_init_modules()
       mods_change_stream_mgr_,
       *mods_log_storage_adapter_,
       schema_publish_signal_,
+      mods_trans_service_->get_async_index_log_signal(),
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));
   }

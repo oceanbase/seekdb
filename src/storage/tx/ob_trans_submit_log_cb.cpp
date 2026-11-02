@@ -17,6 +17,7 @@
 #include "ob_trans_submit_log_cb.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tx_ctx.h"
+#include "ob_trans_service.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
@@ -122,6 +123,7 @@ void ObTxLogCb::reset()
   callbacks_.reset();
   is_callbacked_ = false;
   is_busy_ = false;
+  has_async_index_ = false;
   cb_arg_array_.reset();
   mds_range_.reset();
 
@@ -138,6 +140,7 @@ void ObTxLogCb::reuse()
   callbacks_.reset();
   is_callbacked_ = false;
   is_busy_ = false;
+  has_async_index_ = false;
   cb_arg_array_.reset();
   mds_range_.reset();
 
@@ -173,6 +176,11 @@ int ObTxLogCb::on_success()
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "ctx is null", K(ret), KPC(part_ctx));
     } else {
+      // PALF has confirmed this log readable. The callback and context may be
+      // recycled by on_success(), so notify before handing them back.
+      if (has_async_index_) {
+        part_ctx->get_trans_service()->get_async_index_log_signal().notify_log_ready(true);
+      }
       if (OB_FAIL(part_ctx->on_success(this))) {
       }
     }
@@ -210,6 +218,7 @@ int ObTxLogCb::copy(const ObTxLogCb &other)
   log_ts_ = other.log_ts_;
   lsn_ = other.lsn_;
   submit_ts_ = other.submit_ts_;
+  has_async_index_ = other.has_async_index_;
   if (OB_FAIL(callbacks_.assign(other.callbacks_))) {
   } else if (FALSE_IT(is_callbacked_ = other.is_callbacked_)) {
   // without txdata

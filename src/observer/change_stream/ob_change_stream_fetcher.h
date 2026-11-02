@@ -39,6 +39,10 @@ namespace logservice
 {
 class ObILogStorage;
 }
+namespace transaction
+{
+class AsyncIndexLogSignal;
+}
 namespace share
 {
 namespace schema
@@ -61,8 +65,8 @@ static constexpr int64_t CS_FETCHER_INIT_RETRY_SLEEP_US = 500 * 1000;
 static constexpr int64_t CS_FETCHER_INIT_FAIL_SLEEP_US = 1000 * 1000;
 /// Cond wait timeout in IDLE mode (no async-index tables). 10s fallback; schema changes wake immediately.
 static constexpr int64_t CS_FETCHER_IDLE_COND_WAIT_MS = 10 * 1000;
-/// Sleep when caught up (OB_ITER_END).
-static constexpr int64_t CS_FETCHER_ITER_END_SLEEP_US = 200 * 1000;
+/// Maximum caught-up wait; also drives maintenance and non-local log progress.
+static constexpr int64_t CS_FETCHER_ITER_END_WAIT_US = 200 * 1000;
 /// Sleep when iter.next/get_entry fails.
 static constexpr int64_t CS_FETCHER_ITER_ERR_SLEEP_US = 100 * 1000;
 /// tx_info_ hash bucket count.
@@ -133,6 +137,7 @@ public:
       ObCSDispatcher *dispatcher,
       logservice::ObILogStorage &log_storage,
       schema::ObSchemaPublishSignal &schema_publish_signal,
+      transaction::AsyncIndexLogSignal &async_index_log_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
   void stop();
@@ -205,6 +210,7 @@ private:
   transaction::ObTransID current_processing_tx_id_;
   schema::ObSchemaPublishSignal *schema_publish_signal_;
   int64_t observed_schema_publish_epoch_;
+  transaction::AsyncIndexLogSignal *async_index_log_signal_;
 };
 
 }  // namespace share

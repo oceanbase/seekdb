@@ -25,6 +25,7 @@
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/ob_global_stat_proxy.h"
 #include "storage/tx/ob_tx_log.h"
+#include "storage/tx/async_index_log_signal.h"
 #include "storage/tx/ob_multi_data_source.h"
 #include "storage/memtable/ob_memtable_mutator.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -62,7 +63,8 @@ ObCSFetcher::ObCSFetcher()
     last_checked_schema_version_(0),
     current_processing_tx_id_(),
     schema_publish_signal_(nullptr),
-    observed_schema_publish_epoch_(0)
+    observed_schema_publish_epoch_(0),
+    async_index_log_signal_(nullptr)
 {
 }
 
@@ -75,6 +77,7 @@ int ObCSFetcher::init(
     ObCSDispatcher *dispatcher,
     logservice::ObILogStorage &log_storage,
     schema::ObSchemaPublishSignal &schema_publish_signal,
+    transaction::AsyncIndexLogSignal &async_index_log_signal,
     lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
@@ -90,6 +93,7 @@ int ObCSFetcher::init(
     log_storage_ = &log_storage;
     schema_publish_signal_ = &schema_publish_signal;
     observed_schema_publish_epoch_ = schema_publish_signal.current_epoch();
+    async_index_log_signal_ = &async_index_log_signal;
     current_scn_.set_min();
     total_tx_committed_ = 0;
     is_inited_ = true;
@@ -185,6 +189,9 @@ int ObCSFetcher::start()
 void ObCSFetcher::stop()
 {
   ObThreadPool::stop();
+  if (OB_NOT_NULL(async_index_log_signal_)) {
+    async_index_log_signal_->wake_waiter();
+  }
   if (OB_NOT_NULL(schema_publish_signal_)) {
     schema_publish_signal_->wake_waiters();
   }
@@ -213,6 +220,7 @@ void ObCSFetcher::destroy()
     log_storage_ = nullptr;
     schema_publish_signal_ = nullptr;
     observed_schema_publish_epoch_ = 0;
+    async_index_log_signal_ = nullptr;
     current_lsn_.reset();
     current_scn_.reset();
     is_inited_ = false;
@@ -747,6 +755,9 @@ void ObCSFetcher::run1()
     }
   }
 
+  // Enable before the initial iterator check so existing logs and a concurrent
+  // ready notification are both covered. IDLE waits only on the schema signal.
+  async_index_log_signal_->set_enabled(ACTIVE == running_mode_);
   bool iter_ready = false;
 
   // Main state-machine loop.
@@ -790,6 +801,7 @@ void ObCSFetcher::run1()
             }
           }
           running_mode_ = new_mode;
+          async_index_log_signal_->set_enabled(ACTIVE == running_mode_);
           if (ACTIVE == running_mode_) {
             iter_ready = false;
           }
@@ -834,9 +846,14 @@ void ObCSFetcher::run1()
       }
     }
 
+    // Snapshot before checking the iterator: a notification between ITER_END
+    // and wait changes this key, so the futex comparison will refuse to sleep.
+    const uint32_t log_progress_key = async_index_log_signal_->get_key();
     if (OB_FAIL(iter_.next())) {
       if (OB_ITER_END == ret) {
-        usleep(CS_FETCHER_ITER_END_SLEEP_US);
+        if (!has_set_stop()) {
+          (void)async_index_log_signal_->wait(log_progress_key, CS_FETCHER_ITER_END_WAIT_US);
+        }
         continue;
       }
       usleep(CS_FETCHER_ITER_ERR_SLEEP_US);
@@ -992,6 +1009,7 @@ void ObCSFetcher::run1()
     }
   }
 
+  async_index_log_signal_->set_enabled(false);
   FLOG_INFO("CSFetcher: stopped",
             "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
             K(current_lsn_), K(current_scn_), K(total_tx_committed_));

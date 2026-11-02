@@ -118,6 +118,8 @@ public:
   bool is_callbacked() const { return ATOMIC_LOAD(&is_callbacked_); }
   void set_busy() { ATOMIC_STORE(&is_busy_, true); }
   bool is_busy() const { return ATOMIC_LOAD(&is_busy_); }
+  void set_has_async_index(const bool has_async_index) { has_async_index_ = has_async_index; }
+  bool has_async_index() const { return has_async_index_; }
   ObTxCtx *get_tx_ctx() const { return tx_ctx_; }
   ObTxCbArgArray &get_cb_arg_array() { return cb_arg_array_; }
   const ObTxCbArgArray &get_cb_arg_array() const { return cb_arg_array_; }
@@ -142,6 +144,7 @@ public:
                        K_(tx_data_guard),
                        K(is_callbacked_),
                        K(is_busy_),
+                       K_(has_async_index),
                        K(mds_range_),
                        K(cb_arg_array_),
                        K(first_part_scn_),
@@ -155,6 +158,7 @@ public:
   ObTxCtx *tx_ctx_ = nullptr;
   bool is_callbacked_;
   bool is_busy_;
+  bool has_async_index_;
 
   ObTxDataGuard tx_data_guard_;
   ObCallbackScopeArray callbacks_;

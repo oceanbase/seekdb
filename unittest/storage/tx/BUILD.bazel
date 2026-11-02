@@ -25,3 +25,25 @@ cc_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )
+
+cc_library(
+    name = "async_index_log_signal_cases",
+    srcs = ["test_async_index_log_signal.cpp"],
+    alwayslink = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//src/storage:async_index_log_signal_test_headers",
+    ],
+)
+
+cc_test(
+    name = "test_async_index_log_signal",
+    size = "small",
+    linkstatic = True,
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":async_index_log_signal_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

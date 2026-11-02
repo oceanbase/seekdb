@@ -30,6 +30,10 @@ namespace logservice
 {
 class ObILogStorage;
 }
+namespace transaction
+{
+class AsyncIndexLogSignal;
+}
 namespace share
 {
 namespace schema
@@ -50,11 +54,13 @@ public:
       ObChangeStreamMgr *&mgr,
       logservice::ObILogStorage &log_storage,
       schema::ObSchemaPublishSignal &schema_publish_signal,
+      transaction::AsyncIndexLogSignal &async_index_log_signal,
       lib::IRunWrapper *run_wrapper);
 
   int init(
       logservice::ObILogStorage &log_storage,
       schema::ObSchemaPublishSignal &schema_publish_signal,
+      transaction::AsyncIndexLogSignal &async_index_log_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
   void stop();
