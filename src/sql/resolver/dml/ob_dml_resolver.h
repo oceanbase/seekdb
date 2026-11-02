@@ -408,6 +408,7 @@ protected:
   int resolve_order_clause(const ParseNode *node, bool is_for_set_query = false);
   int resolve_limit_clause(const ParseNode *node, bool disable_offset = false);
   int resolve_approx_clause(const ParseNode *approx_node);
+  int replace_with_negative_inner_product(OrderItem &order_item);
   int resolve_vector_index_params(const ParseNode *params_node);
   int resolve_into_clause(const ParseNode *node);
 public:

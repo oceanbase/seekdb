@@ -1,0 +1,37 @@
+#owner: database-competition
+#owner group: shenzhen
+--echo # inner_product(...) DESC APPROXIMATE uses the inner product vector index (issue #1470)
+
+alter system set vector_memory_limit = 0;
+sleep 3;
+
+--disable_warnings
+drop table if exists t_ip;
+--enable_warnings
+create table t_ip(c1 int primary key, c2 vector(3),
+  vector index idx_ip(c2) with (distance=inner_product, type=hnsw, lib=vsag));
+insert into t_ip values
+  (1, '[1,0,0]'), (2, '[0.9,0.1,0]'), (3, '[0,1,0]'), (4, '[0,0,1]'),
+  (5, '[-1,0,0]'), (6, '[0.5,0.5,0.5]'), (7, '[0.2,0.1,0.9]'), (8, null);
+
+--echo # the descending inner product order uses the vector index, like negative_inner_product ASC
+--replace_regex /__vid_[0-9]+/__vid/ /__type_17_[0-9]+/__type_17/
+explain basic select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') desc approximate limit 3;
+--replace_regex /__vid_[0-9]+/__vid/ /__type_17_[0-9]+/__type_17/
+explain basic select c1 from t_ip order by negative_inner_product(c2, '[1,0.2,0]') approximate limit 3;
+
+--echo # same rows and order as the exact search and the negative_inner_product form
+select c1, round(inner_product(c2, '[1,0.2,0]'), 4) as score
+  from t_ip order by inner_product(c2, '[1,0.2,0]') desc approximate limit 3;
+select c1 from t_ip order by negative_inner_product(c2, '[1,0.2,0]') approximate limit 3;
+select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') desc limit 3;
+
+--echo # the score in the select list keeps the inner product value
+select c1, round(inner_product(c2, '[0,0,1]'), 4) as score
+  from t_ip order by inner_product(c2, '[0,0,1]') desc approximate limit 2;
+
+--echo # ascending inner product is not an index order and keeps the exact plan
+explain basic select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') approximate limit 3;
+select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') approximate limit 3;
+
+drop table t_ip;
