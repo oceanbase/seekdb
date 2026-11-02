@@ -5344,8 +5344,17 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
+      if (OB_FAIL(ret) || !is_match || !is_vec_index_valid) {
+      } else if (tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
         stmt->set_has_vec_approx(true);
+      } else if (is_descending_direction(stmt->get_order_item(0).order_type_)) {
+        // inner_product(v, q) DESC ranks rows exactly like negative_inner_product(v, q) ASC,
+        // which is the order the inner product vector index returns. Sort by the latter so
+        // APPROXIMATE uses the index instead of falling back to a full scan.
+        if (OB_FAIL(replace_with_negative_inner_product(stmt->get_order_items().at(0)))) {
+        } else {
+          stmt->set_has_vec_approx(true);
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
@@ -5359,6 +5368,40 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
   } else if (OB_NOT_NULL(approx_node)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Multi order by item when using vector index is");
+  }
+  return ret;
+}
+
+int ObDMLResolver::replace_with_negative_inner_product(OrderItem &order_item)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *ip_expr = order_item.expr_;
+  ObSysFunRawExpr *neg_ip_expr = NULL;
+  if (OB_ISNULL(ip_expr) || OB_ISNULL(params_.expr_factory_) || OB_ISNULL(session_info_)
+      || OB_UNLIKELY(T_FUN_SYS_INNER_PRODUCT != ip_expr->get_expr_type())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected order item", K(ret), KPC(ip_expr));
+  } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_FUN_SYS_NEGATIVE_INNER_PRODUCT, neg_ip_expr))) {
+    LOG_WARN("failed to create negative inner product expr", K(ret));
+  } else if (OB_ISNULL(neg_ip_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(neg_ip_expr->init_param_exprs(ip_expr->get_param_count()))) {
+    LOG_WARN("failed to init param exprs", K(ret));
+  } else {
+    neg_ip_expr->set_func_name(ObString::make_string(N_VECTOR_NEGATIVE_INNER_PRODUCT));
+    for (int64_t i = 0; OB_SUCC(ret) && i < ip_expr->get_param_count(); ++i) {
+      if (OB_FAIL(neg_ip_expr->add_param_expr(ip_expr->get_param_expr(i)))) {
+        LOG_WARN("failed to add param expr", K(ret));
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(neg_ip_expr->formalize(session_info_))) {
+      LOG_WARN("failed to formalize negative inner product expr", K(ret));
+    } else {
+      // DESC places NULL last, keep it last after reversing the direction
+      order_item.expr_ = neg_ip_expr;
+      order_item.order_type_ = NULLS_LAST_ASC;
+    }
   }
   return ret;
 }

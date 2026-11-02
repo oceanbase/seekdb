@@ -1,0 +1,81 @@
+# inner_product(...) DESC APPROXIMATE uses the inner product vector index (issue #1470)
+alter system set vector_memory_limit = 0;
+drop table if exists t_ip;
+create table t_ip(c1 int primary key, c2 vector(3),
+vector index idx_ip(c2) with (distance=inner_product, type=hnsw, lib=vsag));
+insert into t_ip values
+(1, '[1,0,0]'), (2, '[0.9,0.1,0]'), (3, '[0,1,0]'), (4, '[0,0,1]'),
+(5, '[-1,0,0]'), (6, '[0.5,0.5,0.5]'), (7, '[0.2,0.1,0.9]'), (8, null);
+# the descending inner product order uses the vector index, like negative_inner_product ASC
+explain basic select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') desc approximate limit 3;
+Query Plan
+===================================
+|ID|OPERATOR         |NAME        |
+-----------------------------------
+|0 |VECTOR INDEX SCAN|t_ip(idx_ip)|
+===================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ip.c1]), filter(nil), rowset=16
+      access([t_ip.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      range_key([t_ip.__vid], [t_ip.__type_17]), range(MIN,MIN ; MAX,MAX)always true
+explain basic select c1 from t_ip order by negative_inner_product(c2, '[1,0.2,0]') approximate limit 3;
+Query Plan
+===================================
+|ID|OPERATOR         |NAME        |
+-----------------------------------
+|0 |VECTOR INDEX SCAN|t_ip(idx_ip)|
+===================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ip.c1]), filter(nil), rowset=16
+      access([t_ip.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      range_key([t_ip.__vid], [t_ip.__type_17]), range(MIN,MIN ; MAX,MAX)always true
+# same rows and order as the exact search and the negative_inner_product form
+select c1, round(inner_product(c2, '[1,0.2,0]'), 4) as score
+from t_ip order by inner_product(c2, '[1,0.2,0]') desc approximate limit 3;
+c1	score
+1	1.0000
+2	0.9200
+6	0.6000
+select c1 from t_ip order by negative_inner_product(c2, '[1,0.2,0]') approximate limit 3;
+c1
+1
+2
+6
+select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') desc limit 3;
+c1
+1
+2
+6
+# the score in the select list keeps the inner product value
+select c1, round(inner_product(c2, '[0,0,1]'), 4) as score
+from t_ip order by inner_product(c2, '[0,0,1]') desc approximate limit 2;
+c1	score
+4	1.0000
+7	0.9000
+# ascending inner product is not an index order and keeps the exact plan
+explain basic select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') approximate limit 3;
+Query Plan
+===========================
+|ID|OPERATOR         |NAME|
+---------------------------
+|0 |TOP-N SORT       |    |
+|1 |└─TABLE FULL SCAN|t_ip|
+===========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ip.c1]), filter(nil), rowset=16
+      sort_keys([inner_product(t_ip.c2, cast('[1,0.2,0]', ARRAY(18, -1))), ASC]), topn(3)
+  1 - output([t_ip.c1], [t_ip.c2]), filter(nil), rowset=16
+      access([t_ip.c1], [t_ip.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_ip.c1]), range(MIN ; MAX)always true
+select c1 from t_ip order by inner_product(c2, '[1,0.2,0]') approximate limit 3;
+c1
+8
+5
+4
+drop table t_ip;
