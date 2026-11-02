@@ -753,3 +753,126 @@ VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
 alter system set vector_memory_limit = 0;
+drop table if exists t_issue1538_arith_filter;
+create table t_issue1538_arith_filter (
+id bigint not null primary key,
+age int not null,
+embedding vector(3) not null
+) organization heap;
+insert into t_issue1538_arith_filter values (1, 11, '[0,0,0]');
+insert into t_issue1538_arith_filter select id + 1, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 2, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 4, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 8, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 16, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 32, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 64, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 128, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 256, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 512, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 1024, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 2048, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 4096, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 8192, age, embedding from t_issue1538_arith_filter;
+insert into t_issue1538_arith_filter select id + 16384, age, embedding from t_issue1538_arith_filter;
+create vector index idx_issue1538_vec
+on t_issue1538_arith_filter(embedding)
+with (
+distance=l2,
+type=hnsw,
+lib=vsag,
+m=16,
+ef_construction=128,
+sync_mode=immediate
+);
+analyze table t_issue1538_arith_filter;
+set ob_hnsw_ef_search = 16;
+select count(*) from t_issue1538_arith_filter;
+count(*)
+32768
+explain basic
+select id from t_issue1538_arith_filter
+where age > 10
+order by l2_distance(embedding, '[0,0,0]') approximate
+limit 10;
+Query Plan
+================================================================================
+|ID|OPERATOR                                          |NAME                    |
+--------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|t_issue1538_arith_filter|
+================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1538_arith_filter.id]), filter([t_issue1538_arith_filter.age > 10]), rowset=256
+      access([t_issue1538_arith_filter.__pk_increment], [t_issue1538_arith_filter.age], [t_issue1538_arith_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t_issue1538_arith_filter.__pk_increment]), range(MIN ; MAX)always true
+explain basic
+select id from t_issue1538_arith_filter
+where ((age + 0) + 0) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate
+limit 10;
+Query Plan
+================================================================================
+|ID|OPERATOR                                          |NAME                    |
+--------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|t_issue1538_arith_filter|
+================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1538_arith_filter.id]), filter([t_issue1538_arith_filter.age + 0 + 0 > 10]), rowset=256
+      access([t_issue1538_arith_filter.__pk_increment], [t_issue1538_arith_filter.age], [t_issue1538_arith_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t_issue1538_arith_filter.__pk_increment]), range(MIN ; MAX)always true
+explain basic
+select id from t_issue1538_arith_filter
+where (age + 2) > 12
+order by l2_distance(embedding, '[0,0,0]') approximate
+limit 10;
+Query Plan
+================================================================================
+|ID|OPERATOR                                          |NAME                    |
+--------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|t_issue1538_arith_filter|
+================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1538_arith_filter.id]), filter([t_issue1538_arith_filter.age + 2 > 12]), rowset=256
+      access([t_issue1538_arith_filter.__pk_increment], [t_issue1538_arith_filter.age], [t_issue1538_arith_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t_issue1538_arith_filter.__pk_increment]), range(MIN ; MAX)always true
+explain basic
+select id from t_issue1538_arith_filter
+where (age * 2) > 20
+order by l2_distance(embedding, '[0,0,0]') approximate
+limit 10;
+Query Plan
+================================================================================
+|ID|OPERATOR                                          |NAME                    |
+--------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|t_issue1538_arith_filter|
+================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1538_arith_filter.id]), filter([t_issue1538_arith_filter.age * 2 > 20]), rowset=256
+      access([t_issue1538_arith_filter.__pk_increment], [t_issue1538_arith_filter.age], [t_issue1538_arith_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t_issue1538_arith_filter.__pk_increment]), range(MIN ; MAX)always true
+explain basic
+select id from t_issue1538_arith_filter
+where (age / 2.0) > 5.0
+order by l2_distance(embedding, '[0,0,0]') approximate
+limit 10;
+Query Plan
+================================================================================
+|ID|OPERATOR                                          |NAME                    |
+--------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|t_issue1538_arith_filter|
+================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1538_arith_filter.id]), filter([cast(t_issue1538_arith_filter.age, DECIMAL_INT(25, 14)) / 2.0 > cast(5.0, DECIMAL(2, 1))]), rowset=256
+      access([t_issue1538_arith_filter.__pk_increment], [t_issue1538_arith_filter.age], [t_issue1538_arith_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t_issue1538_arith_filter.__pk_increment]), range(MIN ; MAX)always true
+drop table t_issue1538_arith_filter;
