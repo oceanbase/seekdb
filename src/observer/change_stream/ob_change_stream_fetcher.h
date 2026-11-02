@@ -60,12 +60,11 @@ static constexpr int64_t CS_FETCHER_SCHEMA_CHECK_INTERVAL_US = 10 * 1000;
 static constexpr int64_t CS_FETCHER_PROGRESS_LOG_INTERVAL_US = 10 * 1000 * 1000;
 /// Sleep when init checks (sql_proxy not ready, etc.).
 static constexpr int64_t CS_FETCHER_INIT_RETRY_SLEEP_US = 500 * 1000;
-/// Sleep when init_consumption_position_ fails.
+/// Sleep when activating log consumption fails.
 static constexpr int64_t CS_FETCHER_INIT_FAIL_SLEEP_US = 1000 * 1000;
 /// Cond wait timeout in IDLE mode (no async-index tables). 10s fallback; schema changes wake immediately.
 static constexpr int64_t CS_FETCHER_IDLE_COND_WAIT_MS = 10 * 1000;
 static constexpr int64_t CS_FETCHER_ITER_END_SLEEP_US = 200 * 1000;
-static constexpr int64_t CS_FETCHER_CALLBACK_RETRY_INTERVAL_US = 1000 * 1000;
 /// Sleep when iter.next/get_entry fails.
 static constexpr int64_t CS_FETCHER_ITER_ERR_SLEEP_US = 100 * 1000;
 /// tx_info_ hash bucket count.
@@ -176,7 +175,6 @@ private:
   int init_consumption_position_();
   int bind_log_();
   void unbind_log_();
-  void try_register_log_callback_();
   int next_log_();
   int update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn) override;
   void try_advance_min_dep_lsn_();
@@ -207,8 +205,6 @@ private:
   palf::PalfBufferIterator iter_;
   common::SimpleCond log_ready_;
   int32_t wake_armed_;
-  bool callback_registered_;
-  int64_t next_callback_retry_ts_;
   palf::LSN current_lsn_;
   SCN current_scn_;
   int64_t current_schema_version_;

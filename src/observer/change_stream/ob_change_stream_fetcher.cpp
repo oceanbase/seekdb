@@ -57,8 +57,6 @@ ObCSFetcher::ObCSFetcher()
     iter_(),
     log_ready_(),
     wake_armed_(0),
-    callback_registered_(false),
-    next_callback_retry_ts_(0),
     current_lsn_(),
     current_scn_(),
     current_schema_version_(0),
@@ -108,7 +106,6 @@ int ObCSFetcher::init_consumption_position_()
   int ret = common::OB_SUCCESS;
   int64_t persisted_min_dep_lsn = 0;
   palf::LSN start_lsn;
-  unbind_log_();
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
@@ -122,8 +119,7 @@ int ObCSFetcher::init_consumption_position_()
       start_lsn = current_lsn_;
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(bind_log_())) {
-      } else if (OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
+      if (OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
       } else {
         current_lsn_ = start_lsn;
         FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
@@ -175,9 +171,6 @@ int ObCSFetcher::init_consumption_position_()
       }
     }
   }
-  if (OB_FAIL(ret)) {
-    unbind_log_();
-  }
   return ret;
 }
 
@@ -187,8 +180,8 @@ int ObCSFetcher::bind_log_()
   if (OB_ISNULL(palf_env_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(palf_env_->open(read_handle_))) {
-  } else {
-    try_register_log_callback_();
+  } else if (OB_FAIL(read_handle_.register_file_size_cb(this))) {
+    LOG_WARN("CSFetcher: fail to register log notification", KR(ret));
   }
   return ret;
 }
@@ -201,29 +194,10 @@ void ObCSFetcher::unbind_log_()
     // close unregisters and drains callbacks before the condition can be destroyed.
     palf_env_->close(read_handle_);
   }
-  callback_registered_ = false;
-  next_callback_retry_ts_ = 0;
-}
-
-void ObCSFetcher::try_register_log_callback_()
-{
-  if (!callback_registered_ && read_handle_.is_valid()) {
-    const int64_t now = common::ObTimeUtility::current_time();
-    if (now >= next_callback_retry_ts_) {
-      const int ret = read_handle_.register_file_size_cb(this);
-      if (OB_SUCCESS == ret) {
-        callback_registered_ = true;
-      } else {
-        next_callback_retry_ts_ = now + CS_FETCHER_CALLBACK_RETRY_INTERVAL_US;
-        LOG_WARN("CSFetcher: log notification unavailable, using timed wait", KR(ret));
-      }
-    }
-  }
 }
 
 int ObCSFetcher::next_log_()
 {
-  try_register_log_callback_();
   const uint32_t key_before_arm = log_ready_.get_key();
   ATOMIC_STORE(&wake_armed_, 1);
   int ret = OB_SUCCESS;
@@ -901,13 +875,17 @@ void ObCSFetcher::run1()
       continue;
     }
 
-    // ACTIVE branch: initialize iterator if not yet ready.
+    // ACTIVE entry: register the callback and initialize the iterator together.
     if (!iter_ready) {
-      if (OB_SUCC(init_consumption_position_())) {
+      if (OB_FAIL(bind_log_())) {
+      } else if (OB_FAIL(init_consumption_position_())) {
+      } else {
         iter_ready = true;
         FLOG_INFO("CSFetcher: iterator initialized, starting consumption",
                   K(current_lsn_), K(current_scn_));
-      } else {
+      }
+      if (OB_FAIL(ret)) {
+        unbind_log_();
         usleep(CS_FETCHER_INIT_FAIL_SLEEP_US);
         continue;
       }
