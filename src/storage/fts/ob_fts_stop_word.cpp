@@ -74,16 +74,27 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+    // The word already uses the stop-word collation, which is the common case:
+    // probe the set directly instead of building a temporary allocator and
+    // converting the string on every token.
+    ret = stopword_set_.exist_refactored(word);
+    if (OB_HASH_NOT_EXIST == ret) {
+      is_stopword = false;
+      ret = OB_SUCCESS;
+    } else if (OB_HASH_EXIST == ret) {
+      is_stopword = true;
+      ret = OB_SUCCESS;
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(
                                        allocator,
                                        word.get_word().get_string(),
@@ -101,7 +112,6 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
         ret = OB_SUCCESS;
       } else if (OB_SUCC(ret)) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
       }
     }
   }
@@ -163,19 +173,30 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-    } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
-    }
-  } else {
+  } else if (!flag_.casedown()) {
     dst = src;
+  } else {
+    const common::ObString src_str = src.get_word().get_string();
+    // Pure ASCII without an upper case letter is already folded: skip the
+    // conversion and the allocator round trip for those tokens.
+    bool needs_fold = false;
+    for (int64_t i = 0; !needs_fold && i < src_str.length(); ++i) {
+      const unsigned char c = static_cast<unsigned char>(src_str.ptr()[i]);
+      needs_fold = (c >= 0x80) || (c >= 'A' && c <= 'Z');
+    }
+    if (!needs_fold) {
+      dst = src;
+    } else {
+      common::ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(word_meta_.get_collation_type(),
+                                      src_str,
+                                      dst_str,
+                                      allocator_))) {
+      } else {
+        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+        dst = tmp;
+      }
+    }
   }
   return ret;
 }
@@ -204,14 +225,14 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
   } else if (!flag_.groupby_word()) {
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-  } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
+  } else if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
+    if (OB_HASH_EXIST == ret) {
+      // Already counted for this document: accumulate the frequencies. The
+      // insert-first form keeps the single-occurrence case at one probe.
+      ret = word_map_.get_refactored(word, word_count);
+      if (OB_SUCC(ret)) {
+        ret = word_map_.set_refactored(word, word_count + word_freq, 1/*overwrite*/);
+      }
     }
   }
   return ret;
