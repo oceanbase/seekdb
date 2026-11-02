@@ -40,12 +40,6 @@ SDK_IMPORTS = {
     "libssl": {"static_library": "lib/libssl.a"},
 }
 
-SDK_IMPORTS.update({
-    name: {"static_library": "lib/" + archive}
-    for name, archive in {
-    }.items()
-})
-
 SDK_FILEGROUPS = {
     "ios_base_metadata": {"srcs": ["verified/*.json"]},
     "ios_base_licenses": {"srcs": ["licenses/**/*"]},
@@ -139,14 +133,9 @@ _SOURCE_HEADERS = {
 }
 
 def sdk_aliases():
-    native.alias(name = "zlib_headers", actual = "//rust/zlib-sys:headers")
-    native.alias(name = "zlib", actual = "//rust/zlib-sys:zlib")
     cc_library(
         name = "base_libraries",
-        deps = [":libcrypto", ":libssl"] + select({
-            "@platforms//os:emscripten": [],
-            "//conditions:default": [":zlib"],
-        }),
+        deps = [":libcrypto", ":libssl"],
     )
     for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:
         if name in HOST_FILES + ["sanity_pass", "sanity_headers"]:

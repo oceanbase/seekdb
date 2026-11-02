@@ -25,7 +25,7 @@ rust_static_library(
         "//rust/compression",
         "//rust/spatial-covering:spatial_covering",
         "//rust/uuid-generator:uuid_generator",
-    ] + ["//rust/zlib-sys:library"] + select({
+    ] + select({
         "@platforms//os:emscripten": [],
         "//conditions:default": ["//rust/standby-rpc:standby_rpc", "//rust/http-client:http_client"],
     }),

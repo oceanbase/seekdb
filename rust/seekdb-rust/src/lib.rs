@@ -29,4 +29,3 @@ pub use sql_nio as network;
 pub use standby_rpc;
 pub use uuid_generator;
 pub use xml_parser;
-pub use zlib_sys;

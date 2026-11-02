@@ -394,7 +394,6 @@ _TAIL_LINK_DEPS = select({
 
 _ORDERED_LINK_FILES = [
     "//rust:archive",
-    "//bazel/third_party:zlib",
 ] + select({
     "@platforms//os:linux": ["//deps/external:jemalloc_archive"],
     "@platforms//os:macos": ["//deps/external:jemalloc_archive"],

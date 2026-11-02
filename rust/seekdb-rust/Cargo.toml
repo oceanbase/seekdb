@@ -27,7 +27,5 @@ spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
 http-client = { path = "../http-client", optional = true }
 
-zlib-sys = { path = "../zlib-sys" }
-
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 standby-rpc = { path = "../standby-rpc" }
