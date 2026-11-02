@@ -376,7 +376,7 @@ struct ObDatumStrCmpImpl
   static int OB_INLINE cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
                            const ObCollationType cs, const bool with_end_space)
   {
-    cmp_ret = ObCharset::strcmpsp(cs, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
+    cmp_ret = ObCharset::strcmpsp_inline(cs, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
     cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);
     return OB_SUCCESS;
   }
@@ -402,7 +402,7 @@ struct ObDatumTextCmpImpl
     const ObLobCommon& llob = l.get_lob_data();
     if (r.len_ != 0 && !rlob.is_mem_loc_ && rlob.in_row_ &&
         l.len_ != 0 && !llob.is_mem_loc_ && llob.in_row_) {
-        cmp_ret = ObCharset::strcmpsp(
+        cmp_ret = ObCharset::strcmpsp_inline(
             cs, llob.get_inrow_data_ptr(), static_cast<int32_t>(llob.get_byte_size(l.len_)),
             rlob.get_inrow_data_ptr(), static_cast<int32_t>(rlob.get_byte_size(r.len_)), with_end_space);
       cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);
@@ -438,7 +438,7 @@ struct ObDatumTextStringCmpImpl
     int ret = OB_SUCCESS;
     const ObLobCommon& llob = l.get_lob_data();
     if (l.len_ != 0 && !llob.is_mem_loc_ && llob.in_row_) {
-      cmp_ret = ObCharset::strcmpsp(
+      cmp_ret = ObCharset::strcmpsp_inline(
           cs, llob.get_inrow_data_ptr(), static_cast<int32_t>(llob.get_byte_size(l.len_)),
           r.ptr_, r.len_, with_end_space);
       cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);
@@ -475,7 +475,7 @@ struct ObDatumStringTextCmpImpl
     cmp_ret = 0;
     const ObLobCommon& rlob = r.get_lob_data();
     if (r.len_ != 0 && !rlob.is_mem_loc_ && rlob.in_row_ && rlob.reserve_ == 0) {
-      cmp_ret = ObCharset::strcmpsp(
+      cmp_ret = ObCharset::strcmpsp_inline(
           cs, l.ptr_, l.len_,
           rlob.get_inrow_data_ptr(), static_cast<int32_t>(rlob.get_byte_size(r.len_)), with_end_space);
       cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);

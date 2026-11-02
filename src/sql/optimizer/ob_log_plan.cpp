@@ -12065,6 +12065,16 @@ static bool match_score_value_required(const ObDMLStmt *stmt,
     for (int64_t i = 0; !required && i < order_items.count(); ++i) {
       required = has_match_against_expr(order_items.at(i).expr_);
     }
+    // The retrieval of a statement with a limit is driven by the top n
+    // filter that the sort operator pushes down into the scan. The filter
+    // discards the rows that cannot belong to the top n of the sort key,
+    // which is only correct when the scan produces the rows in the order of
+    // the sort key. The retrieval produces the rows in the order of the
+    // relevance score, so the relevance score is required to keep the
+    // retrieval and the pushed down top n filter consistent.
+    if (!required && stmt->has_limit()) {
+      required = true;
+    }
     // the score value must not be consumed by the select list, the having
     // clause or the group by clause
     if (!required && stmt->is_select_stmt()) {

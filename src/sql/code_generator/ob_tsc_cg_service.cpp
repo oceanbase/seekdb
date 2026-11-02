@@ -2994,6 +2994,26 @@ int ObTscCgService::generate_spiv_block_max_spec(
   return ret;
 }
 
+/**
+ * The relevance score is only calculated when its value is really consumed by
+ * the query. When it is not calculated, the score of every matched document is
+ * a positive constant, so a boolean predicate that only wraps the match
+ * expression is always true. Such a filter does not filter out any document
+ * and does not have to be evaluated for every matched document.
+ */
+static bool is_redundant_bool_match_filter(const ObTextRetrievalInfo &tr_info)
+{
+  bool redundant = false;
+  const ObRawExpr *match_filter = tr_info.pushdown_match_filter_;
+  if (!tr_info.need_calc_relevance_ && nullptr != match_filter && nullptr != tr_info.match_expr_) {
+    if (T_OP_BOOL == match_filter->get_expr_type() && 1 == match_filter->get_param_count()
+        && match_filter->get_param_expr(0) == tr_info.match_expr_) {
+      redundant = true;
+    }
+  }
+  return redundant;
+}
+
 int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_info,
                                                 ObDASIRScanCtDef &text_ir_scan_ctdef)
 {
@@ -3042,7 +3062,12 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
   }
 
   if (OB_SUCC(ret) && nullptr != tr_info.pushdown_match_filter_) {
-    if (OB_FAIL(cg_.generate_rt_expr(*tr_info.pushdown_match_filter_, text_ir_scan_ctdef.match_filter_))) {
+    if (is_redundant_bool_match_filter(tr_info)) {
+      // The relevance score is a positive constant when it is not calculated,
+      // so a boolean predicate that only wraps the match expression is always
+      // true. The filter is not generated at all in that case, so that the
+      // retrieval does not have to evaluate it for every matched document.
+    } else if (OB_FAIL(cg_.generate_rt_expr(*tr_info.pushdown_match_filter_, text_ir_scan_ctdef.match_filter_))) {
     }
   }
 

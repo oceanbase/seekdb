@@ -159,17 +159,16 @@ int ObStringDiffDecoder::batch_decode(
 
     // Fill string data
     const uint16_t string_size = header_->string_size_;
-    const static uint16_t min_buf_size = 128;
-    const int64_t buf_size = std::max(string_size, min_buf_size);
+    // The decoded string of every row is exactly string_size bytes long, so
+    // the buffer of a row only has to hold the decoded string. The common part
+    // of the strings is copied into the buffer of a row right before the row
+    // specific part is decoded, so that the buffer of a row is only written
+    // once and the rows that are skipped are not written at all.
+    const int64_t buf_size = std::max(static_cast<int64_t>(string_size), static_cast<int64_t>(1));
     char *buf = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      for (int64_t i = 0; i < row_cap; ++i) {
-        header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
-            header_->common_data(), buf + i * buf_size);
-      }
     }
 
     if (OB_FAIL(ret)) {
@@ -187,10 +186,14 @@ int ObStringDiffDecoder::batch_decode(
           if (header_->is_hex_packing()) {
             ObHexStringUnpacker unpacker(header_->hex_char_array(),
                 reinterpret_cast<const unsigned char *>(cell_data));
+            header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
+                header_->common_data(), str_ptr);
             header_->copy_hex_string(unpacker,
                 static_cast<void (ObHexStringUnpacker::*)(unsigned char &)>(&ObHexStringUnpacker::unpack),
                 reinterpret_cast<unsigned char *>(str_ptr));
           } else {
+            header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
+                header_->common_data(), str_ptr);
             header_->copy_string(
               ObStringDiffHeader::LeftToRight(),
               ObStringDiffHeader::LogicTrue<uint8_t>(),
@@ -216,6 +219,8 @@ int ObStringDiffDecoder::batch_decode(
         } else if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len, row_data, row_len,
             *ctx.micro_block_header_, *ctx.col_header_, *header_))) {
         } else {
+          header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
+              header_->common_data(), str_ptr);
           if (header_->is_hex_packing()) {
             ObHexStringUnpacker unpacker(header_->hex_char_array(),
                 reinterpret_cast<const unsigned char *>(cell_data));
