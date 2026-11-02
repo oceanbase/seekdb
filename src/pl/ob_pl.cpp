@@ -1896,6 +1896,33 @@ int ObPLExecState::set_var(int64_t var_idx, const DatumParameter& value)
 
   if (OB_FAIL(ret)) {
   } else if (copy_value.is_null() && params->at(var_idx).is_pl_extend()) {
+    // Own only the intermediate descriptor allocated by this call. An older
+    // zero descriptor can be borrowed; its value does not establish ownership.
+    class EmptyDescriptorGuard
+    {
+    public:
+      EmptyDescriptorGuard(ObIAllocator &allocator, ParamStore &params)
+        : allocator_(allocator), params_(params), pointer_(nullptr) {}
+      ~EmptyDescriptorGuard()
+      {
+        if (pointer_ != nullptr) {
+          bool retained = false;
+          for (int64_t i = 0; !retained && i < params_.count(); ++i) {
+            const Datum &value = params_.at(i).get_datum();
+            retained = value.is_ext() && value.get_reference() == pointer_;
+          }
+          // A failed constructor can leave this descriptor published. Keep
+          // that state and its existing final()/argument ownership contract.
+          if (!retained) { allocator_.free(const_cast<void *>(pointer_)); }
+        }
+      }
+      void remember(const DatumParameter &value)
+      { pointer_ = value.get_datum().get_reference(); }
+    private:
+      ObIAllocator &allocator_;
+      ParamStore &params_;
+      const void *pointer_;
+    } empty_descriptor(*get_allocator(), *params);
     const ObUserDefinedType *user_type = NULL;
     uint64_t udt_id = params->at(var_idx).get_udt_id();
     if (params->at(var_idx).get_ext() != 0) {
@@ -1904,6 +1931,7 @@ int ObPLExecState::set_var(int64_t var_idx, const DatumParameter& value)
       DatumParameter empty = params->at(var_idx);
       // Allocate the native descriptor before retiring the old composite.
       OZ (empty.set_extend(0, extend_type, *get_allocator(), val_len));
+      OX (empty_descriptor.remember(empty));
       OZ (ObUserDefinedType::destruct_objparam(*get_allocator(), params->at(var_idx), ctx_.exec_ctx_->get_my_session()));
       OX (params->at(var_idx) = empty);
     }
