@@ -17,6 +17,7 @@
 #pragma once
 
 #include "lib/allocator/page_arena.h"
+#include "lib/container/ob_2d_array.h"
 #include "lib/container/ob_array.h"
 #include "sql/engine/graph/graph_path_spec.h"
 
@@ -56,7 +57,7 @@ public:
 
   // Returned identities are shallow copies backed by this store's arena and
   // therefore remain valid until reset(). The copy itself is stable across a
-  // later ObArray growth, unlike a pointer to an element inside states_.
+  // later storage growth, unlike a pointer to an element inside states_.
   int get_state(int64_t path_state_id, GraphPathState &state) const;
   int make_expand_input(int64_t path_state_id, GraphExpandInput &input) const;
 
@@ -90,7 +91,9 @@ private:
 private:
   common::ObArenaAllocator identity_allocator_;
   int64_t memory_limit_;
-  common::ObArray<GraphPathState> states_;
+  // Keep state IDs as logical indexes without requiring one contiguous buffer
+  // to be reallocated and copied as the frontier grows.
+  common::ObSegmentArray<GraphPathState> states_;
   int64_t root_state_count_{0};
   int64_t peak_memory_bytes_{0};
 

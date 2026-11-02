@@ -31,8 +31,7 @@ GraphPathStateStore::GraphPathStateStore(ObIAllocator &allocator,
                                          int64_t memory_limit)
     : identity_allocator_(allocator),
       memory_limit_(memory_limit),
-      states_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-              ModulePageAllocator(allocator, "GraphPathState"))
+      states_(ModulePageAllocator(allocator, "GraphPathState"))
 {
 }
 
@@ -63,9 +62,10 @@ bool GraphPathStateStore::is_valid_state_id(int64_t path_state_id) const
 
 int64_t GraphPathStateStore::used_memory() const
 {
-  // Count allocator capacity rather than only populated bytes: those pages are
-  // already charged to the query allocator and cannot be used elsewhere.
-  return states_.get_data_size() + identity_allocator_.total();
+  // Count reserved state capacity, not only populated states. mem_used() does
+  // not include the segment-pointer array; the shared work-area allocator
+  // still charges every allocation against the query's hard memory limit.
+  return states_.mem_used() + identity_allocator_.total();
 }
 
 int GraphPathStateStore::check_memory_limit()
