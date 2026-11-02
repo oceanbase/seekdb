@@ -204,6 +204,44 @@ fn lines_polygons_and_holes_cover_their_vertices() {
 }
 
 #[test]
+fn geographic_lines_cover_geodesic_samples() {
+    let lines = [
+        vec![(-120.0, 0.0), (0.0, 0.0), (120.0, 0.0)],
+        vec![(179.0, 10.0), (-179.0, 10.0)],
+        vec![(45.0, 85.0), (-135.0, 85.0)],
+        vec![(0.0, 0.0), (0.0, 0.0)],
+        (0..32)
+            .map(|i| {
+                (
+                    -20.0 + i as f64 * 0.005,
+                    -20.0 + (i as f64 * 0.4).sin() * 0.04,
+                )
+            })
+            .collect(),
+    ];
+    for coordinates in lines {
+        let wkb = line(&coordinates);
+        for kind in [CoveringKind::Index, CoveringKind::Query] {
+            let covering = cover_swkb(&wkb, with_kind(GEOGRAPHIC, kind)).unwrap();
+            for edge in coordinates.windows(2) {
+                let a = LatLng::from_degrees(edge[0].1, edge[0].0).to_point();
+                let b = LatLng::from_degrees(edge[1].1, edge[1].0).to_point();
+                for step in 0..=8 {
+                    let sample = s2rst::s2::edge_distances::interpolate(step as f64 / 8.0, a, b);
+                    assert!(
+                        covering.cells.iter().any(|&id| {
+                            s2rst::s2::Cell::from_cell_id(CellId(id)).contains_point(sample)
+                        }),
+                        "lost geodesic sample {sample:?}"
+                    );
+                    assert!(covering.mbr.to_rect().contains_point(sample));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn covered_by_uses_vertices_without_region_covering() {
     let wkb = polygon(&[&[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]]);
     let covering = cover_swkb(&wkb, with_kind(GEOGRAPHIC, CoveringKind::CoveredBy)).unwrap();

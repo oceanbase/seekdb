@@ -20,7 +20,7 @@ use s2rst::s2::latlng_rect_bounder::LatLngRectBounder;
 use s2rst::s2::polyline::Polyline;
 use s2rst::s2::region_coverer::RegionCoverer;
 use s2rst::s2::{
-    Cell, CellId, CellUnion, LatLng, Level, LevelMod, Loop, Point, Polygon, Rect, Region,
+    Cap, Cell, CellId, CellUnion, LatLng, Level, LevelMod, Loop, Point, Polygon, Rect, Region,
 };
 use std::collections::BTreeSet;
 
@@ -203,6 +203,7 @@ impl Projection {
 enum PreparedRegion {
     Point(Cell),
     Line(Polyline),
+    GeographicLine(BoundedPolyline),
     Polygon(Polygon),
 }
 
@@ -211,8 +212,41 @@ impl PreparedRegion {
         match self {
             Self::Point(cell) => cell,
             Self::Line(line) => line,
+            Self::GeographicLine(line) => line,
             Self::Polygon(polygon) => polygon,
         }
+    }
+}
+
+#[derive(Debug)]
+struct BoundedPolyline {
+    line: Polyline,
+    rect: Rect,
+}
+
+impl Region for BoundedPolyline {
+    fn cap_bound(&self) -> Cap {
+        self.rect.cap_bound()
+    }
+
+    fn rect_bound(&self) -> Rect {
+        self.rect
+    }
+
+    fn cell_union_bound(&self) -> Vec<CellId> {
+        self.cap_bound().cell_union_bound()
+    }
+
+    fn contains_cell(&self, cell: &Cell) -> bool {
+        self.line.contains_cell(cell)
+    }
+
+    fn intersects_cell(&self, cell: &Cell) -> bool {
+        self.rect.intersects(cell.rect_bound()) && self.line.intersects_cell(cell)
+    }
+
+    fn contains_point(&self, point: &Point) -> bool {
+        self.line.contains_point(point)
     }
 }
 
@@ -281,9 +315,17 @@ fn prepare_primitives(
                 }
                 let line = Polyline::new(points);
                 if geographic {
-                    prepared.add_rect(line.rect_bound());
+                    let rect = line.rect_bound();
+                    prepared.add_rect(rect);
+                    prepared
+                        .regions
+                        .push(PreparedRegion::GeographicLine(BoundedPolyline {
+                            line,
+                            rect,
+                        }));
+                } else {
+                    prepared.regions.push(PreparedRegion::Line(line));
                 }
-                prepared.regions.push(PreparedRegion::Line(line));
             }
             Primitive::Polygon(rings) => {
                 let mut loops = Vec::with_capacity(rings.len());
