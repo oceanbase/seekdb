@@ -30,8 +30,9 @@
 #include <execinfo.h>
 #endif
 
-#if defined(ENABLE_SANITY) || (defined(OB_HAVE_BUNDLED_JEMALLOC) \
-    && (defined(__APPLE__) || defined(_WIN32)))
+// Windows receives these defaults through jemalloc's --with-malloc-conf option.
+#if !defined(_WIN32) && (defined(ENABLE_SANITY) \
+    || (defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__APPLE__)))
 // Keep background threads disabled for sanity builds and unsupported platforms.
 extern "C" {
 const char *je_malloc_conf =
@@ -43,7 +44,7 @@ extern "C" {
 const char *je_malloc_conf =
     "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
 }
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(_WIN32)
 extern "C" {
 const char *je_malloc_conf =
     "background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0";

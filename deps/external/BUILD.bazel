@@ -19,7 +19,6 @@ package(default_visibility = ["//visibility:private"])
 exports_files([
     "Cargo.toml",
     "Cargo.lock",
-    "jemalloc-windows-build.patch",
 ])
 
 jemalloc(

@@ -146,16 +146,25 @@ void test_background_threads()
 }
 } // namespace
 
+#if !defined(_WIN32)
 extern "C" {
 const char *je_malloc_conf =
     "background_thread:false,dirty_decay_ms:100,muzzy_decay_ms:0";
 }
+#endif
 
 int main()
 {
   std::printf("jemalloc %s\n", read_control<const char *>("version"));
+#if defined(_WIN32)
+  require(read_control<std::ptrdiff_t>("opt.dirty_decay_ms") == 1000,
+          "Windows build-time dirty decay configuration");
+  require(read_control<std::ptrdiff_t>("opt.muzzy_decay_ms") == 0,
+          "Windows build-time muzzy decay configuration");
+#else
   require(read_control<std::ptrdiff_t>("opt.dirty_decay_ms") == 100,
           "application malloc_conf overrides the library default");
+#endif
   test_allocation();
   test_background_threads();
   std::puts("jemalloc backend: PASS");
