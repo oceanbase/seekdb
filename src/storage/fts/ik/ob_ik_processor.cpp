@@ -52,7 +52,8 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
+      next_char_len_(0), handle_size_(0), is_smart_(is_smart), allocator_(allocator),
+      char_lens_(nullptr), char_types_(nullptr), token_list_(allocator),
       result_list_(allocator)
 {
 }
@@ -63,7 +64,25 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(init_char_cache())) {
   } else if (OB_FAIL(prepare_next_char())) {
+  }
+  return ret;
+}
+
+int TokenizeContext::init_char_cache()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_LIKELY(nullptr != char_lens_)) {
+    // cache is allocated once per document and reused by every batch
+  } else if (OB_ISNULL(char_lens_ = static_cast<uint8_t *>(allocator_.alloc(fulltext_len_)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(char_types_ = static_cast<int8_t *>(allocator_.alloc(fulltext_len_)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    MEMSET(char_lens_, 0, fulltext_len_);
+    MEMSET(char_types_, 0, fulltext_len_);
   }
   return ret;
 }
@@ -110,6 +129,36 @@ int TokenizeContext::prepare_next_char()
                                                        fulltext_ + cursor_,
                                                        next_char_len_,
                                                        next_char_type_))) {
+  } else if (OB_LIKELY(nullptr != char_lens_) && cursor_ < fulltext_len_) {
+    // remember the answer for the arbiter's second pass
+    char_lens_[cursor_] = static_cast<uint8_t>(next_char_len_);
+    char_types_[cursor_] = static_cast<int8_t>(next_char_type_);
+  }
+  return ret;
+}
+
+int TokenizeContext::char_info_at(const int64_t pos,
+                                  int64_t &char_len,
+                                  ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(pos < 0 || pos >= fulltext_len_)) {
+    ret = OB_ITER_END;
+  } else if (OB_LIKELY(nullptr != char_lens_) && 0 != char_lens_[pos]) {
+    char_len = char_lens_[pos];
+    type = static_cast<ObFTCharUtil::CharType>(char_types_[pos]);
+  } else if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
+                                                 fulltext_ + pos,
+                                                 fulltext_len_ - pos,
+                                                 char_len))) {
+  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
+                                                       fulltext_ + pos,
+                                                       char_len,
+                                                       type))) {
+  } else if (OB_LIKELY(nullptr != char_lens_)) {
+    char_lens_[pos] = char_len;
+    char_types_[pos] = static_cast<int8_t>(type);
   }
   return ret;
 }
