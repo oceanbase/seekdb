@@ -75,6 +75,12 @@ public:
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const
   { return expand_access_desc_; }
+  const GraphExpandAccessDesc &get_reverse_expand_access_desc() const
+  { return reverse_expand_access_desc_; }
+  const common::ObIArray<ObRawExpr *> &get_reverse_rowkey_exprs() const
+  { return reverse_rowkey_exprs_; }
+  const ObLogTableScan *get_step_edge_scan() const;
+  bool is_bound_pair_shortest_candidate() const;
   int64_t get_min_hops() const { return path_desc_.lower_bound_; }
   int64_t get_max_hops() const { return path_desc_.upper_bound_; }
   bool is_reverse() const
@@ -115,20 +121,25 @@ public:
   bool is_consume_child_1by1() const override { return true; }
 
   VIRTUAL_TO_STRING_KV(K_(path_desc), K_(expand_access_desc),
+                       K_(reverse_expand_access_desc),
                        "pull to local", pull_to_local_,
                        "step access", static_cast<int64_t>(step_access_method_));
 
 private:
   int initialize_path_payloads(ObLogTableScan &edge_scan);
+  int initialize_reverse_access(ObLogTableScan &edge_scan,
+                                share::schema::ObSchemaGetterGuard &schema_guard);
   // Logical plans release their memory context without running every operator
   // destructor. Bind this buffer to that context, like other logical-op arrays.
   common::ObArray<ObRawExpr *, common::ModulePageAllocator, true> path_payload_exprs_{};
+  common::ObArray<ObRawExpr *, common::ModulePageAllocator, true> reverse_rowkey_exprs_{};
   int get_feedback_exprs(ObIArray<ObRawExpr *> &exprs) const;
   bool can_use_basic_native_runtime() const;
 
 private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
+  GraphExpandAccessDesc reverse_expand_access_desc_{};
   bool pull_to_local_{false};
   bool native_step_supported_{false};
   GraphFeedbackAccessMethod step_access_method_{GraphFeedbackAccessMethod::UNKNOWN};

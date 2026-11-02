@@ -111,5 +111,24 @@ int GraphExpandDasAccess::scan_edges(
   return ret;
 }
 
+int GraphExpandDasAccess::probe_adjacency_rows(
+    const ObIArray<GraphElementIdentity> &sources,
+    GraphPathDirection direction, int64_t raw_row_limit,
+    int64_t &scanned_rows, bool &complete, int64_t &peak_memory)
+{
+  int ret = OB_SUCCESS;
+  vertex_lookup_.clear_lookup_memory();
+  scanned_rows = 0;
+  complete = false;
+  peak_memory = 0;
+  if (!initialized_) {
+    ret = OB_NOT_INIT;
+  } else {
+    ret = edge_cursor_.probe_adjacency_rows(
+        sources, direction, raw_row_limit, scanned_rows, complete, peak_memory);
+  }
+  return ret;
+}
+
 } // namespace sql
 } // namespace oceanbase

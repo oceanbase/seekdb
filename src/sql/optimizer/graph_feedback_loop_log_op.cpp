@@ -26,6 +26,7 @@
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/resolver/ddl/ob_explain_stmt.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
+#include "share/schema/ob_table_schema.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -364,6 +365,31 @@ int retain_graph_edge_columns(
   return ret;
 }
 
+int retain_reverse_edge_filter_columns(ObLogTableScan &edge_scan)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObRawExpr *> columns;
+  if (OB_FAIL(ObRawExprUtils::extract_column_exprs(
+          edge_scan.get_filter_exprs(), columns))) {
+    LOG_WARN("failed to extract reverse edge filter columns", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
+    ObRawExpr *expr = columns.at(i);
+    if (OB_ISNULL(expr) || OB_UNLIKELY(!expr->is_column_ref_expr())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid reverse edge filter column", K(ret), KP(expr));
+    } else if (static_cast<ObColumnRefRawExpr *>(expr)->get_table_id()
+               != edge_scan.get_table_id()) {
+      // The reverse DAS scan only returns columns from the edge table.
+    } else if (OB_FAIL(add_var_to_array_no_dup(edge_scan.get_access_exprs(), expr))) {
+      LOG_WARN("failed to retain reverse edge filter access column", K(ret));
+    } else if (OB_FAIL(edge_scan.add_runtime_access_expr(expr))) {
+      LOG_WARN("failed to retain reverse edge filter result column", K(ret));
+    }
+  }
+  return ret;
+}
+
 double bounded_graph_estimate_add(double left, double right)
 {
   return left >= GRAPH_FEEDBACK_ESTIMATE_LIMIT - right
@@ -666,6 +692,90 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
       LOG_WARN("failed to retain graph edge range filters", K(ret));
     } else if (OB_FAIL(initialize_path_payloads(*edge_scan))) {
       LOG_WARN("failed to bind native graph path payloads", K(ret));
+    } else if (OB_FAIL(initialize_reverse_access(*edge_scan, *schema_guard))) {
+      LOG_WARN("failed to initialize graph reverse adjacency access", K(ret));
+    }
+  }
+  return ret;
+}
+
+const ObLogTableScan *GraphFeedbackLoopLogOp::get_step_edge_scan() const
+{
+  return find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS);
+}
+
+bool GraphFeedbackLoopLogOp::is_bound_pair_shortest_candidate() const
+{
+  return native_step_supported_ && path_desc_.any_shortest_
+      && path_desc_.shortest_single_segment_
+      && path_desc_.shortest_goal_key_filter_
+      && path_desc_.path_mode_ == GraphPathMode::WALK
+      && path_desc_.row_shape_ == GraphPathRowShape::PER_MATCH
+      && !path_desc_.need_path_ && path_payload_exprs_.empty()
+      && path_desc_.source_element_id_ == path_desc_.target_element_id_
+      && expand_access_desc_.target_key_count_ == 1
+      && path_desc_.lower_bound_ <= 1 && path_desc_.upper_bound_ > 0;
+}
+
+int GraphFeedbackLoopLogOp::initialize_reverse_access(
+    ObLogTableScan &edge_scan,
+    share::schema::ObSchemaGetterGuard &schema_guard)
+{
+  int ret = OB_SUCCESS;
+  reverse_expand_access_desc_ = GraphExpandAccessDesc();
+  reverse_rowkey_exprs_.reuse();
+  if (is_bound_pair_shortest_candidate()) {
+    GraphPathDesc reverse_path = path_desc_;
+    std::swap(reverse_path.source_element_id_, reverse_path.target_element_id_);
+    reverse_path.direction_ = reverse_path.direction_ == GraphPathDirection::OUT
+        ? GraphPathDirection::IN : GraphPathDirection::OUT;
+    const share::schema::ObTableSchema *edge_table = nullptr;
+    common::ObSEArray<share::schema::ObAuxTableMetaInfo, 8> indexes;
+    if (OB_FAIL(schema_guard.get_table_schema(
+                   expand_access_desc_.edge_table_id_, edge_table))) {
+    } else if (OB_ISNULL(edge_table)) {
+      ret = OB_SCHEMA_ERROR;
+    } else if (OB_FAIL(edge_table->get_simple_index_infos(indexes))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < indexes.count()
+                        && !reverse_expand_access_desc_.uses_adjacency_index(); ++i) {
+      const share::schema::ObTableSchema *index = nullptr;
+      if (OB_FAIL(schema_guard.get_table_schema(indexes.at(i).table_id_, index))) {
+      } else if (OB_ISNULL(index)) {
+        ret = OB_SCHEMA_ERROR;
+      } else if ((!index->is_normal_index() && !index->is_unique_index())
+                 || index->is_global_index_table() || !index->can_read_index()
+                 || !index->is_index_visible() || index->is_final_invalid_index()
+                 || index->get_data_table_id() != edge_table->get_table_id()) {
+      } else {
+        const common::ObIndexInfo &columns = index->get_index_info();
+        bool matches = columns.get_size()
+            >= expand_access_desc_.target_key_count_;
+        for (int64_t j = 0; matches
+             && j < expand_access_desc_.target_key_count_; ++j) {
+          const common::ObIndexColumn *column = columns.get_column(j);
+          matches = column != nullptr && column->column_id_
+              == expand_access_desc_.edge_next_columns_[j];
+        }
+        if (matches && OB_FAIL(build_graph_expand_access_desc(
+                reverse_path, index->get_table_id(), schema_guard,
+                reverse_expand_access_desc_))) {
+          LOG_WARN("failed to bind reverse graph adjacency index", K(ret),
+                   K(indexes.at(i).table_id_));
+        }
+      }
+    }
+    if (OB_SUCC(ret) && reverse_expand_access_desc_.uses_adjacency_index()) {
+      // Reverse filters run after the secondary-index scan and base lookup.
+      // Keep their edge columns in the DAS result even when the normal scan
+      // could have pushed the same predicate down.
+      if (OB_FAIL(retain_reverse_edge_filter_columns(edge_scan))) {
+      } else if (OB_FAIL(edge_scan.get_plan()->get_rowkey_exprs(
+                     edge_scan.get_table_id(), *edge_table,
+                     reverse_rowkey_exprs_))) {
+        LOG_WARN("failed to retain reverse edge lookup rowkeys", K(ret),
+                 K(edge_scan.get_table_id()));
+      }
     }
   }
   return ret;
@@ -753,7 +863,9 @@ int GraphFeedbackLoopLogOp::get_native_runtime_exprs(
     ObIArray<ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(append_array_no_dup(exprs, path_payload_exprs_))) {
+  if (OB_FAIL(append_array_no_dup(exprs, reverse_rowkey_exprs_))) {
+    LOG_WARN("failed to register reverse edge rowkeys", K(ret));
+  } else if (OB_FAIL(append_array_no_dup(exprs, path_payload_exprs_))) {
     LOG_WARN("failed to register graph path payload expressions", K(ret));
   }
   ObLogTableScan *scans[] = {
@@ -1041,6 +1153,16 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                            goal_value != nullptr ? "bound_key" : "none",
                            can_reuse_adjacency() ? "eligible" : "off"))) {
     }
+    if (OB_SUCC(ret) && is_bound_pair_shortest_candidate()
+        && goal_value != nullptr) {
+      if (reverse_expand_access_desc_.uses_adjacency_index()) {
+        if (OB_FAIL(BUF_PRINTF(", reverse_access=index, reverse_index_id=%lu",
+                               static_cast<unsigned long>(
+                                   reverse_expand_access_desc_.edge_access_table_id_)))) {
+        }
+      } else if (OB_FAIL(BUF_PRINTF(", reverse_access=none"))) {
+      }
+    }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }
   return ret;
@@ -1159,6 +1281,10 @@ int GraphFeedbackLoopLogOp::do_re_est_cost(EstimateCostInfo &param,
                                     recursive_work_rows,
                                     output_rows,
                                     step_cost_factor);
+    // This remains a forward-step estimate: the bound-pair reverse search is
+    // runtime-selective and uses only a separately planned adjacency index.
+    // Without that index the ordinary one-way shortest search keeps this cost
+    // model valid; no uncosted reverse full scan is introduced.
     const double scaled_step_cost = bounded_graph_estimate_multiply(
         std::max(0.0, first_step_cost), step_cost_factor);
     const double work_rows = bounded_graph_estimate_add(std::max(0.0, seed_rows),
@@ -1216,6 +1342,9 @@ uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
   seed = do_hash(path_desc_.shortest_single_segment_, seed);
   seed = do_hash(path_desc_.shortest_goal_key_filter_, seed);
   seed = expand_access_desc_.hash(seed);
+  if (reverse_expand_access_desc_.is_valid()) {
+    seed = reverse_expand_access_desc_.hash(seed);
+  }
   seed = do_hash(pull_to_local_, seed);
   seed = do_hash(static_cast<int64_t>(step_access_method_), seed);
   return ObLogicalOperator::hash(seed);

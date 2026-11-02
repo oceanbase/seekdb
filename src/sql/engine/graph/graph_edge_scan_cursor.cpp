@@ -24,6 +24,9 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/graph/graph_das_access_utils.h"
+
+#include <algorithm>
+
 namespace oceanbase
 {
 using namespace common;
@@ -73,7 +76,9 @@ GraphEdgeScanCursor::GraphEdgeScanCursor(ObExecContext &exec_ctx,
       identity_page_allocator_(exec_ctx.get_allocator()),
       payload_scratch_allocator_(work_area_allocator),
       edge_cursor_allocator_(exec_ctx.get_allocator()),
-      edge_source_index_(work_area_allocator)
+      edge_source_index_(work_area_allocator),
+      probe_edges_(OB_MALLOC_NORMAL_BLOCK_SIZE,
+                   ModulePageAllocator(work_area_allocator, "GraphEdgeProbe"))
 {
   edge_das_ref_.set_mem_attr(ObMemAttr("GraphEdgeScan", ObCtxIds::WORK_AREA));
 }
@@ -113,6 +118,7 @@ int GraphEdgeScanCursor::init(const GraphPathDesc &path_desc,
 int GraphEdgeScanCursor::release()
 {
   const int ret = reset_edge_scan(OB_SUCCESS, false);
+  probe_edges_.reset();
   identity_page_allocator_.reset();
   payload_scratch_allocator_.reset();
   edge_cursor_allocator_.reset();
@@ -138,7 +144,8 @@ int64_t GraphEdgeScanCursor::used_memory() const
   const int64_t source_index_bytes = edge_source_index_.used_memory();
   int64_t used = page_bytes;
   const int64_t memory_parts[] = {
-      cursor_bytes, edge_das_bytes, source_index_bytes, payload_scratch_allocator_.total()};
+      cursor_bytes, edge_das_bytes, source_index_bytes,
+      payload_scratch_allocator_.total(), probe_edges_.get_data_size()};
   for (int64_t i = 0; i < ARRAYSIZEOF(memory_parts); ++i) {
     if (used > INT64_MAX - memory_parts[i]) {
       used = INT64_MAX;
@@ -625,7 +632,8 @@ int GraphEdgeScanCursor::get_edge_page(
     int64_t limit,
     ObIArray<GraphExpandEdge> &edges,
     int64_t &scanned_edges,
-    bool &end)
+    bool &end, int64_t raw_row_limit, bool count_only,
+    int64_t *peak_memory)
 {
   int ret = OB_SUCCESS;
   bool finished = false;
@@ -643,14 +651,16 @@ int GraphEdgeScanCursor::get_edge_page(
       && edge_scan_rtdef_->p_pd_expr_op_->is_vectorized();
   const int64_t batch_capacity = vectorized
       ? edge_scan_rtdef_->p_pd_expr_op_->get_batch_size() : 1;
-  while (OB_SUCC(ret) && !finished && edges.count() < limit) {
+  while (OB_SUCC(ret) && !finished && edges.count() < limit
+         && scanned_edges < raw_row_limit) {
     if (OB_FAIL(check_status())) {
     } else if (vectorized && edge_batch_index_ >= edge_batch_count_) {
       edge_batch_count_ = 0;
       edge_batch_index_ = 0;
       if (OB_FAIL(clear_edge_eval_flags(true))) {
       } else if (OB_FAIL(edge_result_iter_.get_next_rows(
-                     edge_batch_count_, batch_capacity))) {
+                     edge_batch_count_,
+                     std::min(batch_capacity, raw_row_limit - scanned_edges)))) {
         if (ret == OB_ITER_END && edge_batch_count_ > 0) {
           ret = OB_SUCCESS;
         } else if (ret == OB_ITER_END) {
@@ -688,11 +698,6 @@ int GraphEdgeScanCursor::get_edge_page(
       if (scanned_edges < INT64_MAX) {
         ++scanned_edges;
       }
-      bool filtered = false;
-      bool matches = false;
-      bool source_found = false;
-      int64_t source_index = -1;
-      GraphExpandEdge edge;
       // Pause on the first row of a page, after DAS has returned it while the
       // stateful edge scan is still live. Avoid a debug-sync lookup for every
       // row; the following status check is needed only because this point can
@@ -718,16 +723,23 @@ int GraphEdgeScanCursor::get_edge_page(
         if (OB_SUCC(ret) && OB_FAIL(check_status())) {
         }
       }
+      // Keep error injection and terminal cleanup observable during probes.
       if (OB_SUCC(ret)) {
-        // This point lets mysqltest verify that a terminal scan error closes
-        // live DAS tasks rather than only testing a timeout before access.
         const int simulate_error = EVENT_CALL(
             EventTable::EN_DAS_GRAPH_EXPAND_AFTER_EDGE_ROW);
         if (OB_UNLIKELY(OB_SUCCESS != simulate_error)) {
           ret = simulate_error;
           LOG_WARN("injected graph edge scan error", K(ret), K(scanned_edges));
-        } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
-                                            filtered))) {
+        }
+      }
+      if (OB_SUCC(ret) && !count_only) {
+        bool filtered = false;
+        bool matches = false;
+        bool source_found = false;
+        int64_t source_index = -1;
+        GraphExpandEdge edge;
+        if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
+                                     filtered))) {
         } else if (!filtered && OB_FAIL(materializer.materialize_edge(
                        edge_binding_.source_, edge_binding_.edge_, edge_binding_.target_, edge, matches))) {
         } else if (!filtered && matches
@@ -751,6 +763,9 @@ int GraphEdgeScanCursor::get_edge_page(
         }
       }
       ++edge_batch_index_;
+      if (peak_memory != nullptr) {
+        *peak_memory = std::max(*peak_memory, used_memory());
+      }
     }
   }
   if (OB_SUCC(ret) && finished) {
@@ -769,6 +784,48 @@ int GraphEdgeScanCursor::scan_edges(
     int64_t &scanned_edges,
     bool &end)
 {
+  return scan_edges_impl(sources, direction, after_edge, limit, edges,
+                         scanned_edges, end, INT64_MAX, false, nullptr);
+}
+
+int GraphEdgeScanCursor::probe_adjacency_rows(
+    const ObIArray<GraphElementIdentity> &sources,
+    GraphPathDirection direction, int64_t raw_row_limit,
+    int64_t &scanned_rows, bool &complete, int64_t &peak_memory)
+{
+  int ret = OB_SUCCESS;
+  scanned_rows = 0;
+  complete = false;
+  peak_memory = 0;
+  if (OB_UNLIKELY(!can_partition_sources() || raw_row_limit <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = scan_edges_impl(sources, direction, nullptr, raw_row_limit,
+                          probe_edges_, scanned_rows, complete,
+                          raw_row_limit, true, &peak_memory);
+    if (OB_SUCC(ret) && OB_FAIL(check_status())) {
+    }
+  }
+  const int release_ret = release();
+  if (OB_SUCC(ret) && OB_SUCCESS != release_ret) {
+    ret = release_ret;
+  }
+  if (OB_UNLIKELY(!edge_scan_resources_released())) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int GraphEdgeScanCursor::scan_edges_impl(
+    const ObIArray<GraphElementIdentity> &sources,
+    GraphPathDirection direction,
+    const GraphElementIdentity *after_edge,
+    int64_t limit,
+    ObIArray<GraphExpandEdge> &edges,
+    int64_t &scanned_edges,
+    bool &end, int64_t raw_row_limit, bool count_only,
+    int64_t *peak_memory)
+{
   int ret = OB_SUCCESS;
   bool empty = false;
   edges.reset();
@@ -776,6 +833,8 @@ int GraphEdgeScanCursor::scan_edges(
   end = false;
   if (OB_UNLIKELY(!initialized_)) {
     ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(raw_row_limit <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_status())) {
   } else if (OB_FAIL(validate_edge_scan_request(sources, direction,
                                                 after_edge, limit))) {
@@ -792,7 +851,7 @@ int GraphEdgeScanCursor::scan_edges(
   } else if (OB_SUCC(ret) && sources.empty()) {
     end = true;
   } else if (OB_SUCC(ret) && after_edge == nullptr) {
-    if (OB_FAIL(build_edge_source_index(sources))) {
+    if (!count_only && OB_FAIL(build_edge_source_index(sources))) {
       LOG_WARN("failed to build graph edge source index", K(ret));
     } else {
       // GraphExpand keeps this array immutable until the stateful scan ends.
@@ -811,8 +870,12 @@ int GraphEdgeScanCursor::scan_edges(
       end = true;
     }
   }
+  if (OB_SUCC(ret) && peak_memory != nullptr) {
+    *peak_memory = std::max(*peak_memory, used_memory());
+  }
   if (OB_SUCC(ret) && !end
-      && OB_FAIL(get_edge_page(sources, limit, edges, scanned_edges, end))) {
+      && OB_FAIL(get_edge_page(sources, limit, edges, scanned_edges, end,
+                               raw_row_limit, count_only, peak_memory))) {
     LOG_WARN("failed to read graph edge page", K(ret));
   }
   if (OB_SUCCESS != ret) {
