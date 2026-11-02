@@ -20,8 +20,7 @@ use s2rst::s2::latlng_rect_bounder::LatLngRectBounder;
 use s2rst::s2::polyline::Polyline;
 use s2rst::s2::region_coverer::RegionCoverer;
 use s2rst::s2::{
-    Cell, CellId, CellUnion, LatLng, Level, LevelMod, Loop, Point, Polygon, Rect, RectVertex,
-    Region,
+    Cell, CellId, CellUnion, LatLng, Level, LevelMod, Loop, Point, Polygon, Rect, Region,
 };
 use std::collections::BTreeSet;
 
@@ -88,29 +87,28 @@ pub fn cover_geometry(geometry: Geometry, config: CoveringConfig) -> Result<Cove
     }
     let projection = config.projected_bounds.map(Projection::new).transpose()?;
     let exceeds_bounds = projection.is_some_and(|projection| {
-        geometry.primitives.iter().any(|primitive| {
-            primitive_coordinates(primitive).any(|point| !projection.valid.contains(point))
+        let outside = |point: &Coordinate| !projection.valid.contains(*point);
+        geometry.primitives.iter().any(|primitive| match primitive {
+            Primitive::Point(point) => outside(point),
+            Primitive::Line(points) => points.iter().any(outside),
+            Primitive::Polygon(rings) => rings.iter().flatten().any(outside),
         })
     });
-    let clipped_envelope = if exceeds_bounds {
-        geometry
-            .envelope
-            .intersection(projection.expect("checked above").valid)
-    } else {
-        None
-    };
     let raw_envelope = geometry.envelope;
     let is_point = geometry.is_point;
-    let mut prepared = if exceeds_bounds {
-        Prepared::empty()
-    } else {
-        prepare_primitives(geometry.primitives, config.geographic, projection)?
-    };
-    if exceeds_bounds {
-        if let Some(envelope) = clipped_envelope {
-            prepared = prepare_envelope(envelope, Some(projection.expect("checked above")));
+    let prepared = if let Some(projection) = projection.filter(|_| exceeds_bounds) {
+        match raw_envelope.intersection(projection.valid) {
+            Some(envelope) => prepare_envelope(envelope, Some(projection), config.kind),
+            None => Prepared::empty(),
         }
-    }
+    } else {
+        prepare_primitives(
+            geometry.primitives,
+            config.geographic,
+            projection,
+            config.kind,
+        )?
+    };
 
     let mut output = Covering {
         mbr: if config.geographic {
@@ -141,7 +139,6 @@ pub fn cover_geometry(geometry: Geometry, config: CoveringConfig) -> Result<Cove
         let margin = LatLng::from_degrees(0.00001, 0.00001);
         let rect = prepared.bounder.get_bound().expanded(margin);
         covering = CellUnion::from_cell_ids(coverer.covering(&rect).cell_ids().to_vec());
-        prepared.vertex_cells = rect_vertices(rect);
         if config.geographic {
             output.mbr = Mbr::from_rect(rect, is_point, true);
         }
@@ -153,7 +150,7 @@ pub fn cover_geometry(geometry: Geometry, config: CoveringConfig) -> Result<Cove
         );
     }
     if config.geographic && !output.mbr.is_empty() {
-        let mut rect = rect_from_mbr(output.mbr)?;
+        let mut rect = output.mbr.to_rect();
         if config.distance_radians > 0.0 {
             rect = rect.expanded_by_distance(Angle::from_radians(config.distance_radians));
         }
@@ -186,32 +183,6 @@ pub fn cover_geometry(geometry: Geometry, config: CoveringConfig) -> Result<Cove
         }
     }
     Ok(output)
-}
-
-fn primitive_coordinates(primitive: &Primitive) -> impl Iterator<Item = Coordinate> + '_ {
-    match primitive {
-        Primitive::Point(point) => PrimitiveCoordinates::Point(std::iter::once(*point)),
-        Primitive::Line(points) => PrimitiveCoordinates::Line(points.iter()),
-        Primitive::Polygon(rings) => PrimitiveCoordinates::Polygon(rings.iter().flatten()),
-    }
-}
-
-enum PrimitiveCoordinates<'a> {
-    Point(std::iter::Once<Coordinate>),
-    Line(std::slice::Iter<'a, Coordinate>),
-    Polygon(std::iter::Flatten<std::slice::Iter<'a, Vec<Coordinate>>>),
-}
-
-impl Iterator for PrimitiveCoordinates<'_> {
-    type Item = Coordinate;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Point(points) => points.next(),
-            Self::Line(points) => points.next().copied(),
-            Self::Polygon(points) => points.next().copied(),
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -262,10 +233,13 @@ impl Prepared {
         }
     }
 
-    fn add_point(&mut self, point: Point) {
-        self.vertex_cells
-            .push(CellId::from_point(&point).parent_at_level(Level::new(MAX_LEVEL)));
-        self.bounder.add_point(point);
+    fn add_point(&mut self, point: Point, kind: CoveringKind) {
+        if kind == CoveringKind::CoveredBy {
+            self.vertex_cells
+                .push(CellId::from_point(&point).parent_at_level(Level::new(MAX_LEVEL)));
+        } else {
+            self.bounder.add_point(point);
+        }
     }
 
     fn add_rect(&mut self, rect: Rect) {
@@ -281,13 +255,14 @@ fn prepare_primitives(
     primitives: Vec<Primitive>,
     geographic: bool,
     projection: Option<Projection>,
+    kind: CoveringKind,
 ) -> Result<Prepared> {
     let mut prepared = Prepared::empty();
     for primitive in primitives {
         match primitive {
             Primitive::Point(coordinate) => {
                 let point = project_point(coordinate, geographic, projection)?;
-                prepared.add_point(point);
+                prepared.add_point(point, kind);
                 prepared.add_rect(if geographic {
                     Rect::from_lat_lng(
                         LatLng::from_degrees(coordinate.y, coordinate.x).normalized(),
@@ -302,7 +277,7 @@ fn prepare_primitives(
             Primitive::Line(coordinates) => {
                 let points = project_points(coordinates, geographic, projection)?;
                 for &point in &points {
-                    prepared.add_point(point);
+                    prepared.add_point(point, kind);
                 }
                 let line = Polyline::new(points);
                 if geographic {
@@ -318,7 +293,7 @@ fn prepare_primitives(
                     }
                     let points = project_points(coordinates, geographic, projection)?;
                     for &point in &points {
-                        prepared.add_point(point);
+                        prepared.add_point(point, kind);
                     }
                     let mut loop_ = Loop::new(points);
                     loop_.normalize();
@@ -335,7 +310,11 @@ fn prepare_primitives(
     Ok(prepared)
 }
 
-fn prepare_envelope(envelope: Envelope, projection: Option<Projection>) -> Prepared {
+fn prepare_envelope(
+    envelope: Envelope,
+    projection: Option<Projection>,
+    kind: CoveringKind,
+) -> Prepared {
     let primitives = if envelope.min_x == envelope.max_x && envelope.min_y == envelope.max_y {
         vec![Primitive::Point(Coordinate {
             x: envelope.min_x,
@@ -376,7 +355,8 @@ fn prepare_envelope(envelope: Envelope, projection: Option<Projection>) -> Prepa
             },
         ]])]
     };
-    prepare_primitives(primitives, false, projection).expect("clipped coordinates are in bounds")
+    prepare_primitives(primitives, false, projection, kind)
+        .expect("clipped coordinates are in bounds")
 }
 
 fn project_points(
@@ -457,20 +437,6 @@ fn is_full_range(covering: &CellUnion, geographic: bool) -> bool {
     }
 }
 
-fn rect_vertices(rect: Rect) -> Vec<CellId> {
-    [
-        RectVertex::LowerLeft,
-        RectVertex::LowerRight,
-        RectVertex::UpperRight,
-        RectVertex::UpperLeft,
-    ]
-    .iter()
-    .map(|&vertex| {
-        CellId::from_point(&rect.vertex(vertex).to_point()).parent_at_level(Level::new(MAX_LEVEL))
-    })
-    .collect()
-}
-
 fn normalized_ids(cells: Vec<CellId>) -> Vec<u64> {
     CellUnion::from_cell_ids(cells)
         .cell_ids()
@@ -495,11 +461,4 @@ fn unique_ancestors(cells: &[u64]) -> Vec<u64> {
         }
     }
     ancestors.into_iter().collect()
-}
-
-fn rect_from_mbr(mbr: Mbr) -> Result<Rect> {
-    Ok(Rect::from_point_pair(
-        LatLng::from_degrees(mbr.y_min, mbr.x_min),
-        LatLng::from_degrees(mbr.y_max, mbr.x_max),
-    ))
 }

@@ -26,7 +26,8 @@ pub use covering::{
     cover_swkb,
 };
 pub use geometry::{Bounds, Coordinate, Envelope, Geometry, Primitive};
-use s2rst::s2::Rect;
+use s2rst::s2::{LatLng, Rect};
+use std::panic::catch_unwind;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mbr {
@@ -52,6 +53,13 @@ impl Mbr {
 
     pub fn is_empty(self) -> bool {
         self.x_min.is_nan() && self.x_max.is_nan() && self.y_min.is_nan() && self.y_max.is_nan()
+    }
+
+    fn to_rect(self) -> Rect {
+        Rect::from_point_pair(
+            LatLng::from_degrees(self.y_min, self.x_min),
+            LatLng::from_degrees(self.y_max, self.x_max),
+        )
     }
 
     fn from_envelope(envelope: Envelope, is_point: bool, geographic: bool) -> Self {
@@ -119,8 +127,7 @@ fn spatial_cover(
     kind: bridge::ffi::CoveringKind,
     distance_radians: f64,
 ) -> bridge::ffi::CoveringResult {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    let result = catch_unwind(|| {
         let kind = match kind {
             bridge::ffi::CoveringKind::Index => CoveringKind::Index,
             bridge::ffi::CoveringKind::Query => CoveringKind::Query,
@@ -142,7 +149,7 @@ fn spatial_cover(
                 distance_radians,
             },
         )
-    }));
+    });
     match result {
         Ok(Ok(covering)) => bridge::ffi::CoveringResult {
             code: bridge::ffi::ErrorCode::None,
@@ -169,8 +176,7 @@ fn spatial_filter_mbr(
     query: bridge::ffi::Mbr,
     relation: bridge::ffi::MbrRelation,
 ) -> bridge::ffi::MbrFilterResult {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    let result = catch_unwind(|| {
         let relation = match relation {
             bridge::ffi::MbrRelation::Covers => MbrRelation::Covers,
             bridge::ffi::MbrRelation::Intersects => MbrRelation::Intersects,
@@ -180,7 +186,7 @@ fn spatial_filter_mbr(
             _ => return Err(Error::InvalidArgument("unknown MBR relation")),
         };
         filter_mbr(native_mbr(index), native_mbr(query), relation)
-    }));
+    });
     match result {
         Ok(Ok(pass_through)) => bridge::ffi::MbrFilterResult {
             code: bridge::ffi::ErrorCode::None,

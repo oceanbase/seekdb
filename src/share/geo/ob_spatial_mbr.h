@@ -29,21 +29,7 @@ class ObSpatialMBR
   OB_UNIS_VERSION(4);
 public:
   ObSpatialMBR()
-      : x_min_(NAN),
-        x_max_(NAN),
-        y_min_(NAN),
-        y_max_(NAN),
-        mbr_type_(ObDomainOpType::T_INVALID),
-        is_point_(false),
-        is_geog_(false) {}
-  explicit ObSpatialMBR(ObDomainOpType rel_type)
-      : x_min_(NAN),
-        x_max_(NAN),
-        y_min_(NAN),
-        y_max_(NAN),
-        mbr_type_(rel_type),
-        is_point_(false),
-        is_geog_(false) {}
+      : ObSpatialMBR(NAN, NAN, NAN, NAN, ObDomainOpType::T_INVALID) {}
   ObSpatialMBR(double x_min, double x_max, double y_min, double y_max, ObDomainOpType rel_type)
       : x_min_(x_min),
         x_max_(x_max),
@@ -69,13 +55,8 @@ public:
                          ObSpatialMBR &spa_mbr,
                          bool is_point = false);
   int filter(const ObSpatialMBR &other, ObDomainOpType type, bool &pass_through) const;
-  OB_INLINE bool is_point() const { return is_point_; }
   OB_INLINE bool is_geog() const { return is_geog_; }
   OB_INLINE ObDomainOpType get_type() const { return mbr_type_; }
-  OB_INLINE double get_xmin() const { return x_min_; }
-  OB_INLINE double get_xmax() const { return x_max_; }
-  OB_INLINE double get_ymin() const { return y_min_; }
-  OB_INLINE double get_ymax() const { return y_max_; }
   OB_INLINE bool is_empty() const { return std::isnan(x_min_) && std::isnan(x_max_)
                                         && std::isnan(y_min_) && std::isnan(y_max_); }
 public:

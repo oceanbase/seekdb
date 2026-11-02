@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{Error, Mbr, Result};
-use s2rst::s2::{LatLng, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MbrRelation {
@@ -34,8 +33,8 @@ pub fn filter(index: Mbr, query: Mbr, relation: MbrRelation) -> Result<bool> {
         return Err(Error::InvalidArgument("MBR coordinate systems differ"));
     }
     if index.geographic {
-        let index_rect = rect(index);
-        let query_rect = rect(query);
+        let index_rect = index.to_rect();
+        let query_rect = query.to_rect();
         if index.is_point && query.is_point && index_rect.approx_eq(query_rect) {
             return Ok(false);
         }
@@ -74,13 +73,6 @@ fn validate(mbr: Mbr) -> Result<()> {
         return Err(Error::InvalidArgument("invalid MBR"));
     }
     Ok(())
-}
-
-fn rect(mbr: Mbr) -> Rect {
-    Rect::from_point_pair(
-        LatLng::from_degrees(mbr.y_min, mbr.x_min),
-        LatLng::from_degrees(mbr.y_max, mbr.x_max),
-    )
 }
 
 fn contains(outer: Mbr, inner: Mbr) -> bool {
