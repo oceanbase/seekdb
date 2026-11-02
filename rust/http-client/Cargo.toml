@@ -8,5 +8,5 @@ publish = false
 cxx = "=1.0.202"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
-curl = { version = "=0.4.49", default-features = false, features = ["static-curl", "rustls"] }
+curl = { version = "=0.4.49", default-features = false, features = ["static-curl", "rustls", "zlib-ng-compat"] }
 curl-sys = { version = "=0.4.84", default-features = false }

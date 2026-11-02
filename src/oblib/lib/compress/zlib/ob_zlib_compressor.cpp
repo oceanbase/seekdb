@@ -118,7 +118,12 @@ int ObZlibCompressor::get_max_overflow_size(const int64_t src_data_size,
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid argument, ", K(ret), K(src_data_size));
   } else {
-    max_overflow_size = (src_data_size >> 12) + (src_data_size >> 14) + (src_data_size >> 25) + 13;
+    const uint64_t bound = compression::zlib_compress_bound(static_cast<size_t>(src_data_size));
+    if (bound < static_cast<uint64_t>(src_data_size) || bound > static_cast<uint64_t>(INT64_MAX)) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      max_overflow_size = static_cast<int64_t>(bound) - src_data_size;
+    }
   }
   return ret;
 }

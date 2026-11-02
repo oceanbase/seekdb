@@ -22,8 +22,9 @@ build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:windows --per_file_copt=sql_parser_mysql_mode_tab[.]c$@/clang:-fno-slp-vectorize
 # Allow developers to modify build outputs in place.
 build --experimental_writable_outputs
-# Windows generators use the installed SDK/Python utility paths.
+# Native generators and Cargo build scripts use installed SDK utilities.
 build:windows --action_env=PATH
+build:macos --action_env=PATH
 build:windows --repo_env=BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00
 build:windows --platforms=//bazel/platforms:windows_x86_64
 build:windows --host_platform=//bazel/platforms:windows_x86_64

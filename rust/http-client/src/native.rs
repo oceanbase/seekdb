@@ -251,6 +251,6 @@ impl HttpError {
     }
 
     fn from_multi(error: curl::MultiError) -> Self {
-        Self::new(ErrorKind::Multi, error.code() as i32, error.to_string())
+        Self::new(ErrorKind::Multi, error.code(), error.to_string())
     }
 }

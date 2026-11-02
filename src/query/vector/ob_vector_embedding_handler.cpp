@@ -768,7 +768,7 @@ int ObEmbeddingTask::check_http_progress()
             ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
             memcpy(message, body.data(), body.size());
-            http_error_message_.assign_ptr(message, body.size());
+            http_error_message_.assign_ptr(message, static_cast<int64_t>(body.size()));
           }
         }
         if (OB_SUCC(ret)) {

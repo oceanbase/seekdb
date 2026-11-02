@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include "lib/compress/zlib/ob_zlib_compressor.h"
 #include "rust/compression.h"
 
 namespace oceanbase::compression
@@ -107,6 +108,36 @@ TEST(RustCompression, CxxAndCAbiZlibInteroperateInBothDirections)
       ASSERT_EQ(Code::Ok, result.code) << size << " " << level;
       encoded.resize(result.size);
       expect_abi_decompress(encoded, input);
+    }
+  }
+}
+
+TEST(RustCompression, NativeCompressorBoundCoversIncompressibleDataAtEveryLevel)
+{
+  for (size_t size : {size_t(4096), size_t(65536)}) {
+    std::vector<uint8_t> input(size);
+    uint64_t state = 0x12345678;
+    for (auto &byte : input) {
+      state ^= state << 13;
+      state ^= state >> 7;
+      state ^= state << 17;
+      byte = static_cast<uint8_t>(state);
+    }
+    for (int level = -1; level <= 9; ++level) {
+      common::ObZlibCompressor compressor(level);
+      int64_t overflow = 0;
+      ASSERT_EQ(0, compressor.get_max_overflow_size(input.size(), overflow));
+      ASSERT_GE(overflow, 0);
+      std::vector<char> encoded(input.size() + overflow);
+      int64_t encoded_size = 0;
+      ASSERT_EQ(0, compressor.compress(reinterpret_cast<const char *>(input.data()), input.size(),
+                                       encoded.data(), encoded.size(), encoded_size)) << size << " " << level;
+      std::vector<uint8_t> decoded(input.size());
+      int64_t decoded_size = 0;
+      ASSERT_EQ(0, compressor.decompress(encoded.data(), encoded_size,
+                                         reinterpret_cast<char *>(decoded.data()), decoded.size(), decoded_size));
+      ASSERT_EQ(input.size(), decoded_size);
+      ASSERT_EQ(input, decoded);
     }
   }
 }

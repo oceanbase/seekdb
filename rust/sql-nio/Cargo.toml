@@ -25,9 +25,9 @@ memory-transport = []
 
 [dependencies]
 cxx = "1"
-# flate2 = zlib for the compressed MySQL protocol. Use the same statically
-# built libz-sys backend as storage compression and libcurl.
-flate2 = { version = "1", default-features = false, features = ["zlib"] }
+# Use the same static zlib-ng compatibility backend as storage compression
+# and libcurl for the compressed MySQL protocol.
+flate2 = { version = "1", default-features = false, features = ["zlib-ng-compat"] }
 # Direct-indexed storage for the reactor's mio Token -> connection hot table.
 slab = "0.4"
 # TLS for the MySQL channel. default-features=false drops the aws-lc-rs

@@ -1,4 +1,8 @@
-exports_files([
-    "src/zlib/zconf.h",
-    "src/zlib/zlib.h",
-])
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+cc_library(
+    name = "headers",
+    testonly = True,
+    hdrs = [":build_script_build"],
+    includes = ["_bs.out_dir/include"],
+)

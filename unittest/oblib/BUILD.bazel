@@ -23,24 +23,20 @@ cc_test(
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
 
-cc_library(
-    name = "zlib_headers",
-    hdrs = [
-        "@@rules_rust++crate+rust_crates__libz-sys-1.1.31//:src/zlib/zconf.h",
-        "@@rules_rust++crate+rust_crates__libz-sys-1.1.31//:src/zlib/zlib.h",
-    ],
-    strip_include_prefix = "/src/zlib",
-)
-
 cc_test(
     name = "test_rust_compression",
     srcs = ["test_rust_compression.cpp"],
     linkstatic = True,
     deps = [
+        "@@rules_rust++crate+rust_crates__libz-sys-1.1.31//:headers",
         "//bazel/third_party:gtest",
-        ":zlib_headers",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_test_runtime",
         "//rust:compression",
-    ],
+    ] + select({
+        "@platforms//os:windows": ["//bazel/third_party:windows_headers"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_test(
