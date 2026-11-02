@@ -36,6 +36,11 @@ public:
   ObFTCacheDict(ObCollationType coll_type, ObFTDAT *dat)
       : coll_type_(coll_type), dat_(dat), reader_(dat)
   {
+    for (int64_t i = 0; i < MEMO_SLOT_CNT; ++i) {
+      memo_[i].key_ = 0;
+      memo_[i].code_ = 0;
+      memo_[i].valid_ = 0;
+    }
   }
   int init() override;
   int match(const ObString &single_word, ObDATrieHit &hit) const override;
@@ -53,10 +58,27 @@ public:
                                         ObKVCacheHandle &handle);
 
 private:
+  // A single character is mapped to its dictionary code many times while the
+  // segmenter walks the text: once for every live prefix.  The dictionary is
+  // immutable, so the answer for a given character never changes and can be
+  // memoized.  The memo is direct mapped and keyed by the raw character bytes,
+  // which keeps the hot path free of the string hash and the modulo probe.
+  struct CharCodeMemo
+  {
+    uint64_t key_;
+    int32_t code_;
+    int8_t valid_;
+  };
+  static constexpr int64_t MEMO_SLOT_CNT = 256;
+
+  int find_code_memo(const ObString &single_word, ObFTWordCode &code) const;
+
+private:
   ObKVCacheHandle handle_; // used to pin the mem block later
   ObCollationType coll_type_;
   ObFTDAT *dat_ = nullptr;
   ObFTDATReader<void> reader_;
+  mutable CharCodeMemo memo_[MEMO_SLOT_CNT];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTCacheDict);

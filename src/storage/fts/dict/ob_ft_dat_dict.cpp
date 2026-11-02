@@ -247,49 +247,75 @@ int ObFTDATBuilder<DATA_TYPE>::encode(const ObString &word, ObFTWordCode &code, 
 }
 
 template <typename DATA_TYPE>
+int ObFTDATReader<DATA_TYPE>::find_code(const ObString &ft_char,
+                                        ObFTWordCode &code,
+                                        bool &found) const
+{
+  int ret = OB_SUCCESS;
+  found = false;
+  ObFTSingleWord word;
+  word.set_word(ft_char.ptr(), ft_char.length());
+  if (OB_FAIL(dat_->get_map()->find(word, code))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else {
+    found = true;
+  }
+  return ret;
+}
+
+template <typename DATA_TYPE>
+int ObFTDATReader<DATA_TYPE>::step_with_code(const ObFTWordCode code,
+                                            const int64_t char_len,
+                                            const ObDATrieHit &last_hit,
+                                            ObDATrieHit &hit) const
+{
+  int ret = OB_SUCCESS;
+  int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
+  int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
+
+  if (&last_hit == &hit) {
+    // sameone
+  } else {
+    hit = last_hit;
+  }
+  if (0 == hit.base_idx_) {
+    hit.base_idx_ = 1; // from current to do check;
+  }
+  // from current place to do check
+  int32_t idx = abs(base[hit.base_idx_]) + code;
+
+  if (check[idx] != hit.base_idx_) {
+    hit.set_unmatch();
+  } else if (base[idx] < 0) {
+    hit.base_idx_ = idx;
+    hit.end_pos_ = hit.end_pos_ + char_len;
+    hit.char_cnt_++;
+    hit.set_match();
+    hit.set_prefix(); // to be checked next time
+  } else {
+    hit.base_idx_ = idx;
+    hit.end_pos_ = hit.end_pos_ + char_len;
+    hit.char_cnt_++;
+    hit.set_prefix();
+  }
+  return ret;
+}
+
+template <typename DATA_TYPE>
 int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
                                              const ObDATrieHit &last_hit,
                                              ObDATrieHit &hit) const
 {
   int ret = OB_SUCCESS;
-  ObFTWordCode code;
+  ObFTWordCode code = 0;
+  bool found = false;
   hit.set_unmatch();
-  auto *map = dat_->get_map();
-  int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
-  int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
-
-  ObFTSingleWord word;
-  word.set_word(ft_char.ptr(), ft_char.length());
-  if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
-  } else if (OB_ENTRY_NOT_EXIST == ret) {
-    ret = OB_SUCCESS;
+  if (OB_FAIL(find_code(ft_char, code, found))) {
+  } else if (!found) {
     hit.set_unmatch();
-  } else {
-    if (&last_hit == &hit) {
-      // sameone
-    } else {
-      hit = last_hit;
-    }
-    if (0 == hit.base_idx_) {
-      hit.base_idx_ = 1; // from current to do check;
-    }
-    // from current place to do check
-    int32_t idx = abs(base[hit.base_idx_]) + code;
-
-    if (check[idx] != hit.base_idx_) {
-      hit.set_unmatch();
-    } else if (base[idx] < 0) {
-      hit.base_idx_ = idx;
-      hit.end_pos_ = hit.end_pos_ + ft_char.length();
-      hit.char_cnt_++;
-      hit.set_match();
-      hit.set_prefix(); // to be checked next time
-    } else {
-      hit.base_idx_ = idx;
-      hit.end_pos_ = hit.end_pos_ + ft_char.length();
-      hit.char_cnt_++;
-      hit.set_prefix();
-    }
+  } else if (OB_FAIL(step_with_code(code, ft_char.length(), last_hit, hit))) {
   }
   return ret;
 }

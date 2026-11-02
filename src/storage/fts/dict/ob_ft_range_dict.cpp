@@ -307,10 +307,54 @@ int ObFTRangeDict::init()
     ret = OB_INIT_TWICE;
   } else {
     if (OB_FAIL(build_dict_from_cache(*range_container_))) {
+    } else if (OB_FAIL(build_first_byte_index())) {
     }
     is_inited_ = true;
   }
   return ret;
+}
+
+int ObFTRangeDict::build_first_byte_index()
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; i < FIRST_BYTE_SLOT_CNT; ++i) {
+    first_byte_begin_[i] = -1;
+    first_byte_end_[i] = -1;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < range_dicts_.size(); ++i) {
+    const ObString &start = range_dicts_[i].start_.get_word();
+    const ObString &end = range_dicts_[i].end_.get_word();
+    if (OB_UNLIKELY(start.empty()) || OB_UNLIKELY(end.empty())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("empty range boundary", K(ret), K(i), K(start), K(end));
+    } else {
+      const int64_t first = static_cast<uint8_t>(start.ptr()[0]);
+      const int64_t last = static_cast<uint8_t>(end.ptr()[0]);
+      for (int64_t byte = first; byte <= last && byte < FIRST_BYTE_SLOT_CNT; ++byte) {
+        if (-1 == first_byte_begin_[byte]) {
+          first_byte_begin_[byte] = static_cast<int16_t>(i);
+        }
+        first_byte_end_[byte] = static_cast<int16_t>(i);
+      }
+    }
+  }
+  return ret;
+}
+
+// Binary (UTF8MB4_BIN) word order: byte comparison, then shorter first.  This
+// matches ObCharset::strcmp for the only collation used by this dictionary, and
+// avoids the charset dispatch and function pointer call on the hot path.
+int ObFTRangeDict::cmp_word_bin(const ObString &left, const ObString &right)
+{
+  const int64_t common = MIN(left.length(), right.length());
+  const int cmp = 0 == common ? 0 : MEMCMP(left.ptr(), right.ptr(), common);
+  if (cmp != 0) {
+    return cmp < 0 ? -1 : 1;
+  } else if (left.length() == right.length()) {
+    return 0;
+  } else {
+    return left.length() < right.length() ? -1 : 1;
+  }
 }
 int ObFTRangeDict::build_ranges(const ObFTDictDesc &desc,
                                 ObIFTDictIterator &iter,
@@ -381,23 +425,29 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
-    }
-  }
-  if (!found) {
-    // not found, dis match
+  dict = nullptr;
+  if (OB_UNLIKELY(single_word.empty())) {
     ret = OB_ENTRY_NOT_EXIST;
+  } else {
+    // A word can only live in a range whose [start, end] covers the byte that
+    // starts the word, so narrow the scan with the first byte index instead of
+    // walking every range of the dictionary.
+    const int64_t first_byte = static_cast<uint8_t>(single_word.ptr()[0]);
+    const int16_t begin = first_byte_begin_[first_byte];
+    const int16_t end = first_byte_end_[first_byte];
+    if (OB_UNLIKELY(begin < 0)) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else {
+      for (int16_t i = begin; OB_SUCC(ret) && nullptr == dict && i <= end; ++i) {
+        if (cmp_word_bin(range_dicts_[i].start_.get_word(), single_word) <= 0
+            && cmp_word_bin(range_dicts_[i].end_.get_word(), single_word) >= 0) {
+          dict = range_dicts_[i].dict_;
+        }
+      }
+      if (OB_SUCC(ret) && OB_ISNULL(dict)) {
+        ret = OB_ENTRY_NOT_EXIST;
+      }
+    }
   }
   return ret;
 }

@@ -907,6 +907,7 @@ SQL_PRIVATE_HEADERS = [
     "engine/expr/ob_expr_to_pinyin_tab.h",
     "engine/expr/ob_expr_to_type.h",
     "engine/expr/ob_expr_tokenize.h",
+    "engine/expr/ob_expr_file_sql_gate.h",
     "engine/expr/ob_expr_topn_filter.h",
     "engine/expr/ob_expr_transaction_id.h",
     "engine/expr/ob_expr_trim.h",

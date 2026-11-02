@@ -1535,8 +1535,7 @@ std::string build_json_table(const std::vector<Column> &cols, const std::string 
 {
   // file SQL is off unless the session turned it on, so the table is empty by
   // default instead of exposing local files
-  std::string sql = "JSON_TABLE(IF(IFNULL(@__enable_file_sql, 0) = 1, " + sql_quote_json(json) +
-                    ", '[]'), '$[*]' COLUMNS(";
+  std::string sql = "JSON_TABLE(" + sql_quote_json(json) + ", '$[*]' COLUMNS(";
   for (size_t c = 0; c < cols.size(); ++c) {
     if (c > 0) sql += ", ";
     sql += "`" + cols[c].name + "` " + type_name(cols[c].type);
@@ -1810,6 +1809,7 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
     } else {
       std::string built;
       bool ok = true;
+      bool force_reject = false;
       std::vector<std::string> schema_names;
       std::vector<FileType> schema_types;
       std::vector<bool> schema_nullable;
@@ -1870,7 +1870,12 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
             load_ret = load_glob(ca.path, cols, data);
           } else if (is_csv) {
             if (ca.has_format && "csv" != ca.format) { ok = false; break; }  // invalid format
-            if (-1 != ca.sample_size && 0 != ca.sample_size) { ok = false; break; }
+            if (-1 != ca.sample_size && 0 != ca.sample_size) {
+              force_reject = true;
+              i = sql.size();
+              matched = true;
+              break;
+            }
             load_ret = load_csv(ca.path, ca.header, ca.delim, cols, data);
           } else {
             if (ca.has_format && "newline_delimited" != ca.format && "jsonl" != ca.format) {
@@ -1881,7 +1886,8 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
           }
           if (OB_FAIL(load_ret)) { ok = false; break; }
           const std::string json = build_json(cols, data, !is_csv && !is_glob);
-          built += build_json_table(cols, json);
+          built += "(SELECT * FROM " + build_json_table(cols, json) +
+                   " AS __fsrc WHERE __file_sql_gate() = 1)";
           if (!has_alias_after(sql, close_pos)) {
             built += " AS __file_sql";
           }
@@ -1909,7 +1915,17 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
           ++i;
         }
       }
-      if (ok && !schema_names.empty()) {
+      if (ok && force_reject) {
+        const std::string reject_sql("SELECT __file_sql_reject()");
+        char *rbuf = static_cast<char *>(alloc.alloc(reject_sql.size()));
+        if (OB_ISNULL(rbuf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(rbuf, reject_sql.data(), reject_sql.size());
+          out.assign_ptr(rbuf, static_cast<int32_t>(reject_sql.size()));
+          rewritten = true;
+        }
+      } else if (ok && !schema_names.empty()) {
         std::string final_sql;
         if (is_describe) {
           std::vector<Column> cols;
