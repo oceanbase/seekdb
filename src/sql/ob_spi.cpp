@@ -87,6 +87,10 @@ template <typename Value>
 int rewrite_owned_spi_pl_descriptor(Value &value, int64_t address, uint8_t subtype, int32_t size)
 {
   Datum &carrier = value.datum_;
+  if (carrier.is_inline_extended()) {
+    carrier.set_inline_extended(address, subtype, size);
+    return OB_SUCCESS;
+  }
   if (!carrier.has_ext_value() || carrier.length() != DATUM_EXTEND_PAYLOAD_SIZE) {
     return OB_INVALID_ARGUMENT;
   }

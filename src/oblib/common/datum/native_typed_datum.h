@@ -137,6 +137,11 @@ inline int clone_native_parameter_value(const NativeTypedDatum &source,
     DatumParameterArray *owned = nullptr;
     if (OB_FAIL(native_parameter_detail::array_view(source, array))) {
     } else if (OB_FAIL(native_parameter_detail::clone_array(*array, bulk_owner, owned, 0))) {
+    } else if (source.datum_.is_inline_extended()) {
+      candidate.datum_.set_inline_extended(reinterpret_cast<int64_t>(owned),
+          source.datum_.get_extend_type(), source.datum_.get_extend_size(),
+          source.datum_.get_extend_collation_level(), source.datum_.get_extend_collation(),
+          source.datum_.inline_extended_payload_size() == DATUM_LEGACY_EXTEND_SIZE);
     } else {
       // Preserve the prepared carrier's supported 8B/15B/16B encoding, replacing
       // only the graph address. The preceding CopyPlan validation bounds it.
@@ -151,6 +156,17 @@ inline int clone_native_parameter_value(const NativeTypedDatum &source,
         ret = candidate.datum_.set_reference(bytes, length, source.datum_.reference_flags());
       }
     }
+  } else if (ret == OB_SUCCESS && source.datum_.is_present()
+      && source.type_->legacy_meta().is_pl_extend_type()) {
+    // Validation above still uses the complete declaration. This native
+    // retaining boundary copies only the carrier, borrowing the original PL
+    // resource; an explicitly borrowed old descriptor need not be allocated.
+    candidate.datum_.set_inline_extended(source.datum_.get_ext(),
+        source.datum_.get_extend_type(), source.datum_.get_extend_size(),
+        source.datum_.get_extend_collation_level(), source.datum_.get_extend_collation(),
+        source.datum_.is_inline_extended()
+            ? source.datum_.inline_extended_payload_size() == DATUM_LEGACY_EXTEND_SIZE
+            : source.datum_.length() == DATUM_LEGACY_EXTEND_SIZE);
   } else if (ret == OB_SUCCESS) {
     const DatumCopyPlan plan(*source.type_);
     int64_t bytes = 0;

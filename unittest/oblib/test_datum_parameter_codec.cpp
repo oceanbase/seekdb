@@ -15,6 +15,7 @@
  */
 
 #include "common/datum/datum_parameter_codec.h"
+#include "common/datum/datum_value_flat.h"
 #ifdef OCEANBASE_COMMON_OB_OBJECT_H_
 #error "Native codec tests must not include the legacy value definition"
 #endif
@@ -669,6 +670,66 @@ TEST(DatumCodec, unis_metadata_reuse_does_not_change_strict_or_schema_decoding)
       wire.data(), wire.size(), pos, owner, value, meta));
   EXPECT_EQ(1, pos);
   EXPECT_EQ("050700ff00", encode_unis_regression_value(value, meta));
+}
+
+
+TEST(DatumCodec, inline_extended_normalizes_native_row_and_schema_wire_and_keeps_memory_offsets)
+{
+  SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(1);
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    for (int64_t address : {int64_t(0), int64_t(ObActionFlag::OP_DEL_ROW), int64_t(65536)}) {
+      SCOPED_TRACE(address);
+      DatumValue input;
+      input.meta_ = meta; input.datum_.set_inline_extended(address, 1, -31,
+          CS_LEVEL_EXPLICIT, CS_TYPE_UTF8MB4_BIN, legacy16);
+      char wrapper[16]; ASSERT_EQ(OB_SUCCESS, input.datum_.write_inline_extended_payload(wrapper, sizeof(wrapper)));
+      DatumValue explicit_legacy; explicit_legacy.meta_ = meta;
+      ASSERT_EQ(OB_SUCCESS, explicit_legacy.datum_.set_reference(wrapper, legacy16 ? 16 : 15, Datum::LegacyExtended));
+      // Same-domain memory retention owns the carrier bits and keeps the
+      // resource borrowed; it must never rewrite its address as an offset.
+      EXPECT_EQ(0, NativeValueFlat::size(input)); EXPECT_EQ(0, NativeValueFlat::size(explicit_legacy));
+      char buffer[8] = {}; int64_t pos = 0; DatumValue copy;
+      ASSERT_EQ(OB_SUCCESS, NativeValueFlat::copy(explicit_legacy, copy, buffer, sizeof(buffer), pos));
+      EXPECT_EQ(0, pos); EXPECT_TRUE(copy.datum_.is_inline_extended());
+      ASSERT_EQ(OB_SUCCESS, NativeValueFlat::make_offsets(copy, buffer, sizeof(buffer), pos));
+      EXPECT_EQ(0, pos); EXPECT_EQ(address, copy.get_ext());
+      ASSERT_EQ(OB_SUCCESS, NativeValueFlat::relocate(copy, buffer, sizeof(buffer), pos));
+      EXPECT_EQ(0, pos); EXPECT_EQ(address, copy.get_ext()); EXPECT_EQ(-31, copy.get_val_len());
+      // Both independent native wire families retain their historical pointer
+      // refusal and normalize the private tag before writing a public record.
+      int64_t native_size = 777, old_size = 777;
+      const int old_ret = NativeValueFlat::row_value_size(explicit_legacy, old_size);
+      EXPECT_EQ(old_ret, NativeValueFlat::row_value_size(input, native_size));
+      EXPECT_EQ(old_size, native_size);
+      if (address == 65536) {
+        EXPECT_EQ(OB_NOT_SUPPORTED, old_ret); EXPECT_EQ(777, native_size);
+        char wire[128]; MEMSET(wire, 0x5a, sizeof(wire)); pos = 3;
+        EXPECT_EQ(OB_NOT_SUPPORTED, NativeValueFlat::encode_row_value(input, wire, sizeof(wire), pos));
+        EXPECT_EQ(3, pos); for (char byte : wire) { EXPECT_EQ(char(0x5a), byte); }
+      } else {
+        ASSERT_EQ(OB_SUCCESS, old_ret);
+        std::vector<char> before(old_size), after(native_size); int64_t a = 0, b = 0;
+        ASSERT_EQ(OB_SUCCESS, NativeValueFlat::encode_row_value(explicit_legacy, before.data(), before.size(), a));
+        ASSERT_EQ(OB_SUCCESS, NativeValueFlat::encode_row_value(input, after.data(), after.size(), b));
+        EXPECT_EQ(before, after); EXPECT_EQ(a, b);
+      }
+      char scratch[64]; ObDatum legacy;
+      ASSERT_EQ(OB_SUCCESS, explicit_legacy.export_legacy(legacy, scratch, sizeof(scratch)));
+      old_size = native_size = 888;
+      const int schema_ret = DatumParameterCodec::value_size(legacy, meta, old_size);
+      EXPECT_EQ(schema_ret, DatumParameterCodec::schema_native_value_size(input.datum_, meta, native_size));
+      EXPECT_EQ(old_size, native_size);
+      if (schema_ret == OB_SUCCESS) {
+        std::vector<char> before(old_size), after(native_size); int64_t a = 0, b = 0;
+        ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(legacy, meta, before.data(), before.size(), a));
+        ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::encode_schema_native_value(input.datum_, meta, after.data(), after.size(), b));
+        EXPECT_EQ(before, after); EXPECT_EQ(a, b);
+      } else { EXPECT_EQ(OB_NOT_SUPPORTED, schema_ret); EXPECT_EQ(888, native_size); }
+      MEMSET(wrapper, 0xa5, sizeof(wrapper));
+      EXPECT_EQ(address, copy.get_ext()); EXPECT_EQ(-31, copy.get_val_len());
+    }
+  }
 }
 
 int main(int argc, char **argv) { ::testing::InitGoogleTest(&argc, argv); return RUN_ALL_TESTS(); }

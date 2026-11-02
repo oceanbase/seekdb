@@ -471,7 +471,12 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
           if (type == nullptr) { ret = OB_ERR_UNEXPECTED; }
           else if (OB_FAIL(param.export_legacy(value_view, value_scratch, sizeof(value_scratch)))) {
           } else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(value_view, value))) {
-          } else { ret = calc_datum_from_param(value, *type, col_expr); }
+          } else {
+            if (value.is_present() && param.datum_.is_inline_extended()) {
+              value = param.datum_; // Keep no Reference to value_scratch in the output frame.
+            }
+            ret = calc_datum_from_param(value, *type, col_expr);
+          }
           break;
         }
       };

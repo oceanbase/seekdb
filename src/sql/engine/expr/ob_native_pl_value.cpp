@@ -320,7 +320,7 @@ int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionIn
       // span is owned here; the graph pointee was released above.
       const SqlTypeMeta &meta = value.get_type_meta();
       const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(meta.get_type());
-      if (value.datum_.is_present() && (meta.is_unknown() || meta.is_ext_sql_array()
+      if (value.datum_.is_present() && !value.datum_.is_inline_extended() && (meta.is_unknown() || meta.is_ext_sql_array()
           || (mapping != OBJ_DATUM_8BYTE_DATA && mapping != OBJ_DATUM_4BYTE_DATA
               && mapping != OBJ_DATUM_1BYTE_DATA))) {
         allocator.free(const_cast<void *>(value.datum_.get_reference()));
@@ -378,7 +378,7 @@ int clone_array(const SqlType &type, const DatumParameter &source, DatumParamete
       if (cleanup_ret != OB_SUCCESS) {
         if (metadata_owner != nullptr && !candidate.is_null()) { output = candidate; }
         LOG_ERROR("failed to rollback SQL array clone", K(cleanup_ret));
-      } else if (!candidate.is_null()) {
+      } else if (!candidate.is_null() && !candidate.datum_.is_inline_extended()) {
         // The graph was released explicitly; free only its address span.
         allocator.free(const_cast<void *>(candidate.datum_.get_reference()));
       }
@@ -405,11 +405,9 @@ int clone_record(const SqlType &type,
     if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
     else {
       copy = new (memory) ObPLRecord(type.pl_declaration().declaration_id, count);
-      // The freshly allocated 15-byte physical carrier already belongs to
-      // allocator. Update that buffer explicitly; no setter scratch escapes.
+      // The carrier is inline; only the composite has resource ownership.
       Datum &carrier = candidate.datum_;
-      ret = carrier.set_extend(reinterpret_cast<int64_t>(copy), PL_RECORD_TYPE, init_size,
-          const_cast<void *>(carrier.get_reference()), carrier.length(),
+      carrier.set_inline_extended(reinterpret_cast<int64_t>(copy), PL_RECORD_TYPE, init_size,
           carrier.get_extend_collation_level(), carrier.get_extend_collation());
       if (ret == OB_SUCCESS) { ret = copy->init_data(allocator, need_new_allocator); }
     }
@@ -439,7 +437,7 @@ int clone_record(const SqlType &type,
       if (cleanup_ret != OB_SUCCESS) { LOG_ERROR("failed to rollback PL record clone", K(cleanup_ret)); }
     }
     if (cleanup_ret != OB_SUCCESS && metadata_owner != nullptr) { output = candidate; }
-    else if (!candidate.is_null()) {
+    else if (!candidate.is_null() && !candidate.datum_.is_inline_extended()) {
       allocator.free(const_cast<void *>(candidate.datum_.get_reference()));
     }
   }
@@ -601,6 +599,12 @@ int NativeSqlValueOwner::clone(const SqlType &type, const Datum &source, Datum &
           }
           if (ret == OB_SUCCESS) { ret = plan.import_legacy(legacy, candidate); }
           if (ret == OB_SUCCESS) {
+            // import_legacy deliberately borrows legacy Reference payloads.
+            // An inline carrier exported above lives in scratch, not in the
+            // retained resource. Keep its native bits after the same checks.
+            if (candidate.is_present() && resource->value_.datum_.is_inline_extended()) {
+              candidate = resource->value_.datum_;
+            }
             keep(resource);
             output = candidate;
           } else {

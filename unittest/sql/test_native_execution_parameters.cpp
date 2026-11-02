@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_substring_index.h"
 #include "sql/engine/expr/ob_expr_like.h"
+#include "sql/engine/expr/ob_expr_get_subprogram_var.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -1551,9 +1552,15 @@ TEST_F(NativeExecutionParameters, resolver_snapshot_failures_preserve_inputs_and
   lvalue.set_udt_id(record_id); lvalue.set_param_meta();
   lvalue.set_raw_text_info(17, 23); lvalue.set_result_flags(0x1234);
   ASSERT_EQ(OB_SUCCESS, plan().append_parameter_input(lvalue));
-  ASSERT_EQ(OB_SUCCESS, plan().build_resolution_inputs(resolution, statement_owner));
+  ExecutionAllocator wrapper_reject;
+  wrapper_reject.fail_size_ = DATUM_EXTEND_PAYLOAD_SIZE;
+  ASSERT_EQ(OB_SUCCESS, plan().build_resolution_inputs(resolution, wrapper_reject));
   ASSERT_EQ(1, resolution.count());
-  EXPECT_NE(lvalue.get_datum().get_reference(), resolution.at(0).get_datum().get_reference());
+  // A carrier snapshot now copies inline bits, while this PL lvalue's pointee
+  // still belongs to source_owner. No second 15-byte envelope is required.
+  EXPECT_TRUE(lvalue.datum_.is_inline_extended());
+  EXPECT_TRUE(resolution.at(0).datum_.is_inline_extended());
+  EXPECT_EQ(0, wrapper_reject.calls_for(DATUM_EXTEND_PAYLOAD_SIZE));
   EXPECT_EQ(reinterpret_cast<int64_t>(record), resolution.at(0).get_ext());
   expect_resolver_attributes(lvalue.get_metadata(), resolution.at(0).get_metadata());
   plan().reset_datum_param_store();
@@ -3321,6 +3328,10 @@ public:
   {
     const bool descriptor = size == DATUM_EXTEND_PAYLOAD_SIZE;
     if (descriptor) { ++descriptor_calls_; } else { ++other_calls_; }
+    const bool record = size == oceanbase::pl::ObRecordType::get_init_size(1);
+    if (record) { ++record_calls_; }
+    if (record && record_calls_ == throw_record_call_) { throw PLDescriptorAllocationException(); }
+    if (record && record_calls_ == fail_record_call_) { return nullptr; }
     if ((descriptor && descriptor_calls_ == throw_descriptor_call_)
         || (!descriptor && throw_other_)) { throw PLDescriptorAllocationException(); }
     if ((descriptor && descriptor_calls_ == fail_descriptor_call_)
@@ -3357,12 +3368,23 @@ public:
     }
     return count;
   }
+  int64_t live_records() const
+  {
+    int64_t count = 0;
+    for (const auto &entry : allocations_) {
+      count += entry.live_ && entry.bytes_ == oceanbase::pl::ObRecordType::get_init_size(1);
+    }
+    return count;
+  }
   int64_t hold() const { return blocks_.hold(); }
   ObBlockAllocMgr blocks_;
   ObVSliceAlloc slices_;
   std::vector<Allocation> allocations_;
   int64_t descriptor_calls_ = 0;
   int64_t descriptor_frees_ = 0;
+  int64_t record_calls_ = 0;
+  int64_t fail_record_call_ = 0;
+  int64_t throw_record_call_ = 0;
   int64_t other_calls_ = 0;
   int64_t fail_descriptor_call_ = 0;
   int64_t throw_descriptor_call_ = 0;
@@ -3402,7 +3424,8 @@ protected:
     ObSQLSessionInfo::ExecCtxSessionRegister unregister(session_, nullptr);
     exec_.set_my_session(nullptr);
   }
-  void declare_records(int64_t arguments, int64_t locals = 0, bool in_arguments = true)
+  void declare_records(int64_t arguments, int64_t locals = 0, bool in_arguments = true,
+                       bool second_not_null = false)
   {
     function_.reset(new ObPLFunction(scope_.context_));
     inputs_.reuse();
@@ -3413,7 +3436,9 @@ protected:
       const std::string name = "record_" + std::to_string(i);
       ObString owned_name;
       ASSERT_EQ(OB_SUCCESS, ob_write_string(owner_, ObString(name.size(), name.data()), owned_name));
-      ASSERT_EQ(OB_SUCCESS, symbols.add_symbol(owned_name, declared));
+      ObPLDataType symbol_type = declared;
+      if (second_not_null && i == 1) { symbol_type.set_not_null(true); }
+      ASSERT_EQ(OB_SUCCESS, symbols.add_symbol(owned_name, symbol_type));
     }
     ASSERT_EQ(OB_SUCCESS, function_->set_variables(symbols));
     function_->set_arg_count(arguments);
@@ -3454,8 +3479,12 @@ protected:
   {
     for (int64_t i = 0; i < count; ++i) {
       ASSERT_NO_FATAL_FAILURE(expect_metadata(inputs_.at(i), state.get_params().at(i)));
-      EXPECT_EQ(inputs_.at(i).get_datum().get_reference(),
-          state.get_params().at(i).get_datum().get_reference());
+      EXPECT_EQ(inputs_.at(i).get_datum().is_inline_extended(),
+          state.get_params().at(i).get_datum().is_inline_extended());
+      if (!inputs_.at(i).get_datum().is_inline_extended()) {
+        EXPECT_EQ(inputs_.at(i).get_datum().get_reference(),
+            state.get_params().at(i).get_datum().get_reference());
+      }
       EXPECT_EQ(inputs_.at(i).get_ext(), state.get_params().at(i).get_ext());
       auto *record = reinterpret_cast<oceanbase::pl::ObPLRecord *>(inputs_.at(i).get_ext());
       ASSERT_NE(nullptr, record);
@@ -3480,8 +3509,9 @@ TEST_F(PLInitialDescriptors, trigger_row_binding_releases_only_initial_wrappers)
   oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
   ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, false));
   ASSERT_EQ(2, state.get_params().count());
-  EXPECT_EQ(2, callee.descriptor_calls_); EXPECT_EQ(2, callee.descriptor_frees_);
-  EXPECT_EQ(96, callee.peak_charge_); // Two actual 15-byte requests + slice headers/alignment.
+  // Native OLD/NEW carriers no longer allocate either initial 15-byte wrapper.
+  EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
+  EXPECT_EQ(0, callee.peak_charge_);
   EXPECT_EQ(0, callee.live_charge_); EXPECT_EQ(0, callee.hold());
   EXPECT_EQ(0, callee.other_calls_); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
   ASSERT_NO_FATAL_FAILURE(expect_borrowed_rows(state, 2));
@@ -3493,13 +3523,16 @@ TEST_F(PLInitialDescriptors, trigger_row_binding_releases_only_initial_wrappers)
 
 TEST_F(PLInitialDescriptors, failed_initialization_and_tracking_growth_release_exact_owned_pointers)
 {
+  // The three removed 15-byte wrapper fault sites are negative controls now:
+  // rejecting or throwing on such a request must not affect native binding.
+  // The tracking directory still has a real growth/OOM boundary at slot9.
   enum Fault { FIRST_DESCRIPTOR, SECOND_DESCRIPTOR, THROW_SECOND, TRACKING_GROWTH,
                THROW_TRACKING_GROWTH, WRONG_ARGUMENT_COUNT };
   for (Fault fault : {FIRST_DESCRIPTOR, SECOND_DESCRIPTOR, THROW_SECOND,
                      TRACKING_GROWTH, THROW_TRACKING_GROWTH, WRONG_ARGUMENT_COUNT}) {
     SCOPED_TRACE(static_cast<int>(fault));
     const bool tracking = fault == TRACKING_GROWTH || fault == THROW_TRACKING_GROWTH;
-    const bool throwing = fault == THROW_SECOND || fault == THROW_TRACKING_GROWTH;
+    const bool failing = tracking || fault == WRONG_ARGUMENT_COUNT;
     ASSERT_NO_FATAL_FAILURE(declare_records(tracking ? 9 : 2));
     PLDescriptorAllocator callee;
     if (fault == FIRST_DESCRIPTOR) { callee.fail_descriptor_call_ = 1; }
@@ -3507,69 +3540,122 @@ TEST_F(PLInitialDescriptors, failed_initialization_and_tracking_growth_release_e
     if (fault == THROW_SECOND) { callee.throw_descriptor_call_ = 2; }
     callee.reject_other_ = fault == TRACKING_GROWTH;
     callee.throw_other_ = fault == THROW_TRACKING_GROWTH;
-    const int expected = fault == WRONG_ARGUMENT_COUNT ? OB_ERR_SP_WRONG_ARG_NUM : OB_ALLOCATE_MEMORY_FAILED;
     DatumParameter result; int status = OB_SUCCESS;
     oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
-    if (throwing) {
+    if (fault == THROW_TRACKING_GROWTH) {
       EXPECT_THROW(state.init_params(&inputs_, false), PLDescriptorAllocationException);
     } else {
+      const int expected = tracking ? OB_ALLOCATE_MEMORY_FAILED
+          : fault == WRONG_ARGUMENT_COUNT ? OB_ERR_SP_WRONG_ARG_NUM : OB_SUCCESS;
       EXPECT_EQ(expected, state.init_params(fault == WRONG_ARGUMENT_COUNT ? nullptr : &inputs_, false));
     }
-    EXPECT_EQ(tracking ? 9 : fault == WRONG_ARGUMENT_COUNT ? 2 : static_cast<int64_t>(fault == FIRST_DESCRIPTOR ? 1 : 2),
-        callee.descriptor_calls_);
+    EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
     EXPECT_EQ(tracking ? 1 : 0, callee.other_calls_);
-    EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
-    EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-    for (int64_t i = 0; i < state.get_params().count(); ++i) {
-      EXPECT_TRUE(state.get_params().at(i).is_null());
-      EXPECT_EQ(nullptr, state.get_params().at(i).get_datum().get_reference());
-      EXPECT_EQ(RECORD_ID, state.get_params().at(i).get_udt_id());
-      EXPECT_EQ(ObExtendType, state.get_params().at(i).get_param_meta().get_type());
+    EXPECT_EQ(0, callee.record_calls_); EXPECT_EQ(0, callee.live_descriptors());
+    EXPECT_EQ(0, callee.live_charge_); EXPECT_EQ(0, callee.hold());
+    EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+    if (failing) {
+      // Keep the old observable failure contract, even though there is no
+      // wrapper span to free: untouched initial values become SQL NULL.
+      for (int64_t i = 0; i < state.get_params().count(); ++i) {
+        EXPECT_TRUE(state.get_params().at(i).is_null());
+        EXPECT_EQ(nullptr, state.get_params().at(i).get_datum().get_reference());
+        EXPECT_EQ(RECORD_ID, state.get_params().at(i).get_udt_id());
+        EXPECT_EQ(ObExtendType, state.get_params().at(i).get_param_meta().get_type());
+      }
+    } else {
+      ASSERT_NO_FATAL_FAILURE(expect_borrowed_rows(state, inputs_.count()));
     }
-    EXPECT_EQ(OB_SUCCESS, state.final(expected));
+    EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
     EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-
-    // A fresh execution can bind the unchanged caller rows after the fault.
+    // A fresh execution still binds the unchanged caller rows after every
+    // actual growth/error path, without changing input lifetime or metadata.
     callee.fail_descriptor_call_ = 0; callee.throw_descriptor_call_ = 0;
     callee.reject_other_ = false; callee.throw_other_ = false;
     oceanbase::pl::ObPLExecState retry(owner_, callee, exec_, package_guard_, *function_, result, status);
     ASSERT_EQ(OB_SUCCESS, retry.init_params(&inputs_, false));
     ASSERT_NO_FATAL_FAILURE(expect_borrowed_rows(retry, inputs_.count()));
     EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+    EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
     EXPECT_EQ(OB_SUCCESS, retry.final(OB_ERR_UNEXPECTED));
   }
 }
 
 TEST_F(PLInitialDescriptors, borrowed_zero_descriptor_and_unbound_local_keep_their_owners)
 {
+  {
+    // A successful binding may have exactly the same inline carrier bits as the
+    // initial zero placeholder. A later error must use origin/disarm, not byte
+    // equality, to decide which slots are still untouched initial values.
+    ASSERT_NO_FATAL_FAILURE(declare_records(2, 1, true, true));
+    ASSERT_TRUE(function_->get_variables().at(1).is_not_null());
+    ASSERT_EQ(OB_SUCCESS, function_->set_params_info(inputs_, true));
+    ASSERT_FALSE(function_->get_params_info().at(0).flag_.need_to_check_type_);
+    ASSERT_FALSE(function_->get_params_info().at(1).flag_.need_to_check_type_);
+    ASSERT_EQ(OB_SUCCESS, inputs_.at(0).set_extend(0, oceanbase::pl::PL_RECORD_TYPE, owner_));
+    inputs_.at(0).set_udt_id(RECORD_ID); inputs_.at(0).set_param_meta();
+    const DatumParameter inline_borrowed = inputs_.at(0);
+    ASSERT_TRUE(inline_borrowed.datum_.is_inline_extended());
+    DatumParameter initial_zero;
+    ASSERT_EQ(OB_SUCCESS, initial_zero.set_extend(0, oceanbase::pl::PL_RECORD_TYPE, owner_));
+    EXPECT_EQ(0, MEMCMP(&initial_zero.datum_, &inline_borrowed.datum_, sizeof(Datum)));
+    inputs_.at(1).set_null();
+    PLDescriptorAllocator partial_owner;
+    DatumParameter result; int status = OB_SUCCESS;
+    oceanbase::pl::ObPLExecState partial(owner_, partial_owner, exec_, package_guard_, *function_, result, status);
+    EXPECT_EQ(OB_INVALID_ARGUMENT, partial.init_params(&inputs_, true));
+    ASSERT_EQ(3, partial.get_params().count());
+    EXPECT_FALSE(partial.get_params().at(0).is_null());
+    EXPECT_TRUE(partial.get_params().at(0).datum_.is_inline_extended());
+    EXPECT_EQ(0, partial.get_params().at(0).get_ext());
+    ASSERT_NO_FATAL_FAILURE(expect_metadata(inline_borrowed, partial.get_params().at(0)));
+    EXPECT_TRUE(partial.get_params().at(1).is_null());
+    EXPECT_TRUE(partial.get_params().at(2).is_null());
+    EXPECT_EQ(RECORD_ID, partial.get_params().at(2).get_udt_id());
+    EXPECT_EQ(ObExtendType, partial.get_params().at(2).get_param_meta().get_type());
+    EXPECT_EQ(0, partial_owner.descriptor_calls_); EXPECT_EQ(0, partial_owner.other_calls_);
+    EXPECT_EQ(0, partial_owner.hold()); EXPECT_EQ(0, partial_owner.foreign_or_duplicate_frees_);
+    EXPECT_EQ(OB_SUCCESS, partial.final(OB_INVALID_ARGUMENT));
+    EXPECT_FALSE(partial.get_params().at(0).is_null());
+    EXPECT_TRUE(partial.get_params().at(0).datum_.is_inline_extended());
+    ASSERT_NO_FATAL_FAILURE(expect_metadata(inline_borrowed, inputs_.at(0)));
+    EXPECT_EQ(0, partial_owner.hold()); EXPECT_EQ(0, partial_owner.foreign_or_duplicate_frees_);
+  }
+
   ASSERT_NO_FATAL_FAILURE(declare_records(2, 1));
   // Produce the anonymous cache metadata while its record addresses are valid,
   // then replace only the caller's descriptor with its legitimate zero value.
   ASSERT_EQ(OB_SUCCESS, function_->set_params_info(inputs_, true));
   ASSERT_FALSE(function_->get_params_info().at(0).flag_.need_to_check_type_);
-  ASSERT_EQ(OB_SUCCESS, inputs_.at(0).set_extend(0, oceanbase::pl::PL_RECORD_TYPE, owner_));
+  char borrowed_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  ASSERT_EQ(OB_SUCCESS, inputs_.at(0).datum_.set_extend(0,
+      oceanbase::pl::PL_RECORD_TYPE, 0, borrowed_payload, sizeof(borrowed_payload)));
+  ASSERT_FALSE(inputs_.at(0).datum_.is_inline_extended());
   inputs_.at(0).set_udt_id(RECORD_ID); inputs_.at(0).set_param_meta();
   const DatumParameter borrowed_zero = inputs_.at(0);
   PLDescriptorAllocator callee;
   DatumParameter result; int status = OB_SUCCESS;
   oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
   ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, true));
-  EXPECT_EQ(3, callee.descriptor_calls_); EXPECT_EQ(2, callee.descriptor_frees_);
-  EXPECT_EQ(1, callee.live_descriptors()); EXPECT_GT(callee.hold(), 0);
+  EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
+  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.hold());
   EXPECT_EQ(borrowed_zero.get_datum().get_reference(), state.get_params().at(0).get_datum().get_reference());
   EXPECT_EQ(0, state.get_params().at(0).get_ext());
   ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed_zero, state.get_params().at(0)));
   ASSERT_TRUE(state.get_params().at(2).get_datum().has_ext_value());
   EXPECT_EQ(0, state.get_params().at(2).get_ext());
   EXPECT_EQ(RECORD_ID, state.get_params().at(2).get_udt_id());
-  // Successful initialization transfers the still-live local descriptor to
-  // the existing final() path; this does not exercise a later set_var overwrite.
+  EXPECT_TRUE(state.get_params().at(2).datum_.is_inline_extended());
+  // The unbound local is an inline zero carrier. final() must not free it or
+  // the explicit foreign 15-byte OLD/NEW envelope.
   EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
-  EXPECT_EQ(3, callee.descriptor_frees_); EXPECT_EQ(0, callee.hold());
+  EXPECT_EQ(0, callee.descriptor_frees_); EXPECT_EQ(0, callee.hold());
   EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
   EXPECT_EQ(0, borrowed_zero.get_ext());
   ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed_zero, state.get_params().at(0)));
   EXPECT_EQ(borrowed_zero.get_datum().get_reference(), state.get_params().at(0).get_datum().get_reference());
+
+
 }
 
 TEST_F(PLInitialDescriptors, null_and_out_construction_release_replaced_placeholders_on_success_and_failure)
@@ -3596,7 +3682,9 @@ TEST_F(PLInitialDescriptors, null_and_out_construction_release_replaced_placehol
       if (pure_out) { inputs_.at(0).set_null(); }
       inputs_.at(1).set_null();
       PLDescriptorAllocator callee;
-      if (reject_replacement) { callee.fail_descriptor_call_ = 3; }
+      // Fail the real pointee allocation, after argument0 if pureOUT. This
+      // cannot accidentally become a no-op failure of a removed wrapper.
+      if (reject_replacement) { callee.fail_record_call_ = pure_out ? 2 : 1; }
       DatumParameter result; int status = OB_SUCCESS;
       oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
       oceanbase::pl::ObPLContext pl_context;
@@ -3605,14 +3693,15 @@ TEST_F(PLInitialDescriptors, null_and_out_construction_release_replaced_placehol
       const int ret = state.init_params(&inputs_, false);
       if (reject_replacement) {
         EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ret);
-        EXPECT_EQ(3, callee.descriptor_calls_); EXPECT_EQ(2, callee.descriptor_frees_);
-        EXPECT_EQ(0, callee.hold());
+        EXPECT_EQ(pure_out ? 2 : 1, callee.record_calls_);
+        EXPECT_EQ(pure_out ? 1 : 0, callee.live_records());
+        if (!pure_out) { EXPECT_EQ(0, callee.hold()); }
         if (!pure_out) { ASSERT_NO_FATAL_FAILURE(expect_borrowed_rows(state, 1)); }
       } else {
         ASSERT_EQ(OB_SUCCESS, ret);
-        EXPECT_EQ(pure_out ? 4 : 3, callee.descriptor_calls_);
-        EXPECT_EQ(2, callee.descriptor_frees_);
-        EXPECT_EQ(pure_out ? 2 : 1, callee.live_descriptors());
+        EXPECT_EQ(pure_out ? 2 : 1, callee.record_calls_);
+        EXPECT_EQ(pure_out ? 2 : 1, callee.live_records());
+        EXPECT_TRUE(state.get_params().at(1).datum_.is_inline_extended());
         EXPECT_TRUE(state.need_free_arg(1));
         auto *record = reinterpret_cast<oceanbase::pl::ObPLRecord *>(state.get_params().at(1).get_ext());
         ASSERT_NE(nullptr, record); EXPECT_EQ(1, record->get_count());
@@ -3620,6 +3709,8 @@ TEST_F(PLInitialDescriptors, null_and_out_construction_release_replaced_placehol
         EXPECT_EQ(RECORD_ID, state.get_params().at(1).get_udt_id());
         EXPECT_EQ(ObExtendType, state.get_params().at(1).get_param_meta().get_type());
       }
+      EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
+      EXPECT_EQ(0, callee.live_descriptors());
       EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
       EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.live_descriptors());
       EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
@@ -3663,8 +3754,8 @@ TEST_F(PLInitialDescriptors, set_var_null_reclaims_only_its_intermediate_descrip
   ASSERT_EQ(OB_SUCCESS, pl_context.get_exec_stack().push_back(&state));
   PLQuestionMarkBindingGuard binding(exec_, session_, state, pl_context);
   ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, false));
-  ASSERT_TRUE(state.need_free_arg(0));
-  ASSERT_EQ(1, callee.live_descriptors());
+  ASSERT_TRUE(state.need_free_arg(0)); ASSERT_EQ(1, callee.live_records());
+  ASSERT_EQ(0, callee.live_descriptors());
   auto &slot = state.get_params().at(0);
   slot.set_raw_text_info(31, 47); slot.set_result_flags(0x527);
   slot.set_need_to_check_type(true); slot.set_need_to_check_extend_type(true);
@@ -3679,17 +3770,15 @@ TEST_F(PLInitialDescriptors, set_var_null_reclaims_only_its_intermediate_descrip
     ASSERT_NE(nullptr, old_record); ASSERT_NE(nullptr, old_record->get_allocator());
     ASSERT_EQ(OB_SUCCESS, old_record->get_element()[0].set_int(900 + round, *old_record->get_allocator()));
     const size_t begin = callee.allocations_.size();
-    const int64_t calls = callee.descriptor_calls_, frees = callee.descriptor_frees_;
+    const int64_t calls = callee.record_calls_;
     ASSERT_EQ(OB_SUCCESS, state.set_var(0, null_value));
-    const auto created = pl_descriptor_indexes_since(callee, begin);
-    ASSERT_EQ(2U, created.size()); // This invocation's empty B, then constructor C.
-    EXPECT_FALSE(callee.allocations_[created[0]].live_);
-    EXPECT_EQ(48, callee.allocations_[created[0]].slice_bytes_);
-    EXPECT_TRUE(callee.allocations_[created[1]].live_);
-    EXPECT_EQ(callee.allocations_[created[1]].pointer_, slot.get_datum().get_reference());
-    EXPECT_EQ(calls + 2, callee.descriptor_calls_);
-    EXPECT_EQ(frees + 2, callee.descriptor_frees_); // Old wrapper and B only.
-    EXPECT_EQ(1, callee.live_descriptors());
+    // B and C no longer have 15-byte heap envelopes. Only the newly constructed
+    // record and its real allocator own memory; the old record is retired.
+    EXPECT_TRUE(pl_descriptor_indexes_since(callee, begin).empty());
+    EXPECT_EQ(calls + 1, callee.record_calls_);
+    EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
+    EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(1, callee.live_records());
+    EXPECT_TRUE(slot.datum_.is_inline_extended());
     EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
     ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, slot.get_metadata()));
     EXPECT_EQ(value_length, slot.get_val_len());
@@ -3700,20 +3789,20 @@ TEST_F(PLInitialDescriptors, set_var_null_reclaims_only_its_intermediate_descrip
     ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(null_metadata, null_value.get_metadata()));
   }
   EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
-  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
-  EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-  EXPECT_TRUE(inputs_.at(0).is_null());
+  EXPECT_EQ(0, callee.live_records()); EXPECT_EQ(0, callee.live_descriptors());
+  EXPECT_EQ(0, callee.live_charge_); EXPECT_EQ(0, callee.hold());
+  EXPECT_EQ(0, callee.foreign_or_duplicate_frees_); EXPECT_TRUE(inputs_.at(0).is_null());
 }
 
 TEST_F(PLInitialDescriptors, set_var_null_allocation_failures_preserve_original_publication_and_cleanup)
 {
   PLSetVarSqlProxyGuard proxy_guard(sql_proxy_);
   ASSERT_EQ(&sql_proxy_, exec_.get_sql_proxy());
-  enum Fault { EMPTY_OOM, CONSTRUCTOR_OOM, EMPTY_THROW, CONSTRUCTOR_THROW };
-  for (Fault fault : {EMPTY_OOM, CONSTRUCTOR_OOM, EMPTY_THROW, CONSTRUCTOR_THROW}) {
+  // Removed B/C carrier allocations cannot fail. Keep the actual remaining
+  // record allocation's OOM/exception boundary and an earlier first-error control.
+  enum Fault { BAD_INDEX, POINTEE_OOM, POINTEE_THROW };
+  for (Fault fault : {BAD_INDEX, POINTEE_OOM, POINTEE_THROW}) {
     SCOPED_TRACE(static_cast<int>(fault));
-    const bool constructor = fault == CONSTRUCTOR_OOM || fault == CONSTRUCTOR_THROW;
-    const bool throwing = fault == EMPTY_THROW || fault == CONSTRUCTOR_THROW;
     ASSERT_NO_FATAL_FAILURE(declare_records(1));
     ASSERT_NO_FATAL_FAILURE(install_record_type());
     inputs_.at(0).set_null();
@@ -3731,59 +3820,46 @@ TEST_F(PLInitialDescriptors, set_var_null_allocation_failures_preserve_original_
     slot.set_ignore_scale_check(true);
     const DatumParameterMetadata metadata = slot.get_metadata();
     const int32_t value_length = slot.get_val_len();
-    const void *old_descriptor = slot.get_datum().get_reference();
+    const Datum old_value = slot.datum_;
     const int64_t old_address = slot.get_ext();
     auto *old_record = reinterpret_cast<oceanbase::pl::ObPLRecord *>(old_address);
     ASSERT_NE(nullptr, old_record); ASSERT_NE(nullptr, old_record->get_allocator());
     ASSERT_EQ(OB_SUCCESS, old_record->get_element()[0].set_int(931, *old_record->get_allocator()));
-    const int64_t charge = callee.live_charge_, calls = callee.descriptor_calls_;
-    const size_t begin = callee.allocations_.size();
-    const int64_t rejected = calls + (constructor ? 2 : 1);
-    if (throwing) { callee.throw_descriptor_call_ = rejected; }
-    else { callee.fail_descriptor_call_ = rejected; }
+    const int64_t charge = callee.live_charge_, calls = callee.record_calls_;
+    if (fault == POINTEE_THROW) { callee.throw_record_call_ = calls + 1; }
+    if (fault == POINTEE_OOM) { callee.fail_record_call_ = calls + 1; }
     DatumParameter null_value;
-    if (throwing) {
+    if (fault == POINTEE_THROW) {
       EXPECT_THROW(state.set_var(0, null_value), PLDescriptorAllocationException);
-    } else {
+    } else if (fault == POINTEE_OOM) {
       EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, state.set_var(0, null_value));
-    }
-    EXPECT_EQ(rejected, callee.descriptor_calls_);
-    const auto created = pl_descriptor_indexes_since(callee, begin);
-    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, slot.get_metadata()));
-    EXPECT_EQ(value_length, slot.get_val_len());
-    EXPECT_TRUE(state.need_free_arg(0));
-    EXPECT_EQ(1, callee.live_descriptors());
-    if (constructor) {
-      ASSERT_EQ(1U, created.size());
-      EXPECT_TRUE(callee.allocations_[created[0]].live_);
-      EXPECT_EQ(callee.allocations_[created[0]].pointer_, slot.get_datum().get_reference());
-      EXPECT_EQ(0, slot.get_ext()); // B was already published; do not clear it on C failure.
-      EXPECT_EQ(48, callee.live_charge_);
     } else {
-      EXPECT_TRUE(created.empty());
-      EXPECT_EQ(old_descriptor, slot.get_datum().get_reference());
-      EXPECT_EQ(old_address, slot.get_ext());
-      EXPECT_EQ(931, old_record->get_element()[0].get_int());
-      EXPECT_EQ(charge, callee.live_charge_);
+      EXPECT_EQ(OB_ERR_UNEXPECTED, state.set_var(1, null_value));
     }
-    EXPECT_TRUE(null_value.is_null());
-    EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-    callee.fail_descriptor_call_ = 0; callee.throw_descriptor_call_ = 0;
-    EXPECT_EQ(OB_SUCCESS, state.final(OB_ALLOCATE_MEMORY_FAILED));
-    EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
-    EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-
-    // Retry with a fresh execution after the existing final() owner retired B.
-    // A later call cannot infer ownership of an arbitrary historical zero slot.
-    oceanbase::pl::ObPLExecState retry(owner_, callee, exec_, package_guard_, *function_, result, status);
-    oceanbase::pl::ObPLContext retry_context;
-    ASSERT_EQ(OB_SUCCESS, retry_context.get_exec_stack().push_back(&retry));
-    PLQuestionMarkBindingGuard retry_binding(exec_, session_, retry, retry_context);
-    ASSERT_EQ(OB_SUCCESS, retry.init_params(&inputs_, false));
-    ASSERT_EQ(OB_SUCCESS, retry.set_var(0, null_value));
-    EXPECT_EQ(1, callee.live_descriptors());
-    EXPECT_EQ(OB_SUCCESS, retry.final(OB_ERR_UNEXPECTED));
-    EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, slot.get_metadata()));
+    EXPECT_EQ(value_length, slot.get_val_len()); EXPECT_TRUE(state.need_free_arg(0));
+    EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
+    EXPECT_EQ(0, callee.live_descriptors());
+    if (fault == BAD_INDEX) {
+      EXPECT_EQ(calls, callee.record_calls_); EXPECT_EQ(charge, callee.live_charge_);
+      EXPECT_EQ(0, MEMCMP(&old_value, &slot.datum_, sizeof(old_value)));
+      EXPECT_EQ(old_address, slot.get_ext()); EXPECT_EQ(931, old_record->get_element()[0].get_int());
+      EXPECT_EQ(1, callee.live_records());
+    } else {
+      EXPECT_EQ(calls + 1, callee.record_calls_); // Real ObPLRecord allocation was reached.
+      EXPECT_TRUE(slot.datum_.is_inline_extended()); EXPECT_EQ(0, slot.get_ext());
+      EXPECT_EQ(0, callee.live_records()); EXPECT_EQ(0, callee.live_charge_); EXPECT_EQ(0, callee.hold());
+    }
+    EXPECT_TRUE(null_value.is_null()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+    // Retry the same state, including the published zero B after a failed C.
+    // This used to retain an owned zero wrapper from the prior invocation.
+    callee.fail_record_call_ = 0; callee.throw_record_call_ = 0;
+    ASSERT_EQ(OB_SUCCESS, state.set_var(0, null_value));
+    EXPECT_TRUE(slot.datum_.is_inline_extended()); EXPECT_NE(0, slot.get_ext());
+    EXPECT_EQ(1, callee.live_records()); EXPECT_EQ(0, callee.live_descriptors());
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, slot.get_metadata()));
+    EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
+    EXPECT_EQ(0, callee.live_records()); EXPECT_EQ(0, callee.live_charge_);
     EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
   }
 }
@@ -3796,9 +3872,14 @@ TEST_F(PLInitialDescriptors, set_var_null_never_claims_a_borrowed_zero_descripto
   ASSERT_NO_FATAL_FAILURE(install_record_type());
   ASSERT_EQ(OB_SUCCESS, function_->set_params_info(inputs_, true));
   ASSERT_FALSE(function_->get_params_info().at(0).flag_.need_to_check_type_);
-  ASSERT_EQ(OB_SUCCESS, inputs_.at(0).set_extend(0, oceanbase::pl::PL_RECORD_TYPE, owner_));
+  // Explicit old Reference carrier: a native set_extend() would now be inline
+  // and would no longer exercise protection of a foreign 15-byte envelope.
+  char borrowed_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  ASSERT_EQ(OB_SUCCESS, inputs_.at(0).datum_.set_extend(0,
+      oceanbase::pl::PL_RECORD_TYPE, 0, borrowed_payload, sizeof(borrowed_payload)));
   inputs_.at(0).set_udt_id(RECORD_ID); inputs_.at(0).set_param_meta();
   const DatumParameter borrowed = inputs_.at(0);
+  ASSERT_FALSE(borrowed.datum_.is_inline_extended());
   PLDescriptorAllocator callee;
   DatumParameter result; int status = OB_SUCCESS;
   oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
@@ -3809,37 +3890,166 @@ TEST_F(PLInitialDescriptors, set_var_null_never_claims_a_borrowed_zero_descripto
   EXPECT_FALSE(state.need_free_arg(0));
   EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.hold());
   auto &slot = state.get_params().at(0);
-  ASSERT_EQ(borrowed.get_datum().get_reference(), slot.get_datum().get_reference());
+  ASSERT_EQ(borrowed_payload, slot.datum_.get_reference());
+  ASSERT_FALSE(slot.datum_.is_inline_extended());
   DatumParameter null_value;
-  const int64_t calls = callee.descriptor_calls_;
-  callee.fail_descriptor_call_ = calls + 1;
+  const int64_t calls = callee.record_calls_;
+  callee.fail_record_call_ = calls + 1;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, state.set_var(0, null_value));
-  EXPECT_EQ(calls + 1, callee.descriptor_calls_); // Only C is requested; there is no B.
-  EXPECT_EQ(borrowed.get_datum().get_reference(), slot.get_datum().get_reference());
-  EXPECT_EQ(0, slot.get_ext());
-  ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, slot));
-  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.hold());
+  EXPECT_EQ(calls + 1, callee.record_calls_);
+  EXPECT_EQ(borrowed_payload, slot.datum_.get_reference()); EXPECT_FALSE(slot.datum_.is_inline_extended());
+  EXPECT_EQ(0, slot.get_ext()); ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, slot));
+  EXPECT_EQ(0, callee.live_records()); EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.hold());
   EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-  callee.fail_descriptor_call_ = 0;
-  const size_t begin = callee.allocations_.size();
+  callee.fail_record_call_ = 0;
   ASSERT_EQ(OB_SUCCESS, state.set_var(0, null_value));
-  const auto created = pl_descriptor_indexes_since(callee, begin);
-  ASSERT_EQ(1U, created.size());
-  EXPECT_EQ(callee.allocations_[created[0]].pointer_, slot.get_datum().get_reference());
-  EXPECT_EQ(1, callee.live_descriptors()); EXPECT_NE(0, slot.get_ext());
-  EXPECT_FALSE(state.need_free_arg(0)); // The setter does not change argument ownership flags.
+  EXPECT_TRUE(slot.datum_.is_inline_extended()); EXPECT_NE(0, slot.get_ext());
+  EXPECT_EQ(1, callee.live_records()); EXPECT_EQ(0, callee.live_descriptors());
+  EXPECT_EQ(0, callee.descriptor_calls_); EXPECT_EQ(0, callee.descriptor_frees_);
+  EXPECT_FALSE(state.need_free_arg(0)); // Existing borrowed-formal policy is unchanged.
   ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(borrowed.get_metadata(), slot.get_metadata()));
-  EXPECT_EQ(borrowed.get_datum().get_reference(), inputs_.at(0).get_datum().get_reference());
-  EXPECT_EQ(0, inputs_.at(0).get_ext());
+  EXPECT_EQ(borrowed_payload, inputs_.at(0).datum_.get_reference());
+  EXPECT_FALSE(inputs_.at(0).datum_.is_inline_extended()); EXPECT_EQ(0, inputs_.at(0).get_ext());
   ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, inputs_.at(0)));
   EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
-  // Retire only the known newly constructed C. This negative control does not
-  // broaden final()'s existing false need_free_arg policy for borrowed formals.
+  // Only C's known new pointee is owned here; never free the borrowed envelope.
   ASSERT_EQ(OB_SUCCESS, oceanbase::pl::ObUserDefinedType::destruct_objparam(callee, slot, &session_));
   EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
-  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
+  EXPECT_EQ(0, callee.live_records()); EXPECT_EQ(0, callee.live_charge_);
   EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
   EXPECT_EQ(0, inputs_.at(0).get_ext());
   ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, inputs_.at(0)));
 }
+
 } // namespace
+
+
+TEST_F(PLInitialDescriptors, subprogram_evaluator_keeps_inline_record_carrier_after_return_and_rejects_invalid_slot)
+{
+  ASSERT_NO_FATAL_FAILURE(declare_records(1));
+  constexpr uint64_t package_id = 1807;
+  constexpr uint64_t routine_id = 1809;
+  function_->set_package_id(package_id);
+  function_->set_routine_id(routine_id);
+  // Resolve the actual record declaration through the live PL namespace;
+  // neither the expression Type nor its carrier layout is fabricated.
+  oceanbase::pl::ObRecordType record_type;
+  record_type.set_user_type_id(RECORD_ID);
+  record_type.set_name(ObString::make_string("subprogram_record"));
+  ASSERT_EQ(OB_SUCCESS, record_type.record_members_init(&owner_, 1));
+  ObPLDataType member(ObIntType);
+  member.get_data_type()->set_accuracy(ObAccuracy(19, 0));
+  ASSERT_EQ(OB_SUCCESS, record_type.add_record_member(ObString::make_string("v"), member));
+  SqlPLDeclarationIdentity declaration;
+  declaration.source = SqlPLDeclarationSource::Local;
+  declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  declaration.declaration_id = RECORD_ID;
+  declaration.compilation_scope.low = 0x18091807;
+  ASSERT_EQ(OB_SUCCESS, record_type.set_sql_declaration_identity(declaration, SqlNominalType()));
+  oceanbase::pl::ObPLUserTypeTable types;
+  ASSERT_EQ(OB_SUCCESS, types.add_type(&record_type));
+  ASSERT_EQ(OB_SUCCESS, function_->set_types(types));
+
+  PLDescriptorAllocator callee;
+  DatumParameter function_result; int function_status = OB_SUCCESS;
+  oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_,
+      function_result, function_status);
+  oceanbase::pl::ObPLContext pl_context;
+  ASSERT_EQ(OB_SUCCESS, pl_context.get_exec_stack().push_back(&state));
+  ObSQLSessionInfo::ExecCtxSessionRegister registration(session_, &exec_);
+  PLQuestionMarkBindingGuard binding(exec_, session_, state, pl_context);
+  ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, false));
+  ASSERT_EQ(1, state.get_params().count());
+  ASSERT_TRUE(state.get_params().at(0).datum_.is_inline_extended());
+  ASSERT_NO_FATAL_FAILURE(expect_borrowed_rows(state, 1));
+  auto *source = reinterpret_cast<oceanbase::pl::ObPLRecord *>(inputs_.at(0).get_ext());
+  ASSERT_NE(nullptr, source);
+  const DatumParameter original_binding = state.get_params().at(0);
+
+  constexpr int64_t block = 256;
+  alignas(8) std::array<char, 5 * block> frame = {};
+  char *frames[] = {frame.data()};
+  exec_.set_frames(frames); exec_.set_frame_cnt(1);
+  ObEvalCtx evaluation(exec_);
+  ObExpr arguments[4];
+  ObExpr *argument_ptrs[] = {&arguments[0], &arguments[1], &arguments[2], &arguments[3]};
+  for (int64_t i = 0; i < 4; ++i) {
+    ObExpr &argument = arguments[i];
+    argument.type_ = T_INT;
+    argument.frame_idx_ = 0; argument.datum_off_ = i * block;
+    argument.eval_info_off_ = i * block + 32;
+    new (frame.data() + argument.datum_off_) Datum();
+    new (frame.data() + argument.eval_info_off_) ObEvalInfo{};
+    SqlTypeMeta integer_meta; integer_meta.set_int();
+    argument.obj_meta_ = integer_meta;
+    argument.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
+    ASSERT_EQ(OB_SUCCESS, argument.prepare_scalar_type(integer_meta, ObAccuracy(20, 0), owner_));
+    argument.get_eval_info(evaluation).evaluated_ = true;
+  }
+  arguments[0].locate_expr_datum(evaluation).set_int(package_id);
+  arguments[1].locate_expr_datum(evaluation).set_int(routine_id);
+  arguments[2].locate_expr_datum(evaluation).set_int(0);
+  arguments[3].locate_expr_datum(evaluation).set_int(0); // Runtime placeholder, never evaluated.
+  ObExpr expression;
+  expression.type_ = T_OP_GET_SUBPROGRAM_VAR;
+  expression.args_ = argument_ptrs; expression.arg_cnt_ = 4;
+  expression.frame_idx_ = 0; expression.datum_off_ = 4 * block;
+  expression.eval_info_off_ = 4 * block + 32;
+  expression.dyn_buf_header_offset_ = 4 * block + 96;
+  expression.res_buf_off_ = 4 * block + 128; expression.res_buf_len_ = 128;
+  new (frame.data() + expression.datum_off_) Datum();
+  new (frame.data() + expression.eval_info_off_) ObEvalInfo{};
+  auto *dynamic = new (frame.data() + expression.dyn_buf_header_offset_) ObDynReserveBuf();
+  dynamic->magic_ = ObDynReserveBuf::MAGIC_NUM;
+  dynamic->len_ = 128; dynamic->mem_ = frame.data() + expression.res_buf_off_;
+  ObRawExprResType resolved;
+  resolved.set_type(ObExtendType);
+  resolved.set_extend_type(oceanbase::pl::PL_RECORD_TYPE);
+  resolved.set_udt_id(RECORD_ID);
+  expression.obj_meta_ = resolved.get_sql_type_meta();
+  expression.datum_meta_ = ObDatumMeta(ObExtendType, CS_TYPE_BINARY, 0);
+  ASSERT_EQ(OB_SUCCESS, expression.prepare_resolved_type(resolved, &session_, owner_,
+      &schema_guard_, &state.get_exec_ctx()));
+  const SqlType *prepared_type = &expression.get_sql_type();
+  ASSERT_EQ(SqlTypeForm::Record, prepared_type->form());
+  ASSERT_EQ(1, prepared_type->member_count());
+  const SqlTypeMeta expression_meta = expression.obj_meta_;
+
+  Datum output;
+  owner_.clear_calls();
+  ASSERT_EQ(OB_SUCCESS,
+      ObExprGetSubprogramVar::calc_get_subprogram_var(expression, evaluation, output));
+  // Inspect after the real evaluator returned: no result may point into its
+  // export scratch, while the PL resource itself still belongs to the caller.
+  ASSERT_TRUE(output.is_inline_extended());
+  ASSERT_TRUE(expression.locate_expr_datum(evaluation).is_inline_extended());
+  EXPECT_EQ(reinterpret_cast<int64_t>(source), output.get_ext());
+  EXPECT_EQ(output.get_ext(), expression.locate_expr_datum(evaluation).get_ext());
+  EXPECT_EQ(source->get_init_size(), output.get_extend_size());
+  EXPECT_EQ(oceanbase::pl::PL_RECORD_TYPE, output.get_extend_type());
+  EXPECT_EQ(0, owner_.calls_for(DATUM_EXTEND_PAYLOAD_SIZE));
+  EXPECT_EQ(0, callee.descriptor_calls_);
+  ASSERT_EQ(OB_SUCCESS, source->get_element()[0].set_int(INT64_MIN, owner_));
+  EXPECT_EQ(INT64_MIN, reinterpret_cast<oceanbase::pl::ObPLRecord *>(output.get_ext())
+      ->get_element()[0].get_int());
+  EXPECT_EQ(INT64_MIN, reinterpret_cast<oceanbase::pl::ObPLRecord *>(
+      expression.locate_expr_datum(evaluation).get_ext())->get_element()[0].get_int());
+  for (int64_t invalid_index : {-1, 1}) {
+    SCOPED_TRACE(invalid_index);
+    arguments[2].locate_expr_datum(evaluation).set_int(invalid_index);
+    output.set_int(951);
+    const Datum old_slot = expression.locate_expr_datum(evaluation);
+    EXPECT_EQ(OB_ERR_UNEXPECTED,
+        ObExprGetSubprogramVar::calc_get_subprogram_var(expression, evaluation, output));
+    EXPECT_EQ(951, output.get_int());
+    EXPECT_EQ(0, MEMCMP(&old_slot, &expression.locate_expr_datum(evaluation), sizeof(Datum)));
+    EXPECT_EQ(expression_meta, expression.obj_meta_);
+    EXPECT_EQ(prepared_type, &expression.get_sql_type());
+    ASSERT_NO_FATAL_FAILURE(expect_metadata(original_binding, state.get_params().at(0)));
+  }
+  EXPECT_FALSE(state.need_free_arg(0));
+  EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
+  EXPECT_EQ(INT64_MIN, source->get_element()[0].get_int());
+  EXPECT_EQ(0, callee.hold());
+  EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+}

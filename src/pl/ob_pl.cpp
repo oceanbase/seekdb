@@ -1909,7 +1909,7 @@ int ObPLExecState::set_var(int64_t var_idx, const DatumParameter& value)
           bool retained = false;
           for (int64_t i = 0; !retained && i < params_.count(); ++i) {
             const Datum &value = params_.at(i).get_datum();
-            retained = value.is_ext() && value.get_reference() == pointer_;
+            retained = !value.is_inline_extended() && value.is_ext() && value.get_reference() == pointer_;
           }
           // A failed constructor can leave this descriptor published. Keep
           // that state and its existing final()/argument ownership contract.
@@ -1917,7 +1917,7 @@ int ObPLExecState::set_var(int64_t var_idx, const DatumParameter& value)
         }
       }
       void remember(const DatumParameter &value)
-      { pointer_ = value.get_datum().get_reference(); }
+      { pointer_ = value.get_datum().is_inline_extended() ? nullptr : value.get_datum().get_reference(); }
     private:
       ObIAllocator &allocator_;
       ParamStore &params_;
@@ -1929,7 +1929,7 @@ int ObPLExecState::set_var(int64_t var_idx, const DatumParameter& value)
       int8_t extend_type = params->at(var_idx).get_meta().get_extend_type();
       int32_t val_len = params->at(var_idx).get_val_len();
       DatumParameter empty = params->at(var_idx);
-      // Allocate the native descriptor before retiring the old composite.
+      // Prepare the native carrier before retiring the old composite.
       OZ (empty.set_extend(0, extend_type, *get_allocator(), val_len));
       OX (empty_descriptor.remember(empty));
       OZ (ObUserDefinedType::destruct_objparam(*get_allocator(), params->at(var_idx), ctx_.exec_ctx_->get_my_session()));
@@ -2535,34 +2535,63 @@ namespace
 class PLInitialDescriptorGuard
 {
 public:
+  struct Entry
+  {
+    Entry() : pointer_(nullptr), slot_(-1) {}
+    Entry(const void *pointer, int64_t slot) : pointer_(pointer), slot_(slot) {}
+    const void *pointer_;
+    int64_t slot_;
+  };
   PLInitialDescriptorGuard(ObIAllocator &allocator, ParamStore &params)
     : allocator_(allocator), params_(params),
       owned_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(&allocator)),
-      pending_(nullptr), committed_(false) {}
+      pending_(), binding_position_(0), committed_(false) {}
   ~PLInitialDescriptorGuard()
   {
     release(pending_);
     for (int64_t i = 0; i < owned_.count(); ++i) { release(owned_.at(i)); }
   }
-  int remember(const DatumParameter &value)
+  int remember(const DatumParameter &value, int64_t slot)
   {
     // Keep ownership even if growing the tracking array fails or throws.
-    pending_ = value.get_datum().get_reference();
+    // Inline entries have no allocation, but retain the original failed-init
+    // contract: an unbound initial value becomes NULL while metadata survives.
+    pending_ = Entry(value.get_datum().is_inline_extended()
+        ? nullptr : value.get_datum().get_reference(), slot);
     const int ret = owned_.push_back(pending_);
-    if (OB_SUCCESS == ret) { pending_ = nullptr; }
+    if (OB_SUCCESS == ret) { pending_ = Entry(); }
     return ret;
+  }
+  void replaced(int64_t slot)
+  {
+    // Argument binding proceeds in index order. Disarm on the actual successful
+    // write, not on byte equality: a caller's inline zero may have identical
+    // bytes but is a distinct value that this guard must leave alone.
+    while (binding_position_ < owned_.count()
+        && owned_.at(binding_position_).slot_ < slot) { ++binding_position_; }
+    if (binding_position_ < owned_.count() && owned_.at(binding_position_).slot_ == slot) {
+      if (owned_.at(binding_position_).pointer_ == nullptr) {
+        owned_.at(binding_position_).slot_ = -1;
+      }
+      ++binding_position_;
+    }
   }
   void commit() { committed_ = true; }
 private:
-  void release(const void *pointer)
+  void release(const Entry &entry)
   {
-    if (pointer != nullptr) {
+    const void *pointer = entry.pointer_;
+    if (pointer == nullptr) {
+      if (!committed_ && entry.slot_ >= 0 && entry.slot_ < params_.count()) {
+        params_.at(entry.slot_).datum_.set_null();
+      }
+    } else {
       bool retained = false;
       // A default expression may copy a descriptor between slots. On success
       // keep any live reference; on failure clear all of them before freeing.
       for (int64_t i = 0; i < params_.count(); ++i) {
         Datum &value = params_.at(i).datum_;
-        if (value.is_ext() && value.get_reference() == pointer) {
+        if (!value.is_inline_extended() && value.is_ext() && value.get_reference() == pointer) {
           retained = true;
           // final(ret) may still visit this slot. Keep its declaration.
           if (!committed_) { value.set_null(); }
@@ -2573,8 +2602,9 @@ private:
   }
   ObIAllocator &allocator_;
   ParamStore &params_;
-  ObSEArray<const void *, 8, ObWrapperAllocator> owned_;
-  const void *pending_;
+  ObSEArray<Entry, 8, ObWrapperAllocator> owned_;
+  Entry pending_;
+  int64_t binding_position_;
   bool committed_;
 };
 } // namespace
@@ -2614,7 +2644,7 @@ int ObPLExecState::init_params(const ParamStore *params, bool is_anonymous)
     } else {
       param.set_type(ObExtendType);
       OZ (param.set_extend(0, func_.get_variables().at(i).get_type(), *get_allocator()));
-      OZ (initial_descriptors.remember(param));
+      OZ (initial_descriptors.remember(param, i));
       param.set_param_meta();
       param.set_udt_id(func_.get_variables().at(i).get_user_type_id());
     }
@@ -2680,6 +2710,7 @@ do {                                                                  \
           } else if (result.is_null()) {
             SqlTypeMeta null_meta = get_params().at(i).get_meta();
             get_params().at(i).set_null();
+            initial_descriptors.replaced(i);
             get_params().at(i).set_param_meta(null_meta);
           } else {
             if (!result.is_pl_extend()) {
@@ -2801,6 +2832,7 @@ do {                                                                  \
             }
           }
         }
+        OX (initial_descriptors.replaced(i));
         CHECK_NOT_NULL_VIOLATED(i, get_params().at(i));
       } else {
         CHECK_NOT_NULL_VIOLATED(i, params->at(i));
@@ -2825,6 +2857,7 @@ do {                                                                  \
           // Pure OUT parameter, for complex types the value needs to be re-initialized; if the passed complex type value is NULL (PS protocol), initialize a new complex type
           // Here we first copy the input parameter values, by the init_complex_obj function to determine if memory should be reallocated
           OX (get_params().at(i) = params->at(i));
+          OX (initial_descriptors.replaced(i));
           OZ (init_complex_obj(*(get_allocator()),
                                pl_type,
                                get_params().at(i),
@@ -3433,14 +3466,13 @@ int ObPLINS::init_complex_obj(ObIAllocator &allocator,
     allocator.free(ptr);
   }
   if (OB_SUCC(ret)) {
-    OZ (descriptor.datum_.set_extend(reinterpret_cast<int64_t>(ptr), user_type->get_type(), init_size,
-        const_cast<void *>(descriptor.get_datum().get_reference()), descriptor.get_datum().length()));
+    OX (descriptor.datum_.set_inline_extended(reinterpret_cast<int64_t>(ptr), user_type->get_type(), init_size));
     if (OB_SUCC(ret)) {
       obj.assign_value(descriptor);
       obj.set_param_meta(); obj.set_udt_id(pl_type.get_user_type_id());
     }
   }
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && !descriptor.get_datum().is_inline_extended()) {
     allocator.free(const_cast<void *>(descriptor.get_datum().get_reference()));
   }
   return ret;

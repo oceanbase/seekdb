@@ -172,14 +172,16 @@ int ObUserDefinedType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, 
 
 namespace {
 void *pl_descriptor(DatumValue &value)
-{ return const_cast<void *>(value.get_datum().get_reference()); }
+{ return value.get_datum().is_inline_extended() ? nullptr
+    : const_cast<void *>(value.get_datum().get_reference()); }
 void release_non_pl_value(DatumValue &value, ObIAllocator &allocator)
 {
   DatumParameter view; view.assign_value(value);
   DatumParameterArray::release_owned(view, allocator);
 }
 void *pl_descriptor(DatumParameter &value)
-{ return const_cast<void *>(value.get_datum().get_reference()); }
+{ return value.get_datum().is_inline_extended() ? nullptr
+    : const_cast<void *>(value.get_datum().get_reference()); }
 void release_non_pl_value(DatumParameter &value, ObIAllocator &allocator)
 {
   // Destruction clears the value, not its declaration/accuracy/runtime flags.
@@ -187,13 +189,16 @@ void release_non_pl_value(DatumParameter &value, ObIAllocator &allocator)
   DatumParameterArray::release_owned(owned, allocator);
 }
 
-// Every caller owns this already allocated canonical 15-byte PL carrier.
-// Pointee identity and its existing allocator/registration policy stay intact;
-// only the physical descriptor address/size bytes are updated in place.
+// Native carriers are inline; explicit legacy owners still rewrite their own
+// 15-byte spans. Pointee identity and its allocator policy stay intact.
 template <typename Value>
 int rewrite_owned_pl_descriptor(Value &value, int64_t address, uint8_t subtype, int32_t size)
 {
   Datum &carrier = value.datum_;
+  if (carrier.is_inline_extended()) {
+    carrier.set_inline_extended(address, subtype, size);
+    return OB_SUCCESS;
+  }
   if (!carrier.has_ext_value() || carrier.length() != DATUM_EXTEND_PAYLOAD_SIZE) {
     return OB_INVALID_ARGUMENT;
   }
@@ -272,7 +277,8 @@ int ObUserDefinedType::deep_copy_obj(ObIAllocator &allocator,
     // old record-copy path reused this object rather than replacing it.
     if (OB_SUCC(ret) && copy != nullptr) {
       if (copy != source) {
-        CK (dst.datum_.has_ext_value() && dst.datum_.length() == DATUM_EXTEND_PAYLOAD_SIZE);
+        CK (dst.datum_.has_ext_value() && (dst.datum_.is_inline_extended()
+            || dst.datum_.length() == DATUM_EXTEND_PAYLOAD_SIZE));
         OZ (SMART_CALL(ObPLComposite::deep_copy(*source, copy, allocator,
             nullptr, nullptr, nullptr, nullptr, need_new_allocator, ignore_del_element)));
         if (OB_SUCC(ret)) {
@@ -283,8 +289,8 @@ int ObUserDefinedType::deep_copy_obj(ObIAllocator &allocator,
       }
       return ret;
     }
-    // Reserve the descriptor before cloning the composite, so allocation
-    // failure cannot strand a successfully cloned PL value.
+    // Prepare the inline carrier before cloning the composite. Resource
+    // allocation and failure cleanup retain their existing ownership.
     OZ (owned.set_extend(0, subtype, allocator, src.get_val_len()));
     OZ (SMART_CALL(ObPLComposite::deep_copy(*source, copy, allocator,
         nullptr, nullptr, nullptr, nullptr, need_new_allocator, ignore_del_element)));
@@ -1115,7 +1121,7 @@ int ObRecordType::convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&ds
         OZ (rewrite_owned_pl_descriptor(descriptor, ptr, get_type(), get_init_size(get_member_count())));
         OX (*dst = descriptor);
       } else {
-        if (descriptor.datum_.has_ext_value()) {
+        if (descriptor.datum_.has_ext_value() && !descriptor.datum_.is_inline_extended()) {
           ctx.allocator_.free(const_cast<void *>(descriptor.datum_.get_reference()));
         }
       }

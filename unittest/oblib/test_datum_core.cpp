@@ -287,7 +287,14 @@ TEST(DatumCore, owned_parameter_writers_fail_without_changing_old_output)
   EXPECT_EQ(0, reject.calls_); EXPECT_EQ(17, scalar.get_precision());
   EXPECT_EQ(0x1234, scalar.get_result_flag());
   CHECK_FAILED_WRITE(value.set_varchar(ObString("new"), reject))
-  CHECK_FAILED_WRITE(value.set_extend(42, uint8_t(1), reject, 123))
+  // Extend is an inline carrier now; rejecting the owner cannot fail or mutate
+  // the unrelated old Reference value. Pointee ownership remains external.
+  reject.calls_ = 0;
+  ASSERT_EQ(OB_SUCCESS, scalar.set_extend(42, uint8_t(1), reject, 123));
+  EXPECT_TRUE(scalar.datum_.is_inline_extended()); EXPECT_EQ(42, scalar.get_ext());
+  EXPECT_EQ(123, scalar.get_val_len()); EXPECT_EQ(0, reject.calls_);
+  EXPECT_EQ(old_bytes, value.datum_.get_reference());
+  EXPECT_EQ(old_meta, value.get_meta());
   number::ObNumber number;
   ASSERT_EQ(OB_SUCCESS, number.from("123.45", 6, arena));
   CHECK_FAILED_WRITE(value.set_number(number, reject))
@@ -474,7 +481,8 @@ TEST(DatumCore, compact_member_setters_keep_sixteen_byte_layout_and_owned_payloa
   DatumParameterArray::release_owned(view, owner); member.set_null();
   ASSERT_EQ(OB_SUCCESS, member.set_extend(65536, 3, owner, 4096));
   EXPECT_TRUE(member.is_pl_extend()); EXPECT_EQ(65536, member.get_ext());
-  EXPECT_EQ(4096, member.get_val_len()); EXPECT_EQ(DATUM_EXTEND_PAYLOAD_SIZE, member.datum_.length());
+  EXPECT_EQ(4096, member.get_val_len());
+  EXPECT_TRUE(member.datum_.is_inline_extended()); EXPECT_EQ(0, owner.calls_);
   view.assign_value(member); DatumParameterArray::release_owned(view, owner); member.set_null();
   EXPECT_TRUE(owner.live_.empty());
 }
@@ -485,8 +493,15 @@ TEST(DatumCore, compact_member_allocation_failure_preserves_previous_value)
   ASSERT_EQ(OB_SUCCESS, member.set_int(42, owner));
   const Datum old = member.datum_; const SqlTypeMeta meta = member.get_meta();
   owner.fail_at_ = owner.calls_ + 1;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, member.set_extend(65536, 3, owner, 123));
+  // Keep a real allocation-failure oracle: Reference bytes still require owner
+  // storage. The former 15-byte Extend wrapper allocation no longer exists.
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, member.set_varchar(ObString("still-fallible"), owner));
   EXPECT_EQ(0, MEMCMP(&old, &member.datum_, sizeof(old))); EXPECT_EQ(meta, member.get_meta()); EXPECT_EQ(42, member.get_int());
+  owner.fail_at_ = owner.calls_ + 1;
+  const int64_t before_extend = owner.calls_;
+  ASSERT_EQ(OB_SUCCESS, member.set_extend(65536, 3, owner, 123));
+  EXPECT_EQ(before_extend, owner.calls_); EXPECT_TRUE(member.datum_.is_inline_extended());
+  EXPECT_EQ(65536, member.get_ext()); EXPECT_EQ(123, member.get_val_len());
   owner.fail_at_ = owner.calls_ + 1;
   const int64_t before = owner.calls_;
   EXPECT_EQ(OB_SUCCESS, member.set_int(99, owner));
@@ -622,5 +637,164 @@ TEST(DatumCore, native_default_owner_failure_does_not_publish_partial_state)
       EXPECT_EQ(meta, value.get_meta()); EXPECT_EQ(918, value.datum_.get_int());
     }
     EXPECT_TRUE(failure.live_.empty());
+  }
+}
+
+
+TEST(DatumCore, inline_extended_keeps_logical_state_signed_size_and_independent_metadata)
+{
+  EXPECT_EQ(0, static_cast<int>(Datum::State::Null));
+  EXPECT_EQ(1, static_cast<int>(Datum::State::Present));
+  EXPECT_EQ(2, static_cast<int>(Datum::State::Nop));
+  EXPECT_EQ(3, static_cast<int>(Datum::State::Min));
+  EXPECT_EQ(4, static_cast<int>(Datum::State::Max));
+  EXPECT_EQ(16, sizeof(Datum));
+  for (int64_t address : {int64_t(0), INT64_MIN, INT64_MAX}) {
+    for (int32_t size : {INT32_MIN, int32_t(0), INT32_MAX}) {
+      SCOPED_TRACE(address);
+      SCOPED_TRACE(size);
+      Datum value;
+      // These bytes intentionally contain the OutRow/HasLobHeader bit values.
+      // They are complete Extend metadata, never physical reference flags.
+      value.set_inline_extended(address, 0xf1, size, 3, 0xe7);
+      EXPECT_TRUE(value.is_present()); EXPECT_FALSE(value.is_null());
+      EXPECT_TRUE(value.is_inline_extended()); EXPECT_TRUE(value.has_ext_value());
+      EXPECT_EQ(Datum::State::Present, value.state());
+      EXPECT_EQ(address, value.get_ext()); EXPECT_EQ(size, value.get_extend_size());
+      EXPECT_EQ(0xf1, value.get_extend_type());
+      EXPECT_EQ(3, value.get_extend_collation_level()); EXPECT_EQ(0xe7, value.get_extend_collation());
+      EXPECT_EQ(Datum::LegacyExtended, value.reference_flags());
+      EXPECT_TRUE(value.is_ext()); EXPECT_FALSE(value.is_outrow()); EXPECT_FALSE(value.has_lob_header());
+      Datum copy = value;
+      value.set_null(); EXPECT_FALSE(value.is_inline_extended());
+      EXPECT_EQ(Datum::State::Null, value.state()); EXPECT_EQ(Datum::NoReferenceFlags, value.reference_flags());
+      EXPECT_EQ(address, copy.get_ext()); EXPECT_EQ(size, copy.get_extend_size());
+      copy.set_nop(); EXPECT_EQ(Datum::State::Nop, copy.state()); EXPECT_FALSE(copy.is_inline_extended());
+      copy.set_min(); EXPECT_EQ(Datum::State::Min, copy.state()); EXPECT_FALSE(copy.is_inline_extended());
+      copy.set_max(); EXPECT_EQ(Datum::State::Max, copy.state()); EXPECT_FALSE(copy.is_inline_extended());
+      copy.set_int(73); EXPECT_EQ(Datum::State::Present, copy.state());
+      EXPECT_FALSE(copy.is_inline_extended()); EXPECT_FALSE(copy.is_ext()); EXPECT_EQ(73, copy.get_int());
+    }
+  }
+}
+
+TEST(DatumCore, inline_extended_exports_exact_fifteen_and_sixteen_byte_envelopes)
+{
+  const int64_t address = INT64_MIN + 83;
+  const int32_t size = -123456789;
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum value; value.set_inline_extended(address, 0xf3, size, 0xab, 0xcd, legacy16);
+    char expected[16] = {}, bytes[16]; MEMSET(bytes, 0x5a, sizeof(bytes));
+    if (legacy16) {
+      expected[0] = ObExtendType; expected[1] = char(0xab); expected[2] = char(0xcd); expected[3] = char(0xf3);
+      MEMCPY(expected + 4, &size, 4); MEMCPY(expected + 8, &address, 8);
+    } else {
+      MEMCPY(expected, &address, 8); MEMCPY(expected + 8, &size, 4);
+      expected[12] = char(0xf3); expected[13] = char(0xab); expected[14] = char(0xcd);
+    }
+    const uint32_t count = legacy16 ? 16 : 15;
+    EXPECT_EQ(count, value.inline_extended_payload_size());
+    EXPECT_EQ(OB_BUF_NOT_ENOUGH, value.write_inline_extended_payload(bytes, count - 1));
+    for (char byte : bytes) { EXPECT_EQ(char(0x5a), byte); }
+    EXPECT_EQ(OB_INVALID_ARGUMENT, value.write_inline_extended_payload(nullptr, count));
+    ASSERT_EQ(OB_SUCCESS, value.write_inline_extended_payload(bytes, sizeof(bytes)));
+    EXPECT_EQ(0, MEMCMP(expected, bytes, count));
+    if (!legacy16) { EXPECT_EQ(char(0x5a), bytes[15]); }
+    Datum borrowed;
+    ASSERT_EQ(OB_SUCCESS, borrowed.set_reference(bytes, count, Datum::LegacyExtended));
+    EXPECT_FALSE(borrowed.is_inline_extended()); EXPECT_EQ(bytes, borrowed.get_reference());
+    EXPECT_EQ(address, borrowed.get_ext()); EXPECT_EQ(size, borrowed.get_extend_size());
+    EXPECT_EQ(0xf3, borrowed.get_extend_type());
+    EXPECT_EQ(0xab, borrowed.get_extend_collation_level()); EXPECT_EQ(0xcd, borrowed.get_extend_collation());
+  }
+  Datum ordinary; ordinary.set_int(7);
+  char bytes[16]; MEMSET(bytes, 0x5a, sizeof(bytes));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, ordinary.write_inline_extended_payload(bytes, sizeof(bytes)));
+  for (char byte : bytes) { EXPECT_EQ(char(0x5a), byte); }
+}
+
+TEST(DatumCore, native_extended_carrier_copy_uses_no_wrapper_allocation_and_keeps_borrowed_input)
+{
+  ParameterTestAllocator owner; owner.fail_at_ = 1;
+  DatumParameter source, copy;
+  source.set_precision(27); source.set_scale(4); source.set_result_flag(0x531);
+  source.set_raw_text_info(13, 29);
+  ASSERT_EQ(OB_SUCCESS, source.set_extend(65536, 3, owner, -91));
+  source.set_param_meta();
+  EXPECT_EQ(0, owner.calls_); EXPECT_TRUE(source.datum_.is_inline_extended());
+  ASSERT_EQ(OB_SUCCESS, copy.deep_copy(source, owner));
+  EXPECT_EQ(0, owner.calls_); EXPECT_TRUE(copy.datum_.is_inline_extended());
+  EXPECT_EQ(65536, copy.get_ext()); EXPECT_EQ(-91, copy.get_val_len());
+  EXPECT_EQ(source.get_meta(), copy.get_meta()); EXPECT_EQ(source.get_param_meta(), copy.get_param_meta());
+  EXPECT_EQ(27, copy.get_precision()); EXPECT_EQ(4, copy.get_scale());
+  EXPECT_EQ(0x531, copy.get_result_flag()); EXPECT_EQ(13, copy.get_raw_text_pos()); EXPECT_EQ(29, copy.get_raw_text_len());
+  char legacy[15]; Datum borrowed;
+  ASSERT_EQ(OB_SUCCESS, borrowed.set_extend(0, 3, -17, legacy, sizeof(legacy), 3, 0xe7));
+  EXPECT_EQ(legacy, borrowed.get_reference()); EXPECT_FALSE(borrowed.is_inline_extended());
+  EXPECT_EQ(0, borrowed.get_ext()); EXPECT_EQ(-17, borrowed.get_extend_size());
+  DatumParameter legacy_value; legacy_value = source; legacy_value.datum_ = borrowed;
+  ASSERT_EQ(OB_SUCCESS, copy.deep_copy(legacy_value, owner));
+  EXPECT_EQ(0, owner.calls_); EXPECT_TRUE(copy.datum_.is_inline_extended());
+  EXPECT_EQ(0, copy.get_ext()); EXPECT_EQ(-17, copy.get_val_len());
+  EXPECT_EQ(0, borrowed.get_ext()); EXPECT_EQ(legacy, borrowed.get_reference());
+  DatumParameterArray::release_owned(source, owner);
+  DatumParameterArray::release_owned(copy, owner);
+  EXPECT_TRUE(owner.live_.empty()); EXPECT_EQ(0, owner.calls_);
+}
+
+TEST(DatumCore, borrowed_extended_envelopes_copy_without_wrapper_and_row_adapter_uses_current_metadata)
+{
+  const int64_t address = 65536;
+  const int32_t size = -76543;
+  const uint8_t subtype = 3;
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    char input[16] = {};
+    const uint32_t length = legacy16 ? 16 : 15;
+    if (legacy16) {
+      input[0] = ObExtendType; input[1] = CS_LEVEL_EXPLICIT;
+      input[2] = CS_TYPE_UTF8MB4_BIN; input[3] = subtype;
+      MEMCPY(input + 4, &size, 4); MEMCPY(input + 8, &address, 8);
+    } else {
+      MEMCPY(input, &address, 8); MEMCPY(input + 8, &size, 4);
+      input[12] = subtype; input[13] = CS_LEVEL_EXPLICIT; input[14] = CS_TYPE_UTF8MB4_BIN;
+    }
+    DatumValue borrowed;
+    borrowed.get_meta().set_ext(); borrowed.get_meta().set_extend_type(subtype);
+    borrowed.set_collation_level(CS_LEVEL_IMPLICIT);
+    borrowed.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+    ASSERT_EQ(OB_SUCCESS, borrowed.datum_.set_reference(input, length, Datum::LegacyExtended));
+    ParameterTestAllocator owner; owner.fail_at_ = 1;
+    DatumValue owned;
+    ASSERT_EQ(OB_SUCCESS, owned.deep_copy(borrowed, owner));
+    EXPECT_EQ(0, owner.calls_); EXPECT_TRUE(owned.datum_.is_inline_extended());
+    EXPECT_EQ(length, owned.datum_.inline_extended_payload_size());
+    EXPECT_EQ(address, owned.get_ext()); EXPECT_EQ(size, owned.get_val_len());
+    EXPECT_EQ(borrowed.get_meta(), owned.get_meta());
+    EXPECT_EQ(CS_LEVEL_EXPLICIT, owned.datum_.get_extend_collation_level());
+    EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, owned.datum_.get_extend_collation());
+    // Generic export preserves the explicit input envelope, including all
+    // metadata bytes that intentionally differ from the current declaration.
+    char exported_payload[16] = {};
+    ObDatum exported;
+    ASSERT_EQ(OB_SUCCESS, owned.export_legacy(exported, exported_payload, sizeof(exported_payload)));
+    EXPECT_EQ(length, static_cast<uint32_t>(exported.len_)); EXPECT_EQ(exported_payload, exported.ptr_);
+    EXPECT_TRUE(exported.has_ext_value()); EXPECT_EQ(0, MEMCMP(input, exported_payload, length));
+    // The row boundary always produces its historical 15-byte envelope and
+    // uses current declaration metadata. It must also accept a retained16B form.
+    char row_payload[DATUM_EXTEND_PAYLOAD_SIZE] = {};
+    ObDatum row;
+    ASSERT_EQ(OB_SUCCESS, owned.to_row_datum(row, row_payload));
+    EXPECT_EQ(DATUM_EXTEND_PAYLOAD_SIZE, static_cast<uint32_t>(row.len_)); EXPECT_EQ(row_payload, row.ptr_);
+    EXPECT_TRUE(row.has_ext_value()); EXPECT_EQ(address, row.get_ext());
+    char expected[15] = {};
+    MEMCPY(expected, &address, 8); MEMCPY(expected + 8, &size, 4);
+    expected[12] = subtype; expected[13] = CS_LEVEL_IMPLICIT;
+    expected[14] = CS_TYPE_UTF8MB4_GENERAL_CI;
+    EXPECT_EQ(0, MEMCMP(expected, row_payload, sizeof(expected)));
+    EXPECT_FALSE(borrowed.datum_.is_inline_extended());
+    EXPECT_EQ(input, borrowed.datum_.get_reference()); EXPECT_EQ(address, borrowed.get_ext());
+    EXPECT_TRUE(owner.live_.empty()); EXPECT_EQ(0, owner.calls_);
   }
 }

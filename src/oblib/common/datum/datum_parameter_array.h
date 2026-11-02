@@ -127,7 +127,8 @@ struct DatumParameterArray
         DatumParameterArray *array = value.get_array<DatumParameterArray>();
         release_array(array, allocator);
       }
-      if (value.datum_.is_present() && physical_reference(value.get_type_meta())) {
+      if (value.datum_.is_present() && !value.datum_.is_inline_extended()
+          && physical_reference(value.get_type_meta())) {
         allocator.free(const_cast<void *>(value.datum_.get_reference()));
       }
     }
@@ -219,6 +220,11 @@ private:
       }
     }
     if (ret == OB_SUCCESS) { ret = DatumCopyPlan(type).import_legacy(legacy, value); }
+    if (ret == OB_SUCCESS && value.is_present() && physical.datum_.is_inline_extended()) {
+      // The borrowed legacy view above uses this function's scratch. Metadata
+      // validation did not cast the value, so publish its self-contained bits.
+      value = physical.datum_;
+    }
     return ret;
   }
 

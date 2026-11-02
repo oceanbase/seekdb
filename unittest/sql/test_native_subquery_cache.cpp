@@ -131,6 +131,11 @@ int scalar_record(ObIAllocator &allocator, const SqlType &type, int64_t number, 
   alignas(8) char scratch[64]; ObDatum legacy;
   if (ret == OB_SUCCESS) { ret = parameter.export_legacy(legacy, scratch, sizeof(scratch)); }
   if (ret == OB_SUCCESS) { ret = DatumCopyPlan(type).import_legacy(legacy, output); }
+  if (ret == OB_SUCCESS && output.is_present() && parameter.datum_.is_inline_extended()) {
+    // import_legacy validates the full declaration but borrows its input span.
+    // The native producer must not return a view of this helper's local scratch.
+    output = parameter.datum_;
+  }
   return ret;
 }
 
@@ -370,6 +375,11 @@ TEST_F(NativeSubqueryCache, actual_record_first_advance_and_cache_hit_survive_th
     if (call > 1) { source_owner.reset(); return OB_ITER_END; }
     const int ret = scalar_record(source_owner, *type, INT64_MIN,
                                   child_expr_.locate_expr_datum(child_.get_eval_ctx()));
+    if (ret == OB_SUCCESS) {
+      const Datum &first = child_expr_.locate_expr_datum(child_.get_eval_ctx());
+      EXPECT_TRUE(first.is_inline_extended()); // scalar_record's scratch has retired.
+      EXPECT_EQ(INT64_MIN, record_number(*type, first));
+    }
     child_expr_.set_evaluated_projected(child_.get_eval_ctx());
     return ret;
   };
@@ -393,7 +403,13 @@ TEST_F(NativeSubqueryCache, actual_record_cardinality_or_child_failure_never_pub
     ObArenaAllocator source_owner;
     child_.resource_step_ = [&](int call) {
       if (call > 1) { source_owner.reset(); return second; }
-      return scalar_record(source_owner, *type, 81, child_expr_.locate_expr_datum(child_.get_eval_ctx()));
+      Datum &first = child_expr_.locate_expr_datum(child_.get_eval_ctx());
+      const int ret = scalar_record(source_owner, *type, 81, first);
+      if (ret == OB_SUCCESS) {
+        EXPECT_TRUE(first.is_inline_extended()); // Validate after the helper has returned.
+        EXPECT_EQ(81, record_number(*type, first));
+      }
+      return ret;
     };
     EXPECT_EQ(second == OB_SUCCESS ? OB_SUBQUERY_TOO_MANY_ROW : second,
               ObExprSubQueryRef::expr_eval(result_expr_, child_.get_eval_ctx(), result()));

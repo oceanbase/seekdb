@@ -46,14 +46,18 @@ public:
     NoReferenceFlags = 0, OutRow = 1, HasLobHeader = 2, LegacyExtended = 4
   };
 
-  Datum() : payload_(), length_(0), state_(State::Null), reserved_(0), flags_(0) {}
+  Datum() : payload_(), length_(0), state_(static_cast<uint8_t>(State::Null)), reserved_(0), flags_(0) {}
 
-  State state() const { return state_; }
-  bool is_null() const { return state_ == State::Null; }
-  bool is_present() const { return state_ == State::Present; }
-  bool is_nop() const { return state_ == State::Nop; }
-  bool is_min() const { return state_ == State::Min; }
-  bool is_max() const { return state_ == State::Max; }
+  // Logical SQL state is independent of the physical extended-value carrier.
+  State state() const { return static_cast<State>(state_ & LOGICAL_STATE_MASK); }
+  // The physical tag is only set for Present. Every other setter goes through
+  // clear(), retaining the original single-byte tests on scalar hot paths.
+  bool is_null() const { return state_ == static_cast<uint8_t>(State::Null); }
+  bool is_present() const { return state() == State::Present; }
+  bool is_nop() const { return state_ == static_cast<uint8_t>(State::Nop); }
+  bool is_min() const { return state_ == static_cast<uint8_t>(State::Min); }
+  bool is_max() const { return state_ == static_cast<uint8_t>(State::Max); }
+  bool is_inline_extended() const { return (state_ & INLINE_EXTENDED) != 0; }
 
   // Scalar accessors require a present value whose prepared type selects the
   // corresponding canonical representation. They do not inspect payload bits
@@ -130,13 +134,15 @@ public:
   // representation. An empty, non-NULL byte string may have a null address.
   const void *get_reference() const { return payload_.reference_; }
   uint32_t length() const { return length_; }
-  uint16_t reference_flags() const { return flags_; }
-  bool is_outrow() const { return (flags_ & OutRow) != 0; }
-  bool has_lob_header() const { return (flags_ & HasLobHeader) != 0; }
-  bool is_ext() const { return (flags_ & LegacyExtended) != 0; }
-  void set_outrow() { flags_ = OutRow; }
-  void set_has_lob_header() { flags_ = HasLobHeader; }
-  void clear_lob_header() { flags_ &= ~HasLobHeader; }
+  // Inline Extend uses the physical flags bytes for collation metadata. Do
+  // not expose them as LOB/reference flags, even for unknown legacy byte values.
+  uint16_t reference_flags() const { return is_inline_extended() ? LegacyExtended : flags_; }
+  bool is_outrow() const { return !is_inline_extended() && (flags_ & OutRow) != 0; }
+  bool has_lob_header() const { return !is_inline_extended() && (flags_ & HasLobHeader) != 0; }
+  bool is_ext() const { return is_inline_extended() || (flags_ & LegacyExtended) != 0; }
+  void set_outrow() { OB_ASSERT(!is_inline_extended()); flags_ = OutRow; }
+  void set_has_lob_header() { OB_ASSERT(!is_inline_extended()); flags_ = HasLobHeader; }
+  void clear_lob_header() { OB_ASSERT(!is_inline_extended()); flags_ &= ~HasLobHeader; }
   int set_reference(const void *bytes, uint32_t length, uint16_t flags = NoReferenceFlags)
   {
     int ret = OB_SUCCESS;
@@ -224,13 +230,46 @@ public:
   ObOTimestampData get_otimestamp() const
   { ObOTimestampData value; MEMCPY(&value, get_reference(), sizeof(value)); return value; }
 
-  // Extended address/metadata bytes remain an explicit reference encoding.
+  // Native extended values keep all address/size/metadata bits inside Datum.
+  // This does not acquire the pointee. Explicit borrowed legacy references
+  // remain supported; only their real owners may release the referenced span.
+  void set_inline_extended(int64_t value, uint8_t subtype, int32_t size,
+                           uint8_t collation_level = CS_LEVEL_INVALID,
+                           uint8_t collation = CS_TYPE_INVALID, bool legacy_16 = false)
+  {
+    clear(State::Present);
+    state_ |= INLINE_EXTENDED | (legacy_16 ? LEGACY_EXTENDED_16 : 0);
+    payload_.i64_ = value;
+    MEMCPY(&length_, &size, sizeof(size));
+    reserved_ = subtype;
+    flags_ = static_cast<uint16_t>(collation_level) | (static_cast<uint16_t>(collation) << 8);
+  }
+  uint32_t inline_extended_payload_size() const
+  { OB_ASSERT(is_inline_extended()); return (state_ & LEGACY_EXTENDED_16) != 0 ? 16 : 15; }
+  // Reconstitute the old bytes in caller storage. Never return a pointer into
+  // a temporary, and never confuse the native size field with a byte span.
+  int write_inline_extended_payload(void *buffer, uint32_t capacity) const
+  {
+    if (!is_inline_extended() || !is_present()) { return OB_INVALID_ARGUMENT; }
+    const uint32_t bytes = inline_extended_payload_size();
+    if (capacity < bytes) { return OB_BUF_NOT_ENOUGH; }
+    if (buffer == nullptr) { return OB_INVALID_ARGUMENT; }
+    char *out = static_cast<char *>(buffer);
+    if (bytes == 15) {
+      MEMCPY(out, &payload_.i64_, 8); MEMCPY(out + 8, &length_, 4);
+      out[12] = reserved_; out[13] = flags_ & 0xff; out[14] = flags_ >> 8;
+    } else {
+      out[0] = ObExtendType; out[1] = flags_ & 0xff; out[2] = flags_ >> 8; out[3] = reserved_;
+      MEMCPY(out + 4, &length_, 4); MEMCPY(out + 8, &payload_.i64_, 8);
+    }
+    return OB_SUCCESS;
+  }
   // Special SQL states have no address or payload and are read separately.
   bool has_ext_value() const
   {
-    return is_present() && is_ext() && get_reference() != nullptr
+    return is_present() && (is_inline_extended() || (is_ext() && get_reference() != nullptr
         && (length_ == 15 || (length_ == 16
-            && static_cast<const uint8_t *>(get_reference())[0] == ObExtendType));
+            && static_cast<const uint8_t *>(get_reference())[0] == ObExtendType))));
   }
   int64_t get_ext() const
   {
@@ -238,6 +277,7 @@ public:
     if (is_max()) { return -2; }
     if (is_nop()) { return ObActionFlag::OP_NOP; }
     OB_ASSERT(has_ext_value());
+    if (is_inline_extended()) { return payload_.i64_; }
     int64_t value;
     MEMCPY(&value, static_cast<const char *>(get_reference()) + (length_ == 15 ? 0 : 8), sizeof(value));
     return value;
@@ -246,15 +286,19 @@ public:
   {
     OB_ASSERT(has_ext_value());
     int32_t value;
+    if (is_inline_extended()) { MEMCPY(&value, &length_, sizeof(value)); return value; }
     MEMCPY(&value, static_cast<const char *>(get_reference()) + (length_ == 15 ? 8 : 4), sizeof(value));
     return value;
   }
   uint8_t get_extend_type() const
-  { return has_ext_value() ? static_cast<const uint8_t *>(get_reference())[length_ == 15 ? 12 : 3] : UINT8_MAX; }
+  { return is_inline_extended() ? reserved_ : has_ext_value()
+      ? static_cast<const uint8_t *>(get_reference())[length_ == 15 ? 12 : 3] : UINT8_MAX; }
   uint8_t get_extend_collation_level() const
-  { OB_ASSERT(has_ext_value()); return static_cast<const uint8_t *>(get_reference())[length_ == 15 ? 13 : 1]; }
+  { OB_ASSERT(has_ext_value()); return is_inline_extended() ? flags_ & 0xff
+      : static_cast<const uint8_t *>(get_reference())[length_ == 15 ? 13 : 1]; }
   uint8_t get_extend_collation() const
-  { OB_ASSERT(has_ext_value()); return static_cast<const uint8_t *>(get_reference())[length_ == 15 ? 14 : 2]; }
+  { OB_ASSERT(has_ext_value()); return is_inline_extended() ? flags_ >> 8
+      : static_cast<const uint8_t *>(get_reference())[length_ == 15 ? 14 : 2]; }
   int set_extend(int64_t value, uint8_t subtype, int32_t size,
                  void *buffer, uint32_t capacity,
                  uint8_t collation_level = CS_LEVEL_INVALID, uint8_t collation = CS_TYPE_INVALID)
@@ -273,7 +317,8 @@ public:
   { return set_extend(value, 0, 0, buffer, capacity); }
 
   // Diagnostics cannot infer the active payload member without a prepared type.
-  TO_STRING_KV("state", static_cast<int>(state_), "length", length_, "flags", flags_);
+  TO_STRING_KV("state", static_cast<int>(state()), "inline_extended", is_inline_extended(),
+              "length", length_, "flags", reference_flags());
 
 private:
   friend class DatumCopyPlan;
@@ -281,7 +326,7 @@ private:
   template <typename T>
   int read_decimal_reference(T &value) const
   {
-    if (!is_present() || flags_ != NoReferenceFlags
+    if (!is_present() || is_inline_extended() || flags_ != NoReferenceFlags
         || (length_ != 0 && length_ != 4 && length_ != 8 && length_ != 16 && length_ != 32 && length_ != 64)
         || (length_ > 0 && get_reference() == nullptr)) { return OB_INVALID_ARGUMENT; }
     const auto *source = static_cast<const uint8_t *>(get_reference());
@@ -322,7 +367,10 @@ private:
     Payload() : u64_(0) {}
   } payload_;
   uint32_t length_;
-  State state_;
+  static constexpr uint8_t INLINE_EXTENDED = 0x80;
+  static constexpr uint8_t LEGACY_EXTENDED_16 = 0x40;
+  static constexpr uint8_t LOGICAL_STATE_MASK = 0x3f;
+  uint8_t state_;
   uint8_t reserved_;
   uint16_t flags_;
 
@@ -330,7 +378,7 @@ private:
   {
     payload_.u64_ = 0;
     length_ = 0;
-    state_ = state;
+    state_ = static_cast<uint8_t>(state);
     reserved_ = 0;
     flags_ = 0;
   }

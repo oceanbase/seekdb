@@ -151,6 +151,46 @@ TEST(DatumValueProjection, native_failure_preserves_destination_and_null_project
   EXPECT_EQ(calls, owner.calls);
 }
 
+
+TEST(DatumValueProjection, inline_extended_projection_keeps_transformed_value_and_owns_only_needed_bytes)
+{
+  ObArenaAllocator metadata_owner;
+  SqlTypeSpec spec; spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(1);
+  spec.attributes.set_udt_id(908); spec.form = SqlTypeForm::Record;
+  spec.pl_declaration.source = SqlPLDeclarationSource::Local;
+  spec.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID; spec.pl_declaration.declaration_id = 908;
+  spec.pl_declaration.compilation_scope.low = 0x8642;
+  const SqlType *type = nullptr; ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, metadata_owner, type));
+  ProjectionAllocator owner; owner.reject = true;
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum input; input.set_inline_extended(65536, 1, -17, CS_LEVEL_EXPLICIT, CS_TYPE_UTF8MB4_BIN, legacy16);
+    DatumValue output; ASSERT_EQ(OB_SUCCESS, output.set_int(99, owner));
+    ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(input, *type, type->legacy_meta(),
+        OBJ_DATUM_EXTEND, SqlTypeMeta(), output, owner));
+    EXPECT_TRUE(output.datum_.is_inline_extended()); EXPECT_EQ(65536, output.get_ext());
+    EXPECT_EQ(-17, output.get_val_len()); EXPECT_EQ(CS_LEVEL_EXPLICIT, output.get_collation_level());
+    EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, output.get_collation_type()); EXPECT_EQ(0, owner.calls);
+    // The mapping may intentionally discard or reinterpret the carrier.
+    ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(input, *type, type->legacy_meta(),
+        OBJ_DATUM_NULL, SqlTypeMeta(), output, owner));
+    EXPECT_TRUE(output.is_null()); EXPECT_EQ(0, owner.calls);
+    SqlTypeMeta string_meta; string_meta.set_varbinary();
+    const Datum previous = output.datum_; const SqlTypeMeta previous_meta = output.meta_;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, project_native_datum_value_view(input, *type, string_meta,
+        OBJ_DATUM_STRING, SqlTypeMeta(), output, owner));
+    EXPECT_EQ(0, MEMCMP(&previous, &output.datum_, sizeof(Datum))); EXPECT_EQ(previous_meta, output.meta_);
+    owner.reject = false;
+    char expected[16]; ASSERT_EQ(OB_SUCCESS, input.write_inline_extended_payload(expected, sizeof(expected)));
+    ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(input, *type, string_meta,
+        OBJ_DATUM_STRING, SqlTypeMeta(), output, owner));
+    input.set_null();
+    EXPECT_EQ(legacy16 ? 16U : 15U, output.datum_.length());
+    EXPECT_EQ(0, MEMCMP(expected, output.datum_.get_reference(), output.datum_.length()));
+    owner.reject = true; owner.calls = 0;
+  }
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

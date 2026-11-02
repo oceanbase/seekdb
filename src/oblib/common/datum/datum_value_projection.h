@@ -93,6 +93,21 @@ inline int project_native_datum_value_view(const Datum &datum, const SqlType &so
     bool keep_null_collation = false)
 {
   const DatumCopyPlan plan(source_type);
+  if (datum.is_inline_extended()) {
+    // Projection may change the physical interpretation or metadata. Preserve
+    // that result, not the original bits, without retaining a scratch view.
+    alignas(8) char scratch[64];
+    ObDatum legacy;
+    DatumValue projected, candidate;
+    int ret = plan.legacy_view(datum, legacy, scratch, sizeof(scratch));
+    if (OB_SUCC(ret)) {
+      ret = project_datum_value_view(legacy, result_meta, mapping, previous_meta,
+                                    projected, keep_null_collation);
+    }
+    if (OB_SUCC(ret)) { ret = candidate.deep_copy(projected, wrapper_owner); }
+    if (OB_SUCC(ret)) { value = candidate; }
+    return ret;
+  }
   ObDatum legacy;
   int ret = plan.borrow_legacy(datum, legacy);
   if (ret == OB_NOT_SUPPORTED) {

@@ -808,6 +808,9 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
       ObDatum legacy_result;
       OZ(result.export_legacy(legacy_result, result_scratch, sizeof(result_scratch)));
       OZ(expr.get_datum_copy_plan().import_legacy(legacy_result, res));
+      if (OB_SUCC(ret) && res.is_present() && result.datum_.is_inline_extended()) {
+        res = result.datum_;
+      }
       if (is_lob_storage(result.get_type())) {
         OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res, result.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), res));

@@ -85,15 +85,16 @@ public:
 private:
   LiveBlocks live_;
 };
-// This predicate never reads a payload until its entire 15-byte descriptor is
-// known live. Callers use ASSERT_TRUE, so a failed predicate stops the TEST
-// before any get_ext(), Record dereference, destructor or real helper call.
+// Explicit legacy spans still require a live descriptor owner. Inline values
+// carry no descriptor allocation; in both cases the actual record must remain
+// in the asserted resource owner before any dereference or destructor call.
 template <class DescriptorOwner, class RecordOwner>
 bool live_record_parameter(const DatumParameter &value, const DescriptorOwner &descriptor_owner,
                            const RecordOwner &record_owner)
 {
   if (!value.datum_.has_ext_value()
-      || !descriptor_owner.owns_live(value.datum_.get_reference(), DATUM_EXTEND_PAYLOAD_SIZE)
+      || (!value.datum_.is_inline_extended()
+          && !descriptor_owner.owns_live(value.datum_.get_reference(), value.datum_.length()))
       || value.get_extend_type() != PL_RECORD_TYPE
       || value.datum_.get_extend_type() != PL_RECORD_TYPE) { return false; }
   return record_owner.owns_live(reinterpret_cast<const void *>(value.get_ext()), sizeof(ObPLRecord));
@@ -142,10 +143,10 @@ TEST(NativeTriggerParameterLifetime, repeated_real_copyout_reuses_initial_descri
       callee[i].set_need_to_check_type(true); callee[i].set_expected_bool_value(true);
       ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(temporary, callee[i], params.at(i)));
       ASSERT_TRUE(live_record_parameter(params.at(i), temporary, dml));
-      ASSERT_NE(initial[i].datum_.get_reference(), params.at(i).datum_.get_reference());
-      ASSERT_EQ(OB_SUCCESS, params.at(i).datum_.set_extend(params.at(i).get_ext(), PL_RECORD_TYPE,
-          params.at(i).get_val_len(), const_cast<void *>(params.at(i).datum_.get_reference()),
-          params.at(i).datum_.length(), 0xa7, 0xef));
+      ASSERT_TRUE(params.at(i).datum_.is_inline_extended());
+      EXPECT_EQ(0, temporary.outstanding()); // Shared record copy-out has no wrapper allocation.
+      params.at(i).datum_.set_inline_extended(params.at(i).get_ext(), PL_RECORD_TYPE,
+          params.at(i).get_val_len(), 0xa7, 0xef);
       // Compare the actual copy-out publication, not a presumed clone policy.
       // Its metadata is inline; never read its borrowed payload after poison.
       published_snapshot[i] = params.at(i);
@@ -320,12 +321,20 @@ TEST(NativeTriggerParameterLifetime, partial_out_failure_retires_published_and_p
   }
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(temporary, initial[0], params.at(0)));
   ASSERT_TRUE(live_record_parameter(params.at(0), temporary, dml));
+  EXPECT_EQ(0, temporary.outstanding());
+  // Wrapper copying cannot fail allocation anymore. A different record takes
+  // the real owning clone path and can still fail before OUT slot publication.
+  auto *replacement = make_record(temporary, 2, 90); ASSERT_NE(nullptr, replacement);
+  DatumParameter failed_out; ASSERT_EQ(OB_SUCCESS, describe(failed_out, *replacement, temporary));
   temporary.allocations_left = 0;
-  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObUserDefinedType::copy_out_parameter(temporary, initial[1], params.at(1)));
+  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObUserDefinedType::copy_out_parameter(temporary, failed_out, params.at(1)));
   ASSERT_TRUE(live_record_parameter(params.at(1), dml, dml));
   ASSERT_EQ(initial[1].datum_.get_reference(), params.at(1).datum_.get_reference());
   ASSERT_EQ(OB_SUCCESS, NativeTriggerParameterTestAccess::stabilize(initial, 2, params, temporary));
-  temporary.allocations_left = -1; ASSERT_TRUE(poison(temporary));
+  temporary.allocations_left = -1;
+  ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(temporary, failed_out));
+  EXPECT_EQ(0, temporary.outstanding());
+  ASSERT_TRUE(poison(temporary));
   for (int i = 0; i < 2; ++i) {
     ASSERT_TRUE(live_record_parameter(params.at(i), dml, dml));
     ASSERT_EQ(initial[i].datum_.get_reference(), params.at(i).datum_.get_reference());

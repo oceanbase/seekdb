@@ -900,6 +900,14 @@ int DatumParameterCodec::export_native_value(const Datum &source, const SqlTypeM
       candidate.ptr_ = static_cast<const char *>(scratch);
       candidate.set_extend(source.get_ext(), 0, 0, meta.get_cs_level(), meta.get_cs_type());
     }
+  } else if (source.is_inline_extended()) {
+    if (!meta.is_ext()) { ret = OB_INVALID_ARGUMENT; }
+    else if (capacity < source.inline_extended_payload_size()) { ret = OB_BUF_NOT_ENOUGH; }
+    else if (OB_FAIL(source.write_inline_extended_payload(scratch, source.inline_extended_payload_size()))) {
+    } else {
+      candidate.ptr_ = static_cast<const char *>(scratch);
+      candidate.set_ext(source.inline_extended_payload_size());
+    }
   } else if (schema_scalar(meta) != SchemaScalar::Reference) {
     if (source.length() != 0 || source.reference_flags() != Datum::NoReferenceFlags) {
       ret = OB_INVALID_ARGUMENT;
@@ -1034,7 +1042,7 @@ int DatumParameterCodec::native_span_size(const Datum &source, const SqlTypeMeta
   int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
   if (ret == OB_SUCCESS && !valid_generic_legacy(view, meta)) { ret = OB_INVALID_ARGUMENT; }
   if (ret == OB_SUCCESS) {
-    output = source.is_present() && schema_scalar(meta) == SchemaScalar::Reference
+    output = source.is_present() && !source.is_inline_extended() && schema_scalar(meta) == SchemaScalar::Reference
         ? source.length() : 0;
   }
   return ret;
@@ -1048,7 +1056,8 @@ int DatumParameterCodec::copy_native_span(const Datum &source, const SqlTypeMeta
   int ret = native_span_size(source, meta, bytes);
   Datum candidate = source;
   if (ret == OB_SUCCESS && bytes > length - pos) { ret = OB_BUF_NOT_ENOUGH; }
-  if (ret == OB_SUCCESS && source.is_present() && schema_scalar(meta) == SchemaScalar::Reference) {
+  if (ret == OB_SUCCESS && source.is_present() && !source.is_inline_extended()
+      && schema_scalar(meta) == SchemaScalar::Reference) {
     if (bytes > 0 && buffer == nullptr) { ret = OB_INVALID_ARGUMENT; }
     else {
       char *destination = buffer == nullptr ? nullptr : buffer + pos;
@@ -1069,8 +1078,15 @@ int DatumParameterCodec::copy_native_value_span(const Datum &source, const SqlTy
   int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
   if (ret == OB_SUCCESS && !valid_generic_legacy(view, meta)) { ret = OB_INVALID_ARGUMENT; }
   if (ret == OB_SUCCESS) {
-    if (!source.is_present() || schema_scalar(meta) != SchemaScalar::Reference) {
+    if (!source.is_present() || source.is_inline_extended() || schema_scalar(meta) != SchemaScalar::Reference) {
       candidate = source;
+    } else if (meta.is_pl_extend_type() && source.has_ext_value()) {
+      // A native PL copy owns no carrier allocation, including when its input
+      // is an explicitly borrowed old ABI descriptor. Preserve all payload
+      // metadata and the legacy envelope; the resource itself remains borrowed.
+      candidate.set_inline_extended(source.get_ext(), source.get_extend_type(), source.get_extend_size(),
+          source.get_extend_collation_level(), source.get_extend_collation(),
+          source.length() == DATUM_LEGACY_EXTEND_SIZE);
     } else {
       void *bytes = allocator.alloc(std::max<int64_t>(source.length(), 1));
       if (bytes == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
@@ -1172,7 +1188,7 @@ int DatumParameterCodec::import_schema_native_value(const ObDatum &source, const
 void DatumParameterCodec::release_owned_schema_native_value(Datum &value, const SqlTypeMeta &meta,
     ObIAllocator &allocator)
 {
-  if (value.is_present() && schema_scalar(meta) == SchemaScalar::Reference) {
+  if (value.is_present() && !value.is_inline_extended() && schema_scalar(meta) == SchemaScalar::Reference) {
     void *bytes = const_cast<void *>(value.get_reference());
     if (bytes != nullptr) {
       if (meta.is_ext_sql_array()) {
@@ -1375,6 +1391,16 @@ int DatumValue::assign_reference_bytes(const void *bytes, int64_t length, uint16
 int DatumValue::set_extend(int64_t value, uint8_t subtype, ObIAllocator &owner, int32_t size)
 {
   SqlTypeMeta meta = meta_; meta.set_ext(); meta.set_extend_type(subtype);
+  if (!meta.is_ext_sql_array()) {
+    Datum candidate;
+    if (subtype == 0 && size == 0 && value == DATUM_MIN_EXT_VALUE) { candidate.set_min(); }
+    else if (subtype == 0 && size == 0 && value == DATUM_MAX_EXT_VALUE) { candidate.set_max(); }
+    else if (subtype == 0 && size == 0 && value == ObActionFlag::OP_NOP) { candidate.set_nop(); }
+    else { candidate.set_inline_extended(value, subtype, size); }
+    datum_ = candidate;
+    meta_ = meta;
+    return OB_SUCCESS;
+  }
   alignas(8) char bytes[DATUM_EXTEND_PAYLOAD_SIZE];
   ObDatum source;
   if (meta.is_ext_sql_array()) {
@@ -1401,11 +1427,17 @@ int DatumValue::to_row_datum(ObDatum &output,
 {
   int ret = OB_SUCCESS;
   ObDatum candidate;
+  // A native clone may retain the historical 16-byte envelope. The row ABI
+  // below normalizes Extend to 15 bytes, so first read that envelope in local
+  // storage rather than requiring the caller's 15-byte result buffer to hold it.
+  char extended_scratch[DATUM_LEGACY_EXTEND_SIZE];
   if (!meta_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_null() || meta_.is_null()) {
     candidate.set_null();
-  } else if (OB_FAIL(export_legacy(candidate, legacy_payload, sizeof(legacy_payload)))) {
+  } else if (OB_FAIL(export_legacy(candidate,
+      datum_.is_inline_extended() ? extended_scratch : legacy_payload,
+      datum_.is_inline_extended() ? sizeof(extended_scratch) : sizeof(legacy_payload)))) {
   } else if (is_ext()) {
     if ((is_ext_sql_array() && (candidate.ptr_ == nullptr || candidate.len_ != sizeof(int64_t)))
         || (!is_ext_sql_array() && !candidate.has_ext_value())) {

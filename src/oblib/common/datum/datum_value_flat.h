@@ -19,7 +19,7 @@ public:
   // is an encoded offset. Never inspect reference bytes to guess the layout.
   static bool uses_reference(const DatumValue &value)
   {
-    if (!value.datum_.is_present()) { return false; }
+    if (!value.datum_.is_present() || value.datum_.is_inline_extended()) { return false; }
     switch (value.get_type()) {
       case ObTinyIntType: case ObSmallIntType: case ObMediumIntType:
       case ObInt32Type: case ObIntType: case ObDateTimeType: case ObTimestampType:
@@ -38,7 +38,11 @@ public:
     if (DatumParameterCodec::native_span_size(value.datum_, value.meta_, payload) != OB_SUCCESS) {
       return INT64_MAX;
     }
-    if (!uses_reference(value)) { return 0; }
+    if (!uses_reference(value) || (value.meta_.is_pl_extend_type() && value.datum_.has_ext_value())) {
+      // clone_parameter canonicalizes PL carriers, including explicit old
+      // descriptors, into the value. The resource itself remains borrowed.
+      return 0;
+    }
     int64_t bytes = 0;
     if (value.is_ext_sql_array()) {
       const auto *array = reinterpret_cast<const DatumParameterArray *>(value.get_ext());
@@ -189,6 +193,15 @@ private:
   static int row_size(const DatumValue &value, int64_t &output, int depth)
   {
     if (depth > 64) { return OB_SIZE_OVERFLOW; }
+    if (value.datum_.is_inline_extended()) {
+      char scratch[16];
+      DatumValue wire = value;
+      int ret = value.datum_.write_inline_extended_payload(scratch, sizeof(scratch));
+      if (ret == OB_SUCCESS) {
+        ret = wire.datum_.set_reference(scratch, value.datum_.inline_extended_payload_size(), Datum::LegacyExtended);
+      }
+      return ret == OB_SUCCESS ? row_size(wire, output, depth) : ret;
+    }
     int ret = row_shape(value);
     int64_t bytes = 11;
     if (ret == OB_SUCCESS && value.datum_.is_present()) {
@@ -216,6 +229,15 @@ private:
   static int row_encode(const DatumValue &value, char *buf, int64_t length, int64_t &pos, int depth)
   {
     if (depth > 64) { return OB_SIZE_OVERFLOW; }
+    if (value.datum_.is_inline_extended()) {
+      char scratch[16];
+      DatumValue wire = value;
+      int ret = value.datum_.write_inline_extended_payload(scratch, sizeof(scratch));
+      if (ret == OB_SUCCESS) {
+        ret = wire.datum_.set_reference(scratch, value.datum_.inline_extended_payload_size(), Datum::LegacyExtended);
+      }
+      return ret == OB_SUCCESS ? row_encode(wire, buf, length, pos, depth) : ret;
+    }
     int ret = OB_SUCCESS;
     if (OB_FAIL(serialization::encode(buf, length, pos, value.meta_))) {}
     else if (OB_FAIL(serialization::encode_i8(buf, length, pos, static_cast<int8_t>(value.datum_.state())))) {}

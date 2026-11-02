@@ -15,6 +15,7 @@
  */
 
 #include "sql/engine/expr/ob_native_pl_value.h"
+#include "query/engine/expr/ob_expr.h"
 #include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_parameter_array.h"
 #include "sql/engine/ob_exec_context.h"
@@ -41,6 +42,7 @@ public:
   ~FailingAllocator() { for (void *pointer : live_) { std::free(pointer); } }
   void *alloc(int64_t size) override
   {
+    if (size == DATUM_EXTEND_PAYLOAD_SIZE) { ++carrier_calls_; }
     if (++calls_ == failure_) { return nullptr; }
     void *pointer = std::malloc(size > 0 ? size : 1);
     if (pointer != nullptr) { live_.insert(pointer); }
@@ -57,6 +59,7 @@ public:
   }
   int64_t failure_;
   int64_t calls_ = 0;
+  int64_t carrier_calls_ = 0;
   std::unordered_set<void *> live_;
 };
 
@@ -219,6 +222,9 @@ int import_parameter(const SqlType &type, const DatumParameter &parameter, Datum
   ObDatum physical;
   int ret = parameter.export_legacy(physical, scratch, sizeof(scratch));
   if (ret == OB_SUCCESS) { ret = DatumCopyPlan(type).import_legacy(physical, value); }
+  if (ret == OB_SUCCESS && value.is_present() && parameter.datum_.is_inline_extended()) {
+    value = parameter.datum_; // The fixture must not return its local legacy scratch.
+  }
   return ret;
 }
 
@@ -977,6 +983,117 @@ TEST(NativePlValue, typed_array_metadata_arena_rolls_back_with_each_parent_alloc
     EXPECT_EQ(0, owner.resource_count()); EXPECT_TRUE(allocator.live_.empty()) << failure;
   }
   EXPECT_TRUE(succeeded);
+}
+
+
+TEST(NativePlValue, owned_record_carrier_remains_inline_after_legacy_source_and_scratch_retire)
+{
+  ObArenaAllocator type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlTypeMeta integer_meta; integer_meta.set_int();
+  SqlType integer; ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(integer_meta, ObAccuracy(), integer));
+  const SqlType *type = record_type(type_owner, registry, 1907, {&integer}); ASSERT_NE(nullptr, type);
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    FailingAllocator target;
+    NativeSqlValueOwner owner(target, nullptr, &registry);
+    Datum output; output.set_int(93);
+    {
+      ObArenaAllocator source_owner;
+      DatumParameter field_value; ASSERT_EQ(OB_SUCCESS, field_value.set_int(739, source_owner));
+      DatumParameter source = record(source_owner, 1907, {field_value});
+      Datum native; native.set_inline_extended(source.get_ext(), PL_RECORD_TYPE, source.get_val_len(),
+          CS_LEVEL_INVALID, CS_TYPE_INVALID, legacy16);
+      char wrapper[16]; ASSERT_EQ(OB_SUCCESS, native.write_inline_extended_payload(wrapper, sizeof(wrapper)));
+      Datum borrowed; ASSERT_EQ(OB_SUCCESS, borrowed.set_reference(wrapper, legacy16 ? 16 : 15, Datum::LegacyExtended));
+      ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, borrowed, owner, output));
+      ASSERT_TRUE(output.is_inline_extended()); EXPECT_NE(source.get_ext(), output.get_ext());
+      EXPECT_EQ(1, owner.resource_count()); EXPECT_EQ(0, target.carrier_calls_);
+      MEMSET(wrapper, 0xa5, sizeof(wrapper));
+      ASSERT_EQ(OB_SUCCESS, release_owned_parameter_graph(source, source_owner));
+    }
+    // The output carrier is not a Reference into NativeSqlValueOwner::clone's
+    // returned scratch. The actual cloned record survives source destruction.
+    ASSERT_TRUE(output.is_inline_extended());
+    auto *record_value = reinterpret_cast<ObPLRecord *>(output.get_ext());
+    ASSERT_NE(nullptr, record_value); ASSERT_EQ(1, record_value->get_count());
+    EXPECT_EQ(739, record_value->get_element()[0].get_int());
+    EXPECT_EQ(0, target.carrier_calls_);
+    EXPECT_EQ(OB_SUCCESS, owner.enforce_empty_before_destroy());
+    EXPECT_EQ(0, owner.resource_count()); EXPECT_TRUE(target.live_.empty());
+  }
+}
+
+
+TEST(NativePlValue, expr_compatibility_clone_preserves_native_carrier_without_returning_scratch)
+{
+  ObArenaAllocator metadata;
+  FixtureDeclarations registry(metadata);
+  const SqlType *type = record_type(metadata, registry, 1908, {}); ASSERT_NE(nullptr, type);
+  FailingAllocator owner;
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum native; native.set_inline_extended(65536, PL_RECORD_TYPE, -19,
+        CS_LEVEL_INVALID, CS_TYPE_INVALID, legacy16);
+    char wrapper[16]; ASSERT_EQ(OB_SUCCESS, native.write_inline_extended_payload(wrapper, sizeof(wrapper)));
+    Datum borrowed; ASSERT_EQ(OB_SUCCESS, borrowed.set_reference(wrapper, legacy16 ? 16 : 15, Datum::LegacyExtended));
+    Datum output; output.set_int(93);
+    // This compatibility cloner retains only the old carrier/resource borrow
+    // policy. It does not invent ownership of the pointed record.
+    ASSERT_EQ(OB_SUCCESS, ObExpr::clone_native_value(*type, borrowed, owner, output));
+    ASSERT_TRUE(output.is_inline_extended()); EXPECT_EQ(65536, output.get_ext());
+    EXPECT_EQ(-19, output.get_extend_size()); EXPECT_EQ(legacy16 ? 16U : 15U, output.inline_extended_payload_size());
+    MEMSET(wrapper, 0xa5, sizeof(wrapper));
+    EXPECT_EQ(65536, output.get_ext()); EXPECT_EQ(0, owner.carrier_calls_); EXPECT_TRUE(owner.live_.empty());
+  }
+}
+
+TEST(NativePlValue, expr_carrier_copy_normalizes_legacy_pl_only_after_full_type_validation)
+{
+  ObArenaAllocator metadata;
+  FixtureDeclarations registry(metadata);
+  const SqlType *type = record_type(metadata, registry, 1909, {}); ASSERT_NE(nullptr, type);
+  FailingAllocator owner;
+  ObExecContext execution(owner);
+  ObEvalCtx evaluation(execution);
+  alignas(8) char frame[128] = {};
+  char *frames[] = {frame};
+  evaluation.frames_ = frames;
+  ObExpr expression;
+  expression.frame_idx_ = 0; expression.datum_off_ = 0;
+  expression.eval_info_off_ = sizeof(Datum);
+  expression.res_buf_off_ = 24; expression.res_buf_len_ = 16;
+  new (frame) Datum(); new (frame + expression.eval_info_off_) ObEvalInfo{};
+  ASSERT_EQ(OB_SUCCESS, expression.bind_sql_type(*type, metadata));
+  Datum &slot = expression.locate_expr_datum(evaluation);
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum native; native.set_inline_extended(65536, PL_RECORD_TYPE, -29, 0xa7, 0xef, legacy16);
+    char wrapper[16]; ASSERT_EQ(OB_SUCCESS, native.write_inline_extended_payload(wrapper, sizeof(wrapper)));
+    Datum borrowed; ASSERT_EQ(OB_SUCCESS, borrowed.set_reference(wrapper, legacy16 ? 16 : 15, Datum::LegacyExtended));
+    const int64_t calls = owner.calls_;
+    owner.failure_ = calls + 1;
+    slot.set_int(71);
+    ASSERT_EQ(OB_SUCCESS, expression.deep_copy_datum(evaluation, borrowed));
+    ASSERT_TRUE(slot.is_inline_extended()); EXPECT_EQ(65536, slot.get_ext());
+    EXPECT_EQ(-29, slot.get_extend_size()); EXPECT_EQ(0xa7, slot.get_extend_collation_level());
+    EXPECT_EQ(0xef, slot.get_extend_collation());
+    EXPECT_EQ(legacy16 ? 16U : 15U, slot.inline_extended_payload_size());
+    EXPECT_EQ(calls, owner.calls_); EXPECT_EQ(0, owner.carrier_calls_);
+    MEMSET(wrapper, 0x5a, sizeof(wrapper));
+    ASSERT_EQ(OB_SUCCESS, expression.deep_copy_datum(evaluation, slot));
+    EXPECT_EQ(65536, slot.get_ext()); EXPECT_EQ(calls, owner.calls_);
+    // A physically valid carrier for another PL subtype still fails the
+    // prepared Record declaration before publishing to the actual Expr slot.
+    Datum incompatible; incompatible.set_inline_extended(65536, PL_CURSOR_TYPE, -29);
+    const Datum previous = slot;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, expression.deep_copy_datum(evaluation, incompatible));
+    EXPECT_EQ(0, MEMCMP(&previous, &slot, sizeof(Datum))); EXPECT_EQ(calls, owner.calls_);
+    Datum null_value;
+    ASSERT_EQ(OB_SUCCESS, expression.deep_copy_datum(evaluation, null_value));
+    EXPECT_TRUE(slot.is_null()); EXPECT_FALSE(slot.is_inline_extended());
+    EXPECT_EQ(calls, owner.calls_);
+  }
 }
 
 } // namespace

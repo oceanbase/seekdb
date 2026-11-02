@@ -251,6 +251,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
     ObDatum result_view;
     OZ(result.export_legacy(result_view, result_scratch, sizeof(result_scratch)));
     OZ(expr.get_datum_copy_plan().import_legacy(result_view, res));
+    if (OB_SUCC(ret) && res.is_present() && result.datum_.is_inline_extended()) {
+      res = result.datum_;
+    }
     if (is_lob_storage(result.get_type())) {
       OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res, result.get_meta(), expr.obj_meta_,
                              ctx.exec_ctx_.get_allocator(), res));

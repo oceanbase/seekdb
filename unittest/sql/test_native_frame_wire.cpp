@@ -337,6 +337,18 @@ TEST(NativeFrameValueWire, pl_addresses_are_rejected_while_special_states_remain
   EXPECT_EQ(OB_NOT_SUPPORTED, NativeFrameValueCodec::encode(*type, source, buffer, sizeof(buffer), pos));
   EXPECT_EQ(3, pos);
   for (char byte : buffer) { EXPECT_EQ(0x7d, static_cast<uint8_t>(byte)); }
+  for (bool legacy16 : {false, true}) {
+    for (int64_t address : {int64_t(0), reinterpret_cast<int64_t>(&pointed)}) {
+      Datum inline_value; inline_value.set_inline_extended(address, 1, 8,
+          CS_LEVEL_INVALID, CS_TYPE_INVALID, legacy16);
+      size = 91; pos = 3;
+      EXPECT_EQ(OB_NOT_SUPPORTED, NativeFrameValueCodec::size(*type, inline_value, size));
+      EXPECT_EQ(91, size);
+      EXPECT_EQ(OB_NOT_SUPPORTED, NativeFrameValueCodec::encode(*type, inline_value, buffer, sizeof(buffer), pos));
+      EXPECT_EQ(3, pos);
+      for (char byte : buffer) { EXPECT_EQ(0x7d, static_cast<uint8_t>(byte)); }
+    }
+  }
   source.set_null();
   std::vector<char> wire;
   ASSERT_NO_FATAL_FAILURE(encode_value(*type, source, wire));
@@ -1191,6 +1203,48 @@ TEST(NativeFrameWire, px_nonplaceholder_invalid_native_metadata_is_still_rejecte
   EXPECT_EQ(OB_INVALID_ARGUMENT, ObPxTreeSerializer::serialize_expr_frame_info<true>(
       wire.data(), wire.size(), pos, context, info));
   EXPECT_EQ(7, pos);
+}
+
+
+TEST(NativeFrameValueWire, inline_extended_array_envelopes_match_both_existing_wire_versions)
+{
+  ObArenaAllocator owner;
+  SqlType integer; ASSERT_NO_FATAL_FAILURE(scalar_type(ObIntType, integer));
+  SqlTypeSpec spec; spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  spec.form = SqlTypeForm::Array; spec.element = &integer;
+  const SqlType *type = nullptr; ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, owner, type));
+  auto *array = DatumParameterArray::alloc(owner, 1); ASSERT_NE(nullptr, array);
+  ASSERT_EQ(OB_SUCCESS, array->data_[0].set_int(INT64_MIN, owner));
+  ASSERT_EQ(OB_SUCCESS, array->set_element_type_borrowed(0, integer, owner));
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum input; input.set_inline_extended(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY,
+        123, CS_LEVEL_COERCIBLE, CS_TYPE_BINARY, legacy16);
+    char wrapper[16]; ASSERT_EQ(OB_SUCCESS, input.write_inline_extended_payload(wrapper, sizeof(wrapper)));
+    Datum old; ASSERT_EQ(OB_SUCCESS, old.set_reference(wrapper, legacy16 ? 16 : 15, Datum::LegacyExtended));
+    for (int64_t version : {NativeFrameValueCodec::PHYSICAL_ARRAY_VERSION, NativeFrameValueCodec::TYPED_ARRAY_VERSION}) {
+      SCOPED_TRACE(version);
+      int64_t old_size = 0, size = 0;
+      ASSERT_EQ(OB_SUCCESS, NativeFrameValueCodec::size(*type, old, old_size, version));
+      ASSERT_EQ(OB_SUCCESS, NativeFrameValueCodec::size(*type, input, size, version)); EXPECT_EQ(old_size, size);
+      std::vector<char> before(old_size), after(size); int64_t a = 0, b = 0;
+      ASSERT_EQ(OB_SUCCESS, NativeFrameValueCodec::encode(*type, old, before.data(), before.size(), a, version));
+      ASSERT_EQ(OB_SUCCESS, NativeFrameValueCodec::encode(*type, input, after.data(), after.size(), b, version));
+      EXPECT_EQ(before, after); EXPECT_EQ(a, b); expect_address_absent(after, array);
+      Datum decoded; const SqlType *decoded_type = nullptr; b = 0;
+      ASSERT_EQ(OB_SUCCESS, NativeFrameValueCodec::decode(after.data(), after.size(), b, owner, decoded_type, decoded, version));
+      EXPECT_TRUE(type->equals(*decoded_type)); EXPECT_EQ(size, b);
+      const auto *decoded_array = reinterpret_cast<const DatumParameterArray *>(decoded.get_ext());
+      ASSERT_NE(nullptr, decoded_array); EXPECT_NE(array, decoded_array); ASSERT_EQ(1, decoded_array->count_);
+      EXPECT_EQ(INT64_MIN, decoded_array->data_[0].get_int()); EXPECT_EQ(123, decoded.get_extend_size());
+      EXPECT_EQ(CS_LEVEL_COERCIBLE, decoded.get_extend_collation_level());
+      for (int64_t length = 0; length < size; ++length) {
+        Datum destination; destination.set_int(91); const SqlType *sentinel_type = type; int64_t pos = 0;
+        EXPECT_NE(OB_SUCCESS, NativeFrameValueCodec::decode(after.data(), length, pos, owner, sentinel_type, destination, version));
+        EXPECT_EQ(0, pos); EXPECT_EQ(type, sentinel_type); EXPECT_EQ(91, destination.get_int());
+      }
+    }
+  }
 }
 
 int main(int argc, char **argv)

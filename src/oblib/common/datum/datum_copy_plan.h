@@ -181,7 +181,7 @@ public:
     char scratch[64];
     bool reference = false;
     int ret = prepare_legacy(source, prepared, scratch, reference, false);
-    if (ret == OB_SUCCESS && reference && needs_resource_clone()) { ret = OB_NOT_SUPPORTED; }
+    if (ret == OB_SUCCESS && source.is_present() && needs_resource_clone()) { ret = OB_NOT_SUPPORTED; }
     if (ret == OB_SUCCESS) { size = reference ? source.length() : 0; }
     return ret;
   }
@@ -277,7 +277,7 @@ public:
     int ret = prepare_legacy(source, candidate, scratch, reference, false);
     if (OB_FAIL(ret)) {
     } else if (source.is_null()) {
-    } else if (!source.is_present()) {
+    } else if (!source.is_present() || source.is_inline_extended()) {
       ret = OB_NOT_SUPPORTED;
     } else if (reference) {
       if (meta_.get_type() == ObDecimalIntType) {
@@ -378,7 +378,7 @@ public:
     bool reference = false;
     Datum candidate = source;
     if (OB_FAIL(prepare_legacy(source, prepared, scratch, reference, false))) {
-    } else if (reference && needs_resource_clone()) {
+    } else if (source.is_present() && needs_resource_clone()) {
       ret = OB_NOT_SUPPORTED;
     } else if (reference) {
       char *bytes = nullptr;
@@ -416,7 +416,7 @@ private:
     if (position < 0 || capacity < position) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(prepare_legacy(source, prepared, scratch, reference, false))) {
-    } else if (reference && needs_resource_clone() && !borrow_resources) {
+    } else if (source.is_present() && needs_resource_clone() && !borrow_resources) {
       ret = OB_NOT_SUPPORTED;
     } else {
       const int64_t size = reference ? source.length() : 0;
@@ -659,6 +659,18 @@ private:
     if (ret != OB_SUCCESS) { return ret; }
     const DatumRepresentation representation = type->canonical_representation();
     if (representation == DatumRepresentation::NoPayload) { return OB_INVALID_ARGUMENT; }
+    if (source.is_inline_extended()) {
+      if (representation != DatumRepresentation::Reference || type->kind() != ObExtendType) {
+        return OB_INVALID_ARGUMENT;
+      }
+      ret = source.write_inline_extended_payload(scratch, 64);
+      if (ret == OB_SUCCESS) {
+        output.ptr_ = scratch;
+        output.set_ext(source.inline_extended_payload_size());
+        ret = validate_reference(output, *type);
+      }
+      return ret;
+    }
     if (representation == DatumRepresentation::Reference) {
       const uint16_t flags = source.reference_flags();
       if (flags != Datum::NoReferenceFlags && flags != Datum::OutRow

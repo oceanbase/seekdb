@@ -1196,7 +1196,18 @@ OB_INLINE int ObExpr::deep_copy_datum(ObEvalCtx &ctx, const common::Datum &datum
   const common::DatumCopyPlan plan = get_datum_copy_plan();
   int64_t bytes = 0;
   int ret = plan.carrier_span_size(source, bytes);
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && source.is_present() && source.is_ext()
+      && get_sql_type().legacy_meta().is_pl_extend_type()) {
+    // The complete CopyPlan validation above still precedes publication.
+    // Retain only the PL carrier here; ownership of its pointee is unchanged.
+    common::Datum candidate;
+    candidate.set_inline_extended(source.get_ext(), source.get_extend_type(),
+        source.get_extend_size(), source.get_extend_collation_level(),
+        source.get_extend_collation(), source.is_inline_extended()
+            ? source.inline_extended_payload_size() == common::DATUM_LEGACY_EXTEND_SIZE
+            : source.length() == common::DATUM_LEGACY_EXTEND_SIZE);
+    locate_expr_datum(ctx) = candidate;
+  } else if (OB_SUCC(ret)) {
     char *buffer = bytes > 0 ? get_reference_res_mem(ctx, bytes) : nullptr;
     if (bytes > 0 && buffer == nullptr) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;

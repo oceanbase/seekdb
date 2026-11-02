@@ -16,6 +16,7 @@
 
 #include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_parameter_array.h"
+#include "common/datum/native_typed_datum.h"
 #include <gtest/gtest.h>
 #include <cstring>
 
@@ -26,10 +27,12 @@ class CopyPlanAllocator final : public ObIAllocator
 {
 public:
   CopyPlanAllocator() : calls(0), reject(false), arena() {}
-  void *alloc(int64_t bytes) override { ++calls; return reject ? nullptr : arena.alloc(bytes); }
+  void *alloc(int64_t bytes) override
+  { ++calls; if (bytes == 15 || bytes == 16) { ++carrier_calls; } return reject ? nullptr : arena.alloc(bytes); }
   void *alloc(int64_t bytes, const ObMemAttr &) override { return alloc(bytes); }
   void free(void *bytes) override { arena.free(bytes); }
   int64_t calls;
+  int64_t carrier_calls = 0;
   bool reject;
   ObArenaAllocator arena;
 };
@@ -708,6 +711,108 @@ TEST(DatumCopyPlan, same_scope_array_carrier_copy_borrows_pointee_and_preflights
   EXPECT_EQ(OB_INVALID_ARGUMENT,
       plan.copy_carrier_span_borrowing_resources(source, copied, wrapper, sizeof(wrapper), position));
   EXPECT_EQ(0, position); EXPECT_EQ(wrapper + 4, copied.get_reference());
+}
+
+
+namespace {
+const SqlType *inline_record_type(ObIAllocator &owner)
+{
+  SqlTypeSpec spec;
+  spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(1);
+  spec.attributes.set_udt_id(907); spec.form = SqlTypeForm::Record;
+  spec.pl_declaration.source = SqlPLDeclarationSource::Local;
+  spec.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  spec.pl_declaration.declaration_id = 907;
+  spec.pl_declaration.compilation_scope.low = 0x97531;
+  const SqlType *type = nullptr;
+  EXPECT_EQ(OB_SUCCESS, SqlType::create(spec, owner, type));
+  return type;
+}
+struct InlineCloneProbe { int calls = 0; int result = OB_SUCCESS; int64_t address = 0; };
+int inline_clone_probe(const SqlType &, const Datum &source, ObIAllocator &, Datum &out, void *opaque)
+{
+  auto &probe = *static_cast<InlineCloneProbe *>(opaque);
+  ++probe.calls;
+  EXPECT_TRUE(source.is_inline_extended());
+  if (probe.result == OB_SUCCESS) {
+    out.set_inline_extended(probe.address, source.get_extend_type(), source.get_extend_size(),
+        source.get_extend_collation_level(), source.get_extend_collation(),
+        source.inline_extended_payload_size() == DATUM_LEGACY_EXTEND_SIZE);
+  }
+  return probe.result;
+}
+}
+
+TEST(DatumCopyPlan, inline_pl_carrier_keeps_explicit_borrow_and_resource_clone_boundaries)
+{
+  ObArenaAllocator type_owner;
+  const SqlType *type = inline_record_type(type_owner); ASSERT_NE(nullptr, type);
+  const DatumCopyPlan plan(*type);
+  CopyPlanAllocator reject; reject.reject = true;
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum source; source.set_inline_extended(65536, 1, INT32_MIN, 0xab, 0xcd, legacy16);
+    ObDatum view; char scratch[64];
+    ASSERT_EQ(OB_SUCCESS, plan.legacy_view(source, view, scratch, sizeof(scratch)));
+    EXPECT_EQ(scratch, view.ptr_); EXPECT_EQ(legacy16 ? 16 : 15, view.len_);
+    Datum borrowed;
+    ASSERT_EQ(OB_SUCCESS, plan.import_legacy(view, borrowed));
+    EXPECT_FALSE(borrowed.is_inline_extended()); EXPECT_EQ(scratch, borrowed.get_reference());
+    ObDatum sentinel; sentinel.set_null();
+    EXPECT_EQ(OB_NOT_SUPPORTED, plan.borrow_legacy(source, sentinel)); EXPECT_TRUE(sentinel.is_null());
+    Datum output; output.set_int(91);
+    int64_t bytes = 99, position = 0;
+    ASSERT_EQ(OB_SUCCESS, plan.carrier_span_size(source, bytes)); EXPECT_EQ(0, bytes);
+    ASSERT_EQ(OB_SUCCESS, plan.copy_carrier_span_borrowing_resources(source, output, nullptr, 0, position));
+    EXPECT_TRUE(output.is_inline_extended()); EXPECT_EQ(65536, output.get_ext()); EXPECT_EQ(0, position);
+    output.set_int(91); bytes = 99;
+    EXPECT_EQ(OB_NOT_SUPPORTED, plan.payload_copy_size(source, bytes)); EXPECT_EQ(99, bytes);
+    EXPECT_EQ(OB_NOT_SUPPORTED, plan.deep_copy(source, output, reject)); EXPECT_EQ(91, output.get_int());
+    InlineCloneProbe probe; probe.result = OB_ALLOCATE_MEMORY_FAILED;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan.deep_copy_resource(source, output, reject, inline_clone_probe, &probe));
+    EXPECT_EQ(1, probe.calls); EXPECT_EQ(91, output.get_int());
+    probe.result = OB_SUCCESS; probe.address = 131072;
+    ASSERT_EQ(OB_SUCCESS, plan.deep_copy_resource(source, output, reject, inline_clone_probe, &probe));
+    EXPECT_EQ(2, probe.calls); EXPECT_TRUE(output.is_inline_extended()); EXPECT_EQ(131072, output.get_ext());
+    EXPECT_EQ(INT32_MIN, output.get_extend_size()); EXPECT_EQ(0xab, output.get_extend_collation_level());
+    EXPECT_EQ(0xcd, output.get_extend_collation()); EXPECT_EQ(0, reject.calls);
+  }
+}
+
+TEST(DatumCopyPlan, typed_retaining_and_array_leaf_preserve_inline_carrier_after_scratch_retirement)
+{
+  ObArenaAllocator source_owner;
+  const SqlType *type = inline_record_type(source_owner); ASSERT_NE(nullptr, type);
+  for (bool legacy16 : {false, true}) {
+    SCOPED_TRACE(legacy16);
+    Datum inline_value; inline_value.set_inline_extended(65536, 1, -73, 0xa7, 0xef, legacy16);
+    char wrapper[16]; ASSERT_EQ(OB_SUCCESS, inline_value.write_inline_extended_payload(wrapper, sizeof(wrapper)));
+    NativeTypedDatum input, retained;
+    input.type_ = type;
+    ASSERT_EQ(OB_SUCCESS, input.datum_.set_reference(wrapper, legacy16 ? 16 : 15, Datum::LegacyExtended));
+    CopyPlanAllocator target;
+    ASSERT_EQ(OB_SUCCESS, clone_native_parameter_value(input, target, retained));
+    ASSERT_NE(nullptr, retained.type_); EXPECT_NE(type, retained.type_); EXPECT_TRUE(type->equals(*retained.type_));
+    EXPECT_TRUE(retained.datum_.is_inline_extended()); EXPECT_EQ(0, target.carrier_calls);
+    MEMSET(wrapper, 0x5a, sizeof(wrapper));
+    EXPECT_EQ(65536, retained.datum_.get_ext()); EXPECT_EQ(-73, retained.datum_.get_extend_size());
+    EXPECT_EQ(legacy16 ? 16U : 15U, retained.datum_.inline_extended_payload_size());
+    auto *array = DatumParameterArray::alloc(target, 1); ASSERT_NE(nullptr, array);
+    DatumParameterMetadata attributes; attributes.type_meta_ = type->legacy_meta();
+    attributes.param_meta_ = type->legacy_meta(); attributes.raw_text_pos_ = 17;
+    ASSERT_EQ(OB_SUCCESS, array->set_native_element_borrowed_type(0, retained.datum_, *retained.type_, attributes, target));
+    Datum leaf; const SqlType *leaf_type = nullptr;
+    ASSERT_EQ(OB_SUCCESS, array->get_native_element(0, leaf, leaf_type));
+    ASSERT_TRUE(leaf.is_inline_extended()); EXPECT_EQ(retained.type_, leaf_type);
+    EXPECT_EQ(65536, leaf.get_ext()); EXPECT_EQ(-73, leaf.get_extend_size());
+    EXPECT_EQ(0xa7, leaf.get_extend_collation_level()); EXPECT_EQ(0xef, leaf.get_extend_collation());
+    EXPECT_EQ(17, array->data_[0].get_raw_text_pos()); EXPECT_EQ(0, target.carrier_calls);
+    // A failed binding must not publish a value or replace the caller's Type.
+    const SqlType *sentinel_type = type;
+    leaf.set_int(99); array->data_[0].get_meta().set_int();
+    EXPECT_EQ(OB_INVALID_ARGUMENT, array->get_native_element(0, leaf, sentinel_type));
+    EXPECT_EQ(99, leaf.get_int()); EXPECT_EQ(type, sentinel_type);
+  }
 }
 
 int main(int argc, char **argv)

@@ -98,6 +98,11 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
     ObDatum result_view;
     OZ(res_var.export_legacy(result_view, result_scratch, sizeof(result_scratch)));
     OZ(expr.get_datum_copy_plan().import_legacy(result_view, expr_datum));
+    if (OB_SUCC(ret) && expr_datum.is_present() && res_var.datum_.is_inline_extended()) {
+      // The resource is still borrowed until deep_copy_datum below, but its
+      // carrier must not borrow result_scratch after this block ends.
+      expr_datum = res_var.datum_;
+    }
     if (is_lob_storage(res_var.get_type())) {
       OZ (ob_adjust_lob_datum(ctx.exec_ctx_, expr_datum, res_var.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), expr_datum));

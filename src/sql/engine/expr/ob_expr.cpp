@@ -494,7 +494,12 @@ int clone_legacy_resource(const common::SqlType &type, const common::Datum &sour
     if (OB_FAIL(input.assign_legacy_borrowed(legacy, type.legacy_meta()))) {
     } else if (OB_FAIL(common::clone_typed_value(input, owned, owner))) {
     } else if (OB_FAIL(owned.export_legacy(legacy, scratch, sizeof(scratch)))) {
-    } else { ret = plan.import_legacy(legacy, destination); }
+    } else {
+      ret = plan.import_legacy(legacy, destination);
+      if (OB_SUCC(ret) && destination.is_present() && owned.datum_.is_inline_extended()) {
+        destination = owned.datum_; // Never return a Reference to local scratch.
+      }
+    }
   }
   return ret;
 }

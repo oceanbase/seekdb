@@ -123,7 +123,13 @@ struct Frame {
     }
     alignas(8) char scratch[64]; ObDatum legacy;
     EXPECT_EQ(OB_SUCCESS, input.export_legacy(legacy, scratch, sizeof(scratch)));
-    EXPECT_EQ(OB_SUCCESS, DatumCopyPlan(*result.type_).import_legacy(legacy, result.datum_));
+    const int imported = DatumCopyPlan(*result.type_).import_legacy(legacy, result.datum_);
+    EXPECT_EQ(OB_SUCCESS, imported);
+    if (imported == OB_SUCCESS && result.datum_.is_present() && input.datum_.is_inline_extended()) {
+      // Validation is unchanged; this native fixture result cannot borrow its
+      // helper-local legacy export scratch after typed() returns.
+      result.datum_ = input.datum_;
+    }
     return result;
   }
   int bind_status(int64_t index, const DatumParameter &value) {
@@ -721,15 +727,25 @@ TEST(DynamicParamCapture, package_cursor_adoption_owns_descriptor_and_preserves_
   DatumParameter empty, cursor;
   ASSERT_EQ(OB_SUCCESS, state.add_package_var_val(empty, PL_CURSOR_TYPE));
   ASSERT_EQ(OB_SUCCESS, ObSPIService::spi_cursor_alloc(state.get_pkg_cursor_allocator(), cursor));
-  const int64_t handle = cursor.get_ext(); const void *temporary = cursor.datum_.get_reference();
+  const int64_t handle = cursor.get_ext();
+  ASSERT_TRUE(cursor.datum_.is_inline_extended());
+  const SqlTypeMeta cursor_meta = cursor.get_type_meta();
   ASSERT_EQ(OB_SUCCESS, state.set_package_var_val(0, cursor, false));
-  EXPECT_NE(temporary, state.get_vars().at(0).datum_.get_reference());
-  state.get_pkg_cursor_allocator().free(const_cast<void *>(temporary));
+  ASSERT_TRUE(state.get_vars().at(0).datum_.is_inline_extended());
+  EXPECT_EQ(handle, state.get_vars().at(0).get_ext());
+  // There is no allocated wrapper to free. get_reference() would expose the
+  // actual cursor handle here; its pointee remains owned by package reset().
   cursor.set_null();
   DatumParameter observed; ASSERT_EQ(OB_SUCCESS, state.get_package_var_val(0, observed));
+  ASSERT_TRUE(observed.datum_.is_inline_extended());
   EXPECT_EQ(handle, observed.get_ext());
+  EXPECT_EQ(cursor_meta, observed.get_type_meta());
+  EXPECT_EQ(PL_CURSOR_TYPE, observed.get_extend_type());
   ASSERT_EQ(OB_SUCCESS, state.set_package_var_val(0, observed));
-  ASSERT_EQ(OB_SUCCESS, state.get_package_var_val(0, observed)); EXPECT_EQ(handle, observed.get_ext());
+  ASSERT_EQ(OB_SUCCESS, state.get_package_var_val(0, observed));
+  EXPECT_TRUE(observed.datum_.is_inline_extended());
+  EXPECT_EQ(handle, observed.get_ext());
+  EXPECT_EQ(cursor_meta, observed.get_type_meta());
   state.reset(nullptr);
 }
 
@@ -865,7 +881,7 @@ TEST(DynamicParamCapture, native_out_parameter_scalar_snapshot_keeps_caller_decl
 
 TEST(DynamicParamCapture, native_out_parameter_shared_composite_copies_descriptor_only) {
   using namespace oceanbase::pl;
-  ObArenaAllocator caller;
+  RejectParameterGrowth caller;
   DatumParameter output;
   const int64_t handle = 0x1234; // opaque identity; this path must not dereference it
   ASSERT_EQ(OB_SUCCESS, output.set_extend(handle, PL_RECORD_TYPE, caller, 64));
@@ -873,11 +889,23 @@ TEST(DynamicParamCapture, native_out_parameter_shared_composite_copies_descripto
     ObArenaAllocator callee;
     DatumParameter source;
     ASSERT_EQ(OB_SUCCESS, source.set_extend(handle, PL_RECORD_TYPE, callee, 64));
-    source.set_udt_id(456);
+    source.set_udt_id(456); source.set_param_meta();
+    source.set_result_flags(0x72); source.set_raw_text_info(2, 9);
+    source.set_need_to_check_type(true);
+    ASSERT_TRUE(source.datum_.is_inline_extended());
+    caller.reject_ = true; // A by-value carrier copy needs no wrapper allocation.
     ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(caller, source, output));
-    EXPECT_NE(source.datum_.get_reference(), output.datum_.get_reference());
+    ASSERT_TRUE(output.datum_.is_inline_extended());
+    EXPECT_EQ(source.get_type_meta(), output.get_type_meta());
+    EXPECT_EQ(source.get_param_meta(), output.get_param_meta());
+    EXPECT_EQ(source.get_accuracy(), output.get_accuracy());
+    EXPECT_EQ(0x72, output.get_result_flag());
+    EXPECT_EQ(2, output.get_raw_text_pos()); EXPECT_EQ(9, output.get_raw_text_len());
+    EXPECT_TRUE(output.need_to_check_type());
+    source.set_null(); // Retiring the callee's carrier must not alter the output.
   }
   EXPECT_EQ(handle, output.get_ext()); EXPECT_EQ(64, output.get_val_len());
+  EXPECT_EQ(PL_RECORD_TYPE, output.get_extend_type());
   EXPECT_EQ(456, output.get_udt_id());
 }
 
@@ -1017,19 +1045,45 @@ TEST(DynamicParamCapture, udf_write_marker_restoration_owns_descriptor_and_prese
   write.allocator_ = reinterpret_cast<int64_t>(&field_owner);
   write.value_addr_ = reinterpret_cast<int64_t>(&field);
   DatumParameter input;
-  ASSERT_EQ(OB_SUCCESS, input.set_extend(reinterpret_cast<int64_t>(&write), PL_RECORD_TYPE, owner));
+  ASSERT_EQ(OB_SUCCESS, input.set_extend(reinterpret_cast<int64_t>(&write), PL_RECORD_TYPE, owner, 64));
+  const Datum original = input.datum_;
   ObIAllocator *actual_owner = nullptr;
   DatumParameter restored;
   ASSERT_EQ(OB_SUCCESS, ObExprUDF::extract_allocator_and_restore_obj(input, restored, actual_owner, owner));
   EXPECT_EQ(&field_owner, actual_owner);
+  ASSERT_TRUE(restored.datum_.is_inline_extended());
   EXPECT_EQ(reinterpret_cast<int64_t>(&field), restored.get_ext());
-  EXPECT_NE(input.datum_.get_reference(), restored.datum_.get_reference());
+  EXPECT_EQ(PL_RECORD_TYPE, restored.get_extend_type()); EXPECT_EQ(64, restored.get_val_len());
+  EXPECT_EQ(0, MEMCMP(&original, &input.datum_, sizeof(Datum)));
   RejectParameterGrowth reject; reject.reject_ = true;
   DatumParameter previous; ASSERT_EQ(OB_SUCCESS, previous.set_int(123, owner));
   actual_owner = nullptr;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
+  ASSERT_EQ(OB_SUCCESS,
       ObExprUDF::extract_allocator_and_restore_obj(input, previous, actual_owner, reject));
-  EXPECT_EQ(123, previous.get_int()); EXPECT_EQ(nullptr, actual_owner);
+  EXPECT_TRUE(previous.datum_.is_inline_extended());
+  EXPECT_EQ(reinterpret_cast<int64_t>(&field), previous.get_ext());
+  EXPECT_EQ(&field_owner, actual_owner); EXPECT_EQ(64, previous.get_val_len());
+  // Removed wrapper OOM is a zero-allocation positive control. Invalid marker
+  // inputs still fail before publishing either the output or its owner.
+  for (bool null_input : {false, true}) {
+    SCOPED_TRACE(null_input);
+    DatumParameter invalid;
+    if (!null_input) { ASSERT_EQ(OB_SUCCESS, invalid.set_extend(0, PL_RECORD_TYPE, owner)); }
+    ASSERT_EQ(OB_SUCCESS, previous.set_int(123, owner));
+    previous.set_precision(19); previous.set_result_flags(0x88); previous.set_param_meta();
+    const Datum old_value = previous.datum_;
+    const SqlTypeMeta old_meta = previous.get_type_meta();
+    const SqlTypeMeta old_param_meta = previous.get_param_meta();
+    actual_owner = nullptr;
+    EXPECT_EQ(OB_ERR_UNEXPECTED,
+        ObExprUDF::extract_allocator_and_restore_obj(invalid, previous, actual_owner, reject));
+    EXPECT_EQ(0, MEMCMP(&old_value, &previous.datum_, sizeof(Datum)));
+    EXPECT_EQ(old_meta, previous.get_type_meta()); EXPECT_EQ(old_param_meta, previous.get_param_meta());
+    EXPECT_EQ(19, previous.get_precision()); EXPECT_EQ(0x88, previous.get_result_flag());
+    EXPECT_EQ(nullptr, actual_owner);
+  }
+  EXPECT_EQ(9, field.get_int());
+  EXPECT_EQ(0, MEMCMP(&original, &input.datum_, sizeof(Datum)));
 }
 
 TEST(DynamicParamCapture, native_expression_capture_keeps_accuracy_scale_and_lob_metadata_separate) {
@@ -1137,6 +1191,12 @@ TEST(DynamicParamCapture, pl_frame_capture_preserves_complete_declaration_id_for
         EXPECT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(owner_, value_));
       }
     } cleanup{f.arena, source};
+    const NativeTypedDatum typed_fixture = f.typed(source);
+    ASSERT_TRUE(typed_fixture.datum_.is_inline_extended()); // typed() scratch has retired.
+    EXPECT_EQ(&f.expr.get_sql_type(), typed_fixture.type_);
+    EXPECT_EQ(declaration_id, typed_fixture.type_->pl_declaration().declaration_id);
+    EXPECT_EQ(source.get_ext(), typed_fixture.datum_.get_ext());
+    EXPECT_EQ(source.get_val_len(), typed_fixture.datum_.get_extend_size());
     alignas(8) char source_scratch[64];
     ObDatum legacy_source;
     ASSERT_EQ(OB_SUCCESS, source.export_legacy(legacy_source, source_scratch, sizeof(source_scratch)));
@@ -1148,7 +1208,10 @@ TEST(DynamicParamCapture, pl_frame_capture_preserves_complete_declaration_id_for
     EXPECT_EQ(declaration_id, captured.get_udt_id());
     EXPECT_EQ(declaration_id, static_cast<uint64_t>(captured.get_accuracy().get_accuracy()));
     EXPECT_EQ(meta, captured.get_type_meta()); EXPECT_EQ(meta, captured.get_param_meta());
-    EXPECT_EQ(source.datum_.get_reference(), captured.datum_.get_reference());
+    // This frame deliberately imports a borrowed old-ABI view. Its outer
+    // source_scratch is still live; capture may keep exactly that borrowed span.
+    EXPECT_FALSE(captured.datum_.is_inline_extended());
+    EXPECT_EQ(legacy_source.ptr_, captured.datum_.get_reference());
     EXPECT_EQ(reinterpret_cast<int64_t>(record), captured.get_ext());
     EXPECT_EQ(57, record->get_element()[0].get_int());
 
@@ -1175,12 +1238,19 @@ TEST(DynamicParamCapture, pl_frame_capture_preserves_complete_declaration_id_for
     ASSERT_EQ(OB_SUCCESS, f.expr.get_datum_copy_plan().import_legacy(
         legacy_source, f.expr.locate_expr_datum(ctx)));
     ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, f.expr.locate_expr_datum(ctx)));
+    const Datum retained = read_parameter_value(plan, 0);
+    EXPECT_EQ(reinterpret_cast<int64_t>(record), retained.get_ext());
+    if (!retained.is_inline_extended()) {
+      EXPECT_NE(legacy_source.ptr_, retained.get_reference()); // Actual owned carrier bytes.
+    }
+    MEMSET(source_scratch, 0xa5, sizeof(source_scratch));
+    f.expr.locate_expr_datum(ctx).set_null(); // Retire the original frame view too.
     EXPECT_EQ(reinterpret_cast<int64_t>(record), read_parameter_value(plan, 0).get_ext());
-    EXPECT_NE(source.datum_.get_reference(), read_parameter_value(plan, 0).get_reference());
     EXPECT_EQ(declaration_id, f.parameters().get_udt_id());
     EXPECT_EQ(57, record->get_element()[0].get_int());
     record->get_element()[0].datum_.set_int(58);
-    EXPECT_EQ(58, record->get_element()[0].get_int()); // Pointee/lvalue identity is deliberately borrowed.
+    EXPECT_EQ(58, reinterpret_cast<ObPLRecord *>(read_parameter_value(plan, 0).get_ext())
+        ->get_element()[0].get_int()); // Pointee/lvalue identity remains deliberately borrowed.
   }
 }
 

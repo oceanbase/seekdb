@@ -414,10 +414,11 @@ TEST(NativeRowStores, compact_extended_action_markers_survive_end_flag_and_sourc
       ASSERT_EQ(OB_SUCCESS, cells[1].set_int(733, source_owner));
       ObNewRow row(cells, 2);
       ASSERT_EQ(OB_SUCCESS, source.add_row(row));
-      // The compact stream already owns these source fields. Later parsing
-      // must retain its separate reader-owned extended descriptor across END.
+      // The compact stream already owns these source fields. Overwrite the
+      // actual inline source bits before serializing the retained row.
       ASSERT_TRUE(cells[0].datum_.has_ext_value());
-      MEMSET(const_cast<void *>(cells[0].datum_.get_reference()), 0xa7, cells[0].datum_.length());
+      ASSERT_TRUE(cells[0].datum_.is_inline_extended());
+      cells[0].datum_.set_null();
       cells[1].datum_.set_int(999);
       wire = current_row_wire(source);
     }

@@ -84,6 +84,14 @@ private:
     using namespace common;
     if (depth > 64) { return OB_SIZE_OVERFLOW; }
     if (!valid_version(wire_version)) { return OB_NOT_SUPPORTED; }
+    if (value.is_inline_extended()) {
+      char scratch[16]; Datum wire;
+      int ret = value.write_inline_extended_payload(scratch, sizeof(scratch));
+      if (ret == OB_SUCCESS) {
+        ret = wire.set_reference(scratch, value.inline_extended_payload_size(), Datum::LegacyExtended);
+      }
+      return ret == OB_SUCCESS ? size_impl(type, wire, output, wire_version, depth) : ret;
+    }
     int64_t span = 0;
     int ret = DatumCopyPlan(type).carrier_span_size(value, span);
     int64_t bytes = type.get_serialize_size();
@@ -109,6 +117,14 @@ private:
                     char *buf, int64_t length, int64_t &pos, int64_t wire_version, int depth)
   {
     using namespace common;
+    if (value.is_inline_extended()) {
+      char scratch[16]; Datum wire;
+      int ret = value.write_inline_extended_payload(scratch, sizeof(scratch));
+      if (ret == OB_SUCCESS) {
+        ret = wire.set_reference(scratch, value.inline_extended_payload_size(), Datum::LegacyExtended);
+      }
+      return ret == OB_SUCCESS ? encode_impl(type, wire, buf, length, pos, wire_version, depth) : ret;
+    }
     int64_t bytes = 0;
     int ret = size_impl(type, value, bytes, wire_version, depth);
     if (ret != OB_SUCCESS) { return ret; }

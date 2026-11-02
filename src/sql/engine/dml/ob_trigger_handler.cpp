@@ -464,7 +464,8 @@ int TriggerHandle::stabilize_trigger_params(
       // is_pl_extend() itself reads the Extend payload. Check descriptor
       // shape and non-null pointers before invoking payload-reading helpers.
       // Both owners still live here: DML for initial, TriggerExec for OUT.
-      if (!saved.datum_.has_ext_value() || saved.datum_.length() < DATUM_EXTEND_PAYLOAD_SIZE
+      if (!saved.datum_.has_ext_value()
+          || (!saved.datum_.is_inline_extended() && saved.datum_.length() < DATUM_EXTEND_PAYLOAD_SIZE)
           || !published.datum_.has_ext_value()
           || saved.get_extend_type() != pl::PL_RECORD_TYPE
           || published.get_extend_type() != pl::PL_RECORD_TYPE
@@ -485,9 +486,14 @@ int TriggerHandle::stabilize_trigger_params(
         const uint8_t subtype = published.datum_.get_extend_type();
         const uint8_t collation_level = published.datum_.get_extend_collation_level();
         const uint8_t collation = published.datum_.get_extend_collation();
-        copy_ret = published.datum_.set_extend(reinterpret_cast<int64_t>(original),
-            subtype, size, const_cast<void *>(saved.get_datum().get_reference()),
-            saved.get_datum().length(), collation_level, collation);
+        if (saved.datum_.is_inline_extended()) {
+          published.datum_.set_inline_extended(reinterpret_cast<int64_t>(original),
+              subtype, size, collation_level, collation);
+        } else {
+          copy_ret = published.datum_.set_extend(reinterpret_cast<int64_t>(original),
+              subtype, size, const_cast<void *>(saved.get_datum().get_reference()),
+              saved.get_datum().length(), collation_level, collation);
+        }
       }
       if (copy_ret == OB_SUCCESS) {
         params.at(i) = published;
@@ -678,6 +684,8 @@ int TriggerHandle::check_and_update_new_row(
           } else if (OB_FAIL(current_cell.export_legacy(current_view, current_scratch, sizeof(current_scratch)))) {
           } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(
                          current_view, write_datum))) {
+          } else if (write_datum.is_present() && current_cell.datum_.is_inline_extended()) {
+            write_datum = current_cell.datum_; // current_scratch ends before later column consumers.
           }
           if (OB_SUCC(ret) && current_cell.is_lob_storage()
               && OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_, write_datum,

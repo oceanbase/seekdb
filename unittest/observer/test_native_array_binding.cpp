@@ -460,17 +460,45 @@ public:
   BudgetOwner() : budget(0), reject_size(-1) {}
   void *alloc(const int64_t size) override
   {
+    requests.push_back(size);
     void *pointer = size != reject_size && budget-- > 0 ? arena.alloc(size) : nullptr;
-    if (pointer != nullptr) { live.insert(pointer); }
+    if (pointer != nullptr) { live.insert(pointer); allocated.push_back(pointer); }
     return pointer;
   }
   void *alloc(const int64_t size, const ObMemAttr &) override { return alloc(size); }
-  void free(void *pointer) override { live.erase(pointer); arena.free(pointer); }
+  void free(void *pointer) override
+  {
+    if (pointer != nullptr) {
+      if (live.erase(pointer) != 1) { ++foreign_or_duplicate_frees; }
+      freed.push_back(pointer);
+    }
+    arena.free(pointer);
+  }
+  int64_t calls_for(int64_t size) const
+  {
+    int64_t count = 0;
+    for (int64_t request : requests) { count += request == size; }
+    return count;
+  }
+  std::vector<int64_t> requests;
+  std::vector<void *> allocated;
+  std::vector<void *> freed;
+  int64_t foreign_or_duplicate_frees = 0;
   int budget;
   int64_t reject_size;
   std::set<void *> live;
   ObArenaAllocator arena;
 };
+void expect_parameter_metadata(const DatumParameter &expected, const DatumParameter &actual)
+{
+  EXPECT_EQ(expected.get_type_meta(), actual.get_type_meta());
+  EXPECT_EQ(expected.get_accuracy(), actual.get_accuracy());
+  EXPECT_EQ(expected.get_param_meta(), actual.get_param_meta());
+  EXPECT_EQ(flag_wire(expected.get_param_flag()), flag_wire(actual.get_param_flag()));
+  EXPECT_EQ(expected.get_result_flag(), actual.get_result_flag());
+  EXPECT_EQ(expected.get_raw_text_pos(), actual.get_raw_text_pos());
+  EXPECT_EQ(expected.get_raw_text_len(), actual.get_raw_text_len());
+}
 }
 
 TEST(NativeArrayBinding, actual_old_234_results_keep_every_metadata_flag_and_wire_field)
@@ -648,18 +676,45 @@ TEST(NativeArrayBinding, closed_cursor_is_independently_owned_and_live_destinati
   char text[] = "a retained SQL string on a closed cursor";
   closed->get_sql_text() = ObString::make_string(text);
   std::strcpy(closed->get_sql_id(), "0123456789abcdef0123456789abcdef");
-  for (int allowance : {0, 1, 2}) {
+  // Inline carrier preparation cannot fail an allocation. Inject at each
+  // actual resource allocation: cursor body, then its independently owned SQL.
+  for (int allowance : {0, 1}) {
+    SCOPED_TRACE(allowance);
     BudgetOwner failing; failing.budget = allowance;
     DatumParameter previous; ASSERT_EQ(OB_SUCCESS, previous.set_int(55, output_owner));
-    const Datum original = previous.datum_;
+    previous.set_accuracy(ObAccuracy(19, 0)); previous.set_param_meta();
+    previous.set_result_flags(0x1234); previous.set_raw_text_info(17, 9);
+    previous.set_need_to_check_type(false); previous.set_ignore_scale_check(true);
+    const DatumParameter original = previous;
     EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObUserDefinedType::clone_parameter(failing, source, previous));
-    EXPECT_EQ(0, std::memcmp(&original, &previous.datum_, sizeof(original))); EXPECT_EQ(55, previous.get_int());
-    EXPECT_TRUE(failing.live.empty());
+    EXPECT_EQ(0, std::memcmp(&original.datum_, &previous.datum_, sizeof(Datum)));
+    EXPECT_EQ(55, previous.get_int());
+    ASSERT_NO_FATAL_FAILURE(expect_parameter_metadata(original, previous));
+    ASSERT_EQ(static_cast<size_t>(allowance + 1), failing.requests.size());
+    EXPECT_EQ(static_cast<int64_t>(sizeof(ObPLCursorInfo)), failing.requests.at(0));
+    if (allowance == 1) { EXPECT_EQ(closed->get_sql_text().length(), failing.requests.at(1)); }
+    EXPECT_EQ(0, failing.calls_for(DATUM_EXTEND_PAYLOAD_SIZE));
+    EXPECT_EQ(static_cast<size_t>(allowance), failing.allocated.size());
+    // In particular, a failed SQL allocation must free the cursor just made;
+    // neither failure may free a caller/foreign pointer or publish a value.
+    EXPECT_EQ(failing.allocated, failing.freed);
+    EXPECT_TRUE(failing.live.empty()); EXPECT_EQ(0, failing.foreign_or_duplicate_frees);
     EXPECT_FALSE(closed->isopen()); EXPECT_EQ(nullptr, closed->get_spi_cursor());
+    EXPECT_EQ(ObString::make_string(text), closed->get_sql_text());
   }
+  BudgetOwner snapshot_owner; snapshot_owner.budget = 2;
+  snapshot_owner.reject_size = DATUM_EXTEND_PAYLOAD_SIZE;
   DatumParameter snapshot;
-  ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::clone_parameter(output_owner, source, snapshot));
-  ASSERT_NE(source.get_ext(), snapshot.get_ext()); ASSERT_NE(source.datum_.get_string().ptr(), snapshot.datum_.get_string().ptr());
+  // The former third, wrapper-only failure is now the positive zero-wrapper
+  // contract: exactly two real resource allocations must suffice.
+  ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::clone_parameter(snapshot_owner, source, snapshot));
+  ASSERT_TRUE(source.datum_.is_inline_extended()); ASSERT_TRUE(snapshot.datum_.is_inline_extended());
+  ASSERT_EQ(2U, snapshot_owner.requests.size());
+  EXPECT_EQ(static_cast<int64_t>(sizeof(ObPLCursorInfo)), snapshot_owner.requests.at(0));
+  EXPECT_EQ(closed->get_sql_text().length(), snapshot_owner.requests.at(1));
+  EXPECT_EQ(0, snapshot_owner.calls_for(DATUM_EXTEND_PAYLOAD_SIZE));
+  ASSERT_NE(source.get_ext(), snapshot.get_ext());
+  ASSERT_NO_FATAL_FAILURE(expect_parameter_metadata(source, snapshot));
   auto *copy = reinterpret_cast<ObPLCursorInfo *>(snapshot.get_ext());
   EXPECT_FALSE(copy->isopen()); EXPECT_EQ(nullptr, copy->get_spi_cursor());
   EXPECT_TRUE(copy->is_scrollable()); EXPECT_TRUE(copy->is_for_update()); EXPECT_TRUE(copy->has_hidden_rowid());
@@ -705,7 +760,10 @@ TEST(NativeArrayBinding, closed_cursor_is_independently_owned_and_live_destinati
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(source_owner, source, &session));
   std::memset(text, '~', sizeof(text) - 1);
   EXPECT_EQ(ObString::make_string("a retained SQL string on a closed cursor"), copy->get_sql_text());
-  EXPECT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(output_owner, snapshot, &session));
+  EXPECT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(snapshot_owner, snapshot, &session));
+  EXPECT_EQ(0, snapshot_owner.foreign_or_duplicate_frees);
+  // Cursor/SQL backing stays with its arena until owner destruction; only
+  // rollback above claims per-allocation release, never a new reset contract.
 }
 
 TEST(NativeArrayBinding, actual_old_closed_and_open_array_metadata_matches_with_independent_pointees)
@@ -770,7 +828,8 @@ TEST(NativeArrayBinding, actual_old_closed_and_open_array_metadata_matches_with_
 
 TEST(NativeArrayBinding, local_copyout_descriptor_retires_before_request_owned_snapshot)
 {
-  ObArenaAllocator source_owner, request_owner, sql_owner; ObSQLSessionInfo session;
+  ObArenaAllocator source_owner, request_owner; ObSQLSessionInfo session;
+  BudgetOwner sql_owner; sql_owner.budget = 0; // No carrier heap is allowed.
   auto *original = record(source_owner, 77); ASSERT_NE(nullptr, original);
   DatumValue source;
   ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(original), PL_RECORD_TYPE,
@@ -783,16 +842,45 @@ TEST(NativeArrayBinding, local_copyout_descriptor_retires_before_request_owned_s
   ObMPStmtExecute handler(oceanbase::share::ObGlobalContext::get_instance());
   NativeArrayBindingTestAccess::configure(handler, arrays, row, stmt::T_ANONYMOUS_BLOCK);
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::row(handler, 0, request_owner));
-  const char *request_descriptor = row.at(0).datum_.get_string().ptr();
+  ASSERT_TRUE(row.at(0).datum_.is_inline_extended());
+  const Datum request_carrier = row.at(0).datum_;
   const int64_t snapshot_address = row.at(0).get_ext();
+  auto *snapshot = reinterpret_cast<ObPLRecord *>(snapshot_address);
+  ASSERT_NE(original, snapshot); // Request snapshot owns a distinct resource.
   DatumParameter local = row.at(0), callee = local;
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(sql_owner, callee, local));
-  EXPECT_NE(request_descriptor, local.datum_.get_string().ptr()); EXPECT_EQ(snapshot_address, local.get_ext());
-  auto *snapshot = reinterpret_cast<ObPLRecord *>(snapshot_address);
+  ASSERT_TRUE(local.datum_.is_inline_extended());
+  EXPECT_EQ(snapshot_address, local.get_ext());
+  ASSERT_NO_FATAL_FAILURE(expect_parameter_metadata(callee, local));
+  EXPECT_TRUE(sql_owner.requests.empty());
   EXPECT_EQ(77, snapshot->get_element()[0].get_int());
-  DatumParameterArray::release_owned(local, sql_owner); // Descriptor only; shared execution pointee stays alive.
-  sql_owner.reset();
-  EXPECT_EQ(request_descriptor, row.at(0).datum_.get_string().ptr());
+  ASSERT_EQ(OB_SUCCESS, original->get_element()[0].set_int(98, *original->get_allocator()));
+  EXPECT_EQ(77, snapshot->get_element()[0].get_int());
+  ASSERT_EQ(OB_SUCCESS, original->get_element()[0].set_int(77, *original->get_allocator()));
+  DatumParameterArray::release_owned(local, sql_owner); // Only the inline carrier resets.
+  EXPECT_TRUE(local.is_null()); EXPECT_TRUE(sql_owner.freed.empty());
+  EXPECT_TRUE(sql_owner.live.empty()); EXPECT_EQ(0, sql_owner.foreign_or_duplicate_frees);
+
+  // Explicit legacy input still borrows this caller-owned15B envelope. A
+  // copyout may normalize its own carrier, but may not free/rewrite the input.
+  alignas(8) char borrowed_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  DatumParameter borrowed = row.at(0), borrowed_local = row.at(0);
+  ASSERT_EQ(OB_SUCCESS, borrowed.datum_.set_extend(snapshot_address, PL_RECORD_TYPE,
+      snapshot->get_init_size(), borrowed_payload, sizeof(borrowed_payload)));
+  char before_payload[sizeof(borrowed_payload)];
+  std::memcpy(before_payload, borrowed_payload, sizeof(before_payload));
+  ASSERT_FALSE(borrowed.datum_.is_inline_extended());
+  ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(sql_owner, borrowed, borrowed_local));
+  ASSERT_TRUE(borrowed_local.datum_.is_inline_extended());
+  EXPECT_EQ(snapshot_address, borrowed_local.get_ext());
+  ASSERT_NO_FATAL_FAILURE(expect_parameter_metadata(borrowed, borrowed_local));
+  DatumParameterArray::release_owned(borrowed_local, sql_owner);
+  EXPECT_TRUE(borrowed_local.is_null()); EXPECT_TRUE(sql_owner.requests.empty());
+  EXPECT_TRUE(sql_owner.freed.empty()); EXPECT_EQ(0, sql_owner.foreign_or_duplicate_frees);
+  EXPECT_EQ(0, std::memcmp(before_payload, borrowed_payload, sizeof(borrowed_payload)));
+  EXPECT_EQ(borrowed_payload, borrowed.datum_.get_reference());
+  sql_owner.arena.reset();
+  EXPECT_EQ(0, std::memcmp(&request_carrier, &row.at(0).datum_, sizeof(Datum)));
   EXPECT_EQ(77, snapshot->get_element()[0].get_int());
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::release(handler, request_owner, session));
   EXPECT_EQ(77, original->get_element()[0].get_int());

@@ -88,7 +88,7 @@ DatumParameter package_value_view(const DatumValue &value)
 // references; never inspect an inline integer's inactive reference union.
 bool package_has_reference(const DatumParameter &value)
 {
-  if (!value.get_datum().is_present()) { return false; }
+  if (!value.get_datum().is_present() || value.get_datum().is_inline_extended()) { return false; }
   switch (value.get_type()) {
     case ObTinyIntType: case ObSmallIntType: case ObMediumIntType:
     case ObInt32Type: case ObIntType: case ObDateTimeType: case ObTimestampType:
@@ -137,7 +137,9 @@ void ObPLPackageState::reset(ObSQLSessionInfo *session_info)
         if (session_info != nullptr) { cursor->close(*session_info); }
         cursor->~ObPLCursorInfo();
       }
-      inner_allocator_.free(const_cast<void *>(value.get_datum().get_reference()));
+      if (!value.get_datum().is_inline_extended()) {
+        inner_allocator_.free(const_cast<void *>(value.get_datum().get_reference()));
+      }
     } else {
       int ret = ObUserDefinedType::destruct_objparam(inner_allocator_, value, session_info);
       if (OB_SUCCESS != ret) { LOG_WARN("release native package value failed", K(ret), K(i)); }
@@ -200,7 +202,9 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
             && old.get_ext() == replacement.get_ext();
         if (same_handle) {
           // Replacing a descriptor must not destroy the live aliased pointee.
-          inner_allocator_.free(const_cast<void *>(old.get_datum().get_reference()));
+          if (!old.get_datum().is_inline_extended()) {
+            inner_allocator_.free(const_cast<void *>(old.get_datum().get_reference()));
+          }
         } else {
           const int cleanup_ret = ObUserDefinedType::destruct_objparam(inner_allocator_, old, session);
           if (OB_SUCCESS != cleanup_ret) { LOG_WARN("release replaced package value failed", K(cleanup_ret), K(var_idx)); }
