@@ -3629,3 +3629,217 @@ TEST_F(PLInitialDescriptors, null_and_out_construction_release_replaced_placehol
   }
 }
 } // namespace
+
+namespace
+{
+struct PLSetVarSqlProxyGuard
+{
+  explicit PLSetVarSqlProxyGuard(ObMySQLProxy &proxy) : saved_(GCTX.sql_proxy_)
+  { GCTX.sql_proxy_ = &proxy; }
+  ~PLSetVarSqlProxyGuard() { GCTX.sql_proxy_ = saved_; }
+  ObMySQLProxy *saved_;
+};
+
+std::vector<size_t> pl_descriptor_indexes_since(const PLDescriptorAllocator &allocator, size_t begin)
+{
+  std::vector<size_t> indexes;
+  for (size_t i = begin; i < allocator.allocations_.size(); ++i) {
+    if (allocator.allocations_[i].bytes_ == DATUM_EXTEND_PAYLOAD_SIZE) { indexes.push_back(i); }
+  }
+  return indexes;
+}
+
+TEST_F(PLInitialDescriptors, set_var_null_reclaims_only_its_intermediate_descriptors)
+{
+  PLSetVarSqlProxyGuard proxy_guard(sql_proxy_);
+  ASSERT_EQ(&sql_proxy_, exec_.get_sql_proxy());
+  ASSERT_NO_FATAL_FAILURE(declare_records(1));
+  ASSERT_NO_FATAL_FAILURE(install_record_type());
+  inputs_.at(0).set_null();
+  PLDescriptorAllocator callee;
+  DatumParameter result; int status = OB_SUCCESS;
+  oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
+  oceanbase::pl::ObPLContext pl_context;
+  ASSERT_EQ(OB_SUCCESS, pl_context.get_exec_stack().push_back(&state));
+  PLQuestionMarkBindingGuard binding(exec_, session_, state, pl_context);
+  ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, false));
+  ASSERT_TRUE(state.need_free_arg(0));
+  ASSERT_EQ(1, callee.live_descriptors());
+  auto &slot = state.get_params().at(0);
+  slot.set_raw_text_info(31, 47); slot.set_result_flags(0x527);
+  slot.set_need_to_check_type(true); slot.set_need_to_check_extend_type(true);
+  slot.set_ignore_scale_check(true);
+  const DatumParameterMetadata metadata = slot.get_metadata();
+  const int32_t value_length = slot.get_val_len();
+  DatumParameter null_value;
+  const DatumParameterMetadata null_metadata = null_value.get_metadata();
+  for (int64_t round = 0; round < 2; ++round) {
+    SCOPED_TRACE(round);
+    auto *old_record = reinterpret_cast<oceanbase::pl::ObPLRecord *>(slot.get_ext());
+    ASSERT_NE(nullptr, old_record); ASSERT_NE(nullptr, old_record->get_allocator());
+    ASSERT_EQ(OB_SUCCESS, old_record->get_element()[0].set_int(900 + round, *old_record->get_allocator()));
+    const size_t begin = callee.allocations_.size();
+    const int64_t calls = callee.descriptor_calls_, frees = callee.descriptor_frees_;
+    ASSERT_EQ(OB_SUCCESS, state.set_var(0, null_value));
+    const auto created = pl_descriptor_indexes_since(callee, begin);
+    ASSERT_EQ(2U, created.size()); // This invocation's empty B, then constructor C.
+    EXPECT_FALSE(callee.allocations_[created[0]].live_);
+    EXPECT_EQ(48, callee.allocations_[created[0]].slice_bytes_);
+    EXPECT_TRUE(callee.allocations_[created[1]].live_);
+    EXPECT_EQ(callee.allocations_[created[1]].pointer_, slot.get_datum().get_reference());
+    EXPECT_EQ(calls + 2, callee.descriptor_calls_);
+    EXPECT_EQ(frees + 2, callee.descriptor_frees_); // Old wrapper and B only.
+    EXPECT_EQ(1, callee.live_descriptors());
+    EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, slot.get_metadata()));
+    EXPECT_EQ(value_length, slot.get_val_len());
+    auto *record = reinterpret_cast<oceanbase::pl::ObPLRecord *>(slot.get_ext());
+    ASSERT_NE(nullptr, record); ASSERT_EQ(1, record->get_count());
+    EXPECT_TRUE(record->get_element()[0].is_null());
+    EXPECT_TRUE(null_value.is_null());
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(null_metadata, null_value.get_metadata()));
+  }
+  EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
+  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
+  EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+  EXPECT_TRUE(inputs_.at(0).is_null());
+}
+
+TEST_F(PLInitialDescriptors, set_var_null_allocation_failures_preserve_original_publication_and_cleanup)
+{
+  PLSetVarSqlProxyGuard proxy_guard(sql_proxy_);
+  ASSERT_EQ(&sql_proxy_, exec_.get_sql_proxy());
+  enum Fault { EMPTY_OOM, CONSTRUCTOR_OOM, EMPTY_THROW, CONSTRUCTOR_THROW };
+  for (Fault fault : {EMPTY_OOM, CONSTRUCTOR_OOM, EMPTY_THROW, CONSTRUCTOR_THROW}) {
+    SCOPED_TRACE(static_cast<int>(fault));
+    const bool constructor = fault == CONSTRUCTOR_OOM || fault == CONSTRUCTOR_THROW;
+    const bool throwing = fault == EMPTY_THROW || fault == CONSTRUCTOR_THROW;
+    ASSERT_NO_FATAL_FAILURE(declare_records(1));
+    ASSERT_NO_FATAL_FAILURE(install_record_type());
+    inputs_.at(0).set_null();
+    PLDescriptorAllocator callee;
+    DatumParameter result; int status = OB_SUCCESS;
+    oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
+    oceanbase::pl::ObPLContext pl_context;
+    ASSERT_EQ(OB_SUCCESS, pl_context.get_exec_stack().push_back(&state));
+    PLQuestionMarkBindingGuard binding(exec_, session_, state, pl_context);
+    ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, false));
+    ASSERT_TRUE(state.need_free_arg(0));
+    auto &slot = state.get_params().at(0);
+    slot.set_raw_text_info(53, 79); slot.set_result_flags(0x735);
+    slot.set_need_to_check_type(true); slot.set_need_to_check_extend_type(true);
+    slot.set_ignore_scale_check(true);
+    const DatumParameterMetadata metadata = slot.get_metadata();
+    const int32_t value_length = slot.get_val_len();
+    const void *old_descriptor = slot.get_datum().get_reference();
+    const int64_t old_address = slot.get_ext();
+    auto *old_record = reinterpret_cast<oceanbase::pl::ObPLRecord *>(old_address);
+    ASSERT_NE(nullptr, old_record); ASSERT_NE(nullptr, old_record->get_allocator());
+    ASSERT_EQ(OB_SUCCESS, old_record->get_element()[0].set_int(931, *old_record->get_allocator()));
+    const int64_t charge = callee.live_charge_, calls = callee.descriptor_calls_;
+    const size_t begin = callee.allocations_.size();
+    const int64_t rejected = calls + (constructor ? 2 : 1);
+    if (throwing) { callee.throw_descriptor_call_ = rejected; }
+    else { callee.fail_descriptor_call_ = rejected; }
+    DatumParameter null_value;
+    if (throwing) {
+      EXPECT_THROW(state.set_var(0, null_value), PLDescriptorAllocationException);
+    } else {
+      EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, state.set_var(0, null_value));
+    }
+    EXPECT_EQ(rejected, callee.descriptor_calls_);
+    const auto created = pl_descriptor_indexes_since(callee, begin);
+    ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(metadata, slot.get_metadata()));
+    EXPECT_EQ(value_length, slot.get_val_len());
+    EXPECT_TRUE(state.need_free_arg(0));
+    EXPECT_EQ(1, callee.live_descriptors());
+    if (constructor) {
+      ASSERT_EQ(1U, created.size());
+      EXPECT_TRUE(callee.allocations_[created[0]].live_);
+      EXPECT_EQ(callee.allocations_[created[0]].pointer_, slot.get_datum().get_reference());
+      EXPECT_EQ(0, slot.get_ext()); // B was already published; do not clear it on C failure.
+      EXPECT_EQ(48, callee.live_charge_);
+    } else {
+      EXPECT_TRUE(created.empty());
+      EXPECT_EQ(old_descriptor, slot.get_datum().get_reference());
+      EXPECT_EQ(old_address, slot.get_ext());
+      EXPECT_EQ(931, old_record->get_element()[0].get_int());
+      EXPECT_EQ(charge, callee.live_charge_);
+    }
+    EXPECT_TRUE(null_value.is_null());
+    EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+    callee.fail_descriptor_call_ = 0; callee.throw_descriptor_call_ = 0;
+    EXPECT_EQ(OB_SUCCESS, state.final(OB_ALLOCATE_MEMORY_FAILED));
+    EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
+    EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+
+    // Retry with a fresh execution after the existing final() owner retired B.
+    // A later call cannot infer ownership of an arbitrary historical zero slot.
+    oceanbase::pl::ObPLExecState retry(owner_, callee, exec_, package_guard_, *function_, result, status);
+    oceanbase::pl::ObPLContext retry_context;
+    ASSERT_EQ(OB_SUCCESS, retry_context.get_exec_stack().push_back(&retry));
+    PLQuestionMarkBindingGuard retry_binding(exec_, session_, retry, retry_context);
+    ASSERT_EQ(OB_SUCCESS, retry.init_params(&inputs_, false));
+    ASSERT_EQ(OB_SUCCESS, retry.set_var(0, null_value));
+    EXPECT_EQ(1, callee.live_descriptors());
+    EXPECT_EQ(OB_SUCCESS, retry.final(OB_ERR_UNEXPECTED));
+    EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
+    EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+  }
+}
+
+TEST_F(PLInitialDescriptors, set_var_null_never_claims_a_borrowed_zero_descriptor)
+{
+  PLSetVarSqlProxyGuard proxy_guard(sql_proxy_);
+  ASSERT_EQ(&sql_proxy_, exec_.get_sql_proxy());
+  ASSERT_NO_FATAL_FAILURE(declare_records(1));
+  ASSERT_NO_FATAL_FAILURE(install_record_type());
+  ASSERT_EQ(OB_SUCCESS, function_->set_params_info(inputs_, true));
+  ASSERT_FALSE(function_->get_params_info().at(0).flag_.need_to_check_type_);
+  ASSERT_EQ(OB_SUCCESS, inputs_.at(0).set_extend(0, oceanbase::pl::PL_RECORD_TYPE, owner_));
+  inputs_.at(0).set_udt_id(RECORD_ID); inputs_.at(0).set_param_meta();
+  const DatumParameter borrowed = inputs_.at(0);
+  PLDescriptorAllocator callee;
+  DatumParameter result; int status = OB_SUCCESS;
+  oceanbase::pl::ObPLExecState state(owner_, callee, exec_, package_guard_, *function_, result, status);
+  oceanbase::pl::ObPLContext pl_context;
+  ASSERT_EQ(OB_SUCCESS, pl_context.get_exec_stack().push_back(&state));
+  PLQuestionMarkBindingGuard binding(exec_, session_, state, pl_context);
+  ASSERT_EQ(OB_SUCCESS, state.init_params(&inputs_, true));
+  EXPECT_FALSE(state.need_free_arg(0));
+  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.hold());
+  auto &slot = state.get_params().at(0);
+  ASSERT_EQ(borrowed.get_datum().get_reference(), slot.get_datum().get_reference());
+  DatumParameter null_value;
+  const int64_t calls = callee.descriptor_calls_;
+  callee.fail_descriptor_call_ = calls + 1;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, state.set_var(0, null_value));
+  EXPECT_EQ(calls + 1, callee.descriptor_calls_); // Only C is requested; there is no B.
+  EXPECT_EQ(borrowed.get_datum().get_reference(), slot.get_datum().get_reference());
+  EXPECT_EQ(0, slot.get_ext());
+  ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, slot));
+  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.hold());
+  EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+  callee.fail_descriptor_call_ = 0;
+  const size_t begin = callee.allocations_.size();
+  ASSERT_EQ(OB_SUCCESS, state.set_var(0, null_value));
+  const auto created = pl_descriptor_indexes_since(callee, begin);
+  ASSERT_EQ(1U, created.size());
+  EXPECT_EQ(callee.allocations_[created[0]].pointer_, slot.get_datum().get_reference());
+  EXPECT_EQ(1, callee.live_descriptors()); EXPECT_NE(0, slot.get_ext());
+  EXPECT_FALSE(state.need_free_arg(0)); // The setter does not change argument ownership flags.
+  ASSERT_NO_FATAL_FAILURE(expect_resolver_attributes(borrowed.get_metadata(), slot.get_metadata()));
+  EXPECT_EQ(borrowed.get_datum().get_reference(), inputs_.at(0).get_datum().get_reference());
+  EXPECT_EQ(0, inputs_.at(0).get_ext());
+  ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, inputs_.at(0)));
+  EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+  // Retire only the known newly constructed C. This negative control does not
+  // broaden final()'s existing false need_free_arg policy for borrowed formals.
+  ASSERT_EQ(OB_SUCCESS, oceanbase::pl::ObUserDefinedType::destruct_objparam(callee, slot, &session_));
+  EXPECT_EQ(OB_SUCCESS, state.final(OB_ERR_UNEXPECTED));
+  EXPECT_EQ(0, callee.live_descriptors()); EXPECT_EQ(0, callee.live_charge_);
+  EXPECT_EQ(0, callee.hold()); EXPECT_EQ(0, callee.foreign_or_duplicate_frees_);
+  EXPECT_EQ(0, inputs_.at(0).get_ext());
+  ASSERT_NO_FATAL_FAILURE(expect_metadata(borrowed, inputs_.at(0)));
+}
+} // namespace
