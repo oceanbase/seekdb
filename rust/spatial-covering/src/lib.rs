@@ -56,9 +56,11 @@ impl Mbr {
     }
 
     fn to_rect(self) -> Rect {
-        Rect::from_point_pair(
-            LatLng::from_degrees(self.y_min, self.x_min),
-            LatLng::from_degrees(self.y_max, self.x_max),
+        let lo = LatLng::from_degrees(self.y_min, self.x_min);
+        let hi = LatLng::from_degrees(self.y_max, self.x_max);
+        Rect::new(
+            s2rst::r1::Interval::new(lo.lat.radians(), hi.lat.radians()),
+            s2rst::s1::Interval::new(lo.lng.radians(), hi.lng.radians()),
         )
     }
 

@@ -356,6 +356,36 @@ fn mbr_filter_handles_antimeridian_and_planar_bounds() {
 }
 
 #[test]
+fn geographic_mbr_preserves_wide_and_full_longitude_intervals() {
+    let origin = Mbr {
+        x_min: 0.0,
+        x_max: 0.0,
+        y_min: 0.0,
+        y_max: 0.0,
+        is_point: true,
+        geographic: true,
+    };
+    for (x_min, x_max) in [(-170.0, 170.0), (-180.0, 180.0)] {
+        let enclosing = Mbr {
+            x_min,
+            x_max,
+            y_min: -10.0,
+            y_max: 10.0,
+            is_point: false,
+            ..origin
+        };
+        assert!(!filter_mbr(origin, enclosing, MbrRelation::Intersects).unwrap());
+        assert!(!filter_mbr(origin, enclosing, MbrRelation::Covers).unwrap());
+        assert!(!filter_mbr(enclosing, origin, MbrRelation::CoveredBy).unwrap());
+    }
+    let wkb = line(&[(-120.0, 0.0), (0.0, 0.0), (120.0, 0.0)]);
+    for kind in [CoveringKind::Index, CoveringKind::Query] {
+        let covering = cover_swkb(&wkb, with_kind(GEOGRAPHIC, kind)).unwrap();
+        assert!(!filter_mbr(origin, covering.mbr, MbrRelation::Intersects).unwrap());
+    }
+}
+
+#[test]
 fn big_endian_and_nested_collections_are_supported() {
     let mut big_endian = vec![0, 0, 0, 0, 0];
     big_endian.extend_from_slice(&1u32.to_be_bytes());
