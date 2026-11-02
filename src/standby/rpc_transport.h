@@ -58,26 +58,21 @@ public:
 private:
   Frame frame_{};
 };
-struct Context {
-  uint64_t timeout_us = 9000000;
-  std::shared_ptr<rust::Box<ClientStream>> stream;
-  void cancel() { if (stream) (*stream)->cancel(); }
-};
 class Reader {
 public:
-  explicit Reader(std::shared_ptr<rust::Box<ClientStream>> stream) : stream_(std::move(stream)) {}
+  explicit Reader(rust::Box<ClientStream> stream) : stream_(std::move(stream)) {}
   bool read(Message &message);
-  int finish() { (*stream_)->cancel(); return error_; }
+  void cancel() { stream_->cancel(); }
+  int finish() { cancel(); return error_; }
 private:
-  std::shared_ptr<rust::Box<ClientStream>> stream_;
+  rust::Box<ClientStream> stream_;
   int error_ = 0;
 };
 class Client {
 public:
   int init(const common::ObAddr &address, int64_t timeout, bool tls);
-  void prepare(Context &context, int64_t timeout = -1) const { context.timeout_us = timeout > 0 ? timeout : timeout_us_; }
-  std::unique_ptr<Reader> stream(Method method, Context &context, Message &request);
-  int call(Method method, Context &context, Message &request, Message &response);
+  std::unique_ptr<Reader> stream(Method method, Message &request);
+  int call(Method method, Message &request, Message &response);
 private:
   std::optional<rust::Box<ClientHandle>> handle_;
   common::ObAddr destination_;

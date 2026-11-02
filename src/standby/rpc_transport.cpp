@@ -43,7 +43,7 @@ void report_call(const CallReport &report) {
   }
 }
 bool Reader::read(Message &message) {
-  auto received = (*stream_)->receive();
+  auto received = stream_->receive();
   error_ = received.error;
   if (received.present) message = Message(std::move(received.frame));
   return received.present;
@@ -62,20 +62,19 @@ int Client::init(const common::ObAddr &address, int64_t timeout, bool tls) {
   timeout_us_ = timeout > 0 ? timeout : 9000000;
   return 0;
 }
-std::unique_ptr<Reader> Client::stream(Method method, Context &context, Message &request) {
+std::unique_ptr<Reader> Client::stream(Method method, Message &request) {
   try {
     if (!handle_) return nullptr;
     common::ObCurTraceId::TraceId trace = *common::ObCurTraceId::get_trace_id();
     if (trace.get()[0] == 0) trace.init(destination_);
     char text[common::OB_MAX_TRACE_ID_BUFFER_SIZE]{};
     trace.to_string(text, sizeof(text));
-    context.stream = std::make_shared<rust::Box<ClientStream>>(
-        (*handle_)->open_stream(method, request.take_frame(), text, context.timeout_us));
-    return std::make_unique<Reader>(context.stream);
+    return std::make_unique<Reader>(
+        (*handle_)->open_stream(method, request.take_frame(), text, timeout_us_));
   } catch (const std::exception &) { return nullptr; }
 }
-int Client::call(Method method, Context &context, Message &request, Message &response) {
-  auto reader = stream(method, context, request);
+int Client::call(Method method, Message &request, Message &response) {
+  auto reader = stream(method, request);
   if (!reader) return common::OB_RPC_SEND_ERROR;
   if (!reader->read(response)) {
     const int error = reader->finish();

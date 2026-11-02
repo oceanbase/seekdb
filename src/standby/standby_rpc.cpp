@@ -21,7 +21,7 @@
 #include "standby/rpc_transport.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/allocator/ob_malloc.h"
+#include "lib/allocator/ob_allocator.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_info.h"
 #include "standby/ob_standby_palf_base_info.h"
@@ -1079,45 +1079,18 @@ int StandbyRpcClient::init_tablet_sstable_info_stream(
     int64_t timeout,
     bool rpc_tls_enabled,
     const obcall::ObCopyTabletsSSTableInfoArg &arg,
-    common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx)
 {
   int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  StandbyRpcClient *rpc_client = nullptr;
-
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(StandbyRpcClient)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc RPC client", K(ret));
-  } else {
-    void *ctx_buf = nullptr;
-    rpc_client = new (buf) StandbyRpcClient();
-    if (OB_FAIL(rpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+  {
+    StandbyRpcClient rpc_client;
+    if (OB_FAIL(rpc_client.init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby RPC client", K(ret), K(src_addr), K(timeout));
-    } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(rpc::Context)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc RPC client context", K(ret));
-    } else if (FALSE_IT(sstable_info_ctx.sstable_info_context_ = new (ctx_buf) rpc::Context())) {
-    } else if (OB_FAIL(rpc_client->create_tablet_sstable_info_stream(arg, *sstable_info_ctx.sstable_info_context_,
-                                                                          sstable_info_ctx.sstable_info_reader_))) {
-        LOG_WARN("failed to create tablet sstable info stream", K(ret), K(arg), K(src_addr));
-    } else {
-      sstable_info_ctx.rpc_client_ = rpc_client;
-      rpc_client = nullptr;
+    } else if (OB_FAIL(rpc_client.create_tablet_sstable_info_stream(arg, sstable_info_ctx.sstable_info_reader_))) {
+      LOG_WARN("failed to create tablet sstable info stream", K(ret), K(arg), K(src_addr));
     }
   }
   if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(rpc_client)) {
-      rpc_client->~StandbyRpcClient();
-      allocator.free(rpc_client);
-      rpc_client = nullptr;
-    }
-    if (OB_NOT_NULL(sstable_info_ctx.sstable_info_context_)) {
-      sstable_info_ctx.sstable_info_context_->~Context();
-      allocator.free(sstable_info_ctx.sstable_info_context_);
-      sstable_info_ctx.sstable_info_context_ = nullptr;
-    }
-    sstable_info_ctx.rpc_client_ = nullptr;
     sstable_info_ctx.sstable_info_reader_.reset();
   }
 
@@ -1129,45 +1102,18 @@ int StandbyRpcClient::init_sstable_macro_info_stream(
     int64_t timeout,
     bool rpc_tls_enabled,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-    common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx)
 {
   int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  StandbyRpcClient *rpc_client = nullptr;
-
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(StandbyRpcClient)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc RPC client", K(ret));
-  } else {
-    void *ctx_buf = nullptr;
-    rpc_client = new (buf) StandbyRpcClient();
-    if (OB_FAIL(rpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+  {
+    StandbyRpcClient rpc_client;
+    if (OB_FAIL(rpc_client.init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby RPC client", K(ret), K(src_addr), K(timeout));
-    } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(rpc::Context)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc RPC client context", K(ret));
-    } else if (FALSE_IT(macro_range_ctx.macro_info_context_ = new (ctx_buf) rpc::Context())) {
-    } else if (OB_FAIL(rpc_client->create_sstable_macro_info_stream(arg, *macro_range_ctx.macro_info_context_,
-                                                                          macro_range_ctx.macro_info_reader_))) {
-        LOG_WARN("failed to create sstable macro info stream", K(ret), K(arg), K(src_addr));
-    } else {
-      macro_range_ctx.rpc_client_ = rpc_client;
-      rpc_client = nullptr;
+    } else if (OB_FAIL(rpc_client.create_sstable_macro_info_stream(arg, macro_range_ctx.macro_info_reader_))) {
+      LOG_WARN("failed to create sstable macro info stream", K(ret), K(arg), K(src_addr));
     }
   }
   if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(rpc_client)) {
-      rpc_client->~StandbyRpcClient();
-      allocator.free(rpc_client);
-      rpc_client = nullptr;
-    }
-    if (OB_NOT_NULL(macro_range_ctx.macro_info_context_)) {
-      macro_range_ctx.macro_info_context_->~Context();
-      allocator.free(macro_range_ctx.macro_info_context_);
-      macro_range_ctx.macro_info_context_ = nullptr;
-    }
-    macro_range_ctx.rpc_client_ = nullptr;
     macro_range_ctx.macro_info_reader_.reset();
   }
 
@@ -1179,45 +1125,18 @@ int StandbyRpcClient::init_macro_block_stream(
     int64_t timeout,
     bool rpc_tls_enabled,
     const obcall::ObCopyMacroBlockRangeArg &arg,
-    common::ObIAllocator &allocator,
     restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx)
 {
   int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  StandbyRpcClient *rpc_client = nullptr;
-
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(StandbyRpcClient)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc RPC client", K(ret));
-  } else {
-    void *ctx_buf = nullptr;
-    rpc_client = new (buf) StandbyRpcClient();
-    if (OB_FAIL(rpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+  {
+    StandbyRpcClient rpc_client;
+    if (OB_FAIL(rpc_client.init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby RPC client", K(ret), K(src_addr), K(timeout));
-    } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(rpc::Context)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc RPC client context", K(ret));
-    } else if (FALSE_IT(macro_block_ctx.macro_block_context_ = new (ctx_buf) rpc::Context())) {
-    } else if (OB_FAIL(rpc_client->create_macro_block_stream(arg, *macro_block_ctx.macro_block_context_,
-                                                                  macro_block_ctx.macro_block_reader_))) {
-        LOG_WARN("failed to create macro block stream", K(ret), K(arg), K(src_addr));
-    } else {
-      macro_block_ctx.rpc_client_ = rpc_client;
-      rpc_client = nullptr;
+    } else if (OB_FAIL(rpc_client.create_macro_block_stream(arg, macro_block_ctx.macro_block_reader_))) {
+      LOG_WARN("failed to create macro block stream", K(ret), K(arg), K(src_addr));
     }
   }
   if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(rpc_client)) {
-      rpc_client->~StandbyRpcClient();
-      allocator.free(rpc_client);
-      rpc_client = nullptr;
-    }
-    if (OB_NOT_NULL(macro_block_ctx.macro_block_context_)) {
-      macro_block_ctx.macro_block_context_->~Context();
-      allocator.free(macro_block_ctx.macro_block_context_);
-      macro_block_ctx.macro_block_context_ = nullptr;
-    }
-    macro_block_ctx.rpc_client_ = nullptr;
     macro_block_ctx.macro_block_reader_.reset();
   }
 
@@ -1229,45 +1148,18 @@ int StandbyRpcClient::init_tablet_info_stream(
     int64_t timeout,
     bool rpc_tls_enabled,
     const obcall::ObCopyTabletInfoArg &arg,
-    common::ObIAllocator &allocator,
     restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx)
 {
   int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  StandbyRpcClient *rpc_client = nullptr;
-
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(StandbyRpcClient)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc RPC client", K(ret));
-  } else {
-    void *ctx_buf = nullptr;
-    rpc_client = new (buf) StandbyRpcClient();
-    if (OB_FAIL(rpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+  {
+    StandbyRpcClient rpc_client;
+    if (OB_FAIL(rpc_client.init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby RPC client", K(ret), K(src_addr), K(timeout));
-    } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(rpc::Context)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc RPC client context", K(ret));
-    } else if (FALSE_IT(tablet_info_ctx.tablet_info_context_ = new (ctx_buf) rpc::Context())) {
-    } else if (OB_FAIL(rpc_client->create_tablet_info_stream(arg, *tablet_info_ctx.tablet_info_context_,
-                                                                  tablet_info_ctx.tablet_info_reader_))) {
-        LOG_WARN("failed to create tablet info stream", K(ret), K(arg), K(src_addr));
-    } else {
-      tablet_info_ctx.rpc_client_ = rpc_client;
-      rpc_client = nullptr;
+    } else if (OB_FAIL(rpc_client.create_tablet_info_stream(arg, tablet_info_ctx.tablet_info_reader_))) {
+      LOG_WARN("failed to create tablet info stream", K(ret), K(arg), K(src_addr));
     }
   }
   if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(rpc_client)) {
-      rpc_client->~StandbyRpcClient();
-      allocator.free(rpc_client);
-      rpc_client = nullptr;
-    }
-    if (OB_NOT_NULL(tablet_info_ctx.tablet_info_context_)) {
-      tablet_info_ctx.tablet_info_context_->~Context();
-      allocator.free(tablet_info_ctx.tablet_info_context_);
-      tablet_info_ctx.tablet_info_context_ = nullptr;
-    }
-    tablet_info_ctx.rpc_client_ = nullptr;
     tablet_info_ctx.tablet_info_reader_.reset();
   }
 
@@ -1321,9 +1213,7 @@ int StandbyRpcClient::get_ls_view_tablet_count(ObStandbyLSViewTabletCountResult&
   } else {
     rpc::Message req;
     rpc::Message res;
-    rpc::Context context;
-    rpc_client_.prepare(context);
-    auto status = rpc_client_.call(rpc::Method::get_ls_view_tablet_count, context, req, res);
+    auto status = rpc_client_.call(rpc::Method::get_ls_view_tablet_count, req, res);
     if (OB_FAIL(status)) {
       LOG_WARN("failed to call get_ls_view_tablet_count RPC", K(ret));
     } else {
@@ -1346,9 +1236,7 @@ int StandbyRpcClient::check_restore_precondition(
   } else {
     rpc::Message req;
     rpc::Message res;
-    rpc::Context context;
-    rpc_client_.prepare(context);
-    auto status = rpc_client_.call(rpc::Method::check_restore_precondition, context, req, res);
+    auto status = rpc_client_.call(rpc::Method::check_restore_precondition, req, res);
     if (OB_FAIL(status)) {
       LOG_WARN("failed to call check_restore_precondition RPC", K(ret));
     } else {
@@ -1376,12 +1264,10 @@ int StandbyRpcClient::fetch_standby_palf_base_info(
   } else {
     rpc::Message req;
     rpc::Message res;
-    rpc::Context context;
     if (OB_FAIL(serialize_message(arg, &req))) {
       LOG_WARN("failed to serialize ObFetchStandbyPalfBaseInfoArg", K(ret), K(arg));
     } else {
-      rpc_client_.prepare(context);
-      auto status = rpc_client_.call(rpc::Method::fetch_standby_palf_base_info, context, req, res);
+      auto status = rpc_client_.call(rpc::Method::fetch_standby_palf_base_info, req, res);
       if (OB_FAIL(status)) {
         LOG_WARN("failed to call fetch_standby_palf_base_info RPC", K(ret), K(arg));
       } else if (OB_FAIL(deserialize_message(res, result))) {
@@ -1413,12 +1299,10 @@ int StandbyRpcClient::fetch_log(
   } else {
     rpc::Message request;
     rpc::Message response;
-    rpc::Context context;
     request.set_start_lsn(start_lsn.val_);
     request.set_max_bytes(max_bytes);
-    rpc_client_.prepare(context);
     std::unique_ptr<rpc::Reader> reader(
-        rpc_client_.stream(rpc::Method::fetch_log, context, request));
+        rpc_client_.stream(rpc::Method::fetch_log, request));
     if (OB_ISNULL(reader)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -1441,7 +1325,7 @@ int StandbyRpcClient::fetch_log(
         }
       }
       if (OB_FAIL(ret)) {
-        context.cancel();
+        reader->cancel();
       }
       const int status = reader->finish();
       if (OB_SUCC(ret) && OB_FAIL(status)) {
@@ -1465,13 +1349,11 @@ int StandbyRpcClient::get_promotion_boundary(
   } else {
     rpc::Message request;
     rpc::Message response;
-    rpc::Context context;
     if (OB_FAIL(encode_boundary_request(boundary_request, request.control()))) {
       LOG_WARN("failed to encode promotion boundary request fields",
           K(ret), K(boundary_request));
     } else {
-      rpc_client_.prepare(context);
-      const int status = rpc_client_.call(rpc::Method::get_promotion_boundary, context, request, response);
+      const int status = rpc_client_.call(rpc::Method::get_promotion_boundary, request, response);
       if (OB_FAIL(status)) {
         LOG_WARN("get source promotion boundary failed", K(ret));
       } else if (OB_FAIL(decode_boundary(response.control(), boundary))) {
@@ -1499,9 +1381,7 @@ int StandbyRpcClient::fetch_tablet_info(
     if (OB_FAIL(serialize_message(arg, &req))) {
       LOG_WARN("failed to serialize ObCopyTabletInfoArg", K(ret));
     } else {
-      rpc::Context context;
-      rpc_client_.prepare(context);
-      auto reader = rpc_client_.stream(rpc::Method::fetch_tablet_info, context, req);
+      auto reader = rpc_client_.stream(rpc::Method::fetch_tablet_info, req);
 
       if (OB_ISNULL(reader)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1548,7 +1428,6 @@ int StandbyRpcClient::fetch_tablet_info(
 
 int StandbyRpcClient::create_tablet_info_stream(
     const obcall::ObCopyTabletInfoArg &arg,
-    rpc::Context &context,
     std::unique_ptr<rpc::Reader> &reader)
 {
   int ret = OB_SUCCESS;
@@ -1561,8 +1440,7 @@ int StandbyRpcClient::create_tablet_info_stream(
     if (OB_FAIL(serialize_message(arg, &req))) {
       LOG_WARN("failed to serialize ObCopyTabletInfoArg", K(ret));
     } else {
-      rpc_client_.prepare(context);
-      reader = rpc_client_.stream(rpc::Method::fetch_tablet_info, context, req);
+      reader = rpc_client_.stream(rpc::Method::fetch_tablet_info, req);
       if (OB_ISNULL(reader.get())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to create tablet info stream reader", K(ret));
@@ -1574,7 +1452,6 @@ int StandbyRpcClient::create_tablet_info_stream(
 }
 
 int StandbyRpcClient::create_ls_view_stream(
-    rpc::Context &context,
     std::unique_ptr<rpc::Reader> &reader)
 {
   int ret = OB_SUCCESS;
@@ -1584,8 +1461,7 @@ int StandbyRpcClient::create_ls_view_stream(
     LOG_WARN("StandbyRpcClient not inited", K(ret));
   } else {
     rpc::Message req;
-    rpc_client_.prepare(context);
-    reader = rpc_client_.stream(rpc::Method::fetch_ls_view, context, req);
+    reader = rpc_client_.stream(rpc::Method::fetch_ls_view, req);
     if (OB_ISNULL(reader.get())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to create ls view stream reader", K(ret));
@@ -1596,7 +1472,6 @@ int StandbyRpcClient::create_ls_view_stream(
 
 int StandbyRpcClient::create_tablet_sstable_info_stream(
     const obcall::ObCopyTabletsSSTableInfoArg &arg,
-    rpc::Context &context,
     std::unique_ptr<rpc::Reader> &reader)
 {
   int ret = OB_SUCCESS;
@@ -1610,8 +1485,7 @@ int StandbyRpcClient::create_tablet_sstable_info_stream(
     if (OB_FAIL(serialize_message(arg, &req))) {
       LOG_WARN("failed to serialize ObCopyTabletsSSTableInfoArg", K(ret));
     } else {
-      rpc_client_.prepare(context);
-      reader = rpc_client_.stream(rpc::Method::fetch_tablet_sstable_info, context, req);
+      reader = rpc_client_.stream(rpc::Method::fetch_tablet_sstable_info, req);
       if (OB_ISNULL(reader.get())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to create tablet sstable info stream reader", K(ret));
@@ -1624,7 +1498,6 @@ int StandbyRpcClient::create_tablet_sstable_info_stream(
 
 int StandbyRpcClient::create_sstable_macro_info_stream(
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-    rpc::Context &context,
     std::unique_ptr<rpc::Reader> &reader)
 {
   int ret = OB_SUCCESS;
@@ -1638,8 +1511,7 @@ int StandbyRpcClient::create_sstable_macro_info_stream(
     if (OB_FAIL(serialize_message(arg, &req))) {
       LOG_WARN("failed to serialize ObCopySSTableMacroRangeInfoArg", K(ret));
     } else {
-      rpc_client_.prepare(context);
-      reader = rpc_client_.stream(rpc::Method::fetch_sstable_macro_info, context, req);
+      reader = rpc_client_.stream(rpc::Method::fetch_sstable_macro_info, req);
       if (OB_ISNULL(reader.get())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to create sstable macro info stream reader", K(ret));
@@ -1652,7 +1524,6 @@ int StandbyRpcClient::create_sstable_macro_info_stream(
 
 int StandbyRpcClient::create_macro_block_stream(
     const obcall::ObCopyMacroBlockRangeArg &arg,
-    rpc::Context &context,
     std::unique_ptr<rpc::Reader> &reader)
 {
   int ret = OB_SUCCESS;
@@ -1666,8 +1537,7 @@ int StandbyRpcClient::create_macro_block_stream(
     if (OB_FAIL(serialize_message(arg, &req))) {
       LOG_WARN("failed to serialize ObCopyMacroBlockRangeArg", K(ret));
     } else {
-      rpc_client_.prepare(context);
-      reader = rpc_client_.stream(rpc::Method::fetch_macro_block, context, req);
+      reader = rpc_client_.stream(rpc::Method::fetch_macro_block, req);
       if (OB_ISNULL(reader.get())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to create macro block stream reader", K(ret));
@@ -1678,93 +1548,57 @@ int StandbyRpcClient::create_macro_block_stream(
   return ret;
 }
 
-int StandbyRpcClient::translate_error(const int &status)
-{
-  return status;
-}
-
 int StandbyRpcClient::init_ls_view_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
     bool rpc_tls_enabled,
-    common::ObIAllocator &allocator,
     ObLSMeta &ls_meta,
     share::SCN &physical_checkpoint_scn,
     restore::ObRestoreHelperLSViewCtx &ls_view_ctx)
 {
   int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  StandbyRpcClient *rpc_client = nullptr;
-
+  {
+    StandbyRpcClient rpc_client;
+    if (OB_FAIL(rpc_client.init(src_addr, timeout, rpc_tls_enabled))) {
+      LOG_WARN("failed to init standby RPC client", K(ret), K(src_addr), K(timeout));
+    } else if (OB_FAIL(rpc_client.create_ls_view_stream(ls_view_ctx.ls_view_reader_))) {
+      LOG_WARN("failed to create ls view stream", K(ret), K(src_addr), K(timeout));
+    }
+  }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(buf = allocator.alloc(sizeof(StandbyRpcClient)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc RPC client", K(ret));
+    rpc::Message first_res;
+    if (!ls_view_ctx.ls_view_reader_->read(first_res)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to read first fetch_ls_view response", K(ret), K(src_addr), K(timeout));
+    } else if (0 != first_res.entry_type()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("first fetch_ls_view response is not ls meta package", K(ret),
+          "entry_type", first_res.entry_type());
     } else {
-      rpc_client = new (buf) StandbyRpcClient();
-      if (OB_FAIL(rpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
-        LOG_WARN("failed to init standby RPC client", K(ret), K(src_addr), K(timeout));
+      ObStandbyLSViewMeta ls_view_meta;
+      if (OB_FAIL(deserialize_message(first_res, ls_view_meta))) {
+        LOG_WARN("failed to deserialize standby ls view meta", K(ret));
+      } else if (!ls_view_meta.is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid standby ls view meta", K(ret), K(ls_view_meta));
       } else {
-        void *ctx_buf = nullptr;
-        if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(rpc::Context)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc RPC client context", K(ret));
-        } else {
-          ls_view_ctx.ls_view_context_ = new (ctx_buf) rpc::Context();
-          if (OB_FAIL(rpc_client->create_ls_view_stream(
-                  *ls_view_ctx.ls_view_context_, ls_view_ctx.ls_view_reader_))) {
-            LOG_WARN("failed to create ls view stream", K(ret), K(src_addr), K(timeout));
-          } else {
-            rpc::Message first_res;
-            if (!ls_view_ctx.ls_view_reader_->read(first_res)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("failed to read first fetch_ls_view response", K(ret), K(src_addr), K(timeout));
-            } else if (0 != first_res.entry_type()) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("first fetch_ls_view response is not ls meta package", K(ret),
-                  "entry_type", first_res.entry_type());
-            } else {
-              ObStandbyLSViewMeta ls_view_meta;
-              if (OB_FAIL(deserialize_message(first_res, ls_view_meta))) {
-                LOG_WARN("failed to deserialize standby ls view meta", K(ret));
-              } else if (!ls_view_meta.is_valid()) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("invalid standby ls view meta", K(ret), K(ls_view_meta));
-              } else {
-                ls_meta = ls_view_meta.ls_meta_;
-                physical_checkpoint_scn = ls_view_meta.physical_checkpoint_scn_;
-              }
-            }
-            if (OB_SUCC(ret)) {
-              ls_view_ctx.ls_meta_fetched_ = true;
-              ls_view_ctx.rpc_client_ = rpc_client;
-              rpc_client = nullptr;
-            }
-          }
-        }
+        ls_meta = ls_view_meta.ls_meta_;
+        physical_checkpoint_scn = ls_view_meta.physical_checkpoint_scn_;
       }
+    }
+    if (OB_SUCC(ret)) {
+      ls_view_ctx.ls_meta_fetched_ = true;
     }
   }
 
   if (OB_FAIL(ret)) {
-    if (ls_view_ctx.ls_view_reader_ && OB_NOT_NULL(rpc_client)) {
+    if (ls_view_ctx.ls_view_reader_) {
       int tmp_ret = OB_SUCCESS;
-      if(OB_TMP_FAIL(restore::ObRestoreHelperCtxUtil::close_reader(ls_view_ctx.ls_view_reader_, rpc_client))) {
+      if (OB_TMP_FAIL(restore::ObRestoreHelperCtxUtil::close_reader(ls_view_ctx.ls_view_reader_))) {
         LOG_WARN("failed to close ls view reader", KR(tmp_ret));
       }
     }
-    if (OB_NOT_NULL(ls_view_ctx.ls_view_context_)) {
-      ls_view_ctx.ls_view_context_->~Context();
-      allocator.free(ls_view_ctx.ls_view_context_);
-      ls_view_ctx.ls_view_context_ = nullptr;
-    }
-    if (OB_NOT_NULL(rpc_client)) {
-      rpc_client->~StandbyRpcClient();
-      allocator.free(rpc_client);
-      rpc_client = nullptr;
-    }
     ls_view_ctx.ls_meta_fetched_ = false;
-    ls_view_ctx.rpc_client_ = nullptr;
     ls_view_ctx.ls_view_reader_.reset();
   }
 

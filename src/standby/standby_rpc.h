@@ -17,7 +17,6 @@
 #pragma once
 
 #include "lib/ob_define.h"
-#include "lib/allocator/ob_malloc.h"
 #include "lib/net/ob_addr.h"
 #ifdef _WIN32
 #include <winsock2.h>
@@ -219,29 +218,22 @@ public:
                         std::function<int(const obcall::ObCopyTabletInfo&)> callback);
   int create_tablet_info_stream(
       const obcall::ObCopyTabletInfoArg &arg,
-      rpc::Context &context,
       std::unique_ptr<rpc::Reader> &reader);
   int create_ls_view_stream(
-      rpc::Context &context,
       std::unique_ptr<rpc::Reader> &reader);
   int create_tablet_sstable_info_stream(
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
-      rpc::Context &context,
       std::unique_ptr<rpc::Reader> &reader);
   int create_sstable_macro_info_stream(
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-      rpc::Context &context,
       std::unique_ptr<rpc::Reader> &reader);
   int create_macro_block_stream(
       const obcall::ObCopyMacroBlockRangeArg &arg,
-      rpc::Context &context,
       std::unique_ptr<rpc::Reader> &reader);
-  int translate_error(const int &status);
   static int init_ls_view_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
-      common::ObIAllocator &allocator,
       ObLSMeta &ls_meta,
       share::SCN &physical_checkpoint_scn,
       restore::ObRestoreHelperLSViewCtx &ls_view_ctx);
@@ -250,28 +242,24 @@ public:
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx);
   static int init_sstable_macro_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx);
   static int init_macro_block_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopyMacroBlockRangeArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx);
   static int init_tablet_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
       const obcall::ObCopyTabletInfoArg &arg,
-      common::ObIAllocator &allocator,
       restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx);
 
 private:
