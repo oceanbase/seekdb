@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include <algorithm>
+#include <utility>
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
 #include "query/engine/expr/ob_ai_model_resolver.h"
@@ -232,6 +234,9 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
     } else {
       ObJsonArray *data_array = static_cast<ObJsonArray *>(data_node);
       ObJsonNode *embedding_node = nullptr;
+      // The service may answer in a different order than the request, so every
+      // item is placed by its own index instead of by its position in the array.
+      ObSEArray<std::pair<int64_t, ObJsonNode *>, 8> ordered_items;
       for (int64_t i = 0; OB_SUCC(ret) && i < data_array->element_count(); i++) {
         if (OB_ISNULL(embedding_node = data_array->get_value(i))) {
           ret = OB_INVALID_DATA;
@@ -240,9 +245,25 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
         } else {
           ObJsonObject *embedding_obj = static_cast<ObJsonObject *>(embedding_node);
           ObJsonNode *embedding = embedding_obj->get_value("embedding");
+          ObJsonNode *index_node = embedding_obj->get_value("index");
+          int64_t item_index = i;
           if (OB_ISNULL(embedding)) {
             ret = OB_INVALID_DATA;
-          } else if (OB_FAIL(result_array->append(embedding))) {
+          } else if (embedding->json_type() != ObJsonNodeType::J_ARRAY) {
+            ret = OB_INVALID_DATA;
+          } else if (OB_NOT_NULL(index_node) && index_node->json_type() == ObJsonNodeType::J_INT) {
+            item_index = static_cast<ObJsonInt *>(index_node)->value();
+          }
+          if (OB_SUCC(ret) && OB_FAIL(ordered_items.push_back(std::pair<int64_t, ObJsonNode *>(item_index, embedding)))) {
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        std::sort(ordered_items.begin(), ordered_items.end(),
+                  [](const std::pair<int64_t, ObJsonNode *> &lhs,
+                     const std::pair<int64_t, ObJsonNode *> &rhs) { return lhs.first < rhs.first; });
+        for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(ordered_items.count()); i++) {
+          if (OB_FAIL(result_array->append(ordered_items.at(i).second))) {
           }
         }
       }
