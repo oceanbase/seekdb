@@ -492,6 +492,141 @@ int load_jsonl(const std::string &path, std::vector<Column> &cols, Rows &data)
 }
 
 
+
+// COPY (query) TO 'file' (format csv, header, ...) is answered with the engine's
+// own SELECT ... INTO OUTFILE.  The header is produced by prepending a literal
+// row, which also coerces every data column to text for the CSV output.
+int split_projection(const std::string &query, std::vector<std::string> &names)
+{
+  int ret = OB_SUCCESS;
+  const std::string lowered = lower_ascii(query);
+  const size_t sel = lowered.find("select");
+  if (std::string::npos == sel) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    size_t depth = 0;
+    bool in_str = false;
+    size_t from_pos = std::string::npos;
+    for (size_t i = sel + 6; i + 5 <= lowered.size(); ++i) {
+      const char c = lowered[i];
+      if (in_str) {
+        if ('\'' == c) in_str = false;
+        continue;
+      }
+      if ('\'' == c) { in_str = true; continue; }
+      if ('(' == c) ++depth;
+      else if (')' == c) { if (depth > 0) --depth; }
+      else if (0 == depth && 0 == lowered.compare(i, 5, " from") &&
+               (i + 5 == lowered.size() || ' ' == lowered[i + 5])) {
+        from_pos = i;
+        break;
+      }
+    }
+    if (std::string::npos == from_pos) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const std::string proj = query.substr(sel + 6, from_pos - sel - 6);
+      std::string cur;
+      depth = 0;
+      in_str = false;
+      std::vector<std::string> items;
+      for (size_t i = 0; i < proj.size(); ++i) {
+        const char c = proj[i];
+        if (in_str) {
+          cur += c;
+          if ('\'' == c) in_str = false;
+          continue;
+        }
+        if ('\'' == c) { in_str = true; cur += c; continue; }
+        if ('(' == c) { ++depth; cur += c; continue; }
+        if (')' == c) { if (depth > 0) --depth; cur += c; continue; }
+        if (',' == c && 0 == depth) {
+          items.push_back(trim(cur));
+          cur.clear();
+          continue;
+        }
+        cur += c;
+      }
+      if (!trim(cur).empty()) items.push_back(trim(cur));
+      for (size_t i = 0; i < items.size(); ++i) {
+        std::string item = items[i];
+        const std::string low = lower_ascii(item);
+        const size_t as_pos = low.rfind(" as ");
+        std::string name;
+        if (std::string::npos != as_pos) {
+          name = trim(item.substr(as_pos + 4));
+        } else {
+          // a bare identifier or a qualified column keeps its last component
+          const size_t dot = item.rfind('.');
+          name = trim(std::string::npos == dot ? item : item.substr(dot + 1));
+          if (name.find(' ') != std::string::npos) name = "c" + std::to_string(i + 1);
+        }
+        if (!name.empty() && ('`' == name[0] || '\'' == name[0] || '"' == name[0])) {
+          name = name.substr(1, name.size() > 1 ? name.size() - 2 : 0);
+        }
+        if (name.empty()) name = "c" + std::to_string(i + 1);
+        names.push_back(name);
+      }
+    }
+  }
+  return ret;
+}
+
+int build_copy_sql(const std::string &sql, std::string &out)
+{
+  int ret = OB_SUCCESS;
+  const size_t open = sql.find('(');
+  if (std::string::npos == open) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    // find the matching parenthesis of the query
+    size_t depth = 0;
+    bool in_str = false;
+    size_t close = std::string::npos;
+    for (size_t i = open; i < sql.size(); ++i) {
+      const char c = sql[i];
+      if (in_str) {
+        if ('\'' == c) in_str = false;
+        continue;
+      }
+      if ('\'' == c) { in_str = true; continue; }
+      if ('(' == c) ++depth;
+      else if (')' == c) {
+        if (0 == --depth) { close = i; break; }
+      }
+    }
+    if (std::string::npos == close) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const std::string query = sql.substr(open + 1, close - open - 1);
+      const std::string tail = sql.substr(close + 1);
+      const size_t q1 = tail.find('\'');
+      const size_t q2 = (std::string::npos == q1) ? std::string::npos : tail.find('\'', q1 + 1);
+      if (std::string::npos == q1 || std::string::npos == q2) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const std::string path = tail.substr(q1 + 1, q2 - q1 - 1);
+        std::vector<std::string> names;
+        if (OB_FAIL(split_projection(query, names))) {
+        } else if (names.empty()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          std::string header = "SELECT ";
+          for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) header += ", ";
+            header += sql_quote(names[i]) + " AS `" + names[i] + "`";
+          }
+          out = "SELECT * FROM (" + header + " UNION ALL SELECT * FROM (" + query +
+                ") AS __copy_src) AS __copy_out INTO OUTFILE '" + path +
+                "' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' ESCAPED BY '\\\\' "
+                "LINES TERMINATED BY '\\n'";
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 // ---------------------------------------------------------------- Parquet
 
 // Minimal Parquet reader: Thrift compact metadata, Snappy block decompression,
@@ -1603,6 +1738,17 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
   if (stmt.empty()) {
   } else {
     std::string sql(stmt.ptr(), stmt.length());
+    bool text_changed = false;
+    {
+      const std::string low_head = lower_ascii(trim(sql));
+      if (0 == low_head.compare(0, 4, "copy")) {
+        std::string copy_sql;
+        if (OB_SUCC(build_copy_sql(sql, copy_sql))) {
+          sql = copy_sql;
+          text_changed = true;
+        }
+      }
+    }
     {
       std::string flag_sql;
       bool flag_done = false;
@@ -1638,7 +1784,7 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
       }
     }
     const std::string lowered = lower_ascii(sql);
-    if (flag_read_rewritten && std::string::npos == lowered.find("read_csv(") &&
+    if ((flag_read_rewritten || text_changed) && std::string::npos == lowered.find("read_csv(") &&
         std::string::npos == lowered.find("read_json(") &&
         std::string::npos == lowered.find("read_ndjson(") &&
         std::string::npos == lowered.find("read_parquet(") &&
