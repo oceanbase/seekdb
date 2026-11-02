@@ -36,6 +36,8 @@
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
 #include "share/ob_server_struct.h" // GCTX
+#include "config_bridge.h"
+#include "share/ob_share_util.h"
 
 namespace oceanbase
 {
@@ -672,7 +674,10 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
+  ObTimeoutCtx timeout_ctx;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(
+                 timeout_ctx, config::internal_sql_execute_timeout()))) {
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
