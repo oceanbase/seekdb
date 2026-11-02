@@ -5,29 +5,37 @@
     {
       "path": "src/parse.rs",
       "input_sha256": "0a59babce3393d31db465ced5449d4fd1004ce2dee4dbe5dddc4775107e2bcdb",
-      "output_sha256": "a1b9cff0c748e9e0bac2f22a71237e128de5ab37f6a8f7270e82fc89e78e5c6f",
+      "output_sha256": "ef5e61afbd8e54d7494b568d7e0c89d425fd9871ec31f62ddf4197f8a25d45a6",
       "replacements": [
         [
           "        Ok(if b.is_ascii_digit() {\n            return self.parse_numbered_backref(ix + 1);\n",
           "        Ok(if b == b'0' && self.flag(FLAG_ICU_OCTAL) {\n            // SQL/ICU zero-prefixed octal is an escape, never capture group zero.\n            // This runs at a parsed escape token, including inside a class;\n            // escaped backslashes and comments never reach this branch as \\0.\n            let mut end = ix + 2;\n            let mut value = 0u32;\n            let mut digits = 0;\n            while digits < 3 {\n                let Some(&digit) = bytes.get(end) else {\n                    break;\n                };\n                if !(b'0'..=b'7').contains(&digit) {\n                    break;\n                }\n                let next = value * 8 + u32::from(digit - b'0');\n                if next > 255 {\n                    break;\n                }\n                value = next;\n                digits += 1;\n                end += 1;\n            }\n            if digits == 0 {\n                return Err(Error::ParseError(\n                    ix,\n                    ParseError::InvalidEscape(r\"\\0\".into()),\n                ));\n            }\n            (\n                end,\n                Expr::Literal {\n                    val: char::from(value as u8).to_string(),\n                    casei: self.flag(FLAG_CASEI),\n                },\n            )\n        } else if b.is_ascii_digit() {\n            return self.parse_numbered_backref(ix + 1);\n"
+        ],
+        [
+          "        let class = Expr::Delegate {\n            inner: class,\n            casei: self.flag(FLAG_CASEI),\n        };\n        let ix = ix + 1; // skip closing ']'",
+          "        let mut class = class;\n        if self.flag(FLAG_ICU_POSIX_UNICODE) {\n            // SQL/ICU treats POSIX classes as Unicode property classes, while\n            // regex-syntax compiles them to ASCII ranges. Map only the proven\n            // subset; every other POSIX class keeps upstream ASCII semantics.\n            class = class\n                .replace(\"[:lower:]\", \"\\\\p{Lowercase}\")\n                .replace(\"[:upper:]\", \"\\\\p{Uppercase}\");\n        }\n        let class = Expr::Delegate {\n            inner: class,\n            casei: self.flag(FLAG_CASEI),\n        };\n        let ix = ix + 1; // skip closing ']'"
         ]
       ]
     },
     {
       "path": "src/parse_flags.rs",
       "input_sha256": "bc9490e2aeb005ad077bd13ace0597884eae1e3d35b895b7c435a1dc72dfd98c",
-      "output_sha256": "dd7af496ce492394834b3ba7baf11ebcb6e0dcf6abe004c66816240daa43c405",
+      "output_sha256": "63275444533cdc616281962c9e0aaafffaf728367c823456a2e8ba69439e0a62",
       "replacements": [
         [
           "it for treating numbered groups as non-capturing when named groups exist\npub const FLAG_IGNORE_NUMBERED_GROUPS_WHEN_NAMED_GROUPS_EXIST: u32 = 1 << 8;\n",
           "it for treating numbered groups as non-capturing when named groups exist\npub const FLAG_IGNORE_NUMBERED_GROUPS_WHEN_NAMED_GROUPS_EXIST: u32 = 1 << 8;\n\n/// Opt-in SQL/ICU zero-prefixed octal escapes.\npub const FLAG_ICU_OCTAL: u32 = 1 << 9;\n"
+        ],
+        [
+          "/// Opt-in SQL/ICU zero-prefixed octal escapes.\npub const FLAG_ICU_OCTAL: u32 = 1 << 9;\n",
+          "/// Opt-in SQL/ICU zero-prefixed octal escapes.\npub const FLAG_ICU_OCTAL: u32 = 1 << 9;\n\n/// Opt-in ICU-compatible Unicode POSIX character classes.\npub const FLAG_ICU_POSIX_UNICODE: u32 = 1 << 10;\n"
         ]
       ]
     },
     {
       "path": "src/lib.rs",
       "input_sha256": "897ccc19ef8cac9784cab9767a929ab201baee746ca7913cb583fd876f6a8102",
-      "output_sha256": "642fc8204604988ad7954c9e6b8c21638ed6cd0b541d6e3386e32bce68225a27",
+      "output_sha256": "45523248d6ff9998acd20dfea6f79c2a21e23753ad82fe00f9a8a415d4b54d0c",
       "replacements": [
         [
           "    oniguruma_mode: bool,",
@@ -52,6 +60,30 @@
         [
           "    /// See [`RegexOptionsBuilder::case_insensitive`]\n",
           "    /// See [`RegexOptionsBuilder::icu_octal`].\n    pub fn icu_octal(&mut self, yes: bool) -> &mut Self {\n        self.options.icu_octal(yes);\n        self\n    }\n\n    /// See [`RegexOptionsBuilder::case_insensitive`]\n"
+        ],
+        [
+          "    icu_octal: bool,",
+          "    icu_octal: bool,\n    icu_posix_unicode: bool,"
+        ],
+        [
+          "            .field(\"icu_octal\", &self.icu_octal)",
+          "            .field(\"icu_octal\", &self.icu_octal)\n            .field(\"icu_posix_unicode\", &self.icu_posix_unicode)"
+        ],
+        [
+          "            icu_octal: false,",
+          "            icu_octal: false,\n            icu_posix_unicode: false,"
+        ],
+        [
+          "            | Self::get_flag_value(self.icu_octal, FLAG_ICU_OCTAL)\n",
+          "            | Self::get_flag_value(self.icu_octal, FLAG_ICU_OCTAL)\n            | Self::get_flag_value(self.icu_posix_unicode, FLAG_ICU_POSIX_UNICODE)\n"
+        ],
+        [
+          "    /// Enable SQL/ICU zero-prefixed octal escapes (default: false).\n",
+          "    /// Enable ICU-compatible Unicode POSIX character classes (default: false).\n    pub fn icu_posix_unicode(&mut self, yes: bool) -> &mut Self {\n        self.options.icu_posix_unicode = yes;\n        self\n    }\n\n    /// Enable SQL/ICU zero-prefixed octal escapes (default: false).\n"
+        ],
+        [
+          "    /// See [`RegexOptionsBuilder::icu_octal`].\n",
+          "    /// See [`RegexOptionsBuilder::icu_posix_unicode`].\n    pub fn icu_posix_unicode(&mut self, yes: bool) -> &mut Self {\n        self.options.icu_posix_unicode(yes);\n        self\n    }\n\n    /// See [`RegexOptionsBuilder::icu_octal`].\n"
         ]
       ]
     }
