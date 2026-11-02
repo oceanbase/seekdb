@@ -22,7 +22,6 @@
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/ik/ob_ik_processor.h"
-#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "data_plane/fts/ob_fts_parser.h"
 
 #include <cstdint>
@@ -99,8 +98,6 @@ private:
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
-  // reused across the word batches of one document
-  ObIKArbitrator arbitrator_;
   ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
 
