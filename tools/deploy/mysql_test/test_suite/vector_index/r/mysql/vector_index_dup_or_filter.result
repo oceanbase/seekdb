@@ -1,6 +1,6 @@
-alter system set vector_memory_limit = 0;
 # regression test for issue #1489: duplicated OR/AND operands in pushdown filter
 drop table if exists t1;
+alter system set vector_memory_limit = 0;
 create table t1(c1 int primary key, c2 int, c3 vector(3), c4 int) organization heap;
 create vector index idxv on t1(c3) with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
 insert into t1 values(1,1,'[1.0, 0.0, 0]',10);
@@ -41,3 +41,4 @@ count(*)
 # filtered ANN with duplicated OR operands returns top-k
 count(*)
 3
+drop table if exists t1;

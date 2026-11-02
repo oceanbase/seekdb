@@ -783,6 +783,10 @@ bool ObPushdownFilterConstructor::is_duplicated_filter_expr(
   bool duplicated = false;
   if (OB_UNLIKELY(0 > cur_idx || cur_idx >= exprs.count()) || OB_ISNULL(exprs.at(cur_idx))) {
     // not duplicated; the caller reports the unexpected expr separately
+  } else if (T_OP_RUNTIME_FILTER == exprs.at(cur_idx)->get_expr_type()) {
+    // runtime filter exprs of different sub types (IN / RANGE / BLOOM) share the
+    // same expr type and the same probe-column params, and same_as() does not
+    // distinguish the sub type, so they must not be deduplicated here
   } else {
     for (int64_t i = 0; !duplicated && i < cur_idx; ++i) {
       // comparing against skipped operands is still safe: a skipped one is
