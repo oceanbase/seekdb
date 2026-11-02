@@ -320,10 +320,11 @@ public:
                                    const share::ObAiModelEndpointInfo &endpoint_info,
                                    ObJsonObject *http_response,
                                    ObIJsonBase *&result);
-  static int parse_embed_output(ObIAllocator &allocator, 
+  static int parse_embed_output(ObIAllocator &allocator,
                                 const share::ObAiModelEndpointInfo &endpoint_info,
                                 ObJsonObject *http_response,
                                 ObIJsonBase *&result);
+  static int validate_embedding_vector(const ObIJsonBase *vector, const int64_t expected_dimension);
   static int parse_rerank_output(ObIAllocator &allocator, 
                                  const share::ObAiModelEndpointInfo &endpoint_info,
                                  ObJsonObject *http_response,

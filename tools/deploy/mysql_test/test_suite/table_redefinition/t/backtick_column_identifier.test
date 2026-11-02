@@ -1,0 +1,21 @@
+#owner: donotsleepy
+#owner group: ddl
+#description: escape backticks in column identifiers used by DDL inner SQL.
+
+--disable_warnings
+drop table if exists t_backtick;
+--enable_warnings
+create table t_backtick(
+  `c``id` int primary key,
+  `v``1` int,
+  `e``s` enum('a', 'b'),
+  `multi````tick` int,
+  plain int
+);
+insert into t_backtick values(1, 10, 'a', 20, 30);
+alter table t_backtick drop primary key, add primary key (`v``1`);
+select * from t_backtick order by `v``1`;
+create unique index idx_backtick on t_backtick(`e``s`);
+alter table t_backtick modify column `multi````tick` bigint;
+select * from t_backtick order by `v``1`;
+drop table t_backtick;

@@ -37,6 +37,14 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
   'enhance_embed_ep', '{"ai_model_name":"enhance_embed","scope":"all","url":"http://0.0.0.0:8000/compatible-mode/v1/embeddings","access_key":"mock-key","provider":"openai"}');
 select json_length(ai_embed('enhance_embed', 'single-row')) as embed_dimension;
 select json_length(ai_embed('enhance_embed', 'dimension-row', 768)) as requested_dimension;
+--error ER_WRONG_ARGUMENTS
+select ai_embed('enhance_embed', 'invalid-dimension', 0);
+--error ER_WRONG_ARGUMENTS
+select ai_embed('enhance_embed', 'invalid-dimension', -1);
+--error ER_WRONG_ARGUMENTS
+select ai_embed('enhance_embed', 'invalid-dimension', 1.5);
+--error ER_WRONG_ARGUMENTS
+select ai_embed('enhance_embed', 'invalid-dimension', null);
 
 # 多行在表达式 batch 回调中合并请求；NULL 行不进入请求也不导致结果错位
 --disable_warnings
