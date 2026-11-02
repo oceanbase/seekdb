@@ -40,11 +40,9 @@ sdk_archives(
     }),
     deps = ["@sdk_roaring//:library"] + select({
         "@platforms//os:emscripten": [
-            "@sdk_s2_wasm//:library",
             "@sdk_vsag_wasm//:library",
         ],
         "//conditions:default": [
-            "@sdk_s2_ios//:library",
             "@sdk_vsag_ios//:library",
         ],
     }),
@@ -61,7 +59,6 @@ _IOS_SOURCE_REPOSITORIES = [
     "@sdk_openmp",
     "@sdk_roaring",
     "@sdk_robin_map",
-    "@sdk_s2_ios",
     "@sdk_spdlog",
     "@sdk_thread_pool",
     "@sdk_vsag_ios",

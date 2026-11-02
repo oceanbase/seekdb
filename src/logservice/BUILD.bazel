@@ -134,7 +134,6 @@ grouped_unity_cc_library(
         "//bazel/third_party:mariadb_headers",
         "//bazel/third_party:openssl_headers",
         "//bazel/third_party:rapidjson_headers",
-        "//bazel/third_party:s2_headers",
         "//bazel/third_party:vsag_headers",
         "//bazel/third_party:zlib_headers",
     ],

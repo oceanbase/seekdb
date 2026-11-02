@@ -19,6 +19,7 @@ config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
+spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

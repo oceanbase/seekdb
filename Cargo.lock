@@ -1479,6 +1479,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "s2rst"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32427bddb68a5cc8b2ff1f697ad92a97658a7bbdd9c9dd50604bd228634ea261"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1500,6 +1510,7 @@ dependencies = [
  "logger",
  "mvt",
  "regex-engine",
+ "spatial-covering",
  "sql-nio",
  "standby-rpc",
  "uuid-generator",
@@ -1592,6 +1603,14 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "spatial-covering"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "s2rst",
 ]
 
 [[package]]

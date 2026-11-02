@@ -10,8 +10,6 @@ patches = manifest["patches"]
 selected = []
 if package == "boost":
     selected += patches["boost_ios_numeric"]["files"]
-if package == "s2" and profile == "wasm":
-    selected.append(patches["s2_wasm_port"])
 if package == "vsag" and profile == "wasm":
     selected += [patches[name] for name in (
         "vsag_dataset_paths", "vsag_stream_sizes", "vsag_allocator_sizes")]

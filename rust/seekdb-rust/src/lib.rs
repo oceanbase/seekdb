@@ -19,6 +19,7 @@ pub use local as local_storage;
 pub use logger::*;
 pub use mvt;
 pub use regex_engine;
+pub use spatial_covering;
 pub use sql_nio as network;
 #[cfg(not(target_family = "wasm"))]
 pub use standby_rpc;
