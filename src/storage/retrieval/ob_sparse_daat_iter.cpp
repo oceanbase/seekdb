@@ -26,6 +26,7 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    is_binary_str_id_(false),
     is_inited_(false)
 {
 }
@@ -39,15 +40,57 @@ int ObSRMergeCmp::init(
     ret = OB_ERR_UNEXPECTED;
   } else {
     iter_ids_ = iter_ids;
+    is_binary_str_id_ = false;
     common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
+      // The binary charset compares the bytes of the strings, the fast path
+      // does the very same thing without the call chain of the collation.
+      switch (id_meta.type_) {
+      case common::ObVarcharType:
+      case common::ObCharType:
+      case common::ObTinyTextType:
+      case common::ObTextType:
+      case common::ObMediumTextType:
+      case common::ObLongTextType: {
+        is_binary_str_id_ = (common::CS_TYPE_BINARY == id_meta.cs_type_);
+        break;
+      }
+      default: {
+        break;
+      }
+      }
       is_inited_ = true;
     }
   }
   return ret;
+}
+
+int ObSRMergeCmp::cmp_binary_str(const ObDatum &l, const ObDatum &r, int &cmp_ret)
+{
+  // The behavior is the same as the comparison of the binary charset, the
+  // null values are ordered first.
+  if (OB_UNLIKELY(l.is_null()) || OB_UNLIKELY(r.is_null())) {
+    if (OB_UNLIKELY(l.is_null()) && OB_UNLIKELY(r.is_null())) {
+      cmp_ret = 0;
+    } else if (OB_UNLIKELY(l.is_null())) {
+      cmp_ret = -1;
+    } else {
+      cmp_ret = 1;
+    }
+  } else {
+    const int32_t l_len = l.len_;
+    const int32_t r_len = r.len_;
+    const int32_t min_len = (l_len < r_len) ? l_len : r_len;
+    int cmp = (0 == min_len) ? 0 : MEMCMP(l.ptr_, r.ptr_, min_len);
+    if (0 == cmp) {
+      cmp = l_len - r_len;
+    }
+    cmp_ret = cmp > 0 ? 1 : (cmp < 0 ? -1 : 0);
+  }
+  return OB_SUCCESS;
 }
 
 int ObSRMergeCmp::cmp(
@@ -60,8 +103,14 @@ int ObSRMergeCmp::cmp(
     ret = OB_NOT_INIT;
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(
-            get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret, nullptr))) {
+    const ObDatum &l_datum = get_id_datum(l.iter_idx_);
+    const ObDatum &r_datum = get_id_datum(r.iter_idx_);
+    if (is_binary_str_id_) {
+      if (OB_FAIL(cmp_binary_str(l_datum, r_datum, tmp_ret))) {
+      } else {
+        cmp_ret = tmp_ret;
+      }
+    } else if (OB_FAIL(cmp_func_(l_datum, r_datum, tmp_ret, nullptr))) {
     } else {
       cmp_ret = tmp_ret;
     }
@@ -74,6 +123,7 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     iter_allocator_(nullptr),
     iter_param_(nullptr),
     dim_iters_(nullptr),
+    dim_iter_ptrs_(nullptr),
     merge_cmp_(),
     merge_heap_(nullptr),
     relevance_collector_(nullptr),
@@ -125,8 +175,12 @@ int ObSRDaaTIterImpl::init(
     } else if (OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
     } else if (OB_FAIL(merge_cmp_.init(iter_param_->id_proj_expr_->datum_meta_, &iter_domain_ids_))) {
     } else if (OB_FAIL(init_merge_heap(dim_iters_->count()))) {
+    } else if (OB_ISNULL(dim_iter_ptrs_ = static_cast<ObISRDaaTDimIter **>(
+                   iter_allocator_->alloc(sizeof(ObISRDaaTDimIter *) * dim_iters.count())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       for (int64_t i = 0; i < dim_iters.count(); ++i) {
+        dim_iter_ptrs_[i] = dim_iters.at(i);
         next_round_iter_idxes_[i] = i;
       }
     }
@@ -147,6 +201,10 @@ void ObSRDaaTIterImpl::reset()
     merge_heap_->~ObSRMergeHeap();
     merge_heap_ = nullptr;
   }
+  if (OB_NOT_NULL(dim_iter_ptrs_) && OB_NOT_NULL(iter_allocator_)) {
+    iter_allocator_->free(dim_iter_ptrs_);
+  }
+  dim_iter_ptrs_ = nullptr;
   if (OB_NOT_NULL(relevance_collector_)) {
     relevance_collector_->reset();
     relevance_collector_ = nullptr;
@@ -168,6 +226,11 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
       merge_heap_->reuse();
       merge_heap_->open(dim_iters_->count());
     }
+    if (nullptr != dim_iter_ptrs_) {
+      for (int64_t i = 0; i < dim_iters_->count(); ++i) {
+        dim_iter_ptrs_[i] = dim_iters_->at(i);
+      }
+    }
     next_round_cnt_ = dim_iters_->count();
     for (int64_t i = 0; i < next_round_cnt_; ++i) {
       next_round_iter_idxes_[i] = i;
@@ -185,7 +248,9 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
     int ret = OB_SUCCESS;
     score = 0.0;
     for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
-      ObISRDaaTDimIter *dim_iter = dim_iters_->at(i);
+      ObISRDaaTDimIter *dim_iter = OB_LIKELY(nullptr != dim_iter_ptrs_)
+                                        ? dim_iter_ptrs_[i]
+                                        : dim_iters_->at(i);
       double dim_score = 0.0;
       if (OB_ISNULL(dim_iter) || OB_ISNULL(iter_param_->dim_weights_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -278,7 +343,9 @@ int ObSRDaaTIterImpl::fill_merge_heap()
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
     const int64_t iter_idx = next_round_iter_idxes_[i];
     ObISRDaaTDimIter *dim_iter = nullptr;
-    if (OB_ISNULL(dim_iter = dim_iters_->at(iter_idx))) {
+    if (OB_ISNULL(dim_iter = OB_LIKELY(nullptr != dim_iter_ptrs_)
+                                  ? dim_iter_ptrs_[iter_idx]
+                                  : dim_iters_->at(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dim_iter->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {

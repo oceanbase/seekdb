@@ -46,6 +46,11 @@ struct ObSRMergeCmp
   int init(sql::ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids);
   int cmp(const ObSRMergeItem &l, const ObSRMergeItem &r, int64_t &cmp_ret);
 private:
+  // The doc id of the text retrieval is a string with the binary charset.
+  // Comparing the bytes directly avoids the call chain of the collation
+  // functions, the merge compares the doc ids of every matched document.
+  static int cmp_binary_str(const common::ObDatum &l, const common::ObDatum &r, int &cmp_ret);
+
   inline const ObDatum &get_id_datum(const int64_t iter_idx)
   {
     const ObDatum *datum = iter_ids_->at(iter_idx);
@@ -57,6 +62,7 @@ private:
   // TODO: if memory lifetime of docid datum is guaranteed by dim_iters, we can use pointer to datum directly
   //       and avoid deep copy into merge heap here
   const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids_;
+  bool is_binary_str_id_;
   bool is_inited_;
 };
 
@@ -97,6 +103,9 @@ protected:
   ObIAllocator *iter_allocator_;
   ObSparseRetrievalMergeParam *iter_param_;
   ObIArray<ObISRDaaTDimIter *> *dim_iters_;
+  // The dimension iterators are looked up for every document of the merge
+  // round, the plain array avoids the accessor call of the generic array.
+  ObISRDaaTDimIter **dim_iter_ptrs_;
   ObSRMergeCmp merge_cmp_;
   ObSRMergeHeap *merge_heap_;
   ObSRDaaTRelevanceCollector *relevance_collector_;
