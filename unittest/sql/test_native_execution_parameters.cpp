@@ -2469,3 +2469,72 @@ TEST_F(NativeExecutionParameters, signed_i64_init_keeps_fallbacks_first_error_an
   }
 }
 } // namespace
+
+
+namespace {
+TEST_F(NativeExecutionParameters, typed_bigint_null_init_rejects_point_at_every_key_position)
+{
+  for (int64_t null_index = 0; null_index < 3; ++null_index) {
+    SCOPED_TRACE(null_index);
+    for (int64_t previous_payload : {int64_t(0), int64_t(-73)}) {
+      SCOPED_TRACE(previous_payload);
+      ASSERT_NO_FATAL_FAILURE(load({11, 22, 33}));
+      DatumParameter input = plan().get_parameter_inputs().at(null_index);
+      input.datum_.set_int(previous_payload);
+      input.datum_.set_null(); // Both a zero word and a retired nonzero word are SQL NULL.
+      ASSERT_TRUE(input.datum_.is_null());
+      ASSERT_EQ(ObIntType, input.get_param_meta().get_type());
+      ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(null_index, input));
+      ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+      ASSERT_TRUE(plan().native_parameters_ready());
+      EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan()));
+      const Datum *slot = plan().get_native_parameter(null_index);
+      const SqlType *type = plan().get_native_parameter_type(null_index);
+      ASSERT_NE(nullptr, slot);
+      ASSERT_NE(nullptr, type);
+      ASSERT_TRUE(slot->is_null());
+      ASSERT_EQ(ObIntType, type->kind());
+      EXPECT_EQ(nullptr, plan().get_native_bigint_parameter(null_index));
+      // This exercises the real bound graph and its existing independent
+      // 101/102/103 sentinels, including NULL after a valid prefix.
+      ASSERT_NO_FATAL_FAILURE(expect_no_point());
+      EXPECT_TRUE(slot->is_null());
+    }
+  }
+}
+
+TEST_F(NativeExecutionParameters, ready_bigint_null_rebind_preserves_point_output_and_present_zero)
+{
+  for (int64_t null_index = 0; null_index < 3; ++null_index) {
+    SCOPED_TRACE(null_index);
+    ASSERT_NO_FATAL_FAILURE(load({0, 0, 0}));
+    ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+    ASSERT_NO_FATAL_FAILURE(expect_point(0, 0, 0));
+    const SqlType *type = plan().get_native_parameter_type(null_index);
+    const Datum *slot = plan().get_native_parameter(null_index);
+    ASSERT_NE(nullptr, type);
+    ASSERT_NE(nullptr, slot);
+    const DatumParameterMetadata attributes = *plan().get_parameter_metadata(null_index);
+    Datum replacement;
+    replacement.set_int(97);
+    replacement.set_null();
+    ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(null_index, replacement, *type, attributes));
+    ASSERT_TRUE(plan().native_parameters_ready());
+    EXPECT_EQ(type, plan().get_native_parameter_type(null_index));
+    EXPECT_EQ(slot, plan().get_native_parameter(null_index));
+    ASSERT_TRUE(slot->is_null());
+    EXPECT_EQ(ObIntType, type->kind());
+    EXPECT_EQ(ObNullType, plan().get_parameter_metadata(null_index)->type_meta_.get_type());
+    EXPECT_EQ(ObIntType, plan().get_parameter_metadata(null_index)->param_meta_.get_type());
+    EXPECT_EQ(nullptr, plan().get_native_bigint_parameter(null_index));
+    ASSERT_NO_FATAL_FAILURE(expect_no_point());
+    // A real zero is still eligible. Restoring the value uses the public ready
+    // binding, without changing the graph, Type or constructing a proxy store.
+    replacement.set_int(0);
+    ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(null_index, replacement, *type, attributes));
+    EXPECT_EQ(slot, plan().get_native_bigint_parameter(null_index));
+    ASSERT_TRUE(slot->is_present());
+    ASSERT_NO_FATAL_FAILURE(expect_point(0, 0, 0));
+  }
+}
+} // namespace

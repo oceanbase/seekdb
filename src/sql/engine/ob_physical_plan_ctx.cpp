@@ -560,7 +560,9 @@ const DatumParameterMetadata *ObPhysicalPlanCtx::get_parameter_metadata(int64_t 
 const Datum *ObPhysicalPlanCtx::get_native_bigint_parameter(int64_t index) const
 {
   const SqlType *type = get_native_parameter_type(index);
-  return type != nullptr && type->kind() == ObIntType ? get_native_parameter(index) : nullptr;
+  const Datum *value = get_native_parameter(index);
+  return type != nullptr && type->kind() == ObIntType && value != nullptr && value->is_present()
+      ? value : nullptr;
 }
 
 const DatumParameter *ObPhysicalPlanCtx::get_group_parameter_input(int64_t index) const
