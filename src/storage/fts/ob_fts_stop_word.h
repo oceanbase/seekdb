@@ -123,6 +123,7 @@ private:
   int casedown_word(const ObFTWord &src, ObFTWord &dst);
   int check_stopword(const ObFTWord &word, bool &is_stopword);
   int groupby_word(const ObFTWord &word, const int64_t word_cnt);
+  int copy_word_if_needed(const ObFTWord &word, ObFTWord &dst);
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;

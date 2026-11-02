@@ -382,17 +382,36 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
+  if (ranges_sorted_ && range_dicts_.size() > 0) {
+    // The ranges are ordered and do not overlap, so at most one of them can
+    // contain the word. Find the last range whose start word is not greater
+    // than the word and check its end word. The binary search replaces the
+    // linear scan over all the ranges, which was done for every single
+    // character of the text.
+    int64_t low = 0;
+    int64_t high = range_dicts_.size() - 1;
+    int64_t candidate = -1;
+    while (low <= high) {
+      const int64_t middle = (low + high) / 2;
+      if (compare_word(range_dicts_[middle].start_.get_word(), single_word) <= 0) {
+        candidate = middle;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+    if (candidate >= 0
+        && compare_word(range_dicts_[candidate].end_.get_word(), single_word) >= 0) {
+      dict = range_dicts_[candidate].dict_;
       found = true;
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
+      if (compare_word(range_dicts_[i].start_.get_word(), single_word) <= 0
+          && compare_word(range_dicts_[i].end_.get_word(), single_word) >= 0) {
+        dict = range_dicts_[i].dict_;
+        found = true;
+      }
     }
   }
   if (!found) {
@@ -402,9 +421,28 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
   return ret;
 }
 
+int ObFTRangeDict::compare_word(const ObString &lhs, const ObString &rhs) const
+{
+  if (OB_LIKELY(cmp_cs_ != nullptr)) {
+    // Keep the behavior of ObCharset::strcmp() for the empty words.
+    if (lhs.empty() || rhs.empty()) {
+      return lhs.empty() ? (rhs.empty() ? 0 : -1) : 1;
+    }
+    const bool t_is_prefix = false;
+    return cmp_cs_->coll->strnncoll(cmp_cs_,
+                                   reinterpret_cast<const unsigned char *>(lhs.ptr()),
+                                   lhs.length(),
+                                   reinterpret_cast<const unsigned char *>(rhs.ptr()),
+                                   rhs.length(),
+                                   t_is_prefix);
+  }
+  return ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN, lhs, rhs);
+}
+
 int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
+  cmp_cs_ = ObCharset::get_charset(ObCollationType::CS_TYPE_UTF8MB4_BIN);
   for (ObList<ObFTCacheRangeHandle *, ObIAllocator>::const_iterator iter = range_container.get_handles().begin();
        OB_SUCC(ret) && iter != range_container.get_handles().end();
        iter++) {
@@ -419,6 +457,20 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       range.end_ = dat->end_word_;
       range.dict_ = dict;
       if (OB_FAIL(range_dicts_.push_back(range))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret) && cmp_cs_ != nullptr) {
+    // The ranges are built from the sorted words of the dictionary, so they
+    // are ordered and do not overlap. The flag is verified here, the linear
+    // scan is used when the order is not the expected one.
+    ranges_sorted_ = true;
+    for (int64_t i = 1; i < range_dicts_.size(); ++i) {
+      if (compare_word(range_dicts_[i - 1].end_.get_word(),
+                       range_dicts_[i].start_.get_word())
+          >= 0) {
+        ranges_sorted_ = false;
+        break;
       }
     }
   }

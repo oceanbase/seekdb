@@ -286,7 +286,7 @@ OB_INLINE uint64_t datum_varchar_hash(const ObDatum &datum,
                                              const uint64_t seed,
                                              hash_algo algo)
 {
-  return ObCharset::hash(cs_type, datum.ptr_, datum.len_, seed, calc_end_space, algo);
+  return ObCharset::hash_inline(cs_type, datum.ptr_, datum.len_, seed, calc_end_space, algo);
 }
 
 OB_INLINE int datum_lob_locator_get_string(const ObDatum &datum,

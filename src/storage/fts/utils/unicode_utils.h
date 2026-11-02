@@ -52,7 +52,6 @@ public:
 
   static bool is_convertable_fullwidth(const ob_wc_t unicode);
 
-private:
   // Do compare with u8 char
   // only for static number
   static ob_wc_t get_unicode_from_u8(const char *input, const uint8_t char_len);

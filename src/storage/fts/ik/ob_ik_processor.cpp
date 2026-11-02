@@ -31,17 +31,13 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                             const char *ch,
+                             const uint8_t char_len,
+                             const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
   }
   return ret;
 }
@@ -52,8 +48,10 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+      next_char_len_(0), next_char_type_(ObFTCharUtil::CharType::USELESS), next_unicode_(0),
+      handle_size_(0), is_smart_(is_smart),
+      is_utf8mb4_(CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(coll_type)),
+      token_list_(allocator), result_list_(allocator)
 {
 }
 
@@ -99,6 +97,46 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::check_cn_number(const char *ch, const uint8_t char_len, bool &is_cn_number)
+{
+  int ret = OB_SUCCESS;
+  if (is_utf8mb4_) {
+    is_cn_number = ObFTCharUtil::is_cn_number(next_unicode_);
+  } else if (OB_FAIL(ObFTCharUtil::check_cn_number(coll_type_, ch, char_len, is_cn_number))) {
+  }
+  return ret;
+}
+
+int TokenizeContext::check_num_connector(const char *ch, const uint8_t char_len, bool &is_connector)
+{
+  int ret = OB_SUCCESS;
+  if (is_utf8mb4_) {
+    is_connector = ObFTCharUtil::is_num_connector(next_unicode_);
+  } else if (OB_FAIL(ObFTCharUtil::check_num_connector(coll_type_, ch, char_len, is_connector))) {
+  }
+  return ret;
+}
+
+int TokenizeContext::check_letter_connector(const char *ch, const uint8_t char_len, bool &is_connector)
+{
+  int ret = OB_SUCCESS;
+  if (is_utf8mb4_) {
+    is_connector = ObFTCharUtil::is_letter_connector(next_unicode_);
+  } else if (OB_FAIL(ObFTCharUtil::check_letter_connector(coll_type_, ch, char_len, is_connector))) {
+  }
+  return ret;
+}
+
+int TokenizeContext::check_ignore_single_cjk(const char *ch, const uint8_t char_len, bool &ignore)
+{
+  int ret = OB_SUCCESS;
+  if (is_utf8mb4_) {
+    ignore = ObFTCharUtil::is_ignore_single_cjk(next_unicode_);
+  } else if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(coll_type_, ch, char_len, ignore))) {
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
@@ -106,10 +144,11 @@ int TokenizeContext::prepare_next_char()
                                           fulltext_ + cursor_,
                                           fulltext_len_ - cursor_,
                                           next_char_len_))) {
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
+  } else if (OB_FAIL(ObFTCharUtil::classify_char(coll_type_,
+                                                fulltext_ + cursor_,
+                                                next_char_len_,
+                                                next_unicode_,
+                                                next_char_type_))) {
   }
   return ret;
 }

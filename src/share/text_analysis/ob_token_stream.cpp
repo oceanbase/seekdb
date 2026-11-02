@@ -24,6 +24,33 @@ namespace oceanbase
 namespace share
 {
 
+// Check whether the token is an ASCII word that needs neither trimming nor
+// case conversion. Such tokens can be used in place, which keeps the
+// english tokenizer free of per token allocations.
+static inline bool is_plain_ascii_word(const ObCharsetInfo *cs, const char *token, const uint32_t len)
+{
+  if (0 == len) {
+    return false;
+  }
+  const unsigned char first = static_cast<unsigned char>(token[0]);
+  const unsigned char last = static_cast<unsigned char>(token[len - 1]);
+  if (first >= 0x80 || last >= 0x80) {
+    // Non ascii bytes may have case mappings, keep the generic path.
+    return false;
+  }
+  if (!ob_isalnum(cs, token[0]) || !ob_isalnum(cs, token[len - 1])) {
+    // The token has to be trimmed.
+    return false;
+  }
+  for (uint32_t i = 0; i < len; ++i) {
+    const unsigned char ch = static_cast<unsigned char>(token[i]);
+    if (ch >= 0x80 || (ch >= 'A' && ch <= 'Z')) {
+      return false;
+    }
+  }
+  return true;
+}
+
 ObTextTokenizer::ObTextTokenizer()
   : ObITokenStream(),
     input_doc_(nullptr),
@@ -247,6 +274,7 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     norm_allocator_.reuse();
     ObDatum tmp_datum;
     bool found_alnum = false;
+    bool token_ready = false;
     uint32_t norm_token_len = 0;
     const char *norm_token_ptr = nullptr;
     while (OB_SUCC(ret) && !found_alnum) {
@@ -258,6 +286,16 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
         // trim leading and trailing non-alnum characters
         const char *token = tmp_datum.ptr_;
         const uint32_t raw_token_len = tmp_datum.len_;
+        if (is_plain_ascii_word(cs_, token, raw_token_len)) {
+          // The token is already a trimmed lowercase ASCII word, so it can be
+          // used in place. This avoids a copy and a charset conversion for
+          // every word of the common english text.
+          next_token.set_string(token, raw_token_len);
+          found_alnum = true;
+          token_ready = true;
+          break;
+        }
+
         uint32_t first_alnum_pos = 0;
         uint32_t last_alnum_pos = raw_token_len - 1;
         for (uint32_t i = 0; i < raw_token_len; ++i) {
@@ -290,6 +328,8 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     }
 
     if (OB_FAIL(ret)) {
+    } else if (token_ready) {
+      // the token has been prepared in place
     } else if (OB_UNLIKELY(!found_alnum)) {
       ret = OB_ERR_UNEXPECTED;
     } else {

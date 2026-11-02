@@ -92,7 +92,9 @@ inline void *jemalloc_memalign(const size_t alignment, const size_t size)
   void *ptr = nullptr;
   return 0 == je_posix_memalign(&ptr, alignment, size) ? ptr : nullptr;
 #else
-  return je_memalign(alignment, size);
+  // jemalloc 5.3 no longer exports the legacy je_memalign symbol.
+  void *ptr = nullptr;
+  return 0 == je_posix_memalign(&ptr, alignment, size) ? ptr : nullptr;
 #endif
 #else
   (void)alignment;

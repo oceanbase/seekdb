@@ -474,6 +474,10 @@ public:
     int ret_;
     const ObIArray<ObSortFieldCollation> *sort_collations_;
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
+    // The arrays are looked up for every comparison of every sorted row.
+    // The plain pointers avoid the accessor call of the generic array.
+    const ObSortFieldCollation *sort_collations_data_;
+    const ObSortCmpFunc *sort_cmp_funs_data_;
     ObExecContext *exec_ctx_;
     const common::ObDatumAccessContext *access_ctx_;
     bool enable_encode_sortkey_;

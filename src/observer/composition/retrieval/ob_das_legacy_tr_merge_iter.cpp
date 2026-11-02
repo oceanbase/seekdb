@@ -105,7 +105,10 @@ int ObDASLegacyTRMergeIter::init_das_iter_scan_params()
 {
   int ret = OB_SUCCESS;
   const int64_t dim_iter_cnt = taat_mode_ ? 1 : query_tokens_.count();
-  if (!ir_ctdef_->need_estimate_total_doc_cnt() && 0 != dim_iter_cnt) {
+  // the document count aggregate iterator is only created when the relevance
+  // score is calculated, the total document count is not needed otherwise
+  if (!ir_ctdef_->need_estimate_total_doc_cnt() && 0 != dim_iter_cnt
+      && OB_NOT_NULL(ir_ctdef_->get_doc_agg_ctdef())) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = myself_allocator_.alloc(sizeof(ObTableScanParam)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -473,8 +476,16 @@ int ObDASLegacyTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+  // The bm25 parameters are only required to evaluate the relevance score.
+  // When the score is not consumed by the query, the whole bm25 estimation,
+  // including the document count aggregate scan, can be skipped.
+  const bool need_bm25_param = (OB_NOT_NULL(ir_ctdef_->relevance_expr_));
+  const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+  if (need_bm25_param && OB_NOT_NULL(doc_agg_ctdef)
+      && 1 == doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.count()) {
+    iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+        = doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+  }
   iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
   iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
   iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
@@ -482,6 +493,8 @@ int ObDASLegacyTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (query_tokens_.count() == 0) {
     // do nothing
+  } else if (!need_bm25_param) {
+    // the relevance score is not calculated, the bm25 parameters are not needed
   } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_doc_length_est_param())) {
@@ -524,8 +537,14 @@ int ObDASLegacyTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+  // The bm25 parameters are only required to evaluate the relevance score.
+  const bool need_bm25_param = (OB_NOT_NULL(ir_ctdef_->relevance_expr_));
+  const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+  if (need_bm25_param && OB_NOT_NULL(doc_agg_ctdef)
+      && 1 == doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.count()) {
+    iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+        = doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+  }
   iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
   iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
   iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
@@ -533,6 +552,8 @@ int ObDASLegacyTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (!need_bm25_param) {
+    // the relevance score is not calculated, the bm25 parameters are not needed
   } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_doc_length_est_param())) {

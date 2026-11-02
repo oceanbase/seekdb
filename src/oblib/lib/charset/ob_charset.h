@@ -505,6 +505,40 @@ public:
                       int64_t str2_len,
                       bool cmp_endspace);
 
+  // The inline fast path of strcmpsp().
+  //
+  // The string comparison is called for every pair of rows by the sort
+  // operators, so the lookup of the charset info and the validation of the
+  // arguments dominate the cost when the compared strings are short. The
+  // charset info of an initialized collation is read directly here and the
+  // arguments are checked inline, so that no extra call is needed on the hot
+  // path. The slow path is taken when anything is out of the ordinary, it
+  // reports the invalid arguments the same way as strcmpsp() does.
+  static inline int strcmpsp_inline(ObCollationType collation_type,
+                                    const char *str1,
+                                    int64_t str1_len,
+                                    const char *str2,
+                                    int64_t str2_len,
+                                    bool cmp_endspace)
+  {
+    const ObCharsetInfo *cs = nullptr;
+    if (OB_LIKELY(collation_type > CS_TYPE_INVALID && collation_type < CS_TYPE_MAX)) {
+      cs = charset_arr_inited[collation_type];
+    }
+    if (OB_LIKELY(cs != nullptr && cs->cset != nullptr && cs->coll != nullptr
+                  && OB_LIKELY(str1_len >= 0) && OB_LIKELY(str2_len >= 0)
+                  && OB_LIKELY(str1 != nullptr || str1_len == 0)
+                  && OB_LIKELY(str2 != nullptr || str2_len == 0))) {
+      return cs->coll->strnncollsp(cs,
+                                   reinterpret_cast<const unsigned char *>(str1),
+                                   str1_len,
+                                   reinterpret_cast<const unsigned char *>(str2),
+                                   str2_len,
+                                   cmp_endspace);
+    }
+    return strcmpsp(collation_type, str1, str1_len, str2, str2_len, cmp_endspace);
+  }
+
   static size_t casedn(const ObCollationType collation_type,
                        char *src, size_t src_len,
                        char *dest, size_t dest_len);
@@ -539,6 +573,44 @@ public:
                            int64_t str_len,
                            uint64_t seed,
                            hash_algo hash_algo);
+
+  // The inline fast path of hash().
+  //
+  // The hash of a string is calculated for every key of the hash based
+  // containers, so the lookup of the charset info and the validation of the
+  // arguments are avoided on the hot path. The slow path is taken when
+  // anything is out of the ordinary, it reports the invalid arguments the
+  // same way as hash() does.
+  static inline uint64_t hash_inline(ObCollationType collation_type,
+                                     const char *str,
+                                     int64_t str_len,
+                                     uint64_t seed,
+                                     bool calc_end_space,
+                                     hash_algo hash_algo)
+  {
+    const ObCharsetInfo *cs = nullptr;
+    if (OB_LIKELY(collation_type > CS_TYPE_INVALID && collation_type < CS_TYPE_MAX)) {
+      cs = charset_arr_inited[collation_type];
+    }
+    if (OB_LIKELY(cs != nullptr && cs->coll != nullptr
+                  && OB_LIKELY(str_len >= 0)
+                  && OB_LIKELY(str != nullptr || str_len == 0))) {
+      // hash_sort() needs two integers, one for the accumulated hash and one
+      // for the input seed, 0xc6a4a7935bd1e995 is the seed used by the
+      // murmurhash64A() implementation.
+      unsigned long nr1 = static_cast<unsigned long>(seed);
+      unsigned long nr2 = 0xc6a4a7935bd1e995UL;
+      cs->coll->hash_sort(cs,
+                          reinterpret_cast<const unsigned char *>(str),
+                          str_len,
+                          &nr1,
+                          &nr2,
+                          calc_end_space,
+                          hash_algo);
+      return static_cast<uint64_t>(nr1);
+    }
+    return hash(collation_type, str, str_len, seed, calc_end_space, hash_algo);
+  }
 
   static int like_range(ObCollationType collation_type,
                         const ObString &like_str,

@@ -1,0 +1,14 @@
+# owner: storage
+# description: repeated IK tokenization keeps the same dictionary and result
+
+--disable_warnings
+drop database if exists fts_dict_reuse;
+create database fts_dict_reuse;
+use fts_dict_reuse;
+--enable_warnings
+
+--result_format 4
+select tokenize('中文分词测试：OceanBase 全文索引性能优化', 'ik');
+select tokenize('中文分词测试：OceanBase 全文索引性能优化', 'ik');
+
+drop database fts_dict_reuse;

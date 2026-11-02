@@ -302,6 +302,26 @@ static inline void ob_tosort_unicode(ObUnicaseInfo *uni_plane, ob_wc_t *wc, unsi
   }
 }
 
+// The sort weight of an ascii character is stored in the first page of the
+// case info. Reading it directly avoids the utf8 decoding and the generic
+// weight lookup, which dominate the cost of the comparison when the compared
+// strings are short.
+static inline const ObUnicaseInfoChar *ob_ascii_case_page(const ObCharsetInfo *cs)
+{
+  const ObUnicaseInfo *uni_plane = cs->caseinfo;
+  if (OB_NOT_NULL(uni_plane) && OB_NOT_NULL(uni_plane->page) && uni_plane->maxchar >= 0x7F) {
+    return uni_plane->page[0];
+  }
+  return nullptr;
+}
+
+static inline ob_wc_t ob_ascii_sort_weight(const ObUnicaseInfoChar *ascii_page,
+                                            unsigned char c,
+                                            bool lower_sort)
+{
+  return lower_sort ? (ob_wc_t) ascii_page[c].tolower : (ob_wc_t) ascii_page[c].sort;
+}
+
 static int ob_strnncoll_utf8mb4(const ObCharsetInfo *cs,
                      const unsigned char *src, size_t srclen,
                      const unsigned char *dst, size_t dstlen,
@@ -311,7 +331,20 @@ static int ob_strnncoll_utf8mb4(const ObCharsetInfo *cs,
   const unsigned char *se = src + srclen;
   const unsigned char *te = dst + dstlen;
   ObUnicaseInfo *uni_plane = cs->caseinfo;
+  const ObUnicaseInfoChar *ascii_page = ob_ascii_case_page(cs);
+  const bool lower_sort = 0 != (cs->state & OB_CS_LOWER_SORT);
   while ( src < se && dst < te ) {
+    if (OB_NOT_NULL(ascii_page) && OB_LIKELY((*src | *dst) < 0x80)) {
+      // both characters are single byte ascii characters
+      const ob_wc_t s_wc = ob_ascii_sort_weight(ascii_page, *src, lower_sort);
+      const ob_wc_t d_wc = ob_ascii_sort_weight(ascii_page, *dst, lower_sort);
+      if (s_wc != d_wc) {
+        return s_wc > d_wc ? 1 : -1;
+      }
+      ++src;
+      ++dst;
+      continue;
+    }
     int s_res = ob_mb_wc_utf8mb4(cs, &src_wc, src, se);
     int t_res = ob_mb_wc_utf8mb4(cs, &dst_wc, dst, te);
     if ( s_res <= 0 || t_res <= 0 ) {
@@ -381,7 +414,20 @@ static int ob_strnncollsp_utf8mb4(const ObCharsetInfo *cs,
   ob_wc_t src_wc = 0, dst_wc = 0;
   const unsigned char *se= src + srclen, *te= dst + dstlen;
   ObUnicaseInfo *uni_plane= cs->caseinfo;
+  const ObUnicaseInfoChar *ascii_page = ob_ascii_case_page(cs);
+  const bool lower_sort = 0 != (cs->state & OB_CS_LOWER_SORT);
   while ( src < se && dst < te ) {
+    if (OB_NOT_NULL(ascii_page) && OB_LIKELY((*src | *dst) < 0x80)) {
+      // both characters are single byte ascii characters
+      const ob_wc_t s_wc = ob_ascii_sort_weight(ascii_page, *src, lower_sort);
+      const ob_wc_t d_wc = ob_ascii_sort_weight(ascii_page, *dst, lower_sort);
+      if (s_wc != d_wc) {
+        return s_wc > d_wc ? 1 : -1;
+      }
+      ++src;
+      ++dst;
+      continue;
+    }
     int s_res= ob_mb_wc_utf8mb4(cs, &src_wc, src, se);
     int t_res= ob_mb_wc_utf8mb4(cs, &dst_wc, dst, te);
     if ( s_res <= 0 || t_res <= 0 ) {

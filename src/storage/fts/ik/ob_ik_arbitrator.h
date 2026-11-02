@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_IK_OB_IK_ARBITRATOR_H_
 
 #include "lib/allocator/page_arena.h"
+#include "lib/charset/ob_charset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_token.h"
@@ -56,6 +57,14 @@ private:
                          ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
+
+  static int check_ignore_single_cjk(ObCollationType collation,
+                                      const char *ch,
+                                      const uint8_t char_len,
+                                      ob_wc_t &unicode,
+                                      const bool unicode_ready,
+                                      const bool use_codepoint,
+                                      bool &is_ignore);
 
   bool keep_single() const { return true; }
 

@@ -125,20 +125,35 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
-    TCWLockGuard guard(lock_);
-    if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
-        } else if (OB_ISNULL(dic_loader)) {
+    // The loader is looked up for every tokenize call, the common case is
+    // that it already exists, so the read lock is used for the lookup and
+    // the write lock is only taken when the loader has to be created.
+    int tmp_ret = OB_SUCCESS;
+    {
+      TCRLockGuard guard(lock_);
+      tmp_ret = dic_loader_map_.get_refactored(dic_loader_key, dic_loader);
+    }
+    if (OB_HASH_NOT_EXIST == tmp_ret) {
+      TCWLockGuard guard(lock_);
+      if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
+          } else if (OB_ISNULL(dic_loader)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
+          } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
+          } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+          }
+        } else {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
-        } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
-        } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
       }
-    } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+    } else if (OB_SUCC(tmp_ret)) {
+      if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
     }
   }
   return ret;

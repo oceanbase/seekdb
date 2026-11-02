@@ -1759,6 +1759,7 @@ private: // member functions
   int prepare_text_retrieval_info(const uint64_t ref_table_id,
                                   const uint64_t index_table_id,
                                   ObMatchFunRawExpr *ma_expr,
+                                  const bool need_calc_relevance,
                                   ObTextRetrievalInfo &tr_info);
 public:
   inline const ObLogPlanHint &get_log_plan_hint() const { return log_plan_hint_; }

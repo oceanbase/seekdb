@@ -302,10 +302,22 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+  const ObNewRange *template_range = nullptr;
+  if (OB_NOT_NULL(inv_idx_agg_param_)) {
+    if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      template_range = &inv_idx_agg_param_->key_ranges_.at(0);
+    }
+  } else if (OB_UNLIKELY(inv_idx_scan_param_->key_ranges_.count() != 1)) {
+    // the inverted index aggregate iterator is absent when the relevance is not calculated,
+    // the scan range is used as the template of the new range in that case
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
+    template_range = &inv_idx_scan_param_->key_ranges_.at(0);
+  }
+  if (OB_SUCC(ret)) {
+    ObNewRange scan_range = *template_range;
     ObObj tmp_obj;
     tmp_obj.set_string(ObVarcharType, token);
     tmp_obj.set_meta_type(scan_range.start_key_.get_obj_ptr()->meta_);
@@ -352,6 +364,7 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
     if (OB_SUCC(ret)) {
       reuse();
     }
+  } else {
   }
   return ret;
 }
@@ -359,6 +372,11 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
 int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
 {
   int ret = OB_SUCCESS;
+  if (!need_inv_idx_agg()) {
+    // the relevance is not calculated, the token document count is not needed
+    token_doc_cnt_calculated_ = true;
+    return ret;
+  }
   int64_t logical_row_cnt = 0;
   int64_t physical_row_cnt = 0;
   ObSEArray<ObEstRowCountRecord, 1> est_records;
@@ -526,10 +544,8 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-        };
-      }
+      if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+      };
     }
   }
   return ret;
@@ -584,6 +600,10 @@ int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else if (relevance_expr_) {
     score = relevance_[cur_idx_];
+  } else {
+    // the relevance score is not required, a positive constant keeps the
+    // boolean match semantics and the merge order of the documents
+    score = 1.0;
   }
   return ret;
 }

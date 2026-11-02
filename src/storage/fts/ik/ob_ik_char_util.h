@@ -52,6 +52,60 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  // Decode the character once and classify it. The decoded code point is
+  // returned through `unicode` so that the callers can reuse it instead of
+  // decoding the same character again and again.
+  static int classify_char(ObCollationType coll_type,
+                            const char *input,
+                            const uint8_t char_len,
+                            ob_wc_t &unicode,
+                            CharType &type);
+
+  // Classify an already decoded code point. The order of the checks defines
+  // the CharType precedence and must not be changed.
+  // The surrogate types only exist for the utf16 charsets, the utf8mb4
+  // decoder never produces a surrogate code point.
+  static CharType classify_unicode(const ob_wc_t unicode, const bool allow_surrogate = true)
+  {
+    if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+      return CharType::ENGLISH_LETTER;
+    } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
+      return CharType::ARABIC_LETTER;
+    } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
+      return CharType::CHINESE;
+    } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
+      return CharType::OTHER_CJK;
+    } else if (allow_surrogate && ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
+      return CharType::SURROGATE_HIGH;
+    } else if (allow_surrogate && ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
+      return CharType::SURROGATE_LOW;
+    } else {
+      return CharType::USELESS;
+    }
+  }
+
+  // Code point level predicates. They avoid the decode that the buffer based
+  // helpers have to do for every single character.
+  static bool is_cn_number(const ob_wc_t unicode)
+  {
+    return ObUnicodeBlockUtils::is_unicode_cn_number(unicode);
+  }
+
+  static bool is_num_connector(const ob_wc_t unicode)
+  {
+    return ObUnicodeBlockUtils::check_num_connector(unicode);
+  }
+
+  static bool is_letter_connector(const ob_wc_t unicode)
+  {
+    return ObUnicodeBlockUtils::check_letter_connector(unicode);
+  }
+
+  static bool is_ignore_single_cjk(const ob_wc_t unicode)
+  {
+    return ObUnicodeBlockUtils::check_ignore_as_single(unicode);
+  }
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -76,6 +130,10 @@ public:
 private:
   template <ObCharsetType CS_TYPE>
   static int do_classify(const char *input, const uint8_t char_len, CharType &type);
+
+  // Decode one UTF-8 character. ASCII characters are decoded inline to avoid
+  // the generic decoder call on the hot path.
+  static int decode_utf8mb4(const char *input, const uint8_t char_len, ob_wc_t &unicode);
 
 private:
   /*************************  Alpha: english letter abc *********************/
@@ -467,6 +525,61 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
   } else if (checker) {
     type = CharType::SURROGATE_LOW;
   }
+  return ret;
+}
+
+inline int ObFTCharUtil::decode_utf8mb4(const char *input,
+                                        const uint8_t char_len,
+                                        ob_wc_t &unicode)
+{
+  int ret = OB_SUCCESS;
+  const unsigned char *ustart = reinterpret_cast<const unsigned char *>(input);
+  if (1 == char_len && ustart[0] < 0x80) {
+    // ASCII fast path, the generic decoder returns the very same value.
+    unicode = ustart[0];
+  } else {
+    const unsigned char *uend = reinterpret_cast<const unsigned char *>(&input[char_len]);
+    int code_size = common::ob_charset_decode_unicode<CHARSET_UTF8MB4>(ustart, uend, unicode);
+    if (code_size < 0) {
+      ret = OB_UNEXPECT_INTERNAL_ERROR;
+      STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(code_size), K(ret));
+    }
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_char(ObCollationType coll_type,
+                                       const char *input,
+                                       const uint8_t char_len,
+                                       ob_wc_t &unicode,
+                                       CharType &type)
+{
+  int ret = OB_SUCCESS;
+  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+
+  switch (cs_type) {
+  case CHARSET_UTF8MB4: {
+    ret = decode_utf8mb4(input, char_len, unicode);
+    break;
+  }
+  case CHARSET_UTF16: {
+    ret = decode_unicode<CHARSET_UTF16>(input, char_len, unicode);
+    break;
+  }
+  case CHARSET_UTF16LE: {
+    ret = decode_unicode<CHARSET_UTF16LE>(input, char_len, unicode);
+    break;
+  }
+  default:
+    ret = OB_NOT_SUPPORTED;
+    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    break;
+  }
+
+  if (OB_SUCC(ret)) {
+    type = classify_unicode(unicode, CHARSET_UTF8MB4 != cs_type);
+  }
+
   return ret;
 }
 

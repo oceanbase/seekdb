@@ -49,11 +49,11 @@ int ObBEngFTParser::get_next_token(
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    MEMCPY(buf, token.ptr_, token.len_);
-    word = buf;
+    // The grouping path copies a new token into the word map. Keeping the
+    // stream-owned pointer here avoids a second allocation and copy for every
+    // token before duplicate filtering.
+    word = token.ptr_;
     word_len = token.len_;
     char_len = token.len_;
     word_freq = token_freq;
@@ -155,6 +155,7 @@ int ObBasicEnglishFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
   flag.set_min_max_word();
   flag.set_stop_word();
   flag.set_groupby_word();
+  flag.set_copy_word();
   return ret;
 }
 
