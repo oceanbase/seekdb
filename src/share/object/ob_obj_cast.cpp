@@ -6965,6 +6965,47 @@ static int geometry_geometry_datum(const SqlValueType expect_type, DatumCastPara
   return ret;
 }
 
+template <typename Value>
+static int string_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    ObString in_str;
+    if (OB_FAIL(in.get_string(in_str))) {
+    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, in_str, srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, in_str, geo, srs, cast_name))) {
+    } else if (ObGeoType::GEOMETRY == dst_geo_type) {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::add_geo_version(temp_allocator, in_str, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, static_cast<ObLength>(out.get_string_len()));
+        }
+      }
+    } else if (OB_FAIL(geometry_geometry_datum(expect_type, params, in, in_str, out, cast_mode))) {
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  return ret;
+}
+
 ////////////////////////////////////////////////////////////
 // XXX -> UDT
 
@@ -9948,7 +9989,8 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
              && input.get_type_class() != ObDateTimeTC && input.get_type_class() != ObDateTC
              && input.get_type_class() != ObTimeTC && input.get_type_class() != ObYearTC
              && input.get_type_class() != ObBitTC && input.get_type_class() != ObDecimalIntTC
-             && input.get_type_class() != ObEnumSetTC && input.get_type_class() != ObMySQLDateTC
+             && input.get_type_class() != ObEnumSetTC && input.get_type_class() != ObEnumSetInnerTC
+             && input.get_type_class() != ObMySQLDateTC
              && input.get_type_class() != ObMySQLDateTimeTC && input.get_type_class() != ObTextTC
              && input.get_type_class() != ObJsonTC
              && input.get_type_class() != ObGeometryTC) {
@@ -9971,6 +10013,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
     return OB_INVALID_ARGUMENT;
   } else if (input.get_type_class() != ObNumberTC && input.get_type_class() != ObStringTC
              && input.get_type_class() != ObDecimalIntTC && input.get_type_class() != ObTextTC
+             && input.get_type_class() != ObEnumSetInnerTC
              && input.get_type_class() != ObJsonTC && input.get_type_class() != ObGeometryTC &&
              (physical_input.ptr_ == nullptr || physical_input.len_ !=
               (input.get_type_class() == ObYearTC ? sizeof(uint8_t)
@@ -10007,7 +10050,19 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
     using Frame = detail::DatumCastFrame;
     using Function = int (*)(SqlValueType, DatumCastParams &, const Frame &, Frame &, ObCastMode);
     Function function = nullptr;
-    if (input.get_type_class() == ObGeometryTC) {
+    const bool collection_from_string = target == ObCollectionSQLType
+        && (input.get_type_class() == ObStringTC || input.get_type_class() == ObTextTC);
+    if (collection_from_string) {
+      // The public common cast API receives the actual destination declaration
+      // in output metadata. Keep it local until the runtime's checked lookup,
+      // conversion and the final owned copy all succeed.
+      if (!output.get_meta().is_collection_sql_type() || context.runtime_ == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        result.meta_ = output.get_meta();
+        ret = context.runtime_->cast_collection(context, input, result, context.cast_mode_);
+      }
+    } else if (input.get_type_class() == ObGeometryTC) {
       ObString wkb = input.get_string();
       if (target == ObVarcharType || target == ObCharType || ob_is_text_tc(target)) {
         ObLength res_length = -1;
@@ -10311,6 +10366,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObMySQLDateTC: function = string_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = string_mdatetime<Frame>; break;
           case ObBitTC: function = string_bit<Frame>; break;
+          case ObGeometryTC: function = string_geometry<Frame>; break;
           default: break;
         }
         break;
@@ -10458,6 +10514,46 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           default: break;
         }
         break;
+      case ObEnumSetInnerTC: {
+        const SqlTypeClass target_class = sql_type_class(target);
+        switch (target_class) {
+          case ObIntTC: function = uint_int<Frame>; break;
+          case ObUIntTC: function = uint_uint<Frame>; break;
+          case ObFloatTC: function = uint_float<Frame>; break;
+          case ObDoubleTC: function = uint_double<Frame>; break;
+          case ObNumberTC: function = uint_number<Frame>; break;
+          case ObYearTC: function = uint_year<Frame>; break;
+          case ObBitTC: function = uint_bit<Frame>; break;
+          case ObDecimalIntTC: function = uint_decimalint<Frame>; break;
+          case ObDateTimeTC: function = string_datetime<Frame>; break;
+          case ObDateTC: function = string_date<Frame>; break;
+          case ObTimeTC: function = string_time<Frame>; break;
+          case ObStringTC: function = string_string<Frame>; break;
+          case ObMySQLDateTC: function = string_mdate<Frame>; break;
+          case ObMySQLDateTimeTC:
+            // The legacy table points at the DATETIME-only helper here;
+            // its type guard rejects MYSQL_DATETIME before decoding.
+            return OB_ERR_UNEXPECTED;
+          default: break;
+        }
+        if (function != nullptr) {
+          ObEnumSetInnerValue inner_value;
+          if (OB_FAIL(input.datum_.get_enumset_inner(inner_value))) {
+          } else if (target_class == ObDateTimeTC || target_class == ObDateTC
+                     || target_class == ObTimeTC || target_class == ObStringTC
+                     || target_class == ObMySQLDateTC) {
+            // The decoded text borrows the validated input span only until
+            // the synchronous helper and final result-owner clone finish.
+            source.set_varchar(inner_value.string_value_);
+            source.set_collation_type(input.get_collation_type());
+            source.set_collation_level(input.get_collation_level());
+          } else {
+            source.set_uint64(inner_value.numberic_value_);
+            source.meta_.set_uint64();
+          }
+        }
+        break;
+      }
       case ObMySQLDateTC:
         switch (sql_type_class(target)) {
           case ObIntTC: function = mdate_int<Frame>; break;
@@ -10542,7 +10638,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
         break;
       default: break;
     }
-    if (input.get_type_class() != ObGeometryTC) {
+    if (input.get_type_class() != ObGeometryTC && !collection_from_string) {
       if (function == nullptr) { ret = OB_NOT_SUPPORTED; }
       if (OB_SUCC(ret)) { ret = function(target, context, source, result, context.cast_mode_); }
     }

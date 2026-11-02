@@ -2,6 +2,8 @@
 #include "sql/engine/basic/ob_expr_values_op.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
+#include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/ob_sql_context.h"
 #include "common/udt/ob_array_nested.h"
@@ -535,4 +537,177 @@ TEST(NativeUdtResult, native_caster_collection_source_keeps_same_and_cross_decla
   }
   EXPECT_FALSE(result_owner.unexpected_free_);
   EXPECT_EQ(0, service.calls_);
+}
+
+TEST(NativeUdtResult, common_value_caster_uses_registered_collection_output_declaration)
+{
+  ObArenaAllocator execution_owner;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObExecContext exec(execution_owner);
+  exec.set_my_session(&session);
+  ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &exec);
+  NoIoLobService service; InlineLobContext inline_context;
+  exec.set_lob_read_service(&service);
+  InlineContextGuard context_guard(exec, inline_context);
+  ASSERT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
+  ObSqlDatumCastRuntime runtime(&exec);
+  const char *declarations[] = {"ARRAY(INT)", "VECTOR(3)"};
+  const char *literals[] = {"[1,-2,NULL]", "[1.25,-2.5,3]"};
+  for (int declaration = 0; declaration < 2; ++declaration) {
+    SCOPED_TRACE(declarations[declaration]);
+    uint16_t id = 0;
+    ASSERT_EQ(OB_SUCCESS, exec.get_subschema_id_by_type_string(
+        ObString::make_string(declarations[declaration]), id));
+    ASSERT_FALSE(ob_is_reserved_subschema_id(id));
+    ObSubSchemaValue definition;
+    ASSERT_EQ(OB_SUCCESS, exec.get_sqludt_meta_by_subschema_id(id, definition));
+    const auto *collection = static_cast<const ObSqlCollectionInfo *>(definition.value_);
+    ASSERT_NE(nullptr, collection); ASSERT_NE(nullptr, collection->collection_meta_);
+    for (SqlValueType source_type : {ObVarcharType, ObTinyTextType}) {
+      SCOPED_TRACE(source_type);
+      ObArenaAllocator source_owner, cast_owner;
+      DatumValue input;
+      ASSERT_EQ(OB_SUCCESS, input.set_string(source_type,
+          ObString::make_string(literals[declaration]), source_owner));
+      input.set_collation_type(CS_TYPE_UTF8MB4_BIN); // Real text, not raw binary-array input.
+      const void *source_bytes = input.datum_.get_reference();
+      ObCastCtx context(&cast_owner, nullptr, CM_NONE, CS_TYPE_INVALID);
+      context.runtime_ = &runtime;
+      DatumValue output;
+      // This is the legacy public caller contract: metadata supplies the
+      // actual target declaration, while no target payload has been published.
+      output.meta_.set_type(ObCollectionSQLType);
+      output.meta_.set_subschema_id(id);
+      output.meta_.set_has_lob_header();
+      FreeingOwner result_owner;
+      ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+          ObCollectionSQLType, context, input, result_owner, output));
+      ASSERT_FALSE(output.is_null());
+      EXPECT_EQ(ObCollectionSQLType, output.get_type());
+      EXPECT_EQ(id, output.get_subschema_id());
+      EXPECT_TRUE(output.has_lob_header());
+      EXPECT_NE(source_bytes, output.datum_.get_reference());
+      ASSERT_TRUE(result_owner.owns_live(static_cast<const char *>(output.datum_.get_reference()),
+          output.datum_.length()));
+      std::memset(const_cast<void *>(source_bytes), 0xa5, input.datum_.length());
+      source_owner.reset();
+      cast_owner.reset(); // Runtime parser/binary scratch is genuinely retired.
+      ASSERT_TRUE(result_owner.owns_live(static_cast<const char *>(output.datum_.get_reference()),
+          output.datum_.length()));
+      ObString raw = output.get_string();
+      ASSERT_EQ(OB_SUCCESS, ObTextStringHelper::read_real_string_data(
+          exec, &execution_owner, ObLongTextType, CS_TYPE_BINARY, true, raw));
+      ObIArrayType *array = nullptr;
+      ASSERT_EQ(OB_SUCCESS, ObArrayTypeObjFactory::construct(
+          execution_owner, *collection->collection_meta_, array, true));
+      ASSERT_NE(nullptr, array); ASSERT_EQ(OB_SUCCESS, array->init(raw));
+      ASSERT_EQ(3U, array->size());
+      if (declaration == 0) {
+        const auto *values = static_cast<const ObArrayFixedSize<int32_t> *>(array);
+        EXPECT_EQ(1, (*values)[0]); EXPECT_EQ(-2, (*values)[1]); EXPECT_TRUE(values->is_null(2));
+      } else {
+        const auto *values = static_cast<const ObVectorF32Data *>(array);
+        EXPECT_FLOAT_EQ(1.25F, (*values)[0]); EXPECT_FLOAT_EQ(-2.5F, (*values)[1]);
+        EXPECT_FLOAT_EQ(3.0F, (*values)[2]);
+      }
+      EXPECT_FALSE(result_owner.unexpected_free_);
+    }
+  }
+  EXPECT_EQ(0, service.calls_);
+}
+
+namespace {
+class RejectCollectionResultOwner final : public ObIAllocator {
+public:
+  void *alloc(int64_t) override { ++calls_; return nullptr; }
+  void *alloc(int64_t bytes, const ObMemAttr &) override { return alloc(bytes); }
+  void free(void *) override {}
+  int64_t calls_ = 0;
+};
+}
+
+TEST(NativeUdtResult, common_collection_cast_failures_preserve_previous_output_and_null_contract)
+{
+  ObArenaAllocator owner;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObExecContext exec(owner);
+  exec.set_my_session(&session);
+  ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &exec);
+  ASSERT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
+  uint16_t vector_id = 0;
+  ASSERT_EQ(OB_SUCCESS, exec.get_subschema_id_by_type_string(
+      ObString::make_string("VECTOR(3)"), vector_id));
+  ASSERT_FALSE(ob_is_reserved_subschema_id(vector_id));
+  ObSqlDatumCastRuntime runtime(&exec);
+  ObCastCtx context(&owner, nullptr, CM_NONE, CS_TYPE_INVALID);
+  context.runtime_ = &runtime;
+  DatumValue input;
+  ASSERT_EQ(OB_SUCCESS, input.set_string(ObVarcharType, ObString::make_string("[1,2,3]"), owner));
+  input.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  DatumValue output;
+  output.meta_.set_type(ObCollectionSQLType); output.meta_.set_subschema_id(vector_id);
+  output.meta_.set_has_lob_header();
+  FreeingOwner result_owner;
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, input, result_owner, output));
+  ASSERT_TRUE(result_owner.owns_live(static_cast<const char *>(output.datum_.get_reference()),
+      output.datum_.length()));
+  const DatumValue before = output;
+  const std::string before_bytes(output.get_string().ptr(), output.get_string().length());
+  auto expect_unchanged = [&]() {
+    EXPECT_EQ(before.get_meta(), output.get_meta());
+    EXPECT_EQ(before.datum_.get_reference(), output.datum_.get_reference());
+    EXPECT_EQ(before.datum_.length(), output.datum_.length());
+    ASSERT_TRUE(result_owner.owns_live(static_cast<const char *>(output.datum_.get_reference()),
+        output.datum_.length()));
+    EXPECT_EQ(before_bytes, std::string(output.get_string().ptr(), output.get_string().length()));
+  };
+  DatumValue wrong_dimension;
+  ASSERT_EQ(OB_SUCCESS, wrong_dimension.set_string(ObVarcharType, ObString::make_string("[1,2]"), owner));
+  wrong_dimension.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  EXPECT_EQ(OB_ERR_INVALID_VECTOR_DIM, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, wrong_dimension, result_owner, output));
+  ASSERT_NO_FATAL_FAILURE(expect_unchanged());
+  RejectCollectionResultOwner rejected;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, input, rejected, output));
+  EXPECT_GT(rejected.calls_, 0);
+  ASSERT_NO_FATAL_FAILURE(expect_unchanged());
+  context.runtime_ = nullptr;
+  EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, input, result_owner, output));
+  ASSERT_NO_FATAL_FAILURE(expect_unchanged());
+  context.runtime_ = &runtime;
+
+  // A real non-reserved but unregistered ID reaches the actual ExecCtx lookup.
+  uint16_t unregistered_id = 0;
+  ASSERT_EQ(OB_SUCCESS, exec.get_physical_plan_ctx()->get_subschema_ctx().get_new_subschema_id(unregistered_id));
+  ASSERT_FALSE(ob_is_reserved_subschema_id(unregistered_id));
+  DatumValue unregistered = before;
+  unregistered.meta_.set_subschema_id(unregistered_id);
+  EXPECT_EQ(OB_HASH_NOT_EXIST, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, input, result_owner, unregistered));
+  EXPECT_EQ(unregistered_id, unregistered.get_subschema_id());
+  EXPECT_EQ(before.datum_.get_reference(), unregistered.datum_.get_reference());
+  DatumValue missing_declaration;
+  EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, input, result_owner, missing_declaration));
+  EXPECT_TRUE(missing_declaration.is_null());
+
+  // SQL NULL follows the original identity branch, preserving its actual
+  // current metadata rather than manufacturing a Collection declaration.
+  DatumValue null_input = input;
+  null_input.datum_.set_null();
+  DatumValue null_output;
+  null_output.meta_ = before.get_meta();
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObCollectionSQLType, context, null_input, result_owner, null_output));
+  EXPECT_TRUE(null_output.is_null());
+  EXPECT_EQ(null_input.get_meta(), null_output.get_meta());
+  ASSERT_NO_FATAL_FAILURE(expect_unchanged());
+  EXPECT_FALSE(result_owner.unexpected_free_);
 }

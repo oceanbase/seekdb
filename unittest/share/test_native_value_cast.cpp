@@ -479,3 +479,359 @@ TEST(NativeValueCast, integer_to_geometry_preserves_legacy_cast_modes_and_errors
   EXPECT_EQ(ObIntType, input.get_type());
   EXPECT_EQ(0, input.get_int());
 }
+
+TEST(NativeValueCast, binary_wkb_to_geometry_owns_versioned_payload_and_preserves_subtype_cast)
+{
+  // The two exact successful UPDATE inputs from geometry_dml_mysql.test.
+  const std::string point = unhex("000000000101000000000000000000f03f0000000000000840");
+  const std::string point_z = unhex("0000000001e9030000000000000000f03f00000000000000400000000000000840");
+  const std::string versioned_point = unhex("00000000410101000000000000000000f03f0000000000000840");
+  const std::string versioned_point_z = unhex("000000004101e9030000000000000000f03f00000000000000400000000000000840");
+  const std::string inputs[] = {point, point_z, versioned_point};
+  const std::string expected[] = {versioned_point, versioned_point_z, versioned_point};
+  const SqlValueType kinds[] = {ObHexStringType, ObVarcharType, ObCharType};
+  const ObCastMode modes[] = {CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT};
+  for (SqlValueType kind : kinds) {
+    SCOPED_TRACE(static_cast<int>(kind));
+    for (int sample = 0; sample < 3; ++sample) {
+      SCOPED_TRACE(sample);
+      for (ObCastMode mode : modes) {
+        SCOPED_TRACE(mode);
+        ObArenaAllocator destination;
+        DatumValue output;
+        {
+          ObArenaAllocator temporary;
+          DatumValue input;
+          ASSERT_EQ(OB_SUCCESS, input.set_string(kind,
+              ObString(static_cast<int32_t>(inputs[sample].size()), inputs[sample].data()), temporary));
+          input.meta_.set_collation_type(CS_TYPE_BINARY);
+          ObCastCtx context(&temporary, nullptr, mode, CS_TYPE_BINARY);
+          ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+              ObGeometryType, context, input, destination, output));
+          EXPECT_EQ(OB_SUCCESS, context.warning_);
+          EXPECT_EQ(kind, input.get_type());
+          EXPECT_EQ(ObString(static_cast<int32_t>(inputs[sample].size()), inputs[sample].data()), input.get_string());
+          EXPECT_NE(input.datum_.get_reference(), output.datum_.get_reference());
+        }
+        ASSERT_TRUE(output.is_geometry());
+        ASSERT_TRUE(output.has_lob_header());
+        ObString payload;
+        ASSERT_EQ(OB_SUCCESS, output.get_string(payload));
+        EXPECT_EQ(ObString(static_cast<int32_t>(expected[sample].size()), expected[sample].data()), payload);
+        // The public reverse conversion independently exercises the in-row
+        // LOB header and removes only the geometry version byte.
+        DatumValue raw;
+        ObCastCtx read_context(&destination, nullptr, CM_NONE, CS_TYPE_BINARY);
+        ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+            ObVarcharType, read_context, output, destination, raw));
+        const std::string &original = sample == 1 ? point_z : point;
+        EXPECT_EQ(ObString(static_cast<int32_t>(original.size()), original.data()), raw.get_string());
+      }
+    }
+  }
+
+  ObArenaAllocator owner;
+  DatumValue input, output;
+  ASSERT_EQ(OB_SUCCESS, input.set_string(ObHexStringType,
+      ObString(static_cast<int32_t>(point.size()), point.data()), owner));
+  input.meta_.set_collation_type(CS_TYPE_BINARY);
+  ObCastMode point_mode = CM_NONE;
+  CM_SET_GEOMETRY_POINT(point_mode);
+  point_mode |= CM_COLUMN_CONVERT;
+  ObCastCtx point_context(&owner, nullptr, point_mode, CS_TYPE_BINARY);
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObGeometryType, point_context, input, owner, output));
+  ASSERT_TRUE(output.is_geometry());
+  ObString point_payload;
+  ASSERT_EQ(OB_SUCCESS, output.get_string(point_payload));
+  EXPECT_EQ(ObString(static_cast<int32_t>(versioned_point.size()), versioned_point.data()), point_payload);
+
+  ObCastCtx alias_context(&owner, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObGeometryType, alias_context, input, owner, input));
+  ASSERT_TRUE(input.is_geometry());
+  ObString alias_payload;
+  ASSERT_EQ(OB_SUCCESS, input.get_string(alias_payload));
+  EXPECT_EQ(ObString(static_cast<int32_t>(versioned_point.size()), versioned_point.data()), alias_payload);
+}
+
+TEST(NativeValueCast, binary_wkb_geometry_failures_keep_output_and_null_semantics)
+{
+  ObArenaAllocator source_owner;
+  const SqlValueType kinds[] = {ObHexStringType, ObVarcharType, ObCharType};
+  const ObCastMode modes[] = {CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT,
+      CM_COLUMN_CONVERT | CM_WARN_ON_FAIL | CM_NULL_ON_WARN};
+  const std::string invalid[] = {std::string(), std::string("x"), unhex("0000000001")};
+  for (SqlValueType kind : kinds) {
+    SCOPED_TRACE(static_cast<int>(kind));
+    for (const std::string &bytes : invalid) {
+      SCOPED_TRACE(hex(bytes));
+      for (ObCastMode mode : modes) {
+        SCOPED_TRACE(mode);
+        DatumValue input, output;
+        ASSERT_EQ(OB_SUCCESS, input.set_string(kind,
+            ObString(static_cast<int32_t>(bytes.size()), bytes.data()), source_owner));
+        input.meta_.set_collation_type(CS_TYPE_BINARY);
+        ASSERT_EQ(OB_SUCCESS, output.set_int(71, source_owner));
+        ObAccuracy accuracy(19, 2);
+        const uint64_t before_accuracy = accuracy.get_accuracy();
+        ObCastCtx context(&source_owner, nullptr, mode, CS_TYPE_BINARY, &accuracy);
+        const int expected = CM_IS_COLUMN_CONVERT(mode)
+            ? OB_ERR_CANT_CREATE_GEOMETRY_OBJECT : OB_ERR_GIS_INVALID_DATA;
+        EXPECT_EQ(expected, DatumValueCaster::to_type(
+            ObGeometryType, context, input, source_owner, output));
+        EXPECT_EQ(ObIntType, output.get_type());
+        EXPECT_EQ(71, output.get_int());
+        EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+        EXPECT_EQ(OB_SUCCESS, context.warning_);
+      }
+    }
+    DatumValue typed_null, output;
+    ASSERT_EQ(OB_SUCCESS, typed_null.set_string(kind, ObString::make_string("unused"), source_owner));
+    typed_null.datum_.set_null();
+    ObCastCtx no_context_owner(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObGeometryType, no_context_owner, typed_null, source_owner, output));
+    EXPECT_TRUE(output.is_null());
+    EXPECT_EQ(kind, output.get_type());
+  }
+
+  const std::string point = unhex("000000000101000000000000000000f03f0000000000000840");
+  DatumValue input, output;
+  ASSERT_EQ(OB_SUCCESS, input.set_string(ObHexStringType,
+      ObString(static_cast<int32_t>(point.size()), point.data()), source_owner));
+  input.meta_.set_collation_type(CS_TYPE_BINARY);
+  ASSERT_EQ(OB_SUCCESS, output.set_int(71, source_owner));
+  ObCastCtx no_owner(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+      ObGeometryType, no_owner, input, source_owner, output));
+  EXPECT_EQ(71, output.get_int());
+
+  FailAfter destination;
+  destination.remaining_ = 0;
+  ObAccuracy accuracy(19, 2);
+  const uint64_t before_accuracy = accuracy.get_accuracy();
+  ObCastCtx context(&source_owner, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY, &accuracy);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, DatumValueCaster::to_type(
+      ObGeometryType, context, input, destination, output));
+  EXPECT_EQ(ObIntType, output.get_type());
+  EXPECT_EQ(71, output.get_int());
+  EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+  destination.remaining_ = -1;
+  ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+      ObGeometryType, context, input, destination, output));
+  EXPECT_TRUE(output.is_geometry());
+}
+
+namespace {
+int make_native_inner_cast_input(SqlValueType kind, uint64_t numeric,
+                                const ObString &text, ObIAllocator &owner,
+                                DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  ObString label = text;
+  ObEnumSetInnerValue inner(numeric, label);
+  const int64_t size = inner.get_serialize_size();
+  char *bytes = static_cast<char *>(owner.alloc(size));
+  int64_t pos = 0;
+  if (bytes == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(inner.serialize(bytes, size, pos))) {
+  } else {
+    Datum datum;
+    SqlTypeMeta meta;
+    if (kind == ObEnumInnerType) { meta.set_enum_inner(); }
+    else { meta.set_set_inner(); }
+    meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    if (OB_FAIL(datum.set_enumset_inner(bytes, static_cast<uint32_t>(pos)))) {
+    } else {
+      ret = output.assign_native_borrowed(datum, meta);
+    }
+  }
+  return ret;
+}
+}
+
+TEST(NativeValueCast, enumset_inner_restores_numeric_and_text_cast_families)
+{
+  const SqlValueType kinds[] = {ObEnumInnerType, ObSetInnerType};
+  const SqlValueType numeric_targets[] = {
+    ObIntType, ObUInt64Type, ObFloatType, ObDoubleType,
+    ObNumberType, ObYearType, ObBitType, ObDecimalIntType
+  };
+  const SqlValueType text_targets[] = {
+    ObDateTimeType, ObDateType, ObTimeType, ObVarcharType, ObMySQLDateType
+  };
+  for (SqlValueType kind : kinds) {
+    SCOPED_TRACE(static_cast<int>(kind));
+    for (SqlValueType target : numeric_targets) {
+      SCOPED_TRACE(static_cast<int>(target));
+      ObArenaAllocator destination;
+      DatumValue output;
+      {
+        ObArenaAllocator source_owner;
+        DatumValue input;
+        // The deliberately nonnumeric label distinguishes numeric extraction
+        // from reparsing text, for all eight legacy numeric target families.
+        ASSERT_EQ(OB_SUCCESS, make_native_inner_cast_input(kind, 2024,
+            ObString::make_string("not-a-number"), source_owner, input));
+        ObAccuracy accuracy(18, 2);
+        ObCastCtx context(&source_owner, nullptr, CM_NONE, CS_TYPE_UTF8MB4_BIN, &accuracy);
+        ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+            target, context, input, destination, output));
+        EXPECT_EQ(OB_SUCCESS, context.warning_);
+        EXPECT_EQ(kind, input.get_type());
+        MEMSET(const_cast<void *>(input.datum_.get_reference()), 0xa5, input.datum_.length());
+        source_owner.reset();
+      }
+      ASSERT_EQ(target, output.get_type());
+      switch (target) {
+        case ObIntType: EXPECT_EQ(2024, output.get_int()); break;
+        case ObUInt64Type: EXPECT_EQ(2024U, output.get_uint64()); break;
+        case ObFloatType: EXPECT_EQ(2024.0f, output.get_float()); break;
+        case ObDoubleType: EXPECT_EQ(2024.0, output.get_double()); break;
+        case ObNumberType:
+          EXPECT_EQ(0, output.get_number().compare(static_cast<int64_t>(2024))); break;
+        case ObYearType: EXPECT_EQ(124U, output.get_year()); break;
+        case ObBitType: EXPECT_EQ(2024U, output.get_bit()); break;
+        case ObDecimalIntType: {
+          ASSERT_EQ(8, output.get_int_bytes());
+          EXPECT_EQ(2, output.get_scale());
+          int64_t coefficient = 0;
+          MEMCPY(&coefficient, output.get_decimal_int(), sizeof(coefficient));
+          EXPECT_EQ(202400, coefficient);
+          break;
+        }
+        default: FAIL();
+      }
+    }
+    for (SqlValueType target : text_targets) {
+      SCOPED_TRACE(static_cast<int>(target));
+      ObArenaAllocator destination;
+      DatumValue output;
+      const ObString text = target == ObTimeType ? ObString::make_string("12:34:56")
+          : target == ObVarcharType ? ObString::make_string("enum-label")
+          : ObString::make_string("1970-01-02 00:00:00");
+      {
+        ObArenaAllocator source_owner;
+        DatumValue input;
+        // This unrelated numeric index must not become the temporal/string value.
+        ASSERT_EQ(OB_SUCCESS, make_native_inner_cast_input(kind, 99, text, source_owner, input));
+        ObTimeZoneInfo timezone;
+        timezone.set_offset(0);
+        ObDataTypeCastParams params(&timezone, CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_BIN);
+        ObCastCtx context(&source_owner, &params, CM_NONE, CS_TYPE_UTF8MB4_BIN);
+        ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+            target, context, input, destination, output));
+        EXPECT_EQ(OB_SUCCESS, context.warning_);
+        MEMSET(const_cast<void *>(input.datum_.get_reference()), 0xa5, input.datum_.length());
+        source_owner.reset();
+      }
+      ASSERT_EQ(target, output.get_type());
+      switch (target) {
+        case ObDateTimeType: EXPECT_EQ(86400000000LL, output.get_datetime()); break;
+        case ObDateType: EXPECT_EQ(1, output.get_date()); break;
+        case ObTimeType: EXPECT_EQ(45296000000LL, output.get_time()); break;
+        case ObVarcharType:
+          EXPECT_EQ(text, output.get_string());
+          EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, output.get_collation_type());
+          EXPECT_EQ(CS_LEVEL_COERCIBLE, output.get_collation_level());
+          break;
+        case ObMySQLDateType:
+          // ObMySQLDate packs year/month/day in 14/4/5 bits.
+          EXPECT_EQ((1970 << 9) | (1 << 5) | 2, output.get_mysql_date().date_);
+          break;
+        default: FAIL();
+      }
+    }
+  }
+}
+
+TEST(NativeValueCast, enumset_inner_identity_null_alias_and_failure_ownership)
+{
+  const SqlValueType kinds[] = {ObEnumInnerType, ObSetInnerType};
+  const ObString label = ObString::make_string("retained-inner-label");
+  for (SqlValueType kind : kinds) {
+    SCOPED_TRACE(static_cast<int>(kind));
+    ObArenaAllocator destination;
+    DatumValue owned;
+    {
+      ObArenaAllocator source_owner;
+      DatumValue input;
+      ASSERT_EQ(OB_SUCCESS, make_native_inner_cast_input(kind, 42, label, source_owner, input));
+      ObCastCtx context(&source_owner, nullptr, CM_NONE, CS_TYPE_UTF8MB4_BIN);
+      ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(kind, context, input, destination, owned));
+      EXPECT_NE(input.datum_.get_reference(), owned.datum_.get_reference());
+      MEMSET(const_cast<void *>(input.datum_.get_reference()), 0xa5, input.datum_.length());
+      source_owner.reset();
+    }
+    ObEnumSetInnerValue decoded;
+    ASSERT_EQ(OB_SUCCESS, owned.datum_.get_enumset_inner(decoded));
+    EXPECT_EQ(42U, decoded.numberic_value_);
+    EXPECT_EQ(label, decoded.string_value_);
+    EXPECT_EQ(kind, owned.get_type());
+    EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, owned.get_collation_type());
+
+    ObArenaAllocator source_owner;
+    DatumValue input, output;
+    ASSERT_EQ(OB_SUCCESS, make_native_inner_cast_input(kind, 42, label, source_owner, input));
+    ASSERT_EQ(OB_SUCCESS, output.set_int(71, source_owner));
+    FailAfter failure;
+    failure.remaining_ = 0;
+    ObAccuracy accuracy(19, 2);
+    const uint64_t before_accuracy = accuracy.get_accuracy();
+    ObCastCtx failing(&source_owner, nullptr, CM_NONE, CS_TYPE_UTF8MB4_BIN, &accuracy);
+    const Datum before = output.datum_;
+    const SqlTypeMeta before_meta = output.meta_;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, DatumValueCaster::to_type(
+        ObVarcharType, failing, input, failure, output));
+    EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
+    EXPECT_EQ(0, MEMCMP(&before_meta, &output.meta_, sizeof(before_meta)));
+    EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+    failure.remaining_ = -1;
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObVarcharType, failing, input, failure, output));
+    EXPECT_EQ(label, output.get_string());
+    failure.remaining_ = 0;
+    ObCastCtx scalar_context(&source_owner, nullptr, CM_NONE, CS_TYPE_UTF8MB4_BIN);
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObUInt64Type, scalar_context, input, failure, output));
+    EXPECT_EQ(42U, output.get_uint64());
+
+    DatumValue typed_null = input;
+    typed_null.datum_.set_null();
+    ObCastCtx no_owner(nullptr, nullptr, CM_NONE, CS_TYPE_UTF8MB4_BIN);
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObIntType, no_owner, typed_null, failure, output));
+    EXPECT_TRUE(output.is_null());
+    EXPECT_EQ(kind, output.get_type());
+
+    // This legacy table entry called the DATETIME-only guard and already
+    // failed; restoring legal edges must not silently admit MYSQL_DATETIME.
+    ASSERT_EQ(OB_SUCCESS, output.set_int(71, source_owner));
+    EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+        ObMySQLDateTimeType, scalar_context, input, destination, output));
+    EXPECT_EQ(71, output.get_int());
+
+    // A version-only compatibility image has an omitted length/body and
+    // legally decodes to defaults. Retain the real complete header instead,
+    // so its declared nonempty body is genuinely truncated.
+    const uint32_t header_length = 1 + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+    ASSERT_GT(input.datum_.length(), header_length);
+    Datum truncated;
+    ASSERT_EQ(OB_SUCCESS, truncated.set_enumset_inner(
+        static_cast<const char *>(input.datum_.get_reference()), header_length));
+    DatumValue malformed(truncated, input.meta_);
+    const int ret = DatumValueCaster::to_type(
+        ObIntType, scalar_context, malformed, destination, output);
+    EXPECT_NE(OB_SUCCESS, ret);
+    EXPECT_NE(OB_NOT_SUPPORTED, ret); // The real decoder, rather than family denial, fails.
+    EXPECT_EQ(OB_DESERIALIZE_ERROR, ret);
+    EXPECT_EQ(71, output.get_int());
+
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObVarcharType, scalar_context, input, destination, input));
+    EXPECT_EQ(ObVarcharType, input.get_type());
+    EXPECT_EQ(label, input.get_string());
+  }
+}

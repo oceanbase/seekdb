@@ -154,7 +154,7 @@ int ObSqlDatumCastRuntime::cast_collection(
             common::ObString result_string;
             text_result.get_result_buffer(result_string);
             output.datum_.set_string(result_string);
-            output.meta_.set_type(common::ObCollectionSQLType);
+            output.meta_.set_type_simple(common::ObCollectionSQLType);
             output.meta_.set_has_lob_header();
           }
         }
