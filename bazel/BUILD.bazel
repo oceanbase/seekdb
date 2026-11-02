@@ -1,4 +1,5 @@
 load(":build_settings.bzl", "bool_flag")
+load(":cargo_build_script_env.bzl", "cargo_build_script_environment")
 
 exports_files([
     "build_metadata.py",
@@ -12,6 +13,11 @@ exports_files([
     "final_link.bzl",
     "localized_partial_link.bzl",
 ])
+
+cargo_build_script_environment(
+    name = "windows_build_script_environment",
+    visibility = ["//visibility:public"],
+)
 
 config_setting(
     name = "ios_simulator",

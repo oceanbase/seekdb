@@ -404,6 +404,8 @@ _ORDERED_LINK_FILES = [
 ] + select({
     "@platforms//os:linux": ["//deps/external:jemalloc_archive"],
     "@platforms//os:macos": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:windows": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:android": ["//deps/external:jemalloc_archive"],
     "//conditions:default": [],
 }) + select({
     "@platforms//os:windows": [],

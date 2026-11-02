@@ -32,6 +32,7 @@
 #include <cstdio>
 #include "observer/ob_server.h"
 #include "lib/alloc/alloc_func.h"
+#include "lib/allocator/ob_jemalloc.h"
 #include "observer/ob_system_package_load_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
@@ -728,11 +729,18 @@ int ObServer::init(const ObServerOptions &opts)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
+  // Daemon startup has already forked. Configure allocator defaults before the
+  // logger or server workers can create further arenas.
+  const int allocator_config_ret = jemalloc_configure_runtime();
+
   // Config loading can fail before the rest of the server is initialized.
   // Start the log writer first so the offending config key is
   // recorded in observer.log.
   if (OB_FAIL(OB_LOGGER.init())) {
     LOG_ERROR("async log init error", KR(ret));
+  }
+  if (OB_SUCC(ret) && 0 != allocator_config_ret) {
+    LOG_WARN("failed to configure jemalloc runtime", K(allocator_config_ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));

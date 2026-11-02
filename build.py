@@ -104,7 +104,7 @@ def _cache_directory() -> Path:
 
 
 def _quote(value: str) -> str:
-    return '"' + value.replace('"', '\\"') + '"'
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _bazel_options(bazel: Path, command: str) -> Tuple[Dict[str, bool], Dict[str, bool]]:
@@ -241,6 +241,9 @@ def main(arguments: List[str]) -> int:
     ]
     lines.extend(concurrency_defaults)
     if os.name == "nt":
+        # Starlark can inspect fixed action variables, but not inherited ones.
+        # Native build scripts need both the compiler's PATH and shell tools.
+        lines.append("build --action_env=" + _quote("PATH=" + os.environ.get("PATH", os.defpath)))
         lines.append("build --repo_env=" + _quote(
             "BAZEL_LLVM=" + (root / "deps/3rd/tools/llvm18").resolve().as_posix()
         ))
