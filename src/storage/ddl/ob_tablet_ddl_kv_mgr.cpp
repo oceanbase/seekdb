@@ -379,7 +379,7 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
   } else if (OB_FAIL(get_active_ddl_kv_impl(kv_handle))) {
   }
   if (OB_SUCC(ret) && !kv_handle.is_valid() && freeze_scn > max_freeze_scn_) {
-    // freeze_scn > 0 only occured when ddl commit
+    // freeze_scn > 0 only occurred when ddl commit
     // assure there is an alive ddl kv, for waiting pre-logs
     if (OB_FAIL(alloc_ddl_kv(start_scn, snapshot_version, data_format_version, kv_handle, ddl_kv_type))) {
     }
