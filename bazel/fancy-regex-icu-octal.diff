@@ -44,7 +44,7 @@
              return self.parse_numbered_backref(ix + 1);
          } else if matches!(b, b'k') && !in_class {
              // Named backref: \k<name>
-@@ -946,6 +981,30 @@
+@@ -946,6 +981,40 @@
                      nest += 1;
                      class.push('[');
                      let mut end = ix + 1;
@@ -67,8 +67,18 @@
 +                            let raw = &self.re[end + 1..name_end];
 +                            // POSIX allows an optional negation prefix; keep it.
 +                            let name = raw.strip_prefix('^').unwrap_or(raw);
-+                            if name == "<" || name == ">" {
++                            if name.is_empty() || name.contains(['{', '}', '[', ']'])
++                                || name == "<" || name == ">"
++                            {
 +                                return Err(Error::ParseError(ix, ParseError::PropertySyntax));
++                            }
++                            let ascii_posix = regex_syntax::ast::ClassAsciiKind::from_name(name).is_some();
++                            let unicode_prop = regex_syntax::Parser::new()
++                                .parse(&format!("\\p{{{}}}", name))
++                                .is_ok();
++                            if !ascii_posix && !unicode_prop {
++                                // A smaller backend property table cannot establish ICU invalidity.
++                                return Err(Error::ParseError(ix, ParseError::UnsupportedProperty));
 +                            }
 +                        }
 +                    }
@@ -165,20 +175,23 @@
  
 --- a/src/error.rs
 +++ b/src/error.rs
-@@ -54,6 +54,8 @@
+@@ -54,6 +54,10 @@
      TargetNotRepeatable,
      /// Couldn't parse group name
      InvalidGroupName,
 +    /// Unsupported POSIX/Unicode property syntax (e.g. `[[:<:]]`)
 +    PropertySyntax,
++    /// Property name is not supported by this backend.
++    UnsupportedProperty,
      /// Invalid group id in escape sequence
      InvalidGroupNameBackref(String),
  }
-@@ -139,6 +141,7 @@
+@@ -139,6 +143,8 @@
              }
              ParseError::InvalidBackref => write!(f, "Invalid back reference"),
              ParseError::InvalidGroupName => write!(f, "Could not parse group name"),
 +            ParseError::PropertySyntax => write!(f, "Unsupported property syntax"),
++            ParseError::UnsupportedProperty => write!(f, "Unsupported property name"),
              ParseError::InvalidGroupNameBackref(s) => {
                  write!(f, "Invalid group name in back reference: {}", s)
              }

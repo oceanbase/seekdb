@@ -49,6 +49,7 @@ const LIMIT: i32 = RegexErrorKind::Limit.repr;
 const ALLOCATION: i32 = RegexErrorKind::Allocation.repr;
 const ARGUMENT: i32 = RegexErrorKind::Argument.repr;
 const PROPERTY_SYNTAX: i32 = RegexErrorKind::PropertySyntax.repr;
+const UNSUPPORTED_PROPERTY: i32 = RegexErrorKind::UnsupportedProperty.repr;
 
 pub struct RegexEngine {
     regex: Regex,
@@ -70,10 +71,12 @@ fn err(kind: i32, message: impl Into<Cow<'static, str>>) -> BridgeError {
 }
 
 fn regex_error(error: Error) -> BridgeError {
-    // An unsupported POSIX class name is a property-syntax error; the delegate
-    // parser would otherwise accept the name as ordinary class content.
+    // Preserve the distinction between malformed syntax and backend support.
     if let Error::ParseError(_, ParseError::PropertySyntax) = &error {
         return err(PROPERTY_SYNTAX, "U_REGEX_PROPERTY_SYNTAX");
+    }
+    if let Error::ParseError(_, ParseError::UnsupportedProperty) = &error {
+        return err(UNSUPPORTED_PROPERTY, "Unsupported regular expression property");
     }
     let kind = match &error {
         Error::RuntimeError(_) => LIMIT,
