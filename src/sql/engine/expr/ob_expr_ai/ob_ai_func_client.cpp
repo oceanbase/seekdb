@@ -86,6 +86,7 @@ int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &)
 #else
 void ObAIFuncClient::reset() 
 {
+  clean_up();
   if (url_ != nullptr && allocator_ != nullptr) {
     allocator_->free(url_);
     url_ = nullptr;
@@ -99,11 +100,11 @@ void ObAIFuncClient::reset()
     header_list_ = nullptr;
   }
   is_finished_.store(false);
-  clean_up();
 }
 
 ObAIFuncClient::~ObAIFuncClient() 
 {
+  clean_up();
   if (OB_NOT_NULL(header_list_)) {
     curl_slist_free_all(header_list_);
     header_list_ = nullptr;
@@ -117,7 +118,6 @@ ObAIFuncClient::~ObAIFuncClient()
     url_ = nullptr;
   }
   allocator_ = nullptr;
-  clean_up();
   if (OB_NOT_NULL(curlm_)) {
     curl_multi_cleanup(curlm_);
     curlm_ = nullptr;
@@ -128,7 +128,7 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString
 {
   int ret = OB_SUCCESS;
   int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
-  if (OB_ISNULL(url) || headers.empty()) {
+  if (url.empty()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     allocator_ = &allocator;
@@ -144,9 +144,13 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString
       for (uint32_t i = 0; OB_SUCC(ret) && i < num_headers; ++i) {
         ObString header_c_str;
         if (OB_FAIL(ob_write_string(*allocator_, headers.at(i), header_c_str, true))) {
-        } else if (OB_ISNULL(header_list_ = curl_slist_append(header_list_, header_c_str.ptr()))) {
-          ret = OB_ERR_UNEXPECTED;
         } else {
+          curl_slist *new_headers = curl_slist_append(header_list_, header_c_str.ptr());
+          if (OB_ISNULL(new_headers)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            header_list_ = new_headers;
+          }
           LOG_DEBUG("ai_function request header appended", K(i));
         }
       }
@@ -197,6 +201,7 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
     } 
     // retry if need
     for (int64_t i = 0; OB_SUCC(ret) && i <= max_retry_times_; ++i) {
+      response_buf.reuse();
       http_code = 0;
       if (CURLE_OK != (res = curl_easy_perform(curl_))) {
         LOG_WARN("perform curl failed", K(res));
@@ -232,6 +237,8 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
               allocator_, response_buf.string(), ObJsonInType::JSON_TREE,
               ObJsonInType::JSON_TREE, j_tree))) {
           ret = OB_ERR_INVALID_JSON_TEXT;
+        } else if (OB_ISNULL(j_tree) || j_tree->json_type() != ObJsonNodeType::J_OBJECT) {
+          ret = OB_INVALID_DATA;
         } else {
           response = static_cast<ObJsonObject *>(j_tree);
         }
@@ -259,10 +266,39 @@ int ObAIFuncClient::send_post(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray<ObJsonObject *> &responses) 
+int ObAIFuncClient::add_batch_request(ObJsonObject *data)
 {
   int ret = OB_SUCCESS;
-  if (data_array.empty() || OB_ISNULL(url_) || OB_ISNULL(header_list_)) {
+  CURL *handle = curl_easy_init();
+  ObStringBuffer *buffer = OB_NEWx(ObStringBuffer, allocator_, allocator_);
+  bool registered = false;
+  if (OB_ISNULL(handle) || OB_ISNULL(buffer)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(init_easy_handle(handle, data, *buffer))) {
+  } else if (OB_FAIL(curl_handles_.push_back(handle))) {
+  } else if (OB_FAIL(response_buffers_.push_back(buffer))) {
+    curl_handles_.pop_back();
+  } else {
+    registered = true;
+    if (curl_multi_add_handle(curlm_, handle) != CURLM_OK) {
+      ret = OB_CURL_ERROR;
+    }
+  }
+  if (!registered) {
+    if (OB_NOT_NULL(handle)) {
+      curl_easy_cleanup(handle);
+    }
+    if (OB_NOT_NULL(buffer)) {
+      OB_DELETEx(ObStringBuffer, allocator_, buffer);
+    }
+  }
+  return ret;
+}
+
+int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray<ObJsonObject *> &responses)
+{
+  int ret = OB_SUCCESS;
+  if (data_array.empty() || OB_ISNULL(url_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(curlm_)) {
     if (OB_ISNULL(curlm_ = curl_multi_init())) {
@@ -272,17 +308,7 @@ int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray
   if (OB_SUCC(ret)) {
     const int64_t num_data = data_array.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < num_data; ++i) {
-      ObJsonObject *data = data_array.at(i);
-      CURL *curl_handle = curl_easy_init();
-      ObStringBuffer* response_buf = OB_NEWx(ObStringBuffer, allocator_, allocator_);
-      if (OB_FAIL(init_easy_handle(curl_handle, data, *response_buf))) {
-      } else if (OB_FAIL(curl_handles_.push_back(curl_handle))) {
-      } else if (OB_FAIL(response_buffers_.push_back(response_buf))) {
-      } else {
-        CURLMcode mc = curl_multi_add_handle(curlm_, curl_handle);
-        if (mc != CURLM_OK) {
-          ret = OB_CURL_ERROR;
-        }
+      if (OB_FAIL(add_batch_request(data_array.at(i)))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -327,6 +353,7 @@ int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
     ret = OB_INVALID_ARGUMENT;
   }
   if (OB_SUCC(ret)) {
+    reset();
     if (OB_FAIL(init(allocator, url, headers))) {
     }
     // retry if need
@@ -349,7 +376,7 @@ int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
 int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &data_array) 
 {
   int ret = OB_SUCCESS;
-  if (data_array.empty() || OB_ISNULL(url_) || OB_ISNULL(header_list_)) {
+  if (data_array.empty() || OB_ISNULL(url_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(curlm_)) {
     if (OB_ISNULL(curlm_ = curl_multi_init())) {
@@ -359,21 +386,7 @@ int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &data_array)
   if (OB_SUCC(ret)) {
     const int64_t num_data = data_array.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < num_data; ++i) {
-      ObJsonObject *data_item = data_array.at(i);
-      CURL *curl_handle = curl_easy_init();
-      ObStringBuffer* response_buf = OB_NEWx(ObStringBuffer, allocator_, allocator_);
-      if (OB_ISNULL(data_item)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_ISNULL(curl_handle)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(init_easy_handle(curl_handle, data_item, *response_buf))) {
-      } else if (OB_FAIL(curl_handles_.push_back(curl_handle))) {
-      } else if (OB_FAIL(response_buffers_.push_back(response_buf))) {
-      } else {
-        CURLMcode mc = curl_multi_add_handle(curlm_, curl_handle);
-        if (mc != CURLM_OK) {
-          ret = OB_CURL_ERROR;
-        }
+      if (OB_FAIL(add_batch_request(data_array.at(i)))) {
       }
     }
     int running_handles = 0;
@@ -398,17 +411,22 @@ bool ObAIFuncClient::check_batch_finished()
 int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &responses) 
 {
   int ret = OB_SUCCESS;
-  if (is_finished_.load()) {
+  if (!is_finished_.load()) {
+    ret = OB_EAGAIN;
+  } else {
     CURLMsg *msg;
     int msgs_in_queue;
-    while ((msg = curl_multi_info_read(curlm_, &msgs_in_queue))) {
+    while (OB_SUCC(ret) && (msg = curl_multi_info_read(curlm_, &msgs_in_queue))) {
       if (msg->msg == CURLMSG_DONE) {
         CURL *easy_handle = msg->easy_handle;
         CURLcode res = msg->data.result;
-        if (res == CURLE_OK) {
-          long response_code;
-          curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
-          if (response_code != 200) {
+        if (res != CURLE_OK) {
+          ret = error_handle(res);
+        } else {
+          long response_code = 0;
+          if (CURLE_OK != curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &response_code)) {
+            ret = OB_CURL_ERROR;
+          } else if (response_code != 200) {
             ret = OB_CURL_ERROR;
           }
         }
@@ -428,6 +446,8 @@ int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &responses)
               allocator_, response_str, ObJsonInType::JSON_TREE,
               ObJsonInType::JSON_TREE, j_tree))) {
         ret = OB_ERR_INVALID_JSON_TEXT;
+      } else if (OB_ISNULL(j_tree) || j_tree->json_type() != ObJsonNodeType::J_OBJECT) {
+        ret = OB_INVALID_DATA;
       } else if (OB_FAIL(responses.push_back(static_cast<ObJsonObject *>(j_tree)))) {
       }
     }
@@ -439,7 +459,9 @@ int ObAIFuncClient::init_easy_handle(CURL *curl, ObJsonObject *body, ObStringBuf
 {
   int ret = OB_SUCCESS;
   ObJsonBuffer j_buf(allocator_);
-  if (OB_FAIL(body->print(j_buf, false))) {
+  if (OB_ISNULL(body) || OB_ISNULL(curl)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(body->print(j_buf, false))) {
   } else if (OB_ISNULL(curl)) {
     ret = OB_INVALID_ARGUMENT;
   }
@@ -467,9 +489,9 @@ int ObAIFuncClient::init_easy_handle(CURL *curl, ObJsonObject *body, ObStringBuf
       LOG_WARN("set timeout failed", K(res), K(timeout_sec_));
     } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list_))) {
       LOG_WARN("set headers failed", K(res));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_str.ptr()))) {
-      LOG_WARN("set post failed", K(res), K(body_str.length()));
     } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,body_str.length()))) {
+      LOG_WARN("set post failed", K(res), K(body_str.length()));
+    } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, body_str.ptr()))) {
       LOG_WARN("set post failed", K(res), K(body_str.length()));
     } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_POST, 1))) {
       LOG_WARN("set post method failed", K(res));

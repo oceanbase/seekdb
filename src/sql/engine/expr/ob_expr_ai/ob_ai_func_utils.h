@@ -245,6 +245,10 @@ public:
   static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
   static int compact_json_object(ObIAllocator &allocator, ObJsonObject *obj_node, ObJsonObject *compact_obj);
+  static int validate_embedding_result(ObIAllocator &allocator, ObIJsonBase *result,
+                                      int64_t input_count, int64_t dimension);
+  static int normalize_rerank_result(ObIAllocator &allocator, ObIJsonBase *result,
+                                     int64_t input_count, ObJsonArray *&sorted);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
 };
@@ -377,7 +381,8 @@ public:
   ObAIFuncPromptObjectUtils() {}
   virtual ~ObAIFuncPromptObjectUtils() {}
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
-  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
+  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object,
+                                              ObString& replaced_prompt_str, int64_t depth = 0);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";

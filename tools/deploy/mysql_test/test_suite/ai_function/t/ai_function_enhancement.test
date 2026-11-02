@@ -1,0 +1,160 @@
+connection default;
+--disable_query_log
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enhance_chat', '{"type":"completion","model_name":"echo"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enhance_embed', '{"type":"dense_embedding","model_name":"vector"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enhance_rank', '{"type":"rerank","model_name":"rank"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"ai_model_name":"enhance_chat","provider":"openai","access_key":"test-key","url":"http://127.0.0.1:8000/v1/chat/completions"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"ai_model_name":"enhance_embed","provider":"openai","access_key":"test-key","url":"http://127.0.0.1:8000/v1/embeddings"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enhance_rank_ep', '{"ai_model_name":"enhance_rank","provider":"siliconflow","access_key":"test-key","url":"http://127.0.0.1:8000/v1/rerank"}');
+--enable_query_log
+
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'hello')) as completion;
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'hello', NULL)) as null_config;
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('{0}/{0}/{0}', repeat('a', 1000)))) = concat(repeat('a', 1000), '/', repeat('a', 1000), '/', repeat('a', 1000)) as repeated_placeholder;
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('outer:{0}', AI_PROMPT('inner:{0}', 'value')))) as nested_prompt;
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('object={0},array={1}', JSON_OBJECT('key', 7), JSON_ARRAY(1, 'two')))) as json_arguments;
+select HEX(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('{0}/{0}', CONVERT(0xe4b8ade69687 USING utf8mb4))))) as unicode_prompt;
+select HEX(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('{0}', concat('a', char(0), 'b', char(10), '"', char(92)))))) as escaped_prompt;
+--error 1210
+select AI_COMPLETE('enhance_chat', AI_PROMPT('{1}', 'only'));
+--error 1210
+select AI_COMPLETE('enhance_chat', AI_PROMPT('{-1}', 'only'));
+--error 1210
+select AI_COMPLETE('enhance_chat', AI_PROMPT('{999999999999999999999999999999999999}', 'only'));
+--error 1210
+select AI_COMPLETE('enhance_chat', 'hello', JSON_ARRAY(1));
+
+--disable_query_log
+create table enhance_text (template LONGTEXT, argument TEXT);
+insert into enhance_text values ('{0}{0}{0}', repeat('x', 30000));
+--enable_query_log
+select CHAR_LENGTH(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT(template, argument)))) as long_prompt_length from enhance_text;
+select CHAR_LENGTH(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', repeat('x', 90000)))) as long_completion_length;
+
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"url":"http://127.0.0.1:8000/inspect","request_model_name":"request-echo"}');
+--enable_query_log
+select JSON_EXTRACT(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'hello', JSON_OBJECT('temperature', 0.25, 'max_tokens', 128))), '$.temperature', '$.max_tokens', '$.model') as completion_config;
+
+select JSON_LENGTH(AI_EMBED('enhance_embed', 'hello')) as default_dimension;
+select JSON_LENGTH(AI_EMBED('enhance_embed', 'hello', 4)) as explicit_dimension;
+select AI_EMBED('enhance_embed', NULL) is NULL as null_embedding;
+--error 1210
+select AI_EMBED('enhance_embed', 'hello', 0);
+--error 1210
+select AI_EMBED('enhance_embed', 'hello', -1);
+--error 1210
+select AI_EMBED('enhance_embed', 'hello', 2.5);
+
+--disable_query_log
+create table enhance_rows (id int primary key, content varchar(100), dimension int);
+insert into enhance_rows select id, if(mod(id, 7) = 0, NULL, repeat('x', id)), if(mod(id, 3) = 0, 5, 4) from
+  (select tens.value * 10 + units.value + 1 as id from
+    (select 0 as value union all select 1 union all select 2 union all select 3 union all select 4) tens,
+    (select 0 as value union all select 1 union all select 2 union all select 3 union all select 4 union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) units) numbers where id <= 45;
+create table enhance_results as select id, content, AI_EMBED('enhance_embed', content, 4) as embedding from enhance_rows;
+--enable_query_log
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = 4 and JSON_EXTRACT(embedding, '$[0]') = id)) as correct_rows from enhance_results;
+select id, JSON_EXTRACT(AI_EMBED('enhance_embed', content, 4), '$[0]') as input_length from enhance_rows where mod(id, 2) = 0 order by id limit 3 offset 2;
+--disable_query_log
+create table enhance_dimensions as select id, content, dimension, AI_EMBED('enhance_embed', content, dimension) as embedding from enhance_rows;
+--enable_query_log
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = dimension and JSON_EXTRACT(embedding, '$[0]') = id)) as correct_dimensions from enhance_dimensions;
+
+--disable_query_log
+create table enhance_many as select id, if(mod(id, 7) = 0, NULL, concat('row-', id)) as content from
+  (select enhance_rows.id + 45 * (blocks.tens * 5 + blocks.units) as id from enhance_rows cross join
+    (select tens.value as tens, units.value as units from
+      (select 0 as value union all select 1 union all select 2 union all select 3 union all select 4) tens,
+      (select 0 as value union all select 1 union all select 2 union all select 3 union all select 4) units) blocks) rows_to_embed where id <= 1100;
+create table enhance_many_results as select id, content, AI_EMBED('enhance_embed', content, 4) as embedding from enhance_many;
+--enable_query_log
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = 4 and JSON_EXTRACT(embedding, '$[0]') = LENGTH(content))) as correct_many_rows from enhance_many_results;
+
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'bbb', 'cc')), '$[*].index') as ranked_indices;
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'b', 'c'), NULL), '$[*].index') as tied_indices;
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', JSON_ARRAY(JSON_OBJECT('id', 10, 'text', 'a'), JSON_OBJECT('id', 20, 'text', 'bbb')), 'text'), '$[*].id') as original_ids;
+--disable_query_log
+select JSON_ARRAYAGG(JSON_OBJECT('id', id, 'text', repeat('x', id))) into @rank_docs from enhance_rows;
+select JSON_ARRAYAGG('same') into @tied_docs from enhance_rows;
+select JSON_ARRAYAGG(repeat('x', id)) into @string_docs from enhance_rows;
+--enable_query_log
+select JSON_LENGTH(AI_RERANK('enhance_rank', 'query', @rank_docs, 'text')) as rerank_count, JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', @rank_docs, 'text'), '$[0].id', '$[44].id') as batch_original_ids;
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', @tied_docs), '$[0].index', '$[19].index', '$[20].index', '$[44].index') as stable_batch_indices;
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', @string_docs), '$[0].index', '$[44].index') as global_batch_indices;
+
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"provider":"oLlAmA","access_key":"","url":"http://127.0.0.1:8000/api/generate"}');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"provider":"ollama","access_key":"","url":"http://127.0.0.1:8000/api/embed"}');
+--enable_query_log
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('native:{0}', 'ollama'))) as ollama_completion;
+select JSON_LENGTH(AI_EMBED('enhance_embed', 'ollama', 4)) as ollama_dimension;
+--disable_query_log
+create table enhance_ollama as select id, content, AI_EMBED('enhance_embed', content, 4) as embedding from enhance_rows;
+--enable_query_log
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = 4 and JSON_EXTRACT(embedding, '$[0]') = id)) as correct_ollama_rows from enhance_ollama;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"url":"http://127.0.0.1:8000/api/inspect"}');
+--enable_query_log
+select JSON_EXTRACT(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'native', JSON_OBJECT('stream', true, 'model', 'override', 'prompt', 'override', 'options', JSON_OBJECT('temperature', 0.25)))), '$.stream', '$.model', '$.prompt', '$.options.temperature') as ollama_config;
+--disable_query_log
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enhance_chat_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"ai_model_name":"enhance_chat","provider":"OlLaMa","url":"http://127.0.0.1:8000/api/generate"}');
+--enable_query_log
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'no key')) as ollama_without_key;
+
+--disable_query_log
+--disable_result_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"provider":"openai","access_key":"test-key","url":"http://127.0.0.1:8000/empty"}');
+--error 4070
+select AI_COMPLETE('enhance_chat', 'hello');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"url":"http://127.0.0.1:8000/wrong-content"}');
+--error 4070
+select AI_COMPLETE('enhance_chat', 'hello');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"url":"http://127.0.0.1:8000/array"}');
+--error 4070
+select AI_COMPLETE('enhance_chat', 'hello');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"url":"http://127.0.0.1:8000/error"}');
+--error 4216
+select AI_COMPLETE('enhance_chat', 'hello');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"provider":"openai","access_key":"test-key","url":"http://127.0.0.1:8000/bad-vector"}');
+--error 4070
+select AI_EMBED('enhance_embed', 'hello', 4);
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"url":"http://127.0.0.1:8000/bad-dimension"}');
+--error 4070
+select AI_EMBED('enhance_embed', 'hello', 4);
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"url":"http://127.0.0.1:8000/bad-index"}');
+--error 4070
+select AI_EMBED('enhance_embed', 'hello', 4);
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"url":"http://127.0.0.1:8000/non-finite"}');
+--error 4070
+select AI_EMBED('enhance_embed', 'hello', 4);
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"url":"http://127.0.0.1:8000/duplicate"}');
+--error 4070
+select AI_EMBED('enhance_embed', content, 4) from enhance_rows where content is not NULL;
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_embed_ep', '{"url":"http://127.0.0.1:8000/missing"}');
+--error 4070
+select AI_EMBED('enhance_embed', 'hello', 4);
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_rank_ep', '{"url":"http://127.0.0.1:8000/bad-rerank"}');
+--error 4070
+select AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'b'));
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_rank_ep', '{"url":"http://127.0.0.1:8000/duplicate-rerank"}');
+--error 4070
+select AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'b'));
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_rank_ep', '{"url":"http://127.0.0.1:8000/missing-rerank"}');
+--error 4070
+select AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'b'));
+--enable_result_log
+
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enhance_chat_ep', '{"url":"http://127.0.0.1:8000/stats"}');
+--enable_query_log
+select JSON_EXTRACT(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'stats')), '$.max_embed_batch') > 1 as uses_multi_input_requests;
+--disable_query_log
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enhance_chat_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enhance_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enhance_rank_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enhance_chat');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enhance_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enhance_rank');
+drop table enhance_text, enhance_rows, enhance_results, enhance_dimensions, enhance_ollama, enhance_many, enhance_many_results;
+--enable_query_log

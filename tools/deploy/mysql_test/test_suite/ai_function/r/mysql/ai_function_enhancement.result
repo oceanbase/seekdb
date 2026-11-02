@@ -1,0 +1,103 @@
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'hello')) as completion;
+completion
+hello
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'hello', NULL)) as null_config;
+null_config
+hello
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('{0}/{0}/{0}', repeat('a', 1000)))) = concat(repeat('a', 1000), '/', repeat('a', 1000), '/', repeat('a', 1000)) as repeated_placeholder;
+repeated_placeholder
+1
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('outer:{0}', AI_PROMPT('inner:{0}', 'value')))) as nested_prompt;
+nested_prompt
+outer:inner:value
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('object={0},array={1}', JSON_OBJECT('key', 7), JSON_ARRAY(1, 'two')))) as json_arguments;
+json_arguments
+object={"key": 7},array=[1, "two"]
+select HEX(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('{0}/{0}', CONVERT(0xe4b8ade69687 USING utf8mb4))))) as unicode_prompt;
+unicode_prompt
+E4B8ADE696872FE4B8ADE69687
+select HEX(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('{0}', concat('a', char(0), 'b', char(10), '"', char(92)))))) as escaped_prompt;
+escaped_prompt
+6100620A225C
+select AI_COMPLETE('enhance_chat', AI_PROMPT('{1}', 'only'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select AI_COMPLETE('enhance_chat', AI_PROMPT('{-1}', 'only'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select AI_COMPLETE('enhance_chat', AI_PROMPT('{999999999999999999999999999999999999}', 'only'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select AI_COMPLETE('enhance_chat', 'hello', JSON_ARRAY(1));
+ERROR HY000: Invalid argument
+select CHAR_LENGTH(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT(template, argument)))) as long_prompt_length from enhance_text;
+long_prompt_length
+90000
+select CHAR_LENGTH(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', repeat('x', 90000)))) as long_completion_length;
+long_completion_length
+90000
+select JSON_EXTRACT(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'hello', JSON_OBJECT('temperature', 0.25, 'max_tokens', 128))), '$.temperature', '$.max_tokens', '$.model') as completion_config;
+completion_config
+[0.25, 128, "request-echo"]
+select JSON_LENGTH(AI_EMBED('enhance_embed', 'hello')) as default_dimension;
+default_dimension
+3
+select JSON_LENGTH(AI_EMBED('enhance_embed', 'hello', 4)) as explicit_dimension;
+explicit_dimension
+4
+select AI_EMBED('enhance_embed', NULL) is NULL as null_embedding;
+null_embedding
+1
+select AI_EMBED('enhance_embed', 'hello', 0);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer
+select AI_EMBED('enhance_embed', 'hello', -1);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer
+select AI_EMBED('enhance_embed', 'hello', 2.5);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be an integer, not a decimal or float
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = 4 and JSON_EXTRACT(embedding, '$[0]') = id)) as correct_rows from enhance_results;
+row_count	correct_rows
+45	45
+select id, JSON_EXTRACT(AI_EMBED('enhance_embed', content, 4), '$[0]') as input_length from enhance_rows where mod(id, 2) = 0 order by id limit 3 offset 2;
+id	input_length
+6	6
+8	8
+10	10
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = dimension and JSON_EXTRACT(embedding, '$[0]') = id)) as correct_dimensions from enhance_dimensions;
+row_count	correct_dimensions
+45	45
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = 4 and JSON_EXTRACT(embedding, '$[0]') = LENGTH(content))) as correct_many_rows from enhance_many_results;
+row_count	correct_many_rows
+1100	1100
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'bbb', 'cc')), '$[*].index') as ranked_indices;
+ranked_indices
+[1, 2, 0]
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', JSON_ARRAY('a', 'b', 'c'), NULL), '$[*].index') as tied_indices;
+tied_indices
+[0, 1, 2]
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', JSON_ARRAY(JSON_OBJECT('id', 10, 'text', 'a'), JSON_OBJECT('id', 20, 'text', 'bbb')), 'text'), '$[*].id') as original_ids;
+original_ids
+[20, 10]
+select JSON_LENGTH(AI_RERANK('enhance_rank', 'query', @rank_docs, 'text')) as rerank_count, JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', @rank_docs, 'text'), '$[0].id', '$[44].id') as batch_original_ids;
+rerank_count	batch_original_ids
+45	[45, 1]
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', @tied_docs), '$[0].index', '$[19].index', '$[20].index', '$[44].index') as stable_batch_indices;
+stable_batch_indices
+[0, 19, 20, 44]
+select JSON_EXTRACT(AI_RERANK('enhance_rank', 'query', @string_docs), '$[0].index', '$[44].index') as global_batch_indices;
+global_batch_indices
+[44, 0]
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', AI_PROMPT('native:{0}', 'ollama'))) as ollama_completion;
+ollama_completion
+native:ollama
+select JSON_LENGTH(AI_EMBED('enhance_embed', 'ollama', 4)) as ollama_dimension;
+ollama_dimension
+4
+select count(*) as row_count, sum(if(content is NULL, embedding is NULL, JSON_LENGTH(embedding) = 4 and JSON_EXTRACT(embedding, '$[0]') = id)) as correct_ollama_rows from enhance_ollama;
+row_count	correct_ollama_rows
+45	45
+select JSON_EXTRACT(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'native', JSON_OBJECT('stream', true, 'model', 'override', 'prompt', 'override', 'options', JSON_OBJECT('temperature', 0.25)))), '$.stream', '$.model', '$.prompt', '$.options.temperature') as ollama_config;
+ollama_config
+[false, "request-echo", "native", 0.25]
+select JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'no key')) as ollama_without_key;
+ollama_without_key
+no key
+select JSON_EXTRACT(JSON_UNQUOTE(AI_COMPLETE('enhance_chat', 'stats')), '$.max_embed_batch') > 1 as uses_multi_input_requests;
+uses_multi_input_requests
+1

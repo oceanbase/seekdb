@@ -42,6 +42,11 @@ public:
   virtual bool need_rt_ctx() const override { return true; }
  
 private:
+  static int eval_rerank_batches(common::ObIAllocator &allocator,
+                                const common::ObAIFuncExprInfo &info,
+                                const share::ObAiModelEndpointInfo &endpoint_info,
+                                common::ObString &query, common::ObJsonArray *documents,
+                                common::ObJsonArray *&results);
   static int inner_eval_ai_rerank(common::ObIAllocator &allocator, 
                                   const common::ObAIFuncExprInfo &info, 
                                   const share::ObAiModelEndpointInfo &endpoint_info,
