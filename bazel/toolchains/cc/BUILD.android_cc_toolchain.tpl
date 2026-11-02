@@ -31,7 +31,7 @@ filegroup(
 )
 cc_toolchain_config(
     name = "config",
-    toolchain_identifier = "seekdb-android-arm64-api@ANDROID_API_LEVEL@",
+    toolchain_identifier = "android-arm64-api@ANDROID_API_LEVEL@",
     host_system_name = "local",
     target_system_name = "@ANDROID_TARGET@",
     target_libc = "bionic",
@@ -69,7 +69,7 @@ cc_toolchain_config(
 )
 cc_toolchain(
     name = "cc",
-    toolchain_identifier = "seekdb-android-arm64-api@ANDROID_API_LEVEL@",
+    toolchain_identifier = "android-arm64-api@ANDROID_API_LEVEL@",
     toolchain_config = ":config",
     all_files = ":linker_files",
     compiler_files = ":compiler_files",
