@@ -35,6 +35,18 @@ using oceanbase::sql::ObQueryRetryCtrl;
 #include <string>
 #include <vector>
 
+
+namespace {
+oceanbase::common::Datum read_parameter_value(
+    const oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  oceanbase::common::Datum value;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.read_native_parameter(index, value));
+  return value;
+}
+
+} // namespace
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::observer;
@@ -513,9 +525,9 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   plan.set_original_param_cnt(3);
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   for (int64_t i = 0; i < 3; ++i) {
-    EXPECT_NE(&params_.at(i).get_datum(), plan.get_native_parameter(i));
-    ASSERT_NE(nullptr, plan.get_native_parameter(i));
-    EXPECT_EQ(expected[i], plan.get_native_parameter(i)->get_int());
+    ASSERT_TRUE(plan.has_native_parameter(i));
+    EXPECT_EQ(nullptr, plan.locate_materialized_parameter(i));
+    EXPECT_EQ(expected[i], read_parameter_value(plan, i).get_int());
   }
   Access::poison_values(handler_);
   EXPECT_EQ(INT64_C(0x5a5a5a5a5a5a5a5a), params_.at(0).get_int());
@@ -528,8 +540,10 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
     ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expr, eval, result));
     EXPECT_EQ(expected[i], result.get_int());
     ASSERT_EQ(1, plan.get_param_frame_ptrs().count());
-    const char *slot = plan.get_param_frame_ptrs().at(0) + i * 24;
-    EXPECT_EQ(expected[i], reinterpret_cast<const Datum *>(slot)->get_int());
+    const auto &page = ParameterValuePage::from_handle(plan.get_param_frame_ptrs().at(0));
+    Datum value;
+    ASSERT_EQ(OB_SUCCESS, page.read(i, value));
+    EXPECT_EQ(expected[i], value.get_int());
   }
 
   // Feed the unmodified real binder metadata through the actual graph probe.
@@ -572,8 +586,8 @@ TEST_F(NativePsParameterBinding, rebuilding_execution_context_does_not_modify_re
     ASSERT_EQ(OB_SUCCESS, plan.assign_parameter_inputs(params_));
     plan.set_original_param_cnt(3);
     ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
-    EXPECT_EQ(1, plan.get_native_parameter(0)->get_int());
-    EXPECT_EQ(7, plan.get_native_parameter(1)->get_int());
+    EXPECT_EQ(1, read_parameter_value(plan, 0).get_int());
+    EXPECT_EQ(7, read_parameter_value(plan, 1).get_int());
     Datum replacement; replacement.set_int(1000 + attempt);
     ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, replacement,
         *plan.get_native_parameter_type(0), *plan.get_parameter_metadata(0)));

@@ -32,6 +32,27 @@
 #include "share/datum/typed_datum_compare.h"
 #include <cstring>
 #include <gtest/gtest.h>
+
+namespace {
+oceanbase::common::Datum read_parameter_value(
+    const oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  oceanbase::common::Datum value;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.read_native_parameter(index, value));
+  return value;
+}
+
+// Only tests of a retaining generic Expr ABI explicitly request a projection.
+const oceanbase::common::Datum *materialized_parameter(
+    oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  if (!plan.has_native_parameter(index)) { return nullptr; }
+  oceanbase::common::Datum *value = nullptr;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.materialize_parameter_for_expr(index, value));
+  return value;
+}
+} // namespace
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 namespace oceanbase { namespace sql {
@@ -296,7 +317,7 @@ TEST(DynamicParamCapture, native_array_binding_captures_the_owned_envelope_and_r
   EXPECT_EQ(ObIntType, metadata.type_meta_.get_type());
   ASSERT_EQ(OB_SUCCESS, setter.restore_dynamic_param(ctx, captured, metadata));
   EXPECT_EQ(42, f.expr.locate_expr_datum(ctx).get_int());
-  EXPECT_EQ(42, plan.get_native_parameter(0)->get_int());
+  EXPECT_EQ(42, read_parameter_value(plan, 0).get_int());
   ObBatchRescanParams batch; ObBatchRescanParams::RowBuilder row(batch);
   ObSEArray<int64_t, 1> ids, exprs;
   ASSERT_EQ(OB_SUCCESS, ids.push_back(0)); ASSERT_EQ(OB_SUCCESS, exprs.push_back(1));
@@ -340,11 +361,11 @@ TEST(DynamicParamCapture, native_runtime_binding_preserves_metadata_in_one_alias
   // There is one execution slot; construction inputs are retired, not aliased.
   EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(*plan));
   DatumParameter binding4 = f.parameters(); ASSERT_EQ(OB_SUCCESS, binding4.set_int(99, f.arena)); f.bind(binding4);
-  const Datum *slot = plan->get_native_parameter(0);
+  const Datum *slot = materialized_parameter(*plan, 0);
   const SqlType *type = plan->get_native_parameter_type(0);
   const DatumParameterMetadata attributes = *plan->get_parameter_metadata(0);
   ASSERT_EQ(OB_SUCCESS, plan->set_runtime_parameter(0, *slot, *type, attributes));
-  EXPECT_EQ(slot, plan->get_native_parameter(0)); EXPECT_EQ(type, plan->get_native_parameter_type(0));
+  EXPECT_EQ(slot, materialized_parameter(*plan, 0)); EXPECT_EQ(type, plan->get_native_parameter_type(0));
   EXPECT_EQ(99, slot->get_int()); EXPECT_EQ(0, slot->length());
   EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(*plan));
 }
@@ -382,7 +403,7 @@ TEST(DynamicParamCapture, updated_frame_and_native_store_stay_in_sync) {
   ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, f.native_value(input)));
   EXPECT_EQ(42, f.native().datum_.get_int());
   EXPECT_EQ(42, f.parameters().get_int());
-  EXPECT_EQ(f.expr.locate_expr_datum(ctx).get_int(), f.exec.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+  EXPECT_EQ(f.expr.locate_expr_datum(ctx).get_int(), read_parameter_value(*f.exec.get_physical_plan_ctx(), 0).get_int());
   DatumParameter saved;
   ASSERT_EQ(OB_SUCCESS, saved.deep_copy(f.native(), f.arena));
   input.datum_.set_int(88);
@@ -457,9 +478,9 @@ TEST(DynamicParamCapture, native_update_preserves_value_type_and_slot_metadata) 
   ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, input));
   EXPECT_EQ(ObDecimalIntType, f.parameters().get_param_meta().get_type());
   EXPECT_EQ(ObAccuracy(19, 5), f.parameters().get_accuracy());
-  EXPECT_NE(&coefficient, f.exec.get_physical_plan_ctx()->get_native_parameter(0)->get_reference());
+  EXPECT_NE(&coefficient, read_parameter_value(*f.exec.get_physical_plan_ctx(), 0).get_reference());
   int128_t actual = 0;
-  ASSERT_EQ(OB_SUCCESS, f.exec.get_physical_plan_ctx()->get_native_parameter(0)->get_decimal_int128(actual));
+  ASSERT_EQ(OB_SUCCESS, read_parameter_value(*f.exec.get_physical_plan_ctx(), 0).get_decimal_int128(actual));
   EXPECT_TRUE(coefficient == actual);
   input.set_null();
   ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, input));
@@ -477,13 +498,13 @@ TEST(DynamicParamCapture, execution_slots_grow_after_input_frames_are_initialize
   f.bind(binding6);
   auto *plan = f.exec.get_physical_plan_ctx();
   ASSERT_EQ(OB_SUCCESS, plan->init_datum_param_store());
-  const Datum *input_slot = plan->get_native_parameter(0);
+  const Datum *input_slot = materialized_parameter(*plan, 0);
   const int64_t input_frame_count = plan->get_param_frame_ptrs().count();
   ASSERT_EQ(OB_SUCCESS, plan->reserve_param_space(2049));
   EXPECT_EQ(2049, plan->get_parameter_count());
   EXPECT_EQ(2049, plan->get_parameter_count());
   EXPECT_EQ(42, f.native().datum_.get_int());
-  EXPECT_EQ(input_slot, plan->get_native_parameter(0));
+  EXPECT_EQ(input_slot, materialized_parameter(*plan, 0));
   EXPECT_GT(plan->get_param_frame_ptrs().count(), input_frame_count);
   EXPECT_TRUE(parameter_snapshot(*plan, 2048, f.arena).is_null());
   ObEvalCtx ctx(f.exec);
@@ -509,11 +530,11 @@ TEST(DynamicParamCapture, both_store_accessors_share_reset_and_reserve_state) {
   ASSERT_EQ(OB_SUCCESS, plan->init_datum_param_store());
   EXPECT_TRUE(plan->native_parameters_ready()); EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(*plan));
   EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(*plan));
-  for (int i = 0; i < 5; ++i) { ASSERT_NE(nullptr, plan->get_native_parameter(i)); EXPECT_TRUE(plan->get_native_parameter(i)->is_null()); }
+  for (int i = 0; i < 5; ++i) { ASSERT_NE(nullptr, materialized_parameter(*plan, i)); EXPECT_TRUE(read_parameter_value(*plan, i).is_null()); }
   DatumParameter binding7 = f.parameters(); ASSERT_EQ(OB_SUCCESS, binding7.set_int(42, f.arena));
   binding7.set_precision(19); binding7.set_raw_text_info(17, 23); f.bind(binding7);
   ASSERT_EQ(OB_SUCCESS, plan->reserve_param_space(7));
-  EXPECT_EQ(42, plan->get_native_parameter(0)->get_int());
+  EXPECT_EQ(42, read_parameter_value(*plan, 0).get_int());
   EXPECT_EQ(19, plan->get_parameter_metadata(0)->accuracy_.get_precision());
   EXPECT_EQ(17, plan->get_parameter_metadata(0)->raw_text_pos_); EXPECT_EQ(23, plan->get_parameter_metadata(0)->raw_text_len_);
   EXPECT_EQ(OB_INVALID_ARGUMENT, plan->reserve_param_space(-1)); EXPECT_EQ(7, plan->get_parameter_count());
@@ -537,15 +558,15 @@ TEST(DynamicParamCapture, failed_native_store_growth_preserves_existing_bindings
   DatumParameter initial; ASSERT_EQ(OB_SUCCESS, initial.set_int(42, allocator));
   ASSERT_EQ(OB_SUCCESS, plan.set_parameter_input(0, initial));
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
-  const Datum *prefix = plan.get_native_parameter(0);
+  const Datum *prefix = materialized_parameter(plan, 0);
   const int64_t large = 16384; // Several final scalar24 pages, independent of removed wrapper blocks.
   allocator.reject_ = true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan.reserve_param_space(large));
-  EXPECT_EQ(1, plan.get_parameter_count()); EXPECT_EQ(prefix, plan.get_native_parameter(0));
-  EXPECT_EQ(42, plan.get_native_parameter(0)->get_int());
+  EXPECT_EQ(1, plan.get_parameter_count()); EXPECT_EQ(prefix, materialized_parameter(plan, 0));
+  EXPECT_EQ(42, read_parameter_value(plan, 0).get_int());
   allocator.reject_ = false; ASSERT_EQ(OB_SUCCESS, plan.reserve_param_space(large));
-  EXPECT_EQ(large, plan.get_parameter_count()); EXPECT_EQ(42, plan.get_native_parameter(0)->get_int());
-  EXPECT_TRUE(plan.get_native_parameter(large - 1)->is_null()); EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan));
+  EXPECT_EQ(large, plan.get_parameter_count()); EXPECT_EQ(42, read_parameter_value(plan, 0).get_int());
+  EXPECT_TRUE(read_parameter_value(plan, large - 1).is_null()); EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan));
 }
 
 TEST(DynamicParamCapture, output_destinations_are_references_without_value_objects) {
@@ -1145,15 +1166,15 @@ TEST(DynamicParamCapture, pl_frame_capture_preserves_complete_declaration_id_for
     ObDynamicParamSetter setter(0, nullptr, &f.expr);
     ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, f.expr.locate_expr_datum(ctx)));
     auto &plan = *f.exec.get_physical_plan_ctx();
-    EXPECT_TRUE(plan.get_native_parameter(0)->is_null());
+    EXPECT_TRUE(read_parameter_value(plan, 0).is_null());
     EXPECT_EQ(declaration_id, plan.get_native_parameter_type(0)->pl_declaration().declaration_id);
     EXPECT_EQ(declaration_id, static_cast<uint64_t>(f.parameters().get_accuracy().get_accuracy()));
     EXPECT_EQ(meta, f.parameters().get_param_meta());
     ASSERT_EQ(OB_SUCCESS, f.expr.get_datum_copy_plan().import_legacy(
         legacy_source, f.expr.locate_expr_datum(ctx)));
     ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, f.expr.locate_expr_datum(ctx)));
-    EXPECT_EQ(reinterpret_cast<int64_t>(record), plan.get_native_parameter(0)->get_ext());
-    EXPECT_NE(source.datum_.get_reference(), plan.get_native_parameter(0)->get_reference());
+    EXPECT_EQ(reinterpret_cast<int64_t>(record), read_parameter_value(plan, 0).get_ext());
+    EXPECT_NE(source.datum_.get_reference(), read_parameter_value(plan, 0).get_reference());
     EXPECT_EQ(declaration_id, f.parameters().get_udt_id());
     EXPECT_EQ(57, record->get_element()[0].get_int());
     record->get_element()[0].datum_.set_int(58);
@@ -1178,26 +1199,25 @@ TEST(DynamicParamCapture, typed_update_failure_keeps_destination_parent_and_para
   f.expr.parents_ = parents; f.expr.parent_cnt_ = 1;
   parent.get_eval_info(ctx).evaluated_ = true;
   auto &plan = *f.exec.get_physical_plan_ctx();
-  const Datum *old_slot = plan.get_native_parameter(0);
+  const Datum *old_slot = materialized_parameter(plan, 0);
   const SqlType *old_type = plan.get_native_parameter_type(0);
   const DatumParameter old_view = f.parameters();
-  auto *info = reinterpret_cast<ObEvalInfo *>(plan.get_param_frame_ptrs().at(0)
-      + ScalarFrameLayout::eval_info_offset(0));
+  auto *info = plan.get_parameter_eval_info(0);
   info->evaluated_ = true; info->projected_ = true;
   Datum invalid; ASSERT_EQ(OB_SUCCESS, invalid.set_string("bad", 3));
   ObDynamicParamSetter setter(0, nullptr, &f.expr);
   EXPECT_EQ(OB_INVALID_ARGUMENT, setter.update_dynamic_param(ctx, invalid));
   EXPECT_EQ(old_type, plan.get_native_parameter_type(0));
-  EXPECT_EQ(old_slot, plan.get_native_parameter(0)); EXPECT_EQ(42, old_slot->get_int());
+  EXPECT_EQ(old_slot, materialized_parameter(plan, 0)); EXPECT_EQ(42, old_slot->get_int());
   EXPECT_EQ(old_view.get_int(), f.parameters().get_int());
-  EXPECT_EQ(old_slot, plan.get_native_parameter(0));
+  EXPECT_EQ(old_slot, materialized_parameter(plan, 0));
   EXPECT_TRUE(info->evaluated_); EXPECT_TRUE(info->projected_);
   EXPECT_EQ(77, f.expr.locate_expr_datum(ctx).get_int());
   EXPECT_TRUE(f.expr.get_eval_info(ctx).evaluated_); EXPECT_TRUE(f.expr.get_eval_info(ctx).projected_);
   EXPECT_TRUE(parent.get_eval_info(ctx).evaluated_);
   Datum valid; valid.set_int(-8);
   ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, valid));
-  EXPECT_EQ(-8, plan.get_native_parameter(0)->get_int());
+  EXPECT_EQ(-8, read_parameter_value(plan, 0).get_int());
   EXPECT_EQ(-8, f.expr.locate_expr_datum(ctx).get_int());
   EXPECT_TRUE(f.expr.get_eval_info(ctx).evaluated_);
   EXPECT_FALSE(parent.get_eval_info(ctx).evaluated_);
@@ -1218,7 +1238,7 @@ TEST(DynamicParamCapture, typed_capture_batch_restore_retires_source_and_batch_o
     NativeTypedDatum captured; DatumParameterMetadata metadata;
     ASSERT_EQ(OB_SUCCESS, setter.capture_dynamic_param(ctx, captured, metadata));
     EXPECT_EQ(source.exec.get_physical_plan_ctx()->get_native_parameter_type(0), captured.type_);
-    EXPECT_EQ(source.exec.get_physical_plan_ctx()->get_native_parameter(0)->get_reference(), captured.datum_.get_reference());
+    EXPECT_EQ(read_parameter_value(*source.exec.get_physical_plan_ctx(), 0).get_reference(), captured.datum_.get_reference());
     ObBatchRescanParams::RowBuilder row(batch);
     ASSERT_EQ(OB_SUCCESS, row.append(captured, metadata));
     memset(bytes, 'x', sizeof(bytes));
@@ -1236,7 +1256,7 @@ TEST(DynamicParamCapture, typed_capture_batch_restore_retires_source_and_batch_o
   ASSERT_EQ(OB_SUCCESS, destination.expr.prepare_scalar_type(destination.expr.obj_meta_, text_accuracy, destination.arena));
   ObDynamicParamSetter setter(0, nullptr, &destination.expr);
   ASSERT_EQ(OB_SUCCESS, setter.restore_dynamic_param(ctx, batch.get_one_batch_values(0).at(0), batch.get_one_batch_metadata(0).at(0)));
-  const Datum *slot = destination.exec.get_physical_plan_ctx()->get_native_parameter(0);
+  const Datum *slot = materialized_parameter(*destination.exec.get_physical_plan_ctx(), 0);
   const SqlType *type = destination.exec.get_physical_plan_ctx()->get_native_parameter_type(0);
   EXPECT_NE(batch.get_one_batch_values(0).at(0).datum_.get_reference(), slot->get_reference());
   EXPECT_NE(batch.get_one_batch_values(0).at(0).type_, type);

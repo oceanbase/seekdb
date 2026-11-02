@@ -38,6 +38,27 @@
 #include "sql/resolver/ob_stmt.h"
 #include "sql/session/ob_sql_session_info.h"
 
+
+namespace {
+oceanbase::common::Datum read_parameter_value(
+    const oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  oceanbase::common::Datum value;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.read_native_parameter(index, value));
+  return value;
+}
+
+// Only tests of a retaining generic Expr ABI explicitly request a projection.
+const oceanbase::common::Datum *materialized_parameter(
+    oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  if (!plan.has_native_parameter(index)) { return nullptr; }
+  oceanbase::common::Datum *value = nullptr;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.materialize_parameter_for_expr(index, value));
+  return value;
+}
+} // namespace
+
 namespace oceanbase { namespace sql {
 // Access only the actual installation/matching entry points and retained data.
 // No fixture implementation of either production algorithm.
@@ -340,10 +361,10 @@ TEST(NativePcConstValues, typed_null_parameter_preserves_declaration_and_matches
   ObPhysicalPlanCtx *parameters = context.get_physical_plan_ctx();
   ASSERT_NE(nullptr, parameters);
   ASSERT_EQ(OB_SUCCESS, parameters->append_parameter_input(null));
-  ASSERT_EQ(nullptr, parameters->get_native_parameter(0));
+  ASSERT_EQ(nullptr, materialized_parameter(*parameters, 0));
   ObPCConstParamInfo info;
   ASSERT_EQ(OB_SUCCESS, info.add_parameter(parameters->get_parameter_inputs().at(0), &context, owner));
-  EXPECT_EQ(nullptr, parameters->get_native_parameter(0)); // Capture must not initialize frames.
+  EXPECT_EQ(nullptr, materialized_parameter(*parameters, 0)); // Capture must not initialize frames.
   ASSERT_EQ(1, info.const_params_.count());
   EXPECT_TRUE(info.const_params_.at(0).datum_.is_null());
   ASSERT_NE(nullptr, info.const_params_.at(0).type_);
@@ -768,13 +789,13 @@ TEST(NativePcConstValues, cache_parameter_info_reads_final_metadata_and_sparse_g
   ASSERT_EQ(OB_SUCCESS, parameters.assign_parameter_inputs(inputs));
   ASSERT_EQ(OB_SUCCESS, parameters.init_datum_param_store()); ASSERT_TRUE(parameters.native_parameters_ready());
   source_owner.reuse(); MEMSET(source_text, 'x', sizeof(source_text));
-  ASSERT_NE(nullptr, parameters.get_native_parameter(1)); EXPECT_TRUE(parameters.get_native_parameter(1)->is_null());
+  ASSERT_NE(nullptr, materialized_parameter(parameters, 1)); EXPECT_TRUE(read_parameter_value(parameters, 1).is_null());
   ASSERT_NE(nullptr, parameters.get_parameter_metadata(1));
   EXPECT_EQ(ObNullType, parameters.get_parameter_metadata(1)->type_meta_.get_type());
   EXPECT_EQ(ObDecimalIntType, parameters.get_parameter_metadata(1)->param_meta_.get_type());
   EXPECT_EQ(7, parameters.get_parameter_metadata(1)->accuracy_.get_scale());
   EXPECT_EQ(27, parameters.get_parameter_metadata(1)->accuracy_.get_precision());
-  EXPECT_EQ(ObString::make_string("cache metadata reference"), parameters.get_native_parameter(2)->get_string());
+  EXPECT_EQ(ObString::make_string("cache metadata reference"), read_parameter_value(parameters, 2).get_string());
   ObPhysicalPlan ready_plan;
   ASSERT_EQ(OB_SUCCESS, ready_plan.set_params_info(parameters));
   const auto &after = ready_plan.get_params_info(); ASSERT_EQ(4, after.count());
@@ -795,7 +816,7 @@ TEST(NativePcConstValues, cache_parameter_info_reads_final_metadata_and_sparse_g
   ASSERT_NE(nullptr, parameters.get_group_parameter_input(3));
   EXPECT_EQ(original_flags.flag_, parameters.get_group_parameter_input(3)->get_param_flag().flag_);
   EXPECT_EQ(changed_flags.flag_, parameters.get_parameter_metadata(3)->flag_.flag_);
-  EXPECT_EQ(41, parameters.get_native_parameter(3)->get_int());
+  EXPECT_EQ(41, read_parameter_value(parameters, 3).get_int());
   ObPhysicalPlan merged_plan; ASSERT_EQ(OB_SUCCESS, merged_plan.set_params_info(parameters));
   const auto &merged = merged_plan.get_params_info(); ASSERT_EQ(4, merged.count());
   EXPECT_EQ(changed_flags.flag_, merged.at(3).flag_.flag_);
@@ -920,22 +941,22 @@ TEST_F(NativePcRuntimeMatch, prepared_ordinary_values_match_after_source_retirem
   ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
   ASSERT_TRUE(context.parameters().native_parameters_ready());
   source.reset(); MEMSET(text_bytes, 'x', sizeof(text_bytes)); MEMSET(binary_bytes, 'x', sizeof(binary_bytes));
-  EXPECT_EQ(INT64_MIN, context.parameters().get_native_parameter(0)->get_int());
-  EXPECT_EQ(UINT64_MAX, context.parameters().get_native_parameter(1)->get_uint());
-  EXPECT_EQ(ObString("metadata-owned"), context.parameters().get_native_parameter(4)->get_string());
-  EXPECT_EQ(ObString(3, "a\0b"), context.parameters().get_native_parameter(5)->get_string());
+  EXPECT_EQ(INT64_MIN, read_parameter_value(context.parameters(), 0).get_int());
+  EXPECT_EQ(UINT64_MAX, read_parameter_value(context.parameters(), 1).get_uint());
+  EXPECT_EQ(ObString("metadata-owned"), read_parameter_value(context.parameters(), 4).get_string());
+  EXPECT_EQ(ObString(3, "a\0b"), read_parameter_value(context.parameters(), 5).get_string());
   EXPECT_EQ(DatumRepresentation::Inline64, context.parameters().get_native_parameter_type(6)->canonical_representation());
-  EXPECT_EQ(0, context.parameters().get_native_parameter(6)->length());
+  EXPECT_EQ(0, read_parameter_value(context.parameters(), 6).length());
   EXPECT_EQ(DatumRepresentation::Reference, context.parameters().get_native_parameter_type(7)->canonical_representation());
-  EXPECT_EQ(16, context.parameters().get_native_parameter(7)->length());
+  EXPECT_EQ(16, read_parameter_value(context.parameters(), 7).length());
   const int64_t calls = context.owner_.calls_;
   context.owner_.fail_at_ = calls + 1;
   ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
   EXPECT_EQ(calls, context.owner_.calls_);
   EXPECT_EQ(DatumRepresentation::Reference, context.parameters().get_native_parameter_type(8)->canonical_representation());
-  EXPECT_EQ(8, context.parameters().get_native_parameter(8)->length());
+  EXPECT_EQ(8, read_parameter_value(context.parameters(), 8).length());
   EXPECT_EQ(PRECISION_UNKNOWN_YET, context.parameters().get_parameter_metadata(8)->accuracy_.get_precision());
-  EXPECT_TRUE(context.parameters().get_native_parameter(9)->is_null());
+  EXPECT_TRUE(read_parameter_value(context.parameters(), 9).is_null());
   EXPECT_EQ(ObNullType, context.parameters().get_parameter_metadata(9)->param_meta_.get_type());
   auto &integer_info = NativePcConstValuesTestPeer::parameter_info(context.set_, 0);
   integer_info.is_typed_null_value_ = true;
@@ -1043,7 +1064,7 @@ TEST_F(NativePcRuntimeMatch, sparse_group_uses_its_envelope_and_special_values_k
   ASSERT_EQ(OB_SUCCESS, grouped.bind(inputs));
   inputs.reuse(); source.reset();
   ASSERT_NE(nullptr, grouped.parameters().get_group_parameter_input(0));
-  EXPECT_EQ(41, grouped.parameters().get_native_parameter(0)->get_int());
+  EXPECT_EQ(41, read_parameter_value(grouped.parameters(), 0).get_int());
   auto &cached_group = NativePcConstValuesTestPeer::parameter_info(grouped.set_, 0);
   EXPECT_EQ(ObExtendType, cached_group.type_); EXPECT_EQ(ObIntType, cached_group.ext_real_type_);
   ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(grouped, OB_SUCCESS, true));
@@ -1058,7 +1079,7 @@ TEST_F(NativePcRuntimeMatch, sparse_group_uses_its_envelope_and_special_values_k
   RuntimeParameterMatchContext unknown;
   ASSERT_EQ(OB_SUCCESS, unknown.bind(inputs));
   ASSERT_EQ(ObUnknownType, unknown.parameters().get_parameter_metadata(0)->type_meta_.get_type());
-  EXPECT_EQ(8, unknown.parameters().get_native_parameter(0)->length());
+  EXPECT_EQ(8, read_parameter_value(unknown.parameters(), 0).length());
   ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(unknown, OB_SUCCESS, true));
 
   inputs.reuse(); DatumParameter integer;
@@ -1135,7 +1156,7 @@ TEST_F(NativePcRuntimeMatch, failed_owned_reference_replacement_keeps_the_ready_
   ASSERT_EQ(OB_SUCCESS, inputs.push_back(integer));
   RuntimeParameterMatchContext context;
   ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
-  const Datum *slot = context.parameters().get_native_parameter(0);
+  const Datum *slot = materialized_parameter(context.parameters(), 0);
   const SqlType *type = context.parameters().get_native_parameter_type(0);
   const DatumParameterMetadata attributes = *context.parameters().get_parameter_metadata(0);
   std::string bytes(257, 'r');
@@ -1149,7 +1170,7 @@ TEST_F(NativePcRuntimeMatch, failed_owned_reference_replacement_keeps_the_ready_
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, context.parameters().set_runtime_parameter(
       0, text.datum_, text_type, text.get_metadata()));
   EXPECT_TRUE(context.parameters().native_parameters_ready());
-  EXPECT_EQ(slot, context.parameters().get_native_parameter(0));
+  EXPECT_EQ(slot, materialized_parameter(context.parameters(), 0));
   EXPECT_EQ(type, context.parameters().get_native_parameter_type(0));
   EXPECT_EQ(7, slot->get_int());
   EXPECT_EQ(attributes.accuracy_.get_accuracy(), context.parameters().get_parameter_metadata(0)->accuracy_.get_accuracy());
@@ -1162,6 +1183,6 @@ TEST_F(NativePcRuntimeMatch, failed_owned_reference_replacement_keeps_the_ready_
   ASSERT_EQ(OB_SUCCESS, context.install_info(inputs));
   source.reset(); std::fill(bytes.begin(), bytes.end(), 'x');
   const std::string expected(257, 'r');
-  EXPECT_EQ(ObString(expected.size(), expected.data()), context.parameters().get_native_parameter(0)->get_string());
+  EXPECT_EQ(ObString(expected.size(), expected.data()), read_parameter_value(context.parameters(), 0).get_string());
   ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
 }

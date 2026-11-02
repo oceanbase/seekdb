@@ -233,18 +233,19 @@ int ObPlanSet::match_runtime_params_info(const ObPhysicalPlanCtx *params,
     int64_t N = params->get_parameter_count();
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < N; ++i) {
       const DatumParameter *group = params->get_group_parameter_input(i);
-      const Datum *value = params->get_native_parameter(i);
+      Datum::State state = Datum::State::Null;
+      const bool valid = params->read_native_parameter_state(i, state);
       const DatumParameterMetadata *attributes = params->get_parameter_metadata(i);
-      if (group == nullptr && (value == nullptr || attributes == nullptr)) {
+      if (group == nullptr && (!valid || attributes == nullptr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (group == nullptr && (value->is_present() || value->is_null())
+      } else if (group == nullptr && (state == Datum::State::Present || state == Datum::State::Null)
                  && can_match_parameter_metadata(attributes->type_meta_)
                  && can_match_parameter_metadata(attributes->param_meta_)) {
         // Ready bindings already own their prepared value and Type. This
         // branch compares the producer's independent attributes and NULL
         // state; it must not wrap semantic inline Decimal as physical bytes.
         ret = match_ordinary_param_metadata(params_info_.at(i), *attributes,
-                                           value->is_null(), is_same);
+                                           state == Datum::State::Null, is_same);
       } else {
         // Groups need the whole envelope, and special/extended/Unknown values
         // retain the checked physical conversion and existing domain rules.

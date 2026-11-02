@@ -76,6 +76,157 @@ int clone_construction_type_bindings(const DatumParameter &source, DatumParamete
 }
 } // namespace
 
+int ParameterValuePage::allocate(ObIAllocator &owner, int64_t capacity, ParameterValuePage *&out)
+{
+  if (capacity <= 0 || capacity > ScalarFrameLayout::slots_per_frame()) { return OB_INVALID_ARGUMENT; }
+  void *memory = owner.alloc(allocation_bytes(capacity));
+  if (memory == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+  MEMSET(memory, 0, allocation_bytes(capacity));
+  ParameterValuePage *candidate = new (memory) ParameterValuePage(capacity);
+  for (int64_t i = 0; i < capacity; ++i) { new (&candidate->eval_info(i)) ObEvalInfo{}; }
+  out = candidate;
+  return OB_SUCCESS;
+}
+
+Datum::State ParameterValuePage::state(int64_t slot) const
+{
+  OB_ASSERT(slot >= 0 && slot < capacity_);
+  return static_cast<Datum::State>(states()[slot] & STATE_MASK);
+}
+
+ObEvalInfo &ParameterValuePage::eval_info(int64_t slot) const
+{
+  OB_ASSERT(slot >= 0 && slot < capacity_);
+  return reinterpret_cast<ObEvalInfo *>(reinterpret_cast<char *>(const_cast<ParameterValuePage *>(this))
+      + eval_offset(capacity_))[slot];
+}
+
+int ParameterValuePage::read(int64_t slot, Datum &value) const
+{
+  if (slot < 0 || slot >= capacity_) { return OB_INVALID_ARGUMENT; }
+  Datum candidate;
+  switch (state(slot)) {
+    case Datum::State::Null: candidate.set_null(); break;
+    case Datum::State::Nop: candidate.set_nop(); break;
+    case Datum::State::Min: candidate.set_min(); break;
+    case Datum::State::Max: candidate.set_max(); break;
+    case Datum::State::Present:
+      if ((states()[slot] & INLINE_I64) != 0) {
+        int64_t payload = 0;
+        MEMCPY(&payload, words() + slot, sizeof(payload));
+        candidate.set_int(payload);
+      } else if (words()[slot] == 0) { return OB_ERR_UNEXPECTED; }
+      else { candidate = *reinterpret_cast<const Datum *>(words()[slot]); }
+      break;
+    default: return OB_ERR_UNEXPECTED;
+  }
+  value = candidate;
+  return OB_SUCCESS;
+}
+
+bool ParameterValuePage::read_i64(int64_t slot, int64_t &value) const
+{
+  const bool supported = slot >= 0 && slot < capacity_
+      && states()[slot] == (INLINE_I64 | static_cast<uint8_t>(Datum::State::Present));
+  if (supported) { MEMCPY(&value, words() + slot, sizeof(value)); }
+  return supported;
+}
+
+bool ParameterValuePage::matches_layout(int64_t slot, const SqlType &type) const
+{
+  const bool compact = type.kind() == ObIntType
+      && type.canonical_representation() == DatumRepresentation::Inline64;
+  return slot >= 0 && slot < capacity_ && compact == ((states()[slot] & INLINE_I64) != 0);
+}
+
+Datum *ParameterValuePage::find_materialized(int64_t slot) const
+{
+  return slot < 0 || slot >= capacity_ || projections_ == nullptr ? nullptr : projections_[slot];
+}
+
+int ParameterValuePage::assign(int64_t slot, const Datum &value, const SqlType &type, ObIAllocator &owner)
+{
+  if (slot < 0 || slot >= capacity_) { return OB_INVALID_ARGUMENT; }
+  const Datum candidate = value;
+  const bool compact = type.kind() == ObIntType
+      && type.canonical_representation() == DatumRepresentation::Inline64;
+  uint64_t word = 0;
+  Datum *generic = nullptr;
+  if (candidate.is_present()) {
+    if (compact) {
+      if (candidate.length() != 0 || candidate.reference_flags() != Datum::NoReferenceFlags) {
+        return OB_INVALID_ARGUMENT;
+      }
+      const int64_t payload = candidate.get_int();
+      MEMCPY(&word, &payload, sizeof(word));
+    } else {
+      // Reuse a real generic owner only when it already exists. No generic
+      // descriptor is allocated for an I64 or a non-present value.
+      if ((states()[slot] & INLINE_I64) == 0 && state(slot) == Datum::State::Present) {
+        generic = reinterpret_cast<Datum *>(words()[slot]);
+      }
+      if (generic == nullptr) {
+        void *memory = owner.alloc(sizeof(Datum));
+        if (memory == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+        generic = new (memory) Datum();
+      }
+      word = reinterpret_cast<uint64_t>(generic);
+    }
+  }
+  // Everything below is non-fallible. Publish owner, state and any already
+  // requested ABI value together; an unused parameter gets no projection.
+  if (generic != nullptr) { *generic = candidate; }
+  words()[slot] = word;
+  states()[slot] = static_cast<uint8_t>(candidate.state()) | (compact ? INLINE_I64 : 0);
+  Datum *projection = find_materialized(slot);
+  if (projection != nullptr) { *projection = candidate; }
+  eval_info(slot).evaluated_ = false;
+  eval_info(slot).projected_ = false;
+  return OB_SUCCESS;
+}
+
+int ParameterValuePage::materialize(int64_t slot, ObIAllocator &owner, Datum *&value)
+{
+  Datum candidate;
+  int ret = read(slot, candidate);
+  Datum *result = find_materialized(slot);
+  if (OB_SUCC(ret) && result == nullptr) {
+    Datum **directory = projections_;
+    if (directory == nullptr) {
+      directory = static_cast<Datum **>(owner.alloc(capacity_ * sizeof(Datum *)));
+      if (directory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { MEMSET(directory, 0, capacity_ * sizeof(Datum *)); }
+    }
+    void *memory = OB_SUCC(ret) ? owner.alloc(sizeof(Datum)) : nullptr;
+    if (OB_SUCC(ret) && memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    if (OB_SUCC(ret)) {
+      result = new (memory) Datum(candidate);
+      directory[slot] = result;
+      projections_ = directory;
+    } else if (directory != nullptr && directory != projections_) {
+      // No directory or entry becomes observable on failure. Arena allocators
+      // may retain the attempted block until execution teardown.
+      owner.free(directory);
+    }
+  }
+  if (OB_SUCC(ret)) { *result = candidate; value = result; }
+  return ret;
+}
+
+int ParameterValuePage::prepare_existing_projections(const ParameterValuePage &source, ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  if (source.projections_ != nullptr) {
+    for (int64_t slot = 0; OB_SUCC(ret) && slot < capacity_ && slot < source.capacity_; ++slot) {
+      if (source.projections_[slot] != nullptr) {
+        Datum *unused = nullptr;
+        ret = materialize(slot, owner, unused);
+      }
+    }
+  }
+  return ret;
+}
+
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
       tsc_snapshot_timestamp_(0),
@@ -514,57 +665,94 @@ int ObPhysicalPlanCtx::publish_runtime_parameter(int64_t index,
       || index >= native_parameter_types_.count() || index >= param_frame_capacity_) {
     return OB_INVALID_ARGUMENT;
   }
-  int64_t frame = 0, slot_index = 0;
-  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot_index);
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
   if (frame < 0 || frame >= param_frame_ptrs_.count() || param_frame_ptrs_.at(frame) == nullptr) {
     return OB_INVALID_ARGUMENT;
   }
-  Datum *slot = nullptr;
-  ObEvalInfo *info = nullptr;
-  get_param_frame_info(index, slot, info);
-  // No allocation, import, or fallible operation follows the first publish.
-  *slot = value;
-  native_parameter_types_.at(index) = &type;
-  native_parameter_metadata_.at(index) = attributes;
-  info->evaluated_ = false;
-  info->projected_ = false;
-  return OB_SUCCESS;
+  const DatumParameterMetadata metadata = attributes;
+  ParameterValuePage &page = ParameterValuePage::from_handle(param_frame_ptrs_.at(frame));
+  int ret = page.assign(slot, value, type, allocator_);
+  if (OB_SUCC(ret)) {
+    native_parameter_types_.at(index) = &type;
+    native_parameter_metadata_.at(index) = metadata;
+  }
+  return ret;
 }
 
-const Datum *ObPhysicalPlanCtx::get_native_parameter(int64_t index) const
+bool ObPhysicalPlanCtx::has_native_parameter(int64_t index) const
 {
-  const Datum *value = nullptr;
-  if (native_parameters_ready_ && index >= 0 && index < native_parameter_metadata_.count()
+  bool valid = native_parameters_ready_ && index >= 0 && index < native_parameter_metadata_.count()
       && index < param_frame_capacity_ && index < native_parameter_types_.count()
-      && native_parameter_types_.at(index) != nullptr) {
+      && native_parameter_types_.at(index) != nullptr;
+  if (valid) {
     int64_t frame = 0, slot = 0;
     ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
-    if (frame >= 0 && frame < param_frame_ptrs_.count() && param_frame_ptrs_.at(frame) != nullptr) {
-      value = reinterpret_cast<const Datum *>(param_frame_ptrs_.at(frame)
-          + ScalarFrameLayout::datum_offset(slot));
-    }
+    valid = frame >= 0 && frame < param_frame_ptrs_.count() && param_frame_ptrs_.at(frame) != nullptr
+        && slot < ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).capacity();
   }
-  return value;
+  return valid;
 }
 
 const SqlType *ObPhysicalPlanCtx::get_native_parameter_type(int64_t index) const
 {
-  return get_native_parameter(index) == nullptr ? nullptr : native_parameter_types_.at(index);
+  return has_native_parameter(index) ? native_parameter_types_.at(index) : nullptr;
 }
 
 const DatumParameterMetadata *ObPhysicalPlanCtx::get_parameter_metadata(int64_t index) const
 {
-  return get_native_parameter(index) == nullptr ? nullptr : &native_parameter_metadata_.at(index);
+  return has_native_parameter(index) ? &native_parameter_metadata_.at(index) : nullptr;
+}
+
+bool ObPhysicalPlanCtx::read_native_parameter_state(int64_t index, Datum::State &state) const
+{
+  if (!has_native_parameter(index)) { return false; }
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+  state = ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).state(slot);
+  return true;
+}
+
+int ObPhysicalPlanCtx::read_native_parameter(int64_t index, Datum &value) const
+{
+  if (!has_native_parameter(index)) { return OB_INVALID_ARGUMENT; }
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+  return ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).read(slot, value);
 }
 
 bool ObPhysicalPlanCtx::read_native_bigint_parameter(int64_t index, int64_t &value) const
 {
   const SqlType *type = get_native_parameter_type(index);
-  const Datum *datum = get_native_parameter(index);
-  const bool supported = type != nullptr && type->kind() == ObIntType
-      && datum != nullptr && datum->is_present();
-  if (supported) { value = datum->get_int(); }
-  return supported;
+  if (type == nullptr || type->kind() != ObIntType
+      || type->canonical_representation() != DatumRepresentation::Inline64) { return false; }
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+  return ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).read_i64(slot, value);
+}
+
+int ObPhysicalPlanCtx::materialize_parameter_for_expr(int64_t index, Datum *&value)
+{
+  if (!has_native_parameter(index)) { return OB_INVALID_ARGUMENT; }
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+  return ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).materialize(slot, allocator_, value);
+}
+
+Datum *ObPhysicalPlanCtx::locate_materialized_parameter(int64_t index) const
+{
+  if (!has_native_parameter(index)) { return nullptr; }
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+  return ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).find_materialized(slot);
+}
+
+ObEvalInfo *ObPhysicalPlanCtx::get_parameter_eval_info(int64_t index) const
+{
+  if (!has_native_parameter(index)) { return nullptr; }
+  int64_t frame = 0, slot = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+  return &ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).eval_info(slot);
 }
 
 const DatumParameter *ObPhysicalPlanCtx::get_group_parameter_input(int64_t index) const
@@ -579,15 +767,15 @@ const DatumParameter *ObPhysicalPlanCtx::get_group_parameter_input(int64_t index
 int ObPhysicalPlanCtx::capture_native_parameter(int64_t index, NativeTypedDatum &value,
     DatumParameterMetadata &attributes) const
 {
-  const Datum *slot = get_native_parameter(index);
-  if (slot == nullptr) { return OB_INVALID_ARGUMENT; }
   NativeTypedDatum candidate;
-  candidate.datum_ = *slot;
-  candidate.type_ = native_parameter_types_.at(index);
-  const DatumParameterMetadata metadata = native_parameter_metadata_.at(index);
-  value = candidate;
-  attributes = metadata;
-  return OB_SUCCESS;
+  int ret = read_native_parameter(index, candidate.datum_);
+  if (OB_SUCC(ret)) {
+    candidate.type_ = native_parameter_types_.at(index);
+    const DatumParameterMetadata metadata = native_parameter_metadata_.at(index);
+    value = candidate;
+    attributes = metadata;
+  }
+  return ret;
 }
 
 int ObPhysicalPlanCtx::capture_native_group(int64_t group_index, NativeParameterGroup &output) const
@@ -609,18 +797,20 @@ int ObPhysicalPlanCtx::capture_native_group(int64_t group_index, NativeParameter
 
 int ObPhysicalPlanCtx::runtime_parameter_legacy_size(int64_t index, int64_t &bytes) const
 {
-  const Datum *slot = get_native_parameter(index);
-  if (slot == nullptr) { return OB_INVALID_ARGUMENT; }
-  return DatumCopyPlan(*native_parameter_types_.at(index)).legacy_payload_size(*slot, bytes);
+  Datum value;
+  int ret = read_native_parameter(index, value);
+  if (OB_SUCC(ret)) { ret = DatumCopyPlan(*native_parameter_types_.at(index)).legacy_payload_size(value, bytes); }
+  return ret;
 }
 
 int ObPhysicalPlanCtx::export_runtime_parameter_legacy(int64_t index, ObDatum &out,
     void *caller_scratch, int64_t capacity) const
 {
-  const Datum *slot = get_native_parameter(index);
-  if (slot == nullptr) { return OB_INVALID_ARGUMENT; }
-  return DatumCopyPlan(*native_parameter_types_.at(index)).legacy_view(
-      *slot, out, caller_scratch, capacity);
+  Datum value;
+  int ret = read_native_parameter(index, value);
+  if (OB_SUCC(ret)) { ret = DatumCopyPlan(*native_parameter_types_.at(index)).legacy_view(
+      value, out, caller_scratch, capacity); }
+  return ret;
 }
 
 int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const Datum &source,
@@ -721,6 +911,13 @@ int ObPhysicalPlanCtx::adopt_runtime_parameters(ObPhysicalPlanCtx &staged)
   } else if (OB_FAIL(native_group_inputs_.reserve(staged.native_group_inputs_.count()))) {
   } else if (OB_FAIL(param_frame_ptrs_.reserve(staged.param_frame_ptrs_.count()))) {
   } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_frame_ptrs_.count()
+        && i < staged.param_frame_ptrs_.count(); ++i) {
+      ret = ParameterValuePage::from_handle(staged.param_frame_ptrs_.at(i)).prepare_existing_projections(
+          ParameterValuePage::from_handle(param_frame_ptrs_.at(i)), allocator_);
+    }
+  }
+  if (OB_SUCC(ret)) {
     rebind_parameter_page_aliases(staged.param_frame_ptrs_);
     const int a = native_parameter_metadata_.assign(staged.native_parameter_metadata_);
     const int b = native_parameter_types_.assign(staged.native_parameter_types_);
@@ -815,34 +1012,47 @@ int ObPhysicalPlanCtx::restore_native_parameter_frames(const ObIArray<char *> &f
   const int64_t original_pages = ScalarFrameLayout::frame_count(original_count);
   const int64_t slots_per_page = ScalarFrameLayout::slots_per_frame();
   for (int64_t i = 0; OB_SUCC(ret) && i < frames.count(); ++i) {
-    char *page = frames.at(i);
-    if (page == nullptr || reinterpret_cast<uintptr_t>(page) % alignof(Datum) != 0) {
+    char *handle = frames.at(i);
+    const int64_t logical_slots = i < original_pages
+        ? std::min(slots_per_page, original_count - i * slots_per_page)
+        : std::min(slots_per_page, count - original_count - (i - original_pages) * slots_per_page);
+    const int64_t required_capacity = i < original_pages ? logical_slots : slots_per_page;
+    if (handle == nullptr || reinterpret_cast<uintptr_t>(handle) % alignof(ParameterValuePage) != 0) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (i >= original_pages) {
-      // Incoming wire pages may contain only a short tail. Own a full beyond
-      // page before publishing, so later dynamic append never moves a slot.
-      const int64_t logical_slots = std::min(slots_per_page,
-          count - original_count - (i - original_pages) * slots_per_page);
-      page = static_cast<char *>(allocator_.alloc(slots_per_page * ScalarFrameLayout::slot_size()));
-      if (page == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-      else {
-        MEMSET(page, 0, slots_per_page * ScalarFrameLayout::slot_size());
-        reset_datum_frame(page, slots_per_page);
-        MEMCPY(page, frames.at(i), logical_slots * ScalarFrameLayout::slot_size());
+    } else if (ParameterValuePage::from_handle(handle).capacity() < logical_slots
+        || ParameterValuePage::from_handle(handle).capacity() > slots_per_page) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (ParameterValuePage::from_handle(handle).capacity() < required_capacity) {
+      ParameterValuePage *expanded = nullptr;
+      if (OB_FAIL(ParameterValuePage::allocate(allocator_, required_capacity, expanded))) {
+      } else {
+        const ParameterValuePage &source = ParameterValuePage::from_handle(handle);
+        const int64_t begin = i < original_pages ? i * slots_per_page
+            : original_count + (i - original_pages) * slots_per_page;
+        for (int64_t j = 0; OB_SUCC(ret) && j < logical_slots; ++j) {
+          Datum value;
+          if (types.at(begin + j) == nullptr
+              || !source.matches_layout(j, *types.at(begin + j))) { ret = OB_INVALID_ARGUMENT; }
+          else if (OB_FAIL(source.read(j, value))) {
+          } else if (OB_FAIL(expanded->assign(j, value, *types.at(begin + j), allocator_))) {
+          } else { expanded->eval_info(j) = source.eval_info(j); }
+        }
+        if (OB_SUCC(ret)) { handle = reinterpret_cast<char *>(expanded); }
       }
     }
-    if (OB_SUCC(ret)) { ret = staged.param_frame_ptrs_.push_back(page); }
+    if (OB_SUCC(ret)) { ret = staged.param_frame_ptrs_.push_back(handle); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     int64_t page = 0, slot = 0;
     ScalarFrameLayout::locate_parameter(original_count, i, page, slot);
-    const Datum &native = *reinterpret_cast<const Datum *>(frames.at(page)
-        + ScalarFrameLayout::datum_offset(slot));
+    Datum native;
     DatumParameterMetadata attributes = metadata != nullptr ? metadata->at(i)
         : native_parameters_ready_ ? native_parameter_metadata_.at(i) : param_store_.at(i).get_metadata();
     int64_t span = 0;
-    if (types.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
-    else if (OB_FAIL(DatumCopyPlan(*types.at(i)).carrier_span_size(native, span))) {
+    const ParameterValuePage &values = ParameterValuePage::from_handle(frames.at(page));
+    if (types.at(i) == nullptr || !values.matches_layout(slot, *types.at(i))) { ret = OB_INVALID_ARGUMENT; }
+    else if (OB_FAIL(values.read(slot, native))) {
+    } else if (OB_FAIL(DatumCopyPlan(*types.at(i)).carrier_span_size(native, span))) {
     } else if (OB_FAIL(staged.native_parameter_metadata_.push_back(attributes))) {
     } else { ret = staged.native_parameter_types_.push_back(types.at(i)); }
   }
@@ -1065,12 +1275,7 @@ int ObPhysicalPlanCtx::switch_implicit_cursor()
   return ret;
 }
 
-void ObPhysicalPlanCtx::reset_datum_frame(char *frame, int64_t expr_cnt)
-{
-  for (int64_t j = 0; j < expr_cnt; ++j) {
-    new (frame + ScalarFrameLayout::datum_offset(j)) Datum();
-  }
-}
+
 
 int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
 {
@@ -1094,12 +1299,9 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
       if (frame == nullptr) {
         const int64_t slots = page < original_pages
             ? std::min(per_page, original_param_cnt_ - page * per_page) : per_page;
-        frame = static_cast<char *>(allocator_.alloc(slots * ScalarFrameLayout::slot_size()));
-        if (frame == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-        else {
-          MEMSET(frame, 0, slots * ScalarFrameLayout::slot_size());
-          reset_datum_frame(frame, slots);
-        }
+        ParameterValuePage *page_value = nullptr;
+        ret = ParameterValuePage::allocate(allocator_, slots, page_value);
+        if (OB_SUCC(ret)) { frame = reinterpret_cast<char *>(page_value); }
       }
       if (OB_SUCC(ret)) { ret = staged.push_back(frame); }
     }
@@ -1111,20 +1313,6 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
     }
   }
   return ret;
-}
-
-OB_INLINE void ObPhysicalPlanCtx::get_param_frame_info(int64_t param_idx,
-                                                       Datum *&datum,
-                                                       ObEvalInfo *&eval_info)
-{
-  int64_t idx = 0;
-  int64_t slot_idx = 0;
-  ScalarFrameLayout::locate_parameter(original_param_cnt_, param_idx, idx, slot_idx);
-  const int64_t off = ScalarFrameLayout::datum_offset(slot_idx);
-  datum = reinterpret_cast<Datum*>(param_frame_ptrs_.at(idx) + off);
-  eval_info = reinterpret_cast<ObEvalInfo *>(param_frame_ptrs_.at(idx)
-      + ScalarFrameLayout::eval_info_offset(slot_idx));
-  LOG_DEBUG("get_param_frame_info", K(param_idx), K(off), K(datum), K(lbt()));
 }
 
 int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,

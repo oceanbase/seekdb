@@ -83,14 +83,16 @@ int ObDynamicParamSetter::restore_dynamic_param(ObEvalCtx &eval_ctx,
   if (plan_ctx == nullptr || dst_ == nullptr || value.type_ == nullptr
       || param_idx_ < 0 || param_idx_ >= plan_ctx->get_parameter_count()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (dst_->native_parameter_alias_
+      && OB_FAIL(dst_->prepare_native_parameter_write(eval_ctx, param_idx_))) {
   } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, value.datum_, *value.type_, attributes))) {
   } else {
-    const Datum *current = plan_ctx->get_native_parameter(param_idx_);
-    if (current == nullptr) { ret = OB_ERR_UNEXPECTED; }
-    else {
+    Datum current;
+    if (OB_FAIL(plan_ctx->read_native_parameter(param_idx_, current))) {
+    } else {
       // A failed preparation must not invalidate the old expression or parents.
       clear_parent_evaluated_flag(eval_ctx, *dst_);
-      dst_->locate_datum_for_write(eval_ctx) = *current;
+      dst_->locate_datum_for_write(eval_ctx) = current;
       dst_->get_eval_info(eval_ctx).evaluated_ = true;
     }
   }
@@ -107,6 +109,11 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, const Datum 
     ret = OB_INVALID_ARGUMENT;
   } else {
     const Datum candidate = datum;
+    // A direct alias writer is an actual generic ABI consumer. Snapshot the
+    // input before refreshing a possibly aliased projection, then prepare its
+    // stable result before any owner or parent-state publication.
+    if (dst_->native_parameter_alias_
+        && OB_FAIL(dst_->prepare_native_parameter_write(eval_ctx, param_idx_))) { return ret; }
     const SqlType &target_type = dst_->get_sql_type();
     DatumParameterMetadata attributes = *plan_ctx->get_parameter_metadata(param_idx_);
     if (target_type.legacy_meta().is_pl_extend_type() || target_type.kind() == ObDecimalIntType) {
@@ -118,9 +125,13 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, const Datum 
     }
     if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, candidate, target_type, attributes))) {
     } else {
-      clear_parent_evaluated_flag(eval_ctx, *dst_);
-      dst_->locate_datum_for_write(eval_ctx) = *plan_ctx->get_native_parameter(param_idx_);
-      dst_->get_eval_info(eval_ctx).evaluated_ = true;
+      Datum current;
+      if (OB_FAIL(plan_ctx->read_native_parameter(param_idx_, current))) {
+      } else {
+        clear_parent_evaluated_flag(eval_ctx, *dst_);
+        dst_->locate_datum_for_write(eval_ctx) = current;
+        dst_->get_eval_info(eval_ctx).evaluated_ = true;
+      }
     }
   }
   return ret;

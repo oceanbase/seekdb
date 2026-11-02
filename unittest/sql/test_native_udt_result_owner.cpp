@@ -23,6 +23,18 @@
 #include <map>
 #include <string>
 
+
+namespace {
+oceanbase::common::Datum read_parameter_value(
+    const oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  oceanbase::common::Datum value;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.read_native_parameter(index, value));
+  return value;
+}
+
+} // namespace
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 namespace {
@@ -359,14 +371,14 @@ TEST(NativeUdtResult, table_assignment_parameter_cast_uses_real_collection_decla
     plan.set_original_param_cnt(1);
     ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
     ASSERT_TRUE(plan.native_parameters_ready());
-    ASSERT_NE(input.data(), plan.get_native_parameter(0)->get_reference());
+    ASSERT_NE(input.data(), read_parameter_value(plan, 0).get_reference());
     std::memset(&input[0], 0xa5, input.size());
     Datum result;
     ASSERT_EQ(OB_SUCCESS, eval_assign_question_mark_func(assignment, eval, result));
     ASSERT_FALSE(result.is_null());
     EXPECT_EQ(id, assignment.obj_meta_.get_subschema_id());
     EXPECT_EQ(ObVarcharType, plan.get_native_parameter_type(0)->kind());
-    EXPECT_EQ(ObString::make_string(literals[scenario]), plan.get_native_parameter(0)->get_string());
+    EXPECT_EQ(ObString::make_string(literals[scenario]), read_parameter_value(plan, 0).get_string());
     EXPECT_TRUE(plan.get_parameter_metadata(0)->flag_.need_to_check_type_);
     EXPECT_EQ(9, plan.get_parameter_metadata(0)->raw_text_pos_);
     ObString raw = result.get_string();

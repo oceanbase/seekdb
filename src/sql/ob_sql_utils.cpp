@@ -490,11 +490,10 @@ int ObSQLUtils::calc_const_expr(ObExecContext &bound_ctx, const ObRawExpr *expr,
     } else if (index < 0 || index >= plan->get_parameter_count()) {
       ret = OB_ERR_ILLEGAL_INDEX;
     } else {
-      const Datum *native = plan->get_native_parameter(index);
       const DatumParameterMetadata *attributes = plan->get_parameter_metadata(index);
       alignas(8) char scratch[64];
       ObDatum legacy;
-      if (native == nullptr || attributes == nullptr) { ret = OB_NOT_INIT; }
+      if (attributes == nullptr) { ret = OB_NOT_INIT; }
       else if (OB_FAIL(plan->export_runtime_parameter_legacy(index, legacy, scratch, sizeof(scratch)))) {
       } else if (OB_FAIL(result.assign_legacy_owned(legacy, attributes->type_meta_, result_owner))) {
       } else {

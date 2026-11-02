@@ -714,9 +714,67 @@ void *ObExprStrResAlloc::alloc(const int64_t size)
   return mem;
 }
 
+int ObExpr::eval_native_parameter(ObEvalCtx &ctx, Datum *&datum) const
+{
+  ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+  if (!native_parameter_alias_ || type_ != T_QUESTIONMARK || is_batch_result()
+      || eval_func_ != nullptr || plan == nullptr || !plan->native_parameters_ready()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return plan->materialize_parameter_for_expr(extra_, datum);
+}
+
+int ObExpr::prepare_native_parameter_write(ObEvalCtx &ctx, int64_t parameter_index) const
+{
+  ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+  int64_t page = 0, slot = 0;
+  if (plan == nullptr || parameter_index < 0 || extra_ != static_cast<uint64_t>(parameter_index)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  ScalarFrameLayout::locate_parameter(plan->get_original_param_cnt(), parameter_index, page, slot);
+  if (datum_off_ != ScalarFrameLayout::datum_offset(slot)
+      || eval_info_off_ != ScalarFrameLayout::eval_info_offset(slot)) { return OB_INVALID_ARGUMENT; }
+  // CG/PX validates the logical frame identity. A copied EvalCtx directory may
+  // retain an older page after rebind, so the current owner/index is authoritative.
+  Datum *value = nullptr;
+  return eval_native_parameter(ctx, value);
+}
+
+Datum &ObExpr::locate_native_parameter(ObEvalCtx &ctx) const
+{
+  ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+  Datum *value = plan == nullptr ? nullptr : plan->locate_materialized_parameter(extra_);
+  // This non-fallible read never allocates. The actual generic consumer must
+  // have evaluated first; dynamic/PL writers are not native parameter aliases.
+  OB_ASSERT(native_parameter_alias_ && value != nullptr);
+  return *value;
+}
+
+ObEvalInfo &ObExpr::native_parameter_eval_info(ObEvalCtx &ctx) const
+{
+  ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+  ObEvalInfo *info = plan == nullptr ? nullptr : plan->get_parameter_eval_info(extra_);
+  OB_ASSERT(native_parameter_alias_ && info != nullptr);
+  return *info;
+}
+
+int ObExpr::assign_native_parameter(ObEvalCtx &ctx, const Datum &value) const
+{
+  ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+  if (plan == nullptr || !native_parameter_alias_) { return OB_INVALID_ARGUMENT; }
+  const SqlType *type = plan->get_native_parameter_type(extra_);
+  const DatumParameterMetadata *metadata = plan->get_parameter_metadata(extra_);
+  if (type == nullptr || metadata == nullptr) { return OB_INVALID_ARGUMENT; }
+  return plan->set_runtime_parameter(extra_, value, *type, *metadata);
+}
+
 int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx,
     NativeTypedDatum &value, DatumParameterMetadata &attributes)
 {
+  if (expr.native_parameter_alias_) {
+    const ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
+    return plan == nullptr ? OB_INVALID_ARGUMENT : plan->capture_native_parameter(expr.extra_, value, attributes);
+  }
   const SqlType &type = expr.get_sql_type();
   NativeTypedDatum candidate;
   candidate.datum_ = expr.locate_expr_datum(ctx);
@@ -879,9 +937,13 @@ DEF_TO_STRING(ObToStringExpr)
     J_OBJ_END();
   } else {
     Datum *datum = NULL;
-    int ret = e_.eval(c_, datum);
-    UNUSED(ret);
-    pos = ObToStringDatum(e_, *datum).to_string(buf, buf_len);
+    const int ret = e_.eval(c_, datum);
+    if (ret != OB_SUCCESS || datum == nullptr) {
+      databuff_printf(buf, buf_len, pos, "{expr_eval_error:%d}",
+          ret != OB_SUCCESS ? ret : OB_ERR_UNEXPECTED);
+    } else {
+      pos = ObToStringDatum(e_, *datum).to_string(buf, buf_len);
+    }
   }
   return pos;
 }
@@ -1100,10 +1162,12 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datu
       }
     }
   } else {
-    const Datum *value = plan_ctx->get_native_parameter(expr.extra_);
+    Datum captured;
+    const Datum *value = &captured;
     const SqlType *type = plan_ctx->get_native_parameter_type(expr.extra_);
-    if (value == nullptr || type == nullptr) {
+    if (type == nullptr) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(plan_ctx->read_native_parameter(expr.extra_, captured))) {
     } else if (!value->is_null() && type->kind() != expr.datum_meta_.type_) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -1127,11 +1191,13 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &ex
   } else {
     ObCastMode cast_mode = CM_NONE;
     const ObPhysicalPlanCtx &parameters = *ctx.exec_ctx_.get_physical_plan_ctx();
-    const Datum *parameter = parameters.get_native_parameter(expr.extra_);
+    Datum captured;
+    const Datum *parameter = &captured;
     const SqlType *parameter_type = parameters.get_native_parameter_type(expr.extra_);
     const DatumParameterMetadata *attributes = parameters.get_parameter_metadata(expr.extra_);
-    if (parameter == nullptr || parameter_type == nullptr || attributes == nullptr) {
+    if (parameter_type == nullptr || attributes == nullptr) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(parameters.read_native_parameter(expr.extra_, captured))) {
     } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(
                        session->get_stmt_type(), session, cast_mode))) {
     } else {

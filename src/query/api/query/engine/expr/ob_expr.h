@@ -177,8 +177,9 @@ struct ObEvalInfo
 	uint16_t cnt_;
 };
 
-// Native scalar/parameter values and EvalInfo share one aligned slot. Batch
-// columns instead hold contiguous Datum arrays with one EvalInfo per Expr.
+// Generic scalar expression slots and their logical parameter-frame numbering.
+// ParameterValuePage owns compact values independently of these legacy offsets.
+// Batch columns hold contiguous Datum arrays with one EvalInfo per Expr.
 struct ScalarFrameLayout
 {
   static constexpr int64_t slot_size()
@@ -459,6 +460,11 @@ public:
   }
 
   OB_INLINE int eval(ObEvalCtx &ctx, common::Datum *&datum) const;
+  int eval_native_parameter(ObEvalCtx &ctx, common::Datum *&datum) const;
+  common::Datum &locate_native_parameter(ObEvalCtx &ctx) const;
+  ObEvalInfo &native_parameter_eval_info(ObEvalCtx &ctx) const;
+  int assign_native_parameter(ObEvalCtx &ctx, const common::Datum &value) const;
+  int prepare_native_parameter_write(ObEvalCtx &ctx, int64_t parameter_index) const;
   int eval_enumset(ObEvalCtx &ctx,
                    const common::ObIArray<common::ObString> &str_values,
                    const uint64_t cast_mode,
@@ -471,12 +477,14 @@ public:
   void reset() { new (this) ObExpr(); }
   Datum &locate_expr_datum(ObEvalCtx &ctx) const
   {
+    if (native_parameter_alias_) { return locate_native_parameter(ctx); }
     // performance critical, do not check pointer validity.
     return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_)[get_datum_idx(ctx)];
   }
 
   Datum &locate_expr_datum(ObEvalCtx &ctx, const int64_t batch_idx) const
   {
+    if (native_parameter_alias_) { return locate_native_parameter(ctx); }
     int64_t idx = batch_idx_mask_ & batch_idx;
     return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_)[idx];
   }
@@ -485,13 +493,15 @@ public:
   {
     DatumVector datumsvector;
     datumsvector.set_batch(is_batch_result());
-    datumsvector.datums_ = reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
+    datumsvector.datums_ = native_parameter_alias_ ? &locate_native_parameter(ctx)
+        : reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
     return datumsvector;
   }
 
   Datum *locate_batch_datums(ObEvalCtx &ctx) const
   {
-    return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
+    return native_parameter_alias_ ? &locate_native_parameter(ctx)
+        : reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
   }
 
   // batch version of locate_param_datum.  Array size is batch_size_ in ObEvalCtx
@@ -512,7 +522,8 @@ public:
 
   ObEvalInfo &get_eval_info(ObEvalCtx &ctx) const
   {
-    return *reinterpret_cast<ObEvalInfo *>(ctx.frames_[frame_idx_] + eval_info_off_);
+    return native_parameter_alias_ ? native_parameter_eval_info(ctx)
+        : *reinterpret_cast<ObEvalInfo *>(ctx.frames_[frame_idx_] + eval_info_off_);
   }
 
   OB_INLINE char *get_rev_buf(ObEvalCtx &ctx) const
@@ -778,6 +789,9 @@ public:
       uint64_t is_dynamic_const_:1; // is const during the subplan execution, including exec param
       uint64_t need_stack_check_:1; // the expression tree depth needs to check whether the stack overflows
       uint64_t nullable_:1;
+      // Ordinary SQL QM only. The serialized flag selects native owner/index
+      // access instead of interpreting its logical legacy byte offsets.
+      uint64_t native_parameter_alias_:1;
     };
     uint64_t flag_;
   };
@@ -1024,6 +1038,7 @@ OB_INLINE int ObExpr::eval_batch_param_value(ObEvalCtx &ctx, const ObBitVector &
 
 OB_INLINE int ObExpr::eval(ObEvalCtx &ctx, common::Datum *&datum) const
 {
+  if (native_parameter_alias_) { return eval_native_parameter(ctx, datum); }
   // performance critical, do not check %frame_idx_ and %frame again. (checked in CG)
 	int ret = common::OB_SUCCESS;
 	char *frame = ctx.frames_[frame_idx_];
@@ -1056,6 +1071,13 @@ OB_INLINE int ObExpr::eval_batch(ObEvalCtx &ctx,
                                  const ObBitVector &skip,
                                  const int64_t size) const
 {
+  // A parameter's first generic ABI request can allocate. This failure must
+  // reach the caller even for an all-skipped batch: callers locate the result
+  // after success, unlike the old const callback dry-run error contract.
+  if (native_parameter_alias_) {
+    common::Datum *datum = nullptr;
+    return eval_native_parameter(ctx, datum);
+  }
   int ret = common::OB_SUCCESS;
   const ObEvalInfo &info = get_eval_info(ctx);
   if (!is_batch_result()) {
@@ -1078,6 +1100,8 @@ OB_INLINE int ObExpr::eval_batch(ObEvalCtx &ctx,
 OB_INLINE int ObExpr::deep_copy_self_datum(ObEvalCtx &ctx) const
 {
   int ret = OB_SUCCESS;
+  Datum *parameter = nullptr;
+  if (native_parameter_alias_ && OB_FAIL(eval_native_parameter(ctx, parameter))) { return ret; }
   const Datum &datum = locate_expr_datum(ctx);
   if (OB_FAIL(deep_copy_datum(ctx, datum))) {
   }
@@ -1087,6 +1111,7 @@ OB_INLINE int ObExpr::deep_copy_self_datum(ObEvalCtx &ctx) const
 
 OB_INLINE int ObExpr::deep_copy_datum(ObEvalCtx &ctx, const common::Datum &datum) const
 {
+  if (native_parameter_alias_) { return assign_native_parameter(ctx, datum); }
   // Preserve the source before selecting owner memory: source may be this slot.
   const common::Datum source = datum;
   const common::DatumCopyPlan plan = get_datum_copy_plan();

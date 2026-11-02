@@ -129,9 +129,10 @@ int ObPlanCacheObject::set_params_info(const ObPhysicalPlanCtx &parameters)
     const DatumParameterMetadata *metadata = group != nullptr
         ? &group->get_metadata() : parameters.get_parameter_metadata(i);
     const DatumParameterMetadata *current_metadata = parameters.get_parameter_metadata(i);
-    const Datum *value = group != nullptr ? &group->datum_ : parameters.get_native_parameter(i);
+    Datum::State state = group != nullptr ? group->datum_.state() : Datum::State::Null;
+    const bool valid = group != nullptr || parameters.read_native_parameter_state(i, state);
     ObParamInfo info;
-    if (metadata == nullptr || current_metadata == nullptr || value == nullptr) {
+    if (metadata == nullptr || current_metadata == nullptr || !valid) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       // Resolver flag merging updates the effective metadata page, while the
@@ -139,7 +140,7 @@ int ObPlanCacheObject::set_params_info(const ObPhysicalPlanCtx &parameters)
       info.flag_ = current_metadata->flag_;
       info.type_ = metadata->param_meta_.get_type();
       info.col_type_ = metadata->type_meta_.get_collation_type();
-      info.is_typed_null_value_ = value->is_null() && info.type_ != ObNullType;
+      info.is_typed_null_value_ = state == Datum::State::Null && info.type_ != ObNullType;
       if (metadata->type_meta_.is_ext_sql_array()) {
         ObDataType element_type;
         if (group == nullptr) { ret = OB_ERR_UNEXPECTED; }

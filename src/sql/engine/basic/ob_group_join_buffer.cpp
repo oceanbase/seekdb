@@ -245,14 +245,14 @@ int ObGroupJoinBufffer::fill_cur_row_group_param()
       const ObDynamicParamSetter &rescan_param = rescan_params_->at(i);
       int64_t param_idx = rescan_param.param_idx_;
       ObExpr *dst = rescan_param.dst_;
-      Datum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
+      Datum current;
       const GroupRescanParam &arr = group_params_.at(i);
-      if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, arr.values_.at(cur_group_idx_).datum_, *arr.values_.at(cur_group_idx_).type_, arr.metadata_.at(cur_group_idx_)))) {
-      } else if (plan_ctx->get_native_parameter(param_idx) == nullptr) {
-          ret = OB_ERR_UNEXPECTED;
+      if (dst->native_parameter_alias_ && OB_FAIL(dst->prepare_native_parameter_write(*eval_ctx_, param_idx))) {
+      } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, arr.values_.at(cur_group_idx_).datum_, *arr.values_.at(cur_group_idx_).type_, arr.metadata_.at(cur_group_idx_)))) {
+      } else if (OB_FAIL(plan_ctx->read_native_parameter(param_idx, current))) {
       } else {
         ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
-        param_datum = *plan_ctx->get_native_parameter(param_idx);
+        dst->locate_datum_for_write(*eval_ctx_) = current;
         dst->set_evaluated_projected(*eval_ctx_);
       }
     }
@@ -268,17 +268,17 @@ int ObGroupJoinBufffer::fill_cur_row_group_param()
         const ObDynamicParamSetter &rescan_param = right_rescan_params_->at(i);
         int64_t param_idx = rescan_param.param_idx_;
         ObExpr *dst = rescan_param.dst_;
-        Datum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
+        Datum current;
         const GroupRescanParam *arr = above_right_group_params_.at(i);
         if (OB_UNLIKELY(above_group_idx_for_read_ >= arr->count_)) {
           ret = OB_ERR_UNEXPECTED;
+        } else if (dst->native_parameter_alias_ && OB_FAIL(dst->prepare_native_parameter_write(*eval_ctx_, param_idx))) {
         } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, arr->values_.at(above_group_idx_for_read_).datum_, *arr->values_.at(above_group_idx_for_read_).type_, arr->metadata_.at(above_group_idx_for_read_)))) {
-        } else if (plan_ctx->get_native_parameter(param_idx) == nullptr) {
-          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(plan_ctx->read_native_parameter(param_idx, current))) {
         } else {
           ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
-        param_datum = *plan_ctx->get_native_parameter(param_idx);
-        dst->set_evaluated_projected(*eval_ctx_);
+          dst->locate_datum_for_write(*eval_ctx_) = current;
+          dst->set_evaluated_projected(*eval_ctx_);
         }
       }
     }
@@ -304,14 +304,14 @@ int ObGroupJoinBufffer::get_next_left_iter()
         const ObDynamicParamSetter &rescan_param = left_rescan_params_->at(i);
         int64_t param_idx = rescan_param.param_idx_;
         ObExpr *dst = rescan_param.dst_;
-        Datum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
-        if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, array_obj->values_.at(above_group_idx_for_expand_).datum_, *array_obj->values_.at(above_group_idx_for_expand_).type_, array_obj->metadata_.at(above_group_idx_for_expand_)))) {
-        } else if (plan_ctx->get_native_parameter(param_idx) == nullptr) {
-          ret = OB_ERR_UNEXPECTED;
+        Datum current;
+        if (dst->native_parameter_alias_ && OB_FAIL(dst->prepare_native_parameter_write(*eval_ctx_, param_idx))) {
+        } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, array_obj->values_.at(above_group_idx_for_expand_).datum_, *array_obj->values_.at(above_group_idx_for_expand_).type_, array_obj->metadata_.at(above_group_idx_for_expand_)))) {
+        } else if (OB_FAIL(plan_ctx->read_native_parameter(param_idx, current))) {
         } else {
           ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
-        param_datum = *plan_ctx->get_native_parameter(param_idx);
-        dst->set_evaluated_projected(*eval_ctx_);
+          dst->locate_datum_for_write(*eval_ctx_) = current;
+          dst->set_evaluated_projected(*eval_ctx_);
         }
       }
     }

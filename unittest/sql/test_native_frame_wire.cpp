@@ -34,6 +34,27 @@
 #include <string>
 #include <vector>
 
+
+namespace {
+oceanbase::common::Datum read_parameter_value(
+    const oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  oceanbase::common::Datum value;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.read_native_parameter(index, value));
+  return value;
+}
+
+// Only tests of a retaining generic Expr ABI explicitly request a projection.
+const oceanbase::common::Datum *materialized_parameter(
+    oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  if (!plan.has_native_parameter(index)) { return nullptr; }
+  oceanbase::common::Datum *value = nullptr;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.materialize_parameter_for_expr(index, value));
+  return value;
+}
+} // namespace
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
@@ -122,6 +143,7 @@ void partial_parameter_info(ObExprFrameInfo &info, ObPhysicalPlanCtx &plan, ObIA
   ASSERT_EQ(OB_SUCCESS, info.rt_exprs_.prepare_allocate(1));
   ObExpr &expr = info.rt_exprs_.at(0);
   expr.type_ = T_QUESTIONMARK;
+  expr.native_parameter_alias_ = true;
   expr.datum_meta_.type_ = ObIntType;
   expr.datum_meta_.precision_ = 20;
   expr.datum_meta_.scale_ = 0;
@@ -369,6 +391,7 @@ TEST(NativeFrameWire, px_empty_parent_cannot_clear_constant_payload_during_dynam
   for (int64_t i = 0; i < global_expressions.count(); ++i) {
     ObExpr &expr = global_expressions.at(i);
     expr.type_ = i == 0 ? T_INT : (i == 1 ? T_QUESTIONMARK : T_OP_ADD);
+    expr.native_parameter_alias_ = i == 1;
     expr.obj_meta_.set_int(); expr.datum_meta_.type_ = ObIntType;
     expr.datum_meta_.precision_ = 20; expr.datum_meta_.scale_ = 0;
     expr.frame_idx_ = i < 2 ? i : 2;
@@ -446,7 +469,7 @@ TEST(NativeFrameWire, px_empty_parent_cannot_clear_constant_payload_during_dynam
   Datum replacement; replacement.set_int(901);
   ObDynamicParamSetter setter(0, nullptr, &parameter);
   ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(eval, replacement));
-  EXPECT_EQ(901, destination.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+  EXPECT_EQ(901, read_parameter_value(*destination.get_physical_plan_ctx(), 0).get_int());
   EXPECT_EQ(901, parameter.locate_expr_datum(eval).get_int());
   EXPECT_TRUE(parameter.get_eval_info(eval).evaluated_);
   EXPECT_FALSE(parameter.get_eval_info(eval).projected_);
@@ -564,8 +587,10 @@ TEST(NativeFrameWire, px_restores_all_parameters_directly_into_unique_owner_desp
   EXPECT_EQ(nullptr, destination_info.rt_exprs_.at(0).sql_type_);
   for (int64_t i = 0; i < 2; ++i) { EXPECT_EQ(destination.get_frames()[i], destination_plan.get_param_frame_ptrs().at(i)); }
   for (int64_t i = 0; i < count; ++i) {
-    const Datum *value = destination_plan.get_native_parameter(i);
-    ASSERT_NE(nullptr, value); ASSERT_NE(nullptr, destination_plan.get_native_parameter_type(i));
+    const Datum snapshot = read_parameter_value(destination_plan, i);
+    const Datum *value = &snapshot;
+    ASSERT_NE(nullptr, destination_plan.get_native_parameter_type(i));
+    EXPECT_EQ(nullptr, destination_plan.locate_materialized_parameter(i));
     if (i == 1) { EXPECT_TRUE(value->is_null()); }
     else {
       EXPECT_EQ(i == 0 ? INT64_MIN : i + 71, value->get_int());
@@ -579,13 +604,14 @@ TEST(NativeFrameWire, px_restores_all_parameters_directly_into_unique_owner_desp
   ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(destination_info.rt_exprs_.at(1), eval, questionmark));
   EXPECT_EQ(count - 1 + 71, questionmark.get_int());
   for (int64_t page = 0; page < source_plan.get_param_frame_ptrs().count(); ++page) {
-    const int64_t slots = page == 0 ? original : count - original;
-    MEMSET(source_plan.get_param_frame_ptrs().at(page), 0x6c, slots * 24);
+    char *handle = source_plan.get_param_frame_ptrs().at(page);
+    const int64_t bytes = ParameterValuePage::allocation_bytes(ParameterValuePage::from_handle(handle).capacity());
+    MEMSET(handle, 0x6c, bytes);
   }
   source_plan.reset_datum_param_store();
   MEMSET(wire.data(), 0xb7, wire.size());
-  EXPECT_EQ(INT64_MIN, destination_plan.get_native_parameter(0)->get_int());
-  EXPECT_EQ(count - 1 + 71, destination_plan.get_native_parameter(count - 1)->get_int());
+  EXPECT_EQ(INT64_MIN, read_parameter_value(destination_plan, 0).get_int());
+  EXPECT_EQ(count - 1 + 71, read_parameter_value(destination_plan, count - 1).get_int());
 }
 
 TEST(NativeFrameWire, trailing_frame_truncation_keeps_existing_plan_owner_and_context_frames)
@@ -603,7 +629,7 @@ TEST(NativeFrameWire, trailing_frame_truncation_keeps_existing_plan_owner_and_co
   ASSERT_NO_FATAL_FAILURE(partial_parameter_info(info, *source.get_physical_plan_ctx(), source_owner));
   ASSERT_EQ(OB_SUCCESS, info.pre_alloc_exec_memory(source));
   ASSERT_EQ(OB_SUCCESS, info.pre_alloc_exec_memory(destination));
-  const Datum *before = destination.get_physical_plan_ctx()->get_native_parameter(0);
+  const Datum *before = materialized_parameter(*destination.get_physical_plan_ctx(), 0);
   char **old_frames = destination.get_frames();
   const int64_t size = ObPxTreeSerializer::get_serialize_expr_frame_info_size<false>(source, info);
   ASSERT_GT(size, 0);
@@ -613,7 +639,7 @@ TEST(NativeFrameWire, trailing_frame_truncation_keeps_existing_plan_owner_and_co
   pos = 0;
   EXPECT_NE(OB_SUCCESS, ObPxTreeSerializer::deserialize_expr_frame_info<false>(wire.data(), size - 1, pos, destination, info));
   EXPECT_EQ(0, pos); EXPECT_EQ(old_frames, destination.get_frames());
-  EXPECT_EQ(before, destination.get_physical_plan_ctx()->get_native_parameter(0));
+  EXPECT_EQ(before, materialized_parameter(*destination.get_physical_plan_ctx(), 0));
   EXPECT_EQ(-99, before->get_int());
 }
 
@@ -670,6 +696,7 @@ TEST(NativeFrameWire, sqc_parts2_keeps_selected_expression_directory_through_tre
   ASSERT_EQ(OB_SUCCESS, source_info.rt_exprs_.prepare_allocate(1));
   ObExpr &parameter = source_info.rt_exprs_.at(0);
   parameter.type_ = T_QUESTIONMARK;
+  parameter.native_parameter_alias_ = true;
   parameter.obj_meta_.set_int();
   parameter.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
   parameter.extra_ = 0;
@@ -751,8 +778,8 @@ TEST(NativeFrameWire, sqc_parts2_keeps_selected_expression_directory_through_tre
       ASSERT_EQ(size, pos);
     }
     EXPECT_EQ(previous, ObExpr::get_serialize_array());
-    ASSERT_NE(nullptr, destination.get_physical_plan_ctx()->get_native_parameter(0));
-    EXPECT_EQ(INT64_MIN, destination.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+    ASSERT_NE(nullptr, materialized_parameter(*destination.get_physical_plan_ctx(), 0));
+    EXPECT_EQ(INT64_MIN, read_parameter_value(*destination.get_physical_plan_ctx(), 0).get_int());
     ObEvalCtx evaluation(destination);
     Datum result;
     ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(destination_info.rt_exprs_.at(0), evaluation, result));
@@ -764,7 +791,7 @@ TEST(NativeFrameWire, sqc_parts2_keeps_selected_expression_directory_through_tre
     EXPECT_NE(OB_SUCCESS, (arguments.*px_member(PxParts2Tag{}))(wire.data(), frame_bytes, pos));
     EXPECT_EQ(previous, ObExpr::get_serialize_array());
     MEMSET(wire.data(), 0xA5, wire.size());
-    EXPECT_EQ(INT64_MIN, destination.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+    EXPECT_EQ(INT64_MIN, read_parameter_value(*destination.get_physical_plan_ctx(), 0).get_int());
   }
 }
 
@@ -1031,6 +1058,7 @@ TEST(NativeFrameWire, nested_px_partial_directory_reserializes_empty_slots_witho
   for (int64_t i = 0; i < global_expressions.count(); ++i) {
     ObExpr &expr = global_expressions.at(i);
     expr.type_ = i == 0 ? T_INT : (i == 2 ? T_QUESTIONMARK : (i == 5 ? T_NULL : T_OP_ADD));
+    expr.native_parameter_alias_ = i == 2;
     expr.obj_meta_.set_int();
     expr.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
     expr.frame_idx_ = (i == 0 || i == 5) ? 0 : (i == 2 ? 1 : 2);
@@ -1122,8 +1150,8 @@ TEST(NativeFrameWire, nested_px_partial_directory_reserializes_empty_slots_witho
     ASSERT_NE(nullptr, parameter.sql_type_);
     EXPECT_TRUE(parameters.get_native_parameter_type(0)->equals(parameter.get_sql_type()));
     ASSERT_TRUE(context.get_physical_plan_ctx()->native_parameters_ready());
-    ASSERT_NE(nullptr, context.get_physical_plan_ctx()->get_native_parameter(0));
-    EXPECT_EQ(INT64_MIN, context.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+    ASSERT_NE(nullptr, materialized_parameter(*context.get_physical_plan_ctx(), 0));
+    EXPECT_EQ(INT64_MIN, read_parameter_value(*context.get_physical_plan_ctx(), 0).get_int());
     ObEvalCtx eval(context);
     EXPECT_EQ(1, mode.locate_expr_datum(eval).get_int());
     EXPECT_EQ(T_NULL, typed_null.type_);

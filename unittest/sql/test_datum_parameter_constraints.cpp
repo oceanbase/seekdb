@@ -24,6 +24,19 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/rewrite/ob_query_range_define.h"
 
+
+namespace {
+// Only tests of a retaining generic Expr ABI explicitly request a projection.
+const oceanbase::common::Datum *materialized_parameter(
+    oceanbase::sql::ObPhysicalPlanCtx &plan, int64_t index)
+{
+  if (!plan.has_native_parameter(index)) { return nullptr; }
+  oceanbase::common::Datum *value = nullptr;
+  EXPECT_EQ(oceanbase::common::OB_SUCCESS, plan.materialize_parameter_for_expr(index, value));
+  return value;
+}
+} // namespace
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
@@ -206,7 +219,7 @@ TEST(DatumParameterConstraints, batch_frames_select_full_native_array_values)
   array->data_[0].datum_.set_int(999);
   array->data_[1].set_null();
   ASSERT_EQ(1, context.get_param_frame_ptrs().count());
-  const Datum *frame = context.get_native_parameter(0);
+  const Datum *frame = materialized_parameter(context, 0);
   ASSERT_NE(nullptr, frame);
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(0, 0, 1)); EXPECT_EQ(123, frame->get_int());
   ASSERT_NE(nullptr, context.get_native_parameter_type(0));

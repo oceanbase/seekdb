@@ -149,6 +149,50 @@ int wire_record_count(const ObFrameInfo &info, const ObExprFrameInfo &expression
   return ret;
 }
 
+int prepare_parameter_aliases(const ObExprFrameInfo &expressions,
+    const ObIArray<ObFrameInfo> &group, const ObIArray<char *> &pages,
+    int64_t parameter_count = -1, int64_t original_count = -1,
+    bool restore_private_aliases = false)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    if (i >= pages.count() || pages.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+    else if (ParameterValuePage::from_handle(pages.at(i)).capacity() < group.at(i).expr_cnt_) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < expressions.rt_exprs_.count(); ++j) {
+      const ObExpr &expr = expressions.rt_exprs_.at(j);
+      if (expr.frame_idx_ != group.at(i).frame_idx_ || expr.sql_type_ == nullptr) { continue; }
+      const int64_t slot = expr.datum_off_ / ScalarFrameLayout::slot_size();
+      if ((!restore_private_aliases && !expr.native_parameter_alias_)
+          || expr.type_ != T_QUESTIONMARK || expr.is_batch_result() || expr.eval_func_ != nullptr
+          || expr.datum_off_ != ScalarFrameLayout::datum_offset(slot)
+          || expr.eval_info_off_ != ScalarFrameLayout::eval_info_offset(slot)
+          || slot >= group.at(i).expr_cnt_) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (parameter_count >= 0) {
+        int64_t actual_page = 0, actual_slot = 0;
+        if (expr.extra_ >= static_cast<uint64_t>(parameter_count)) { ret = OB_INVALID_ARGUMENT; }
+        else {
+          ScalarFrameLayout::locate_parameter(original_count, expr.extra_, actual_page, actual_slot);
+          if (actual_page != i || actual_slot != slot) { ret = OB_INVALID_ARGUMENT; }
+        }
+      }
+    }
+  }
+  // Only a newly decoded, unpublished receiver plan may restore legacy wire
+  // flags. Ordinary allocation validates shared cached expressions read-only.
+  if (OB_SUCC(ret) && restore_private_aliases) {
+    for (int64_t j = 0; j < expressions.rt_exprs_.count(); ++j) {
+      ObExpr &expr = expressions.rt_exprs_.at(j);
+      for (int64_t i = 0; expr.sql_type_ != nullptr && i < group.count(); ++i) {
+        if (expr.frame_idx_ == group.at(i).frame_idx_) { expr.native_parameter_alias_ = true; break; }
+      }
+    }
+  }
+  return ret;
+}
+
 // Ordinary execution needs the same layout checks as the wire codec, but does
 // not need to rediscover every preceding alias for each expression. This
 // worklist is private to one allocation call and never becomes plan state.
@@ -534,11 +578,11 @@ int NativeFrameCodec::parameter_size(const ObPhysicalPlanCtx &plan, int64_t &siz
   if (!plan.native_parameters_ready() || plan.get_original_param_cnt() < 0
       || plan.get_original_param_cnt() > count) { return OB_INVALID_ARGUMENT; }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    const Datum *value = plan.get_native_parameter(i);
-    const SqlType *type = plan.get_native_parameter_type(i);
+    NativeTypedDatum value;
+    DatumParameterMetadata metadata;
     int64_t bytes = 0;
-    if (value == nullptr || type == nullptr || plan.get_parameter_metadata(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
-    else if (OB_FAIL(NativeFrameValueCodec::size(*type, *value, bytes))) {
+    if (OB_FAIL(plan.capture_native_parameter(i, value, metadata))) {
+    } else if (OB_FAIL(NativeFrameValueCodec::size(*value.type_, value.datum_, bytes))) {
     } else if (OB_FAIL(add_wire_size(4 + NativeFrameValueCodec::metadata_size(), candidate))) {
     } else { ret = add_wire_size(bytes, candidate); }
   }
@@ -568,15 +612,15 @@ int NativeFrameCodec::serialize_parameters(const ObPhysicalPlanCtx &plan,
   } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, plan.get_original_param_cnt()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_parameter_count(); ++i) {
-    int64_t page = 0, slot = 0;
-    ScalarFrameLayout::locate_parameter(plan.get_original_param_cnt(), i, page, slot);
-    const ObEvalInfo &eval = *reinterpret_cast<const ObEvalInfo *>(plan.get_param_frame_ptrs().at(page)
-        + ScalarFrameLayout::eval_info_offset(slot));
-    if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.flag_))) {
-    } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.cnt_))) {
-    } else if (OB_FAIL(NativeFrameValueCodec::encode_metadata(*plan.get_parameter_metadata(i), buf, length, cursor))) {
-    } else { ret = NativeFrameValueCodec::encode(*plan.get_native_parameter_type(i),
-        *plan.get_native_parameter(i), buf, length, cursor); }
+    NativeTypedDatum value;
+    DatumParameterMetadata metadata;
+    const ObEvalInfo *eval = plan.get_parameter_eval_info(i);
+    if (eval == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(plan.capture_native_parameter(i, value, metadata))) {
+    } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval->flag_))) {
+    } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval->cnt_))) {
+    } else if (OB_FAIL(NativeFrameValueCodec::encode_metadata(metadata, buf, length, cursor))) {
+    } else { ret = NativeFrameValueCodec::encode(*value.type_, value.datum_, buf, length, cursor); }
   }
   if (OB_SUCC(ret)) { ret = serialization::encode_i64(buf, length, cursor, plan.get_native_group_count()); }
   for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_native_group_count(); ++i) {
@@ -618,24 +662,18 @@ int NativeFrameCodec::deserialize_parameters(const char *buf, int64_t length, in
     } else if (version >= 2 && OB_FAIL(candidate_metadata.reserve(count))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < page_count; ++i) {
-      const int64_t slots = parameter_page_slots(i, count, original);
-      char *page = static_cast<char *>(owner.alloc(slots * ScalarFrameLayout::slot_size()));
-      if (page == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-      else {
-        MEMSET(page, 0, slots * ScalarFrameLayout::slot_size());
-        for (int64_t j = 0; j < slots; ++j) {
-          new (page + ScalarFrameLayout::datum_offset(j)) Datum();
-          new (page + ScalarFrameLayout::eval_info_offset(j)) ObEvalInfo{};
-        }
-        ret = candidate_pages.push_back(page);
-      }
+      const int64_t slots = i < ScalarFrameLayout::frame_count(original)
+          ? parameter_page_slots(i, count, original) : ScalarFrameLayout::slots_per_frame();
+      ParameterValuePage *page = nullptr;
+      if (OB_FAIL(ParameterValuePage::allocate(owner, slots, page))) {
+      } else { ret = candidate_pages.push_back(reinterpret_cast<char *>(page)); }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       int64_t page = 0, slot = 0;
       ScalarFrameLayout::locate_parameter(original, i, page, slot);
-      char *frame = candidate_pages.at(page);
-      Datum &value = *reinterpret_cast<Datum *>(frame + ScalarFrameLayout::datum_offset(slot));
-      ObEvalInfo &eval = *reinterpret_cast<ObEvalInfo *>(frame + ScalarFrameLayout::eval_info_offset(slot));
+      ParameterValuePage &frame = ParameterValuePage::from_handle(candidate_pages.at(page));
+      Datum value;
+      ObEvalInfo &eval = frame.eval_info(slot);
       int16_t flags = 0, rows = 0;
       const SqlType *type = nullptr;
       DatumParameterMetadata attributes;
@@ -644,6 +682,7 @@ int NativeFrameCodec::deserialize_parameters(const char *buf, int64_t length, in
       } else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &rows))) {
       } else if (version >= 2 && OB_FAIL(NativeFrameValueCodec::decode_metadata(buf, length, cursor, attributes))) {
       } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value, version))) {
+      } else if (OB_FAIL(frame.assign(slot, value, *type, owner))) {
       } else if (OB_FAIL(candidate_types.push_back(type))) {
       } else if (version >= 2 && OB_FAIL(candidate_metadata.push_back(attributes))) {
       } else {
@@ -693,7 +732,8 @@ int NativeFrameCodec::deserialize_parameters(const char *buf, int64_t length, in
 
 int NativeFrameCodec::bind_parameter_pages(const ObIArray<ObFrameInfo> &group,
     const ObIArray<char *> &pages, int64_t parameter_count, int64_t original_count,
-    char **frames, int64_t frame_count)
+    char **frames, int64_t frame_count, const ObExprFrameInfo *expressions,
+    bool restore_private_aliases)
 {
   int ret = OB_SUCCESS;
   if (original_count < 0 || parameter_count < original_count || group.count() > pages.count()
@@ -709,6 +749,10 @@ int NativeFrameCodec::bind_parameter_pages(const ObIArray<ObFrameInfo> &group,
         if (group.at(j).frame_idx_ == info.frame_idx_) { ret = OB_DESERIALIZE_ERROR; }
       }
     }
+  }
+  if (OB_SUCC(ret) && expressions != nullptr) {
+    ret = prepare_parameter_aliases(*expressions, group, pages, parameter_count, original_count,
+        restore_private_aliases);
   }
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; i < group.count(); ++i) { frames[group.at(i).frame_idx_] = pages.at(i); }
@@ -876,7 +920,7 @@ int ObExprFrameInfo::pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator
   return ret;
 }
 
-// Const pages belong to the plan, parameter pages to PlanCtx, and only
+// Const pages belong to the plan, opaque parameter page handles to PlanCtx, and only
 // dynamic/batch pages are newly allocated here. Construct each Datum at the
 // actual Expr offset; a vector frame is not an array of scalar slots.
 int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
@@ -920,6 +964,7 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
       }
     }
   }
+  if (OB_SUCC(ret)) { ret = prepare_parameter_aliases(*this, param_frame_, param_frame_ptrs); }
   if (OB_SUCC(ret)) { frames = candidate; frame_cnt = count; }
   return ret;
 }

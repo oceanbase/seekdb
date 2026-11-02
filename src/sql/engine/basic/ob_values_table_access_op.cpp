@@ -454,10 +454,11 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
         }
         case ObValuesTableDef::ACCESS_PARAM: {
           int64_t param_idx = MY_SPEC.start_param_idx_ + col_idx + row_idx_ * col_num;
-          const Datum *value = plan_ctx->get_native_parameter(param_idx);
+          Datum value;
           const SqlType *type = plan_ctx->get_native_parameter_type(param_idx);
-          if (value == nullptr || type == nullptr) { ret = OB_ERR_UNEXPECTED; }
-          else { ret = calc_datum_from_param(*value, *type, col_expr); }
+          if (type == nullptr) { ret = OB_ERR_UNEXPECTED; }
+          else if (OB_FAIL(plan_ctx->read_native_parameter(param_idx, value))) {
+          } else { ret = calc_datum_from_param(value, *type, col_expr); }
           break;
         }
         case ObValuesTableDef::ACCESS_VALUE: {

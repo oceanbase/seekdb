@@ -647,6 +647,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
       } else {
         get_param_frame_idx(param_idx, frame_idx, datum_idx);
         rt_expr->frame_idx_ = frame_index_pos + frame_idx;
+        rt_expr->native_parameter_alias_ = true;
         rt_expr->datum_off_ = ScalarFrameLayout::datum_offset(datum_idx);
         rt_expr->eval_info_off_ = ScalarFrameLayout::eval_info_offset(datum_idx);
         rt_expr->res_buf_off_ = 0;

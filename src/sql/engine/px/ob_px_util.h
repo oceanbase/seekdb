@@ -481,7 +481,8 @@ public:
     }
     if (OB_SUCC(ret)) {
       ret = NativeFrameCodec::bind_parameter_pages(expr_frame_info.param_frame_, parameter_pages,
-          parameter_types.count(), original_count, frames, frame_count);
+          parameter_types.count(), original_count, frames, frame_count, &expr_frame_info,
+          DESERIALIZE_PLAN_PART);
     }
     if (OB_SUCC(ret)) {
       ret = deserialize_frame_info<DESERIALIZE_PLAN_PART>(buf, data_len, pos, ctx.get_allocator(),

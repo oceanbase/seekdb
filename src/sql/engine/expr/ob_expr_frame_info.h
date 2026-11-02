@@ -184,7 +184,7 @@ public:
       ObIArray<NativeParameterGroup> *groups = nullptr, int32_t *wire_version = nullptr);
   static int bind_parameter_pages(const ObIArray<ObFrameInfo> &group,
       const ObIArray<char *> &pages, int64_t parameter_count, int64_t original_count,
-      char **frames, int64_t frame_count);
+      char **frames, int64_t frame_count, const ObExprFrameInfo *expressions = nullptr, bool restore_private_aliases = false);
   // Uses actual per-Expr offsets for native arrays/EvalInfo, including batch
   // frames whose wire deliberately contains no execution values.
   static int initialize_frame(const ObFrameInfo &info, const ObExprFrameInfo &expressions,

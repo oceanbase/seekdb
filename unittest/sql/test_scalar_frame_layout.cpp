@@ -204,6 +204,7 @@ void verify_parameter_layout(int64_t original, int64_t count,
   ASSERT_EQ(OB_SUCCESS, info.pre_alloc_exec_memory(exec));
   EXPECT_EQ(static_cast<uint64_t>(next_frame), exec.get_frame_cnt());
   ObEvalCtx eval(exec);
+  std::vector<Datum *> projections(count, nullptr);
   n = 0;
   for (const ExpectedSlot &slot : expected) {
     SCOPED_TRACE(slot.parameter_);
@@ -212,11 +213,20 @@ void verify_parameter_layout(int64_t original, int64_t count,
     ASSERT_EQ(slot.slot_ * NATIVE_SLOT_BYTES, e.datum_off_);
     ASSERT_EQ(slot.slot_ * NATIVE_SLOT_BYTES + NATIVE_EVAL_OFFSET, e.eval_info_off_);
     EXPECT_EQ(0U, e.res_buf_len_);
-    const char *frame = plan.get_param_frame_ptrs().at(slot.page_);
+    const auto &page = ParameterValuePage::from_handle(plan.get_param_frame_ptrs().at(slot.page_));
+    EXPECT_TRUE(e.native_parameter_alias_);
+    EXPECT_EQ(projections[slot.parameter_], plan.locate_materialized_parameter(slot.parameter_));
+    EXPECT_EQ(plan.get_parameter_eval_info(slot.parameter_), &e.get_eval_info(eval));
+    Datum *evaluated = nullptr;
+    ASSERT_EQ(OB_SUCCESS, e.eval(eval, evaluated));
+    if (projections[slot.parameter_] == nullptr) { projections[slot.parameter_] = evaluated; }
+    EXPECT_EQ(projections[slot.parameter_], evaluated);
     Datum &datum = e.locate_expr_datum(eval);
-    EXPECT_EQ(frame + slot.slot_ * NATIVE_SLOT_BYTES, reinterpret_cast<const char *>(&datum));
-    EXPECT_EQ(frame + slot.slot_ * NATIVE_SLOT_BYTES + NATIVE_EVAL_OFFSET,
-              reinterpret_cast<const char *>(&e.get_eval_info(eval)));
+    EXPECT_EQ(evaluated, &datum);
+    EXPECT_EQ(&page.eval_info(slot.slot_), &e.get_eval_info(eval));
+    Datum owner_value;
+    ASSERT_EQ(OB_SUCCESS, page.read(slot.slot_, owner_value));
+    EXPECT_EQ(owner_value.state(), datum.state());
     EXPECT_FALSE(e.get_eval_info(eval).evaluated_);
     Datum questionmark;
     ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(e, eval, questionmark));
@@ -226,7 +236,7 @@ void verify_parameter_layout(int64_t original, int64_t count,
       EXPECT_EQ(input_value(slot.parameter_), datum.get_int());
       EXPECT_EQ(datum.get_int(), questionmark.get_int());
       EXPECT_EQ(0U, questionmark.length());
-      // Writes to EvalInfo must not overwrite this or an adjacent 16B Datum.
+      // State writes must not overwrite the compact word or the ABI projection.
       ObEvalInfo &state = e.get_eval_info(eval);
       state.cnt_ = 57; state.notnull_ = true;
       EXPECT_EQ(input_value(slot.parameter_), datum.get_int());
@@ -347,7 +357,7 @@ TEST(ScalarFrameLayout, failed_second_original_frame_keeps_request_descriptor_un
   std::vector<int64_t> input(NATIVE_SLOTS_PER_FRAME + 1);
   ASSERT_NO_FATAL_FAILURE(load_parameters(plan, input.size(), input));
   const int64_t before = plan.get_parameter_inputs().at(0).get_int();
-  owner.fail_size_ = NATIVE_SLOT_BYTES;
+  owner.fail_size_ = ParameterValuePage::allocation_bytes(1);
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan.init_datum_param_store());
   EXPECT_EQ(0, plan.get_param_frame_ptrs().count());
   int64_t extracted = 101;
