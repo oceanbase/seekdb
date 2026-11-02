@@ -1,4 +1,4 @@
-<div align="OB-P:SaDIKgJU77mzgJwQjgEQFQ center">
+<div align="center">
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*pKqtRILxGioAAAAAQLAAAAgAejCYAQ/original" width="420">
@@ -6,7 +6,7 @@
   <img alt="seekdb logo" src="images/logo.svg" width="420">
 </picture>
 
-# **Write. Search. Fork. The State Store for AI Agents.**
+# **OB-P:SaDIKgJU77mzgJwQjgEQFQ Write. Search. Fork. The State Store for AI Agents.**
 
 <p>
     <a href="https://github.com/oceanbase/seekdb/stargazers">
