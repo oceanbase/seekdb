@@ -1095,7 +1095,7 @@ int ObExprFrameInfo::pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator
   if (NULL == (phy_ctx = exec_ctx.get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(choose_native_i64_layout(exec_ctx, compact_i64))) {
-  } else if (OB_FAIL(alloc_frame(allocator != NULL ? *allocator : exec_ctx.get_allocator(),
+  } else if (OB_FAIL(alloc_frame_after_layout_validation(allocator != NULL ? *allocator : exec_ctx.get_allocator(),
                                  phy_ctx->get_param_frame_ptrs(),
                                  frame_cnt,
                                  frames, compact_i64))) {
@@ -1115,7 +1115,18 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
                                  uint64_t &frame_cnt, char **&frames, bool compact_i64) const
 {
   int ret = validate_native_i64_layout(*this);
-  if (OB_FAIL(ret)) { return ret; }
+  if (OB_SUCC(ret)) {
+    ret = alloc_frame_after_layout_validation(exec_allocator, param_frame_ptrs,
+                                              frame_cnt, frames, compact_i64);
+  }
+  return ret;
+}
+
+int ObExprFrameInfo::alloc_frame_after_layout_validation(ObIAllocator &exec_allocator,
+                                  const ObIArray<char *> &param_frame_ptrs,
+                                  uint64_t &frame_cnt, char **&frames, bool compact_i64) const
+{
+  int ret = OB_SUCCESS;
   if (compact_i64 && native_i64_point_layout_ == nullptr) { return OB_INVALID_ARGUMENT; }
   const uint64_t count = const_frame_.count() + param_frame_.count()
       + dynamic_frame_.count() + datum_frame_.count();

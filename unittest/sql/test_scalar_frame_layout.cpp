@@ -1105,6 +1105,80 @@ TEST_F(NativeI64ExprFrames, real_cg_frame_capacity_is_independent_of_consumer_ba
   }
 }
 
+TEST_F(NativeI64ExprFrames, malformed_cg_lane_regions_reject_both_allocation_entries_without_publication)
+{
+  class RejectingAllocator final : public ObIAllocator
+  {
+  public:
+    RejectingAllocator() : calls_(0) {}
+    void *alloc(int64_t) override { ++calls_; return nullptr; }
+    void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
+    void free(void *) override {}
+    int64_t calls_;
+  };
+
+  for (const bool generic_overlap : {false, true}) {
+    SCOPED_TRACE(generic_overlap ? "generic region overlap" : "compact region overlap");
+    NativePointCoreFixture fixture;
+    ASSERT_NO_FATAL_FAILURE(fixture.prepare(4));
+    ObEvalCtx eval(fixture.exec_);
+    ASSERT_NO_FATAL_FAILURE(fixture.allocate(eval));
+    char **const previous = fixture.exec_.get_frames();
+    const uint64_t previous_count = fixture.exec_.get_frame_cnt();
+    auto &layout = *const_cast<NativeI64PointLayout *>(fixture.info().native_i64_point_layout_);
+    ASSERT_EQ(1U, layout.frame_count);
+    ASSERT_EQ(fixture.lane(0).frame_idx_, fixture.lane(1).frame_idx_);
+    const uint32_t old_datum = fixture.lane(1).datum_off_;
+    const uint32_t old_skip = fixture.lane(1).pvt_skip_off_;
+    const uint32_t old_value = layout.lanes[1].value_off;
+    const auto corrupt = [&]() {
+      if (generic_overlap) {
+        // Retain the valid Datum-array extent but overlap another live lane.
+        fixture.lane(1).datum_off_ = fixture.lane(0).datum_off_;
+        fixture.lane(1).pvt_skip_off_ = fixture.lane(0).pvt_skip_off_;
+      } else {
+        layout.lanes[1].value_off = layout.lanes[0].value_off;
+      }
+    };
+    const auto restore = [&]() {
+      fixture.lane(1).datum_off_ = old_datum;
+      fixture.lane(1).pvt_skip_off_ = old_skip;
+      layout.lanes[1].value_off = old_value;
+    };
+    RejectingAllocator blocked;
+
+    corrupt();
+    for (const bool compact : {false, true}) {
+      char **frames = previous;
+      uint64_t count = previous_count;
+      EXPECT_EQ(OB_ERR_UNEXPECTED, fixture.info().alloc_frame(blocked,
+          fixture.parameters().get_param_frame_ptrs(), count, frames, compact));
+      EXPECT_EQ(0, blocked.calls_);
+      EXPECT_EQ(previous, frames);
+      EXPECT_EQ(previous_count, count);
+      EXPECT_EQ(previous, fixture.exec_.get_frames());
+      EXPECT_EQ(previous_count, fixture.exec_.get_frame_cnt());
+    }
+    restore();
+
+    for (const bool fallback : {false, true}) {
+      ASSERT_NO_FATAL_FAILURE(fixture.bind(0, fallback ? ObDoubleType : ObIntType, 17));
+      ASSERT_EQ(fallback ? ObDoubleType : ObIntType,
+          fixture.parameters().get_native_parameter_type(0)->kind());
+      bool compact = fallback;
+      ASSERT_EQ(OB_SUCCESS, fixture.info().choose_native_i64_layout(fixture.exec_, compact));
+      ASSERT_EQ(!fallback, compact); // actual runtime Type selects each execution mode.
+      corrupt();
+      EXPECT_EQ(OB_ERR_UNEXPECTED, fixture.info().pre_alloc_exec_memory(fixture.exec_, &blocked));
+      EXPECT_EQ(0, blocked.calls_);
+      EXPECT_EQ(previous, fixture.exec_.get_frames());
+      EXPECT_EQ(previous_count, fixture.exec_.get_frame_cnt());
+      restore();
+    }
+    fixture.owner_.expect_frame_canary(previous[layout.frames[0].index]);
+  }
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

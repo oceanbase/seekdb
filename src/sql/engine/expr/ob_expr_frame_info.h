@@ -150,6 +150,12 @@ public:
 
 
 private:
+  // Only entered after choose_native_i64_layout() or alloc_frame() has checked
+  // this same plan layout. Execution mode selection and frame initialization
+  // remain per execution; no validation result is cached on the shared plan.
+  int alloc_frame_after_layout_validation(common::ObIAllocator &exec_allocator,
+                  const ObIArray<char *> &param_frame_ptrs,
+                  uint64_t &frame_cnt, char **&frames, bool compact_i64) const;
   common::ObArray<ObExpr> _rt_exprs_;
 
 public:
