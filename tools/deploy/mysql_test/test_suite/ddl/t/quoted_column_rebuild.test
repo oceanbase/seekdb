@@ -1,0 +1,26 @@
+# Regression for share-local DDL identifier escaping (issue #1469).
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS ddl_quoted_column_rebuild;
+--enable_warnings
+--enable_query_log
+CREATE TABLE ddl_quoted_column_rebuild (
+  id INT PRIMARY KEY,
+  `a``b` INT,
+  `e``n` ENUM('red', 'blue'),
+  `s``t` SET('red', 'blue'),
+  UNIQUE KEY uq (`a``b`)
+);
+INSERT INTO ddl_quoted_column_rebuild VALUES
+  (1, 10, 'red', 'red,blue'), (2, NULL, 'blue', 'blue');
+# A type change rebuilds the table and its unique index. Both the original
+# column names and their aliases must be escaped, including ENUM/SET casts.
+ALTER TABLE ddl_quoted_column_rebuild MODIFY COLUMN `a``b` VARCHAR(20);
+SELECT id, `a``b` AS value, `e``n` AS enum_value, `s``t` AS set_value,
+       `e``n` + 0 AS enum_number, `s``t` + 0 AS set_number
+FROM ddl_quoted_column_rebuild ORDER BY id;
+--error ER_DUP_ENTRY
+INSERT INTO ddl_quoted_column_rebuild VALUES (3, '10', 'red', '');
+INSERT INTO ddl_quoted_column_rebuild VALUES (3, '30', 'red', '');
+SELECT id, `a``b` AS value FROM ddl_quoted_column_rebuild ORDER BY id;
+DROP TABLE ddl_quoted_column_rebuild;
