@@ -314,6 +314,8 @@ void ObLogReplayService::handle(common::LinkTask *task)
     on_replay_error_();
   } else if (OB_UNLIKELY(IS_NOT_INIT)) {
     ret = OB_NOT_INIT;
+    while (!task_to_handle->revoke_lease()) {
+    }
     revert_replay_status_(replay_status);
     task_to_handle = NULL;
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
@@ -322,6 +324,8 @@ void ObLogReplayService::handle(common::LinkTask *task)
   } else if (!is_running_) {
     CLOG_LOG(INFO, "replay service has been stopped, just ignore the task",
              K(is_running_), KPC(replay_status));
+    while (!task_to_handle->revoke_lease()) {
+    }
     revert_replay_status_(replay_status);
     task_to_handle = NULL;
   } else {
@@ -363,6 +367,8 @@ void ObLogReplayService::handle(common::LinkTask *task)
       CLOG_LOG(ERROR, "push task back after handle failed", K(tmp_ret), KPC(task_to_handle), KPC(replay_status), K(ret));
       // simplethreadpool stop lock-free, concurrent push may fail
       // On failure, just return the replay_status reference count, the task can be directly discarded
+      while (!task_to_handle->revoke_lease()) {
+      }
       revert_replay_status_(replay_status);
     } else {
       //do nothing
@@ -438,6 +444,9 @@ int ObLogReplayService::enable(const LSN &base_lsn,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "replay service not init", K(ret));
+  } else if (!is_running_) {
+    ret = OB_NOT_RUNNING;
+    CLOG_LOG(WARN, "replay service not running", K(ret));
   } else if (OB_FAIL(get_replay_status_(guard))) {
   } else if (NULL == (replay_status = guard.get_replay_status())) {
     ret = OB_ERR_UNEXPECTED;
@@ -538,8 +547,7 @@ int ObLogReplayService::disable_local_replay()
   return ret;
 }
 
-int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn,
-                                            const SCN &base_scn)
+int ObLogReplayService::try_release_submit_iterator(SubmitIteratorReleaseState &state)
 {
   int ret = OB_SUCCESS;
   ObReplayStatus *replay_status = NULL;
@@ -551,8 +559,10 @@ int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn,
   } else if (NULL == (replay_status = guard.get_replay_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "replay status is not exist", K(ret));
-  } else if (OB_FAIL(replay_status->enable_local_replay(begin_lsn, base_scn))) {
-    CLOG_LOG(WARN, "failed to enable local replay", K(ret), K(begin_lsn), K(base_scn));
+  } else if (OB_FAIL(replay_status->try_release_submit_iterator(state))) {
+    if (OB_STATE_NOT_MATCH != ret) {
+      CLOG_LOG(WARN, "failed to release replay submit iterator", K(ret));
+    }
   }
   return ret;
 }
@@ -1164,11 +1174,11 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
       if (!replay_status->is_enabled_without_lock() || !replay_status->need_submit_log()) {
         need_submit_log = false;
       } else {
-#ifdef ERRSIM
+#if defined(ERRSIM) || defined(ENABLE_SANITY)
         int tmp_ret = OB_E(EventTable::EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP) OB_SUCCESS;
         if (OB_SUCCESS != tmp_ret) {
-          usleep(300 * 1000);
-          CLOG_LOG(INFO, "sleep 300ms before read log", KPC(submit_task), KPC(replay_status), KR(tmp_ret));
+          usleep(1000 * 1000);
+          CLOG_LOG(INFO, "sleep 1s before read log", KPC(submit_task), KPC(replay_status), KR(tmp_ret));
         }
 #endif
         const SCN &replayable_point = inner_get_replayable_point_();
