@@ -4022,6 +4022,95 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
       min_value = result;
       max_value = result;
     }
+  } else if (expr->get_param_count() == 2 &&
+             ob_is_numeric_type(expr->get_data_type()) &&
+             (T_OP_ADD == expr->get_expr_type() ||
+              T_OP_MINUS == expr->get_expr_type() ||
+              T_OP_MUL == expr->get_expr_type() ||
+              T_OP_DIV == expr->get_expr_type())) {
+    const ObRawExpr *left_expr = expr->get_param_expr(0);
+    const ObRawExpr *right_expr = expr->get_param_expr(1);
+    const bool left_is_const = OB_NOT_NULL(left_expr) && left_expr->is_static_scalar_const_expr();
+    const bool right_is_const = OB_NOT_NULL(right_expr) && right_expr->is_static_scalar_const_expr();
+    ObObj left_min;
+    ObObj left_max;
+    ObObj right_min;
+    ObObj right_max;
+    double left_min_scalar = 0.0;
+    double left_max_scalar = 0.0;
+    double right_min_scalar = 0.0;
+    double right_max_scalar = 0.0;
+    if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!left_is_const && !right_is_const) {
+      // Only estimate arithmetic expressions involving a single variable side and constants.
+    } else if (!ob_is_numeric_type(left_expr->get_data_type()) ||
+               !ob_is_numeric_type(right_expr->get_data_type())) {
+      // do nothing
+    } else if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas,
+                                                    ctx,
+                                                    left_expr,
+                                                    left_min,
+                                                    left_max))) ||
+               OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas,
+                                                    ctx,
+                                                    right_expr,
+                                                    right_min,
+                                                    right_max)))) {
+    } else if (left_min.is_min_value() || left_min.is_max_value() ||
+               left_max.is_min_value() || left_max.is_max_value() ||
+               right_min.is_min_value() || right_min.is_max_value() ||
+               right_max.is_min_value() || right_max.is_max_value() ||
+               left_min.is_null() || left_max.is_null() ||
+               right_min.is_null() || right_max.is_null()) {
+      // do nothing
+    } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&left_min,
+                                                                  left_min_scalar)) ||
+               OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&left_max,
+                                                                  left_max_scalar)) ||
+               OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&right_min,
+                                                                  right_min_scalar)) ||
+               OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&right_max,
+                                                                  right_max_scalar))) {
+      ret = OB_SUCCESS;
+    } else {
+      double result_min = 0.0;
+      double result_max = 0.0;
+      bool valid_range = true;
+      if (T_OP_ADD == expr->get_expr_type()) {
+        result_min = left_min_scalar + right_min_scalar;
+        result_max = left_max_scalar + right_max_scalar;
+      } else if (T_OP_MINUS == expr->get_expr_type()) {
+        result_min = left_min_scalar - right_max_scalar;
+        result_max = left_max_scalar - right_min_scalar;
+      } else if (T_OP_MUL == expr->get_expr_type()) {
+        const double v1 = left_min_scalar * right_min_scalar;
+        const double v2 = left_min_scalar * right_max_scalar;
+        const double v3 = left_max_scalar * right_min_scalar;
+        const double v4 = left_max_scalar * right_max_scalar;
+        result_min = std::min(std::min(v1, v2), std::min(v3, v4));
+        result_max = std::max(std::max(v1, v2), std::max(v3, v4));
+      } else if (right_min_scalar <= 0.0 && right_max_scalar >= 0.0) {
+        valid_range = false;
+      } else {
+        const double v1 = left_min_scalar / right_min_scalar;
+        const double v2 = left_min_scalar / right_max_scalar;
+        const double v3 = left_max_scalar / right_min_scalar;
+        const double v4 = left_max_scalar / right_max_scalar;
+        result_min = std::min(std::min(v1, v2), std::min(v3, v4));
+        result_max = std::max(std::max(v1, v2), std::max(v3, v4));
+      }
+      if (valid_range) {
+        min_value.set_double(result_min);
+        max_value.set_double(result_max);
+        if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, min_value)) ||
+            OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, max_value))) {
+          ret = OB_SUCCESS;
+          min_value.set_min_value();
+          max_value.set_max_value();
+        }
+      }
+    }
   } else if (expr->get_param_count() < 1) {
     // do nothing
   } else if (T_FUN_SYS_CAST == expr->get_expr_type()) {
