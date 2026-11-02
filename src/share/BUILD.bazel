@@ -1841,3 +1841,14 @@ cc_library(
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
+cc_library(
+    name = "ddl_common_test_headers",
+    testonly = True,
+    deps = [
+        ":ddl_protocol",
+        "//src/oblib:oblib_base",
+    ],
+    tags = ["manual"],
+    visibility = ["//unittest/share:__pkg__"],
+)
