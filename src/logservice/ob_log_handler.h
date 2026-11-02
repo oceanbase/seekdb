@@ -49,7 +49,7 @@ namespace logservice
 {
 class ObLogApplyService;
 class ObApplyStatus;
-class ObLogReplayService;
+class ObLogService;
 class ObILogStorage;
 class AppendCb;
 class ObILogHandler
@@ -109,7 +109,7 @@ public:
 
   int init(const common::ObAddr &self,
            ObLogApplyService *apply_service,
-           ObLogReplayService *replay_service,
+           ObLogService *log_service,
            palf::PalfEnv *palf_env);
   bool is_valid() const;
   int stop();
@@ -304,7 +304,7 @@ public:
   // @brief, restore sumbit replay log
   int restore_submit_replay_log() override final;
 
-  // @brief, check if replay is enabled.
+  // @brief, check if replay is enabled, including after its executor finishes.
   bool is_replay_enabled() const override final;
   // @brief, get max decided scn considering both apply and replay.
   // @param[out] int64_t&, max decided scn.
@@ -362,7 +362,7 @@ private:
   //log_handler will frequently call apply_status, reducing the overhead of hashing through applyservice
   ObApplyStatus *apply_status_;
   ObLogApplyService *apply_service_;
-  ObLogReplayService *replay_service_;
+  ObLogService *log_service_;
   common::TCRWLock deps_lock_;
   common::ObQSync ls_qs_;
   ObMiniStat::ObStatItem append_cost_stat_;
