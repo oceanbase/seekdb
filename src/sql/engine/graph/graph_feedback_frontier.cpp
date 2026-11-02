@@ -267,7 +267,14 @@ int GraphFeedbackFrontier::consume_input_batch(
   int ret = OB_SUCCESS;
   bool batch_end = false;
   if (!batch_open_) {
-    if (OB_FAIL(expand_.rescan(input_batcher_.batch(), direction))) {
+    // With one proven shortest-path seed, every indexed vertex has already
+    // passed existence lookup under this snapshot. Avoid repeating TARGET
+    // lookups for edges that accept_extension() would discard anyway.
+    const GraphIdentityIndex *known_visited =
+        shortest_lower_bound_ >= 0 && prune_duplicate_states
+        && path_mode == GraphPathMode::WALK && !retain_path_history_
+        && state_store_.root_count() == 1 ? &next_state_index_ : nullptr;
+    if (OB_FAIL(expand_.rescan(input_batcher_.batch(), direction, known_visited))) {
       LOG_WARN("failed to open graph expand for frontier batch", K(ret),
                "input_count", input_batcher_.batch().count());
     } else {

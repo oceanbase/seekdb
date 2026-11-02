@@ -100,12 +100,14 @@ public:
   ~GraphExpand() = default;
 
   int open(const common::ObIArray<GraphExpandInput> &inputs,
-           GraphPathDirection direction);
+           GraphPathDirection direction,
+           const GraphIdentityIndex *known_visited = nullptr);
   // Output borrows the current edge page. Retain a deep copy before the next
   // get_next_row(), rescan() or release() call.
   int get_next_row(GraphExpandOutput &output);
   int rescan(const common::ObIArray<GraphExpandInput> &inputs,
-             GraphPathDirection direction);
+             GraphPathDirection direction,
+             const GraphIdentityIndex *known_visited = nullptr);
   void release();
 
   const GraphExpandStats &get_stats() const { return stats_; }
@@ -136,6 +138,10 @@ private:
 private:
   IGraphExpandAccess &access_;
   bool sources_verified_{false};
+  // Borrowed only for a single, proven shortest-path seed. Its entries are
+  // confirmed existing vertices under the same statement snapshot.
+  const GraphIdentityIndex *known_visited_{nullptr};
+  int64_t known_visited_binding_id_{-1};
   // Source-existence identities live for the input batch, independently of edge pages.
   common::ObArenaAllocator identity_allocator_;
   GraphExpandInputBindings input_bindings_;

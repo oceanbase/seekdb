@@ -35,9 +35,13 @@ public:
   void reset();
   int stabilize_edge_page();
   int stabilize_targets() { return stabilize_identities(existing_targets_); }
-  int prepare_targets();
+  int prepare_targets(const GraphIdentityIndex *known_visited = nullptr,
+                      int64_t binding_id = -1);
   int validate_targets();
-  bool target_exists(int64_t edge_index) const { return target_exists_.at(edge_index) != 0; }
+  bool target_exists(int64_t edge_index) const
+  { return target_status_.at(edge_index) == TargetStatus::EXISTS; }
+  bool target_missing(int64_t edge_index) const
+  { return target_status_.at(edge_index) == TargetStatus::MISSING; }
   int save_continuation();
   int64_t used_memory() const;
   common::ObIArray<GraphExpandEdge> &edges() { return edge_page_; }
@@ -46,6 +50,13 @@ public:
   const GraphElementIdentity *continuation() const
   { return has_after_edge_ ? &after_edge_ : nullptr; }
 private:
+  enum class TargetStatus : uint8_t
+  {
+    NEEDS_LOOKUP,
+    SKIPPED,
+    EXISTS,
+    MISSING
+  };
   int deep_copy_identity(const GraphElementIdentity &source, GraphElementIdentity &destination);
   int stabilize_identities(common::ObIArray<GraphElementIdentity> &identities);
   common::ObArenaAllocator identity_allocator_;
@@ -57,8 +68,9 @@ private:
   // index checks edge uniqueness first, then validates returned vertices.
   GraphIdentityIndex target_index_;
   GraphIdentityIndex validation_index_;
-  // One flag per physical edge, not per distinct target or output binding.
-  common::ObArray<uint8_t> target_exists_;
+  // One status per physical edge. A proven visited target needs no lookup,
+  // but must not be reported as either an output or an orphan edge.
+  common::ObArray<TargetStatus> target_status_;
   GraphElementIdentity after_edge_{};
   bool has_after_edge_{false};
   DISALLOW_COPY_AND_ASSIGN(GraphExpandEdgePage);

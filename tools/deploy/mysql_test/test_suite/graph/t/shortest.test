@@ -232,3 +232,49 @@ DROP TABLE plan_table;
 DROP PROPERTY GRAPH pruning_graph;
 DROP TABLE pruning_e,pruning_v;
 --enable_query_log
+
+--disable_query_log
+# A single shortest seed can skip vertex lookups for previously admitted
+# targets. The page must still validate the orphan, and a fully skipped page
+# must advance its physical edge cursor. Keep bag and multi-seed paths intact.
+CREATE TABLE visited_v(id INT PRIMARY KEY);
+CREATE TABLE visited_e(id INT PRIMARY KEY,src INT,dst INT);
+INSERT INTO visited_v VALUES(1),(2),(3);
+INSERT INTO visited_e VALUES(10,1,2),(11,1,2),(12,2,1),(13,2,3),
+ (14,3,2),(15,2,99);
+CREATE PROPERTY GRAPH visited_graph
+ VERTEX TABLES(visited_v KEY(id) LABEL v PROPERTIES(id))
+ EDGE TABLES(visited_e KEY(id) SOURCE KEY(src) REFERENCES visited_v(id)
+ DESTINATION KEY(dst) REFERENCES visited_v(id) LABEL e PROPERTIES(id));
+--let $visited_passes=2
+while ($visited_passes)
+{
+  if ($visited_passes == 1)
+  {
+    CREATE INDEX visited_out ON visited_e(src,dst);
+  }
+  --echo shortest_prelookup_visited_and_orphan
+  SELECT endpoint,hops FROM GRAPH_TABLE(visited_graph MATCH ANY SHORTEST
+   (a IS v WHERE a.id=1)-[e IS e]->{0,4}(b IS v)
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+  SELECT endpoint,hops FROM GRAPH_TABLE(visited_graph MATCH ANY SHORTEST
+   (a IS v WHERE a.id=1)-[e IS e]->{2,4}(b IS v)
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+  SELECT MIN(hops) AS distance FROM GRAPH_TABLE(visited_graph MATCH ANY SHORTEST
+   (a IS v WHERE a.id=1)-[e IS e]->{1,4}(b IS v WHERE b.id=3)
+   COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+  SELECT seed,endpoint,hops FROM GRAPH_TABLE(visited_graph MATCH ANY SHORTEST
+   (a IS v WHERE a.id IN (1,3))-[e IS e]->{0,3}(b IS v)
+   COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops)) g
+   ORDER BY seed,endpoint;
+  SELECT COUNT(*) AS walk_paths FROM GRAPH_TABLE(visited_graph MATCH
+   (a IS v WHERE a.id=1)-[e IS e]->{2}(b IS v)
+   COLUMNS(b.id AS endpoint)) g;
+  if ($visited_passes == 1)
+  {
+    DROP INDEX visited_out ON visited_e;
+  }
+  --dec $visited_passes
+}
+DROP PROPERTY GRAPH visited_graph;
+DROP TABLE visited_e,visited_v;
