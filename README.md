@@ -6,7 +6,9 @@
   <img alt="seekdb logo" src="images/logo.svg" width="420">
 </picture>
 
-# **OB-P:SaDIKgJU77mzgJwQjgEQFQ Write. Search. Fork. The State Store for AI Agents.**
+OB-P:SaDIKgJU77mzgJwQjgEQFQ
+
+# **Write. Search. Fork. The State Store for AI Agents.**
 
 <p>
     <a href="https://github.com/oceanbase/seekdb/stargazers">
