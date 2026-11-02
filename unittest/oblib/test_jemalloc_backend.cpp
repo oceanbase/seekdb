@@ -17,6 +17,7 @@
 #include "lib/allocator/ob_jemalloc.h"
 
 #include <chrono>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -87,6 +88,19 @@ void test_allocation()
 
 void test_background_threads()
 {
+#if defined(_WIN32)
+  require(!read_control<bool>("opt.background_thread"),
+          "Windows background threads are disabled");
+  bool enabled = false;
+  size_t size = sizeof(enabled);
+  require(ENOENT == je_mallctl("background_thread", &enabled, &size, nullptr, 0),
+          "Windows background threads are unsupported");
+  require(!jemalloc_enable_background_threads(),
+          "Windows background threads cannot be enabled");
+  refresh_stats();
+  require(read_control<size_t>("stats.background_thread.num_threads") == 0,
+          "no Windows background workers");
+#else
   require(jemalloc_enable_background_threads(), "enable background threads");
   refresh_stats();
   require(read_control<bool>("background_thread"), "background thread state");
@@ -128,6 +142,7 @@ void test_background_threads()
     require(!read_control<bool>("background_thread"), "background threads stopped");
     require(jemalloc_enable_background_threads(), "restart background threads");
   }
+#endif
 }
 } // namespace
 

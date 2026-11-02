@@ -32,9 +32,10 @@ List the checked-in test targets with:
 ```
 
 The backend smoke checks the explicit jemalloc allocation domain, aligned
-allocation, cross-thread release, automatic idle-page reclamation and background
-worker restart. It is available for production Linux, Windows and Android
-builds. On Android, build with `--config=android` and run the binary on the
+allocation and cross-thread release on Linux, Windows and Android. Linux and
+Android also check automatic idle-page reclamation and background worker
+restart. Windows verifies that background threads are unavailable and remain
+disabled. On Android, build with `--config=android` and run the binary on the
 matching device; see [Android](android.md).
 
 `test_jemalloc_hook` separately verifies the glibc interposition contract. The

@@ -30,14 +30,15 @@
 #include <execinfo.h>
 #endif
 
-#if defined(ENABLE_SANITY) || (defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__APPLE__))
-// Darwin jemalloc builds have no background-thread support; enabling it leaves bootstrap incomplete.
+#if defined(ENABLE_SANITY) || (defined(OB_HAVE_BUNDLED_JEMALLOC) \
+    && (defined(__APPLE__) || defined(_WIN32)))
+// Keep background threads disabled for sanity builds and unsupported platforms.
 extern "C" {
 const char *je_malloc_conf =
     "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
 }
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && (defined(_WIN32) || defined(__ANDROID__))
-// Start workers from ObServer::init, after allocator/CRT bootstrap is complete.
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__ANDROID__)
+// Start Android workers from ObServer::init, after allocator bootstrap.
 extern "C" {
 const char *je_malloc_conf =
     "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";

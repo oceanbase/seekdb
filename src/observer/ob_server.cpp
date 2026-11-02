@@ -736,7 +736,7 @@ int ObServer::init(const ObServerOptions &opts)
     LOG_ERROR("async log init error", KR(ret));
   }
 #if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN) \
-    && (defined(_WIN32) || defined(__ANDROID__))
+    && defined(__ANDROID__)
   if (OB_SUCC(ret) && !jemalloc_enable_background_threads()) {
     LOG_WARN("failed to enable jemalloc background threads");
   }

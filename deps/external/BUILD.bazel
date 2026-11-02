@@ -20,7 +20,6 @@ exports_files([
     "Cargo.toml",
     "Cargo.lock",
     "jemalloc-windows-build.patch",
-    "jemalloc-windows-background.patch",
 ])
 
 jemalloc(

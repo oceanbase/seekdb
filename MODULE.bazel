@@ -88,7 +88,6 @@ crate.annotation(
     build_script_toolchains = ["@seekdb//bazel:windows_build_script_environment"],
     patches = [
         "//deps/external:jemalloc-windows-build.patch",
-        "//deps/external:jemalloc-windows-background.patch",
     ],
     patch_args = ["-p1"],
 )
