@@ -48,6 +48,7 @@ const INVALID_ENCODING: i32 = RegexErrorKind::InvalidEncoding.repr;
 const LIMIT: i32 = RegexErrorKind::Limit.repr;
 const ALLOCATION: i32 = RegexErrorKind::Allocation.repr;
 const ARGUMENT: i32 = RegexErrorKind::Argument.repr;
+const PROPERTY_SYNTAX: i32 = RegexErrorKind::PropertySyntax.repr;
 
 pub struct RegexEngine {
     regex: Regex,
@@ -69,6 +70,11 @@ fn err(kind: i32, message: impl Into<Cow<'static, str>>) -> BridgeError {
 }
 
 fn regex_error(error: Error) -> BridgeError {
+    // An unsupported POSIX class name is a property-syntax error; the delegate
+    // parser would otherwise accept the name as ordinary class content.
+    if let Error::ParseError(_, ParseError::PropertySyntax) = &error {
+        return err(PROPERTY_SYNTAX, "U_REGEX_PROPERTY_SYNTAX");
+    }
     let kind = match &error {
         Error::RuntimeError(_) => LIMIT,
         Error::ParseError(_, ParseError::UnclosedOpenParen) => PAREN,
@@ -231,6 +237,7 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
     let mut builder = RegexBuilder::new(&pattern);
     builder
         .icu_octal(true)
+        .icu_posix_class(true)
         .case_insensitive(flags & CASE_INSENSITIVE != 0)
         .multi_line(flags & MULTILINE != 0)
         .dot_matches_new_line(flags & DOTALL != 0)

@@ -43,7 +43,7 @@ def prepare_workspace(original, build, cargo, environment):
     # Never edit the registry/vendor source or its checksum metadata.
     shutil.copytree(source, dependency)
     expected = {entry["path"] for entry in spec["files"]}
-    if expected != {"src/lib.rs", "src/parse.rs", "src/parse_flags.rs"}:
+    if expected != {"src/lib.rs", "src/parse.rs", "src/parse_flags.rs", "src/error.rs"}:
         raise SystemExit("Unexpected SQL regexp patch file set")
     for entry in spec["files"]:
         target = dependency / entry["path"]
