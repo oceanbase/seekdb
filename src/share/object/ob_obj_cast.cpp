@@ -1030,6 +1030,49 @@ static int common_build_geometry(ObIAllocator &allocator,
 }
 
 
+template <typename Value>
+static int int_geometry(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObGeometry *geo = NULL;
+    ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    int64_t in_val = in.get_int();
+    ObFastFormatInt ffi(in_val);
+    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
+    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
+    ObString str(ffi.length(), ffi.ptr());
+    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
+    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
+    } else {
+      ObString res_wkb;
+      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
+      } else {
+        ObTextStringDatumValueResult text_result(ObGeometryType, &params, &out, true);
+        if (OB_FAIL(text_result.init(res_wkb.length(), params.allocator_v2_))) {
+        } else if (OB_FAIL(text_result.append(res_wkb.ptr(), res_wkb.length()))) {
+        } else {
+          text_result.set_result();
+          res_length = static_cast<ObLength>(out.get_string_len());
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
+      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
+      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
+    }
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
 ////////////////////////////////////////////////////////////////
 // UInt -> XXX
 
@@ -10160,6 +10203,7 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
           case ObDecimalIntTC: function = int_decimalint<Frame>; break;
           case ObTextTC: function = int_text<Frame>; break;
           case ObJsonTC: function = int_json<Frame>; break;
+          case ObGeometryTC: function = int_geometry<Frame>; break;
           case ObMySQLDateTC: function = int_mdate<Frame>; break;
           case ObMySQLDateTimeTC: function = int_mdatetime<Frame>; break;
           case ObBitTC: function = int_bit<Frame>; break;

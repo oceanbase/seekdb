@@ -374,8 +374,13 @@ public:
       else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(count)))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-          ret = !expr_frame_info.is_mark_serialize() || expr_frame_info.ser_expr_marks_.at(i)
-              ? exprs.at(i).serialize(buf, buf_len, pos)
+          const ObExpr &expr = exprs.at(i);
+          // A decoded partial directory owns its array, but still contains
+          // genuine empty slots. Preserve their envelope on the next PX hop.
+          const bool selected = !expr_frame_info.is_mark_serialize()
+              || expr_frame_info.ser_expr_marks_.at(i);
+          ret = selected && !(expr.type_ == T_INVALID && expr.sql_type_ == nullptr)
+              ? expr.serialize(buf, buf_len, pos)
               : ObEmptyExpr::instance().serialize(buf, buf_len, pos);
         }
       }
@@ -547,8 +552,11 @@ public:
       else {
         len += serialization::encoded_length_i32(static_cast<int32_t>(count));
         for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-          const int64_t bytes = !expr_frame_info.is_mark_serialize() || expr_frame_info.ser_expr_marks_.at(i)
-              ? exprs.at(i).get_serialize_size() : ObEmptyExpr::instance().get_serialize_size();
+          const ObExpr &expr = exprs.at(i);
+          const bool selected = !expr_frame_info.is_mark_serialize()
+              || expr_frame_info.ser_expr_marks_.at(i);
+          const int64_t bytes = selected && !(expr.type_ == T_INVALID && expr.sql_type_ == nullptr)
+              ? expr.get_serialize_size() : ObEmptyExpr::instance().get_serialize_size();
           if (bytes < 0 || __builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
         }
       }

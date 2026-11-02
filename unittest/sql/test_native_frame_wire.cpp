@@ -1014,6 +1014,157 @@ TEST(NativeFrameWire, execution_layout_spill_oom_keeps_frame_and_published_outpu
   }
 }
 
+TEST(NativeFrameWire, nested_px_partial_directory_reserializes_empty_slots_without_losing_indices)
+{
+  ObArenaAllocator source_owner("PxHopSrc"), middle_owner("PxHopMid"), final_owner("PxHopDst");
+  ObSqlCtx source_sql, middle_sql, final_sql;
+  ObExecContext source(source_owner), middle(middle_owner), final_context(final_owner);
+  ASSERT_NO_FATAL_FAILURE(setup_context(source, source_sql));
+  ASSERT_NO_FATAL_FAILURE(setup_context(middle, middle_sql));
+  ASSERT_NO_FATAL_FAILURE(setup_context(final_context, final_sql));
+  auto &parameters = *source.get_physical_plan_ctx();
+  ASSERT_NO_FATAL_FAILURE(load_parameters(parameters, source_owner, 1, 1, true));
+  ObArray<ObExpr> global_expressions;
+  ObExprFrameInfo source_info(source_owner, global_expressions);
+  ObExprFrameInfo middle_info(middle_owner), final_info(final_owner);
+  ASSERT_EQ(OB_SUCCESS, global_expressions.prepare_allocate(6));
+  for (int64_t i = 0; i < global_expressions.count(); ++i) {
+    ObExpr &expr = global_expressions.at(i);
+    expr.type_ = i == 0 ? T_INT : (i == 2 ? T_QUESTIONMARK : (i == 5 ? T_NULL : T_OP_ADD));
+    expr.obj_meta_.set_int();
+    expr.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
+    expr.frame_idx_ = (i == 0 || i == 5) ? 0 : (i == 2 ? 1 : 2);
+    const int64_t slot = i == 5 ? 1 : (i == 1 ? 2 : (i >= 3 ? i - 3 : 0));
+    expr.datum_off_ = ScalarFrameLayout::datum_offset(slot);
+    expr.eval_info_off_ = ScalarFrameLayout::eval_info_offset(slot);
+    ASSERT_EQ(OB_SUCCESS, expr.bind_sql_type(*parameters.get_native_parameter_type(0), source_owner));
+  }
+  ObExpr *sum_args[] = {&global_expressions.at(2), &global_expressions.at(0)};
+  ObExpr *outer_args[] = {&global_expressions.at(3), &global_expressions.at(2)};
+  ObExpr *parameter_parents[] = {&global_expressions.at(3), &global_expressions.at(1)};
+  ObExpr *sum_parents[] = {&global_expressions.at(4)};
+  global_expressions.at(3).args_ = sum_args; global_expressions.at(3).arg_cnt_ = 2;
+  global_expressions.at(4).args_ = outer_args; global_expressions.at(4).arg_cnt_ = 2;
+  global_expressions.at(2).parents_ = parameter_parents; global_expressions.at(2).parent_cnt_ = 2;
+  global_expressions.at(3).parents_ = sum_parents; global_expressions.at(3).parent_cnt_ = 1;
+  ASSERT_EQ(OB_SUCCESS, source_info.ser_expr_marks_.prepare_allocate(6));
+  for (int64_t i = 0; i < 6; ++i) { source_info.ser_expr_marks_.at(i) = i != 1; }
+  ASSERT_TRUE(source_info.is_mark_serialize());
+  const int64_t slot_size = ScalarFrameLayout::slot_size();
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_.push_back(ObFrameInfo(2, 0, 2 * slot_size, 0, 2 * slot_size)));
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_ptrs_.reserve(1));
+  char *constants = static_cast<char *>(source_owner.alloc(2 * slot_size));
+  ASSERT_NE(nullptr, constants);
+  MEMSET(constants, 0, 2 * slot_size);
+  for (int64_t slot = 0; slot < 2; ++slot) {
+    new (constants + ScalarFrameLayout::datum_offset(slot)) Datum();
+    new (constants + ScalarFrameLayout::eval_info_offset(slot)) ObEvalInfo{};
+  }
+  reinterpret_cast<Datum *>(constants)->set_int(1);
+  reinterpret_cast<Datum *>(constants + ScalarFrameLayout::datum_offset(1))->set_null();
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_ptrs_.push_back(constants));
+  ASSERT_EQ(OB_SUCCESS, source_info.param_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.param_frame_.push_back(ObFrameInfo(1, 1, slot_size, 0, slot_size)));
+  ASSERT_EQ(OB_SUCCESS, source_info.datum_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.datum_frame_.push_back(ObFrameInfo(3, 2, 3 * slot_size, 0, 3 * slot_size)));
+  ASSERT_EQ(OB_SUCCESS, source_info.pre_alloc_exec_memory(source));
+
+  const int64_t first_size = ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(source, source_info);
+  ASSERT_GT(first_size, 0);
+  std::vector<char> first_wire(first_size);
+  int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::serialize_expr_frame_info<true>(
+      first_wire.data(), first_wire.size(), pos, source, source_info));
+  ASSERT_EQ(first_size, pos);
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::deserialize_expr_frame_info<true>(
+      first_wire.data(), first_wire.size(), pos, middle, middle_info));
+  ASSERT_EQ(first_size, pos);
+  ASSERT_FALSE(middle_info.is_mark_serialize());
+  ASSERT_EQ(0, middle_info.ser_expr_marks_.count());
+  ASSERT_EQ(6, middle_info.rt_exprs_.count());
+  ASSERT_EQ(T_INVALID, middle_info.rt_exprs_.at(1).type_);
+  ASSERT_EQ(nullptr, middle_info.rt_exprs_.at(1).sql_type_);
+
+  // Nested DFO dispatch sizes and writes the decoded, now-owning directory.
+  // This public call must succeed, rather than serialize slot 1 as an ordinary
+  // expression whose mandatory native metadata has no SQL Type.
+  const int64_t second_size = ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(middle, middle_info);
+  ASSERT_GT(second_size, 0);
+  std::vector<char> second_wire(second_size);
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::serialize_expr_frame_info<true>(
+      second_wire.data(), second_wire.size(), pos, middle, middle_info));
+  ASSERT_EQ(second_size, pos);
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::deserialize_expr_frame_info<true>(
+      second_wire.data(), second_wire.size(), pos, final_context, final_info));
+  ASSERT_EQ(second_size, pos);
+
+  for (int hop = 0; hop < 2; ++hop) {
+    SCOPED_TRACE(hop);
+    ObExprFrameInfo &info = hop == 0 ? middle_info : final_info;
+    ObExecContext &context = hop == 0 ? middle : final_context;
+    ASSERT_FALSE(info.is_mark_serialize());
+    ASSERT_EQ(6, info.rt_exprs_.count());
+    ObExpr &mode = info.rt_exprs_.at(0), &empty = info.rt_exprs_.at(1);
+    ObExpr &parameter = info.rt_exprs_.at(2), &sum = info.rt_exprs_.at(3);
+    ObExpr &outer = info.rt_exprs_.at(4), &typed_null = info.rt_exprs_.at(5);
+    EXPECT_EQ(T_INVALID, empty.type_); EXPECT_EQ(nullptr, empty.sql_type_);
+    EXPECT_EQ(0U, empty.arg_cnt_); EXPECT_EQ(0U, empty.parent_cnt_);
+    ASSERT_EQ(2U, sum.arg_cnt_); ASSERT_EQ(2U, outer.arg_cnt_);
+    ASSERT_EQ(2U, parameter.parent_cnt_); ASSERT_EQ(1U, sum.parent_cnt_);
+    EXPECT_EQ(&parameter, sum.args_[0]); EXPECT_EQ(&mode, sum.args_[1]);
+    EXPECT_EQ(&sum, outer.args_[0]); EXPECT_EQ(&parameter, outer.args_[1]);
+    EXPECT_EQ(&sum, parameter.parents_[0]); EXPECT_EQ(&empty, parameter.parents_[1]);
+    EXPECT_EQ(&outer, sum.parents_[0]);
+    ASSERT_NE(nullptr, parameter.sql_type_);
+    EXPECT_TRUE(parameters.get_native_parameter_type(0)->equals(parameter.get_sql_type()));
+    ASSERT_TRUE(context.get_physical_plan_ctx()->native_parameters_ready());
+    ASSERT_NE(nullptr, context.get_physical_plan_ctx()->get_native_parameter(0));
+    EXPECT_EQ(INT64_MIN, context.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+    ObEvalCtx eval(context);
+    EXPECT_EQ(1, mode.locate_expr_datum(eval).get_int());
+    EXPECT_EQ(T_NULL, typed_null.type_);
+    ASSERT_NE(nullptr, typed_null.sql_type_);
+    EXPECT_TRUE(parameters.get_native_parameter_type(0)->equals(typed_null.get_sql_type()));
+    EXPECT_TRUE(typed_null.locate_expr_datum(eval).is_null());
+  }
+}
+
+TEST(NativeFrameWire, px_nonplaceholder_invalid_native_metadata_is_still_rejected)
+{
+  ObArenaAllocator owner("PxBadNative");
+  ObSqlCtx sql_context;
+  ObExecContext context(owner);
+  ASSERT_NO_FATAL_FAILURE(setup_context(context, sql_context));
+  ASSERT_EQ(OB_SUCCESS, context.get_physical_plan_ctx()->init_datum_param_store());
+  ObExprFrameInfo info(owner);
+  ASSERT_EQ(OB_SUCCESS, info.rt_exprs_.prepare_allocate(1));
+  ObExpr &expr = info.rt_exprs_.at(0);
+  expr.type_ = T_INT;
+  expr.obj_meta_.set_int();
+  expr.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
+  std::vector<char> wire(4096);
+  int64_t pos = 7;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, ObPxTreeSerializer::serialize_expr_frame_info<true>(
+      wire.data(), wire.size(), pos, context, info));
+  EXPECT_EQ(7, pos);
+
+  // A Type-bearing T_INVALID is not an empty PX slot. Deliberately corrupt
+  // its comparison count to exercise the existing mandatory metadata guard.
+  SqlType integer;
+  ASSERT_NO_FATAL_FAILURE(scalar_type(ObIntType, integer));
+  ASSERT_EQ(OB_SUCCESS, expr.bind_sql_type(integer, owner));
+  expr.type_ = T_INVALID;
+  expr.native_cmp_op_count_ = -1;
+  pos = 7;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, ObPxTreeSerializer::serialize_expr_frame_info<true>(
+      wire.data(), wire.size(), pos, context, info));
+  EXPECT_EQ(7, pos);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

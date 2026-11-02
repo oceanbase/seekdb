@@ -403,3 +403,79 @@ int main(int argc,char **argv) {
       || wide::ObDecimalIntConstValue::init_const_values(constants)!=OB_SUCCESS) { return 2; }
   return RUN_ALL_TESTS();
 }
+
+TEST(NativeValueCast, integer_to_geometry_preserves_legacy_cast_modes_and_errors)
+{
+  ObArenaAllocator owner;
+  const SqlValueType types[] = {
+    ObTinyIntType, ObSmallIntType, ObMediumIntType, ObInt32Type, ObIntType
+  };
+  // All values fit every signed input width. Their decimal representation is
+  // shorter than the four-byte SRID, so no external SRS provider is needed.
+  const int64_t values[] = {0, 1, -1, 127};
+  const ObCastMode modes[] = {
+    CM_NONE, CM_EXPLICIT_CAST, CM_COLUMN_CONVERT,
+    CM_COLUMN_CONVERT | CM_WARN_ON_FAIL | CM_NULL_ON_WARN
+  };
+  for (SqlValueType type : types) {
+    SCOPED_TRACE(static_cast<int>(type));
+    for (int64_t value : values) {
+      SCOPED_TRACE(value);
+      for (ObCastMode mode : modes) {
+        SCOPED_TRACE(mode);
+        DatumValue input, output;
+        ASSERT_EQ(OB_SUCCESS, input.set_int(type, value, owner));
+        ASSERT_EQ(OB_SUCCESS, output.set_varchar(ObString::make_string("keep"), owner));
+        const Datum before = output.datum_;
+        const SqlTypeMeta before_meta = output.meta_;
+        ObAccuracy accuracy(19, 2);
+        const uint64_t before_accuracy = accuracy.get_accuracy();
+        ObCastCtx context(&owner, nullptr, mode, CS_TYPE_BINARY, &accuracy);
+        const int expected = CM_IS_COLUMN_CONVERT(mode)
+            ? OB_ERR_CANT_CREATE_GEOMETRY_OBJECT : OB_ERR_GIS_INVALID_DATA;
+        EXPECT_EQ(expected, DatumValueCaster::to_type(
+            ObGeometryType, context, input, owner, output));
+        EXPECT_EQ(OB_SUCCESS, context.warning_);
+        EXPECT_EQ(before_accuracy, accuracy.get_accuracy());
+        EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
+        EXPECT_EQ(0, MEMCMP(&before_meta, &output.meta_, sizeof(before_meta)));
+        EXPECT_EQ(ObString::make_string("keep"), output.get_string());
+        EXPECT_EQ(type, input.get_type());
+        EXPECT_EQ(value, input.get_int());
+      }
+    }
+    DatumValue null_input, null_output;
+    ASSERT_EQ(OB_SUCCESS, null_input.set_int(type, 0, owner));
+    null_input.datum_.set_null();
+    ASSERT_EQ(OB_SUCCESS, null_output.set_int(71, owner));
+    ObCastCtx null_context(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+    ASSERT_EQ(OB_SUCCESS, DatumValueCaster::to_type(
+        ObGeometryType, null_context, null_input, owner, null_output));
+    EXPECT_TRUE(null_output.is_null());
+    EXPECT_EQ(type, null_output.get_type());
+  }
+
+  DatumValue input, output;
+  ASSERT_EQ(OB_SUCCESS, input.set_int(0, owner));
+  ASSERT_EQ(OB_SUCCESS, output.set_int(71, owner));
+  // The old mapping to the GEOMETRY-field error applies only to a generic
+  // GEOMETRY column, not an explicit POINT target encoded in the cast mode.
+  ObCastMode point_mode = CM_NONE;
+  CM_SET_GEOMETRY_POINT(point_mode);
+  point_mode |= CM_COLUMN_CONVERT;
+  ObCastCtx point_context(&owner, nullptr, point_mode, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_GIS_INVALID_DATA, DatumValueCaster::to_type(
+      ObGeometryType, point_context, input, owner, output));
+  EXPECT_EQ(71, output.get_int());
+
+  ObCastCtx missing_owner(nullptr, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_UNEXPECTED, DatumValueCaster::to_type(
+      ObGeometryType, missing_owner, input, owner, output));
+  EXPECT_EQ(71, output.get_int());
+
+  ObCastCtx alias_context(&owner, nullptr, CM_COLUMN_CONVERT, CS_TYPE_BINARY);
+  EXPECT_EQ(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT, DatumValueCaster::to_type(
+      ObGeometryType, alias_context, input, owner, input));
+  EXPECT_EQ(ObIntType, input.get_type());
+  EXPECT_EQ(0, input.get_int());
+}
