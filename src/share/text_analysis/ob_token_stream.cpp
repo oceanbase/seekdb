@@ -220,8 +220,7 @@ int ObTokenStopWordNormalizer::filter_special_marks(const ObDatum &check_token, 
 
 ObBasicEnglishNormalizer::ObBasicEnglishNormalizer()
   : ObTokenNormalizer(),
-    norm_allocator_("TxtTokGrpFilter", OB_MALLOC_NORMAL_BLOCK_SIZE),
-    output_allocator_(nullptr)
+    norm_allocator_("TxtTokGrpFilter", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -245,9 +244,7 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
   } else {
     next_token.reset();
     token_freq = 0;
-    if (nullptr == output_allocator_) {
-      norm_allocator_.reuse();
-    }
+    norm_allocator_.reuse();
     ObDatum tmp_datum;
     bool found_alnum = false;
     uint32_t norm_token_len = 0;
@@ -297,23 +294,10 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
       ret = OB_ERR_UNEXPECTED;
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
-      bool ascii_lower = true;
-      for (uint32_t i = 0; ascii_lower && i < norm_token_len; ++i) {
-        const unsigned char c = static_cast<unsigned char>(norm_token_ptr[i]);
-        ascii_lower = c < 0x80 && !(c >= 'A' && c <= 'Z');
-      }
-      if (ascii_lower) {
-        // The source document is caller-owned and remains valid for this parse.
-        // Avoid a lowercase conversion and allocation for the common ASCII case.
-        next_token.set_string(norm_alnum_token);
+      ObString norm_lower_token;
+      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
       } else {
-        ObString norm_lower_token;
-        ObIAllocator &output_allocator =
-            nullptr == output_allocator_ ? static_cast<ObIAllocator &>(norm_allocator_) : *output_allocator_;
-        if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, output_allocator))) {
-        } else {
-          next_token.set_string(norm_lower_token);
-        }
+        next_token.set_string(norm_lower_token);
       }
     }
   }
