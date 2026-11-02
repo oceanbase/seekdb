@@ -12,10 +12,10 @@
         ],
         [
           "                b'[' => {\n                    nest += 1;\n                    class.push('[');\n                    let mut end = ix + 1;\n",
-          "                b'[' => {\n                    nest += 1;\n                    class.push('[');\n                    let mut end = ix + 1;\n\n                    // A POSIX class is written `[:name:]`. ICU rejects the\n                    // word-boundary forms `[[:<:]]`/`[[:>:]]`; the delegate parser\n                    // would otherwise accept them as ordinary class content. Only the\n                    // opt-in ICU mode changes this, so the native default stays.\n                    if bytes.get(end) == Some(&b':') && self.flag(FLAG_ICU_POSIX_CLASS) {\n                        let mut name_end = end + 1;\n                        while name_end < self.re.len()\n                            && bytes[name_end] != b':'\n                            && bytes[name_end] != b']'\n                        {\n                            name_end += 1;\n                        }\n                        if bytes.get(name_end) == Some(&b':')\n                            && bytes.get(name_end + 1) == Some(&b']')\n                        {\n                            let raw = &self.re[end + 1..name_end];\n                            // POSIX allows an optional negation prefix; keep it.\n                            let name = raw.strip_prefix('^').unwrap_or(raw);\n                            if name == \"<\" || name == \">\" {\n                                return Err(Error::ParseError(ix, ParseError::PropertySyntax));\n                            }\n                        }\n                    }\n"
+          "                b'[' => {\n                    nest += 1;\n                    class.push('[');\n                    let mut end = ix + 1;\n\n                    // A POSIX class is written `[:name:]`. ICU rejects the\n                    // word-boundary forms `[[:<:]]`/`[[:>:]]`; the delegate parser\n                    // would otherwise accept them as ordinary class content. Only the\n                    // opt-in ICU mode changes this, so the native default stays.\n                    if bytes.get(end) == Some(&b':') && self.flag(FLAG_ICU_POSIX_CLASS) {\n                        let mut name_end = end + 1;\n                        while name_end < self.re.len()\n                            && bytes[name_end] != b':'\n                            && bytes[name_end] != b']'\n                        {\n                            name_end += 1;\n                        }\n                        if bytes.get(name_end) == Some(&b':')\n                            && bytes.get(name_end + 1) == Some(&b']')\n                        {\n                            let raw = &self.re[end + 1..name_end];\n                            // POSIX allows an optional negation prefix; keep it.\n                            let name = raw.strip_prefix('^').unwrap_or(raw);\n                            if name.is_empty() || name.contains(['{', '}', '[', ']'])\n                                || name == \"<\" || name == \">\"\n                            {\n                                return Err(Error::ParseError(ix, ParseError::PropertySyntax));\n                            }\n                            let ascii_posix = regex_syntax::ast::ClassAsciiKind::from_name(name).is_some();\n                            let unicode_prop = regex_syntax::Parser::new()\n                                .parse(&format!(\"\\\\p{{{}}}\", name))\n                                .is_ok();\n                            if !ascii_posix && !unicode_prop {\n                                // A smaller backend property table cannot establish ICU invalidity.\n                                return Err(Error::ParseError(ix, ParseError::UnsupportedProperty));\n                            }\n                        }\n                    }\n"
         ]
       ],
-      "output_sha256": "1e9d68cfb6c6bc0844d417a45e4aa3fbb5e47eea03d742ad2093bf9f2bf815c3"
+      "output_sha256": "22d865b0c339fe74cc2a9eff6c69fff6a6c8cfa4a53d464aa57ec76dc767b915"
     },
     {
       "path": "src/parse_flags.rs",
@@ -93,14 +93,14 @@
       "replacements": [
         [
           "    TargetNotRepeatable,\n    /// Couldn't parse group name\n    InvalidGroupName,\n",
-          "    TargetNotRepeatable,\n    /// Couldn't parse group name\n    InvalidGroupName,\n    /// Unsupported POSIX/Unicode property syntax (e.g. `[[:<:]]`)\n    PropertySyntax,\n"
+          "    TargetNotRepeatable,\n    /// Couldn't parse group name\n    InvalidGroupName,\n    /// Unsupported POSIX/Unicode property syntax (e.g. `[[:<:]]`)\n    PropertySyntax,\n    /// Property name is not supported by this backend.\n    UnsupportedProperty,\n"
         ],
         [
           "            ParseError::InvalidGroupName => write!(f, \"Could not parse group name\"),\n",
-          "            ParseError::InvalidGroupName => write!(f, \"Could not parse group name\"),\n            ParseError::PropertySyntax => write!(f, \"Unsupported property syntax\"),\n"
+          "            ParseError::InvalidGroupName => write!(f, \"Could not parse group name\"),\n            ParseError::PropertySyntax => write!(f, \"Unsupported property syntax\"),\n            ParseError::UnsupportedProperty => write!(f, \"Unsupported property name\"),\n"
         ]
       ],
-      "output_sha256": "c27e38557ee478bd5bbb0d59fe680deb2f99b3d3dc417f6b4361eac187c7b48c"
+      "output_sha256": "d3ce5e86275904d4428f998470ede59059173eb45d63bae4c4419540dc14fead"
     }
   ]
 }
