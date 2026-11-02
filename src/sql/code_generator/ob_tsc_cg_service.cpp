@@ -250,7 +250,7 @@ int ObTscCgService::calc_enable_use_simplified_scan(
   } else if (!stmt->is_select_stmt()) {
     // do nothing
   } else if (OB_ISNULL(vector_expr = stmt->get_first_vector_expr())) {
-  } else if (!vector_expr->has_flag(IS_CUT_CALC_EXPR)) {
+  } else if (!op.is_vec_idx_scan() || !vector_expr->has_flag(IS_CUT_CALC_EXPR)) {
   } else {
     // real result output is pk column
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(stmt);

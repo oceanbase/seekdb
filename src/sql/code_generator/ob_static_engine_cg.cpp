@@ -630,9 +630,25 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
     // dependence expr and generate column self don't add to calc exprs
     bool need_flatten_gen_col = !(log_op_def::LOG_TABLE_SCAN == op.get_type()
                                   && static_cast<ObLogTableScan&>(op).get_is_index_global());
+    // IS_CUT_CALC_EXPR is set while candidate vector access paths are built, so it is
+    // only a hint here. Whether the distance can really be left unevaluated is decided
+    // by the final operator tree: only a real vector scan produces it (the scan itself,
+    // or a direct child of a sort/top-n that sits right above the scan). A plain index
+    // merge or an ordinary table scan does not produce the distance and must evaluate it,
+    // otherwise the TOP-N sort key stays unset.
+    bool allow_skip_vec_distance = false;
+    if (log_op_def::LOG_TABLE_SCAN == op.get_type()) {
+      allow_skip_vec_distance = static_cast<const ObLogTableScan &>(op).get_vector_index_info().need_index_back();
+    }
+    for (int64_t i = 0; !allow_skip_vec_distance && i < op.get_num_of_child(); ++i) {
+      ObLogicalOperator *child_op = op.get_child(i);
+      if (OB_NOT_NULL(child_op) && log_op_def::LOG_TABLE_SCAN == child_op->get_type()) {
+        allow_skip_vec_distance = static_cast<const ObLogTableScan *>(child_op)->get_vector_index_info().need_index_back();
+      }
+    }
     // get calc exprs
     OZ(generate_calc_exprs(child_outputs, cur_op_exprs_, spec.calc_exprs_, op.get_type(),
-                           check_eval_once, need_flatten_gen_col),
+                           check_eval_once, need_flatten_gen_col, allow_skip_vec_distance),
                            op.get_op_id(), op.get_name(), K(op.get_type()));
     LOG_DEBUG("just for debug, after generate_calc_exprs", K(ret), K(op.get_op_id()), K(op.get_name()), K(op.get_type()));
   }
@@ -696,7 +712,8 @@ int ObStaticEngineCG::generate_calc_exprs(
     ObIArray<ObExpr *> &calc_exprs,
     const log_op_def::ObLogOpType log_type,
     bool check_eval_once,
-    bool need_flatten_gen_col)
+    bool need_flatten_gen_col,
+    const bool allow_skip_vec_distance)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObRawExpr *, 16> calc_raw_exprs;
@@ -737,7 +754,9 @@ int ObStaticEngineCG::generate_calc_exprs(
         }
 
         if (OB_FAIL(ret)) {
-        } else if (raw_expr->is_vector_sort_expr() && raw_expr->has_flag(IS_CUT_CALC_EXPR)) {
+        } else if (allow_skip_vec_distance
+                   && raw_expr->is_vector_sort_expr()
+                   && raw_expr->has_flag(IS_CUT_CALC_EXPR)) {
           raw_expr->set_is_calculated(true);
           FLOG_INFO("for distance needn't calc", K(ret));
         } else if (OB_FAIL(calc_raw_exprs.push_back(raw_expr))) {
