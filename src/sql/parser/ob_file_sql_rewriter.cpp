@@ -491,6 +491,797 @@ int load_jsonl(const std::string &path, std::vector<Column> &cols, Rows &data)
   return ret;
 }
 
+
+// ---------------------------------------------------------------- Parquet
+
+// Minimal Parquet reader: Thrift compact metadata, Snappy block decompression,
+// RLE/bit-packed definition levels and PLAIN encoded values.  Dictionary pages
+// and nested schemas are out of scope, they are rejected instead of guessed.
+class CompactReader
+{
+public:
+  CompactReader(const unsigned char *buf, int64_t len) : buf_(buf), len_(len), pos_(0), last_id_(0) {}
+  int64_t pos() const { return pos_; }
+  bool eof() const { return pos_ >= len_; }
+  int16_t pushStruct() { const int16_t saved = last_id_; last_id_ = 0; return saved; }
+  void popStruct(int16_t saved) { last_id_ = saved; }
+
+  int readByte(unsigned char &b)
+  {
+    int ret = OB_SUCCESS;
+    if (pos_ >= len_) ret = OB_INVALID_DATA;
+    else b = buf_[pos_++];
+    return ret;
+  }
+  int readVarint(uint64_t &v)
+  {
+    int ret = OB_SUCCESS;
+    v = 0;
+    int shift = 0;
+    bool done = false;
+    while (OB_SUCC(ret) && !done && shift < 64) {
+      unsigned char b = 0;
+      if (OB_FAIL(readByte(b))) {
+      } else {
+        v |= static_cast<uint64_t>(b & 0x7f) << shift;
+        shift += 7;
+        done = (0 == (b & 0x80));
+      }
+    }
+    if (OB_SUCC(ret) && !done) ret = OB_INVALID_DATA;
+    return ret;
+  }
+  int readZigzag(int64_t &v)
+  {
+    int ret = OB_SUCCESS;
+    uint64_t u = 0;
+    if (OB_FAIL(readVarint(u))) {
+    } else {
+      v = static_cast<int64_t>((u >> 1) ^ (~(u & 1) + 1));
+    }
+    return ret;
+  }
+  int readBinary(std::string &s)
+  {
+    int ret = OB_SUCCESS;
+    uint64_t n = 0;
+    if (OB_FAIL(readVarint(n))) {
+    } else if (pos_ + static_cast<int64_t>(n) > len_) {
+      ret = OB_INVALID_DATA;
+    } else {
+      s.assign(reinterpret_cast<const char *>(buf_ + pos_), static_cast<size_t>(n));
+      pos_ += static_cast<int64_t>(n);
+    }
+    return ret;
+  }
+  // returns false when the struct is finished
+  int nextField(int16_t &field_id, int &type, bool &stop)
+  {
+    int ret = OB_SUCCESS;
+    stop = false;
+    unsigned char h = 0;
+    if (OB_FAIL(readByte(h))) {
+    } else {
+      type = h & 0x0f;
+      const int delta = h >> 4;
+      if (0 == type) {
+        stop = true;
+      } else if (0 == delta) {
+        int64_t id = 0;
+        if (OB_FAIL(readZigzag(id))) {
+        } else {
+          field_id = static_cast<int16_t>(id);
+        }
+      } else {
+        field_id = static_cast<int16_t>(last_id_ + delta);
+      }
+      last_id_ = field_id;
+    }
+    return ret;
+  }
+  // skips the value of the given type
+  int skipValue(int type)
+  {
+    int ret = OB_SUCCESS;
+    switch (type) {
+      case 1:
+      case 2: break;  // bool value is in the type
+      case 3: { unsigned char b = 0; ret = readByte(b); break; }
+      case 4:
+      case 5:
+      case 6: { int64_t v = 0; ret = readZigzag(v); break; }
+      case 7: { pos_ += 8; if (pos_ > len_) ret = OB_INVALID_DATA; break; }
+      case 8: { std::string s; ret = readBinary(s); break; }
+      case 9:
+      case 10: {
+        int et = 0; int64_t n = 0;
+        if (OB_FAIL(readListHeader(et, n))) {
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+            ret = skipValue(et);
+          }
+        }
+        break;
+      }
+      case 11: {
+        uint64_t n = 0;
+        if (OB_FAIL(readVarint(n))) {
+        } else {
+          unsigned char kv = 0;
+          if (OB_FAIL(readByte(kv))) {
+          } else {
+            const int kt = kv >> 4;
+            const int vt = kv & 0x0f;
+            for (uint64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+              if (OB_FAIL(skipValue(kt))) {
+              } else if (OB_FAIL(skipValue(vt))) {
+              }
+            }
+          }
+        }
+        break;
+      }
+      case 12: {
+        int16_t id = 0; int t = 0; bool stop = false;
+        const int16_t saved = last_id_;
+        last_id_ = 0;
+        while (OB_SUCC(ret) && !stop) {
+          if (OB_FAIL(nextField(id, t, stop))) {
+          } else if (!stop && OB_FAIL(skipValue(t))) {
+          }
+        }
+        last_id_ = saved;
+        break;
+      }
+      default: ret = OB_INVALID_DATA; break;
+    }
+    return ret;
+  }
+  int readListHeader(int &elem_type, int64_t &size)
+  {
+    int ret = OB_SUCCESS;
+    unsigned char h = 0;
+    if (OB_FAIL(readByte(h))) {
+    } else {
+      elem_type = h & 0x0f;
+      size = h >> 4;
+      if (15 == size) {
+        uint64_t n = 0;
+        if (OB_FAIL(readVarint(n))) {
+        } else {
+          size = static_cast<int64_t>(n);
+        }
+      }
+    }
+    return ret;
+  }
+
+private:
+  const unsigned char *buf_;
+  int64_t len_;
+  int64_t pos_;
+  int16_t last_id_;
+};
+
+int snappy_uncompress(const unsigned char *in, int64_t in_len, std::string &out)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  uint64_t expected = 0;
+  int shift = 0;
+  bool done = false;
+  while (pos < in_len && !done) {
+    expected |= static_cast<uint64_t>(in[pos] & 0x7f) << shift;
+    shift += 7;
+    done = (0 == (in[pos] & 0x80));
+    ++pos;
+  }
+  out.clear();
+  out.reserve(static_cast<size_t>(expected));
+  while (OB_SUCC(ret) && pos < in_len) {
+    const unsigned char tag = in[pos++];
+    const int kind = tag & 0x03;
+    if (0 == kind) {
+      int64_t len = (tag >> 2) + 1;
+      if (len > 60) {
+        const int extra = static_cast<int>(len - 60);
+        len = 0;
+        for (int i = 0; i < extra && pos < in_len; ++i) {
+          len |= static_cast<int64_t>(in[pos++]) << (8 * i);
+        }
+        len += 1;
+      }
+      if (pos + len > in_len) {
+        ret = OB_INVALID_DATA;
+      } else {
+        out.append(reinterpret_cast<const char *>(in + pos), static_cast<size_t>(len));
+        pos += len;
+      }
+    } else {
+      int64_t len = 0;
+      int64_t offset = 0;
+      if (1 == kind) {
+        len = ((tag >> 2) & 0x07) + 4;
+        if (pos >= in_len) { ret = OB_INVALID_DATA; break; }
+        offset = ((static_cast<int64_t>(tag) >> 5) << 8) | in[pos++];
+      } else if (2 == kind) {
+        len = (tag >> 2) + 1;
+        if (pos + 2 > in_len) { ret = OB_INVALID_DATA; break; }
+        offset = static_cast<int64_t>(in[pos]) | (static_cast<int64_t>(in[pos + 1]) << 8);
+        pos += 2;
+      } else {
+        len = (tag >> 2) + 1;
+        if (pos + 4 > in_len) { ret = OB_INVALID_DATA; break; }
+        offset = static_cast<int64_t>(in[pos]) | (static_cast<int64_t>(in[pos + 1]) << 8) |
+                 (static_cast<int64_t>(in[pos + 2]) << 16) | (static_cast<int64_t>(in[pos + 3]) << 24);
+        pos += 4;
+      }
+      if (offset <= 0 || static_cast<int64_t>(out.size()) < offset) {
+        ret = OB_INVALID_DATA;
+      } else {
+        const size_t start = out.size() - static_cast<size_t>(offset);
+        for (int64_t i = 0; i < len; ++i) {
+          out.push_back(out[start + static_cast<size_t>(i)]);
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && out.size() != expected) ret = OB_INVALID_DATA;
+  return ret;
+}
+
+// RLE / bit-packed hybrid, used for definition levels
+int decode_rle_bp(const unsigned char *buf, int64_t len, int width, int64_t count,
+                  std::vector<int64_t> &out)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  out.clear();
+  const int byte_width = (width + 7) / 8;
+  while (OB_SUCC(ret) && pos < len && static_cast<int64_t>(out.size()) < count) {
+    uint64_t header = 0;
+    int shift = 0;
+    bool done = false;
+    while (pos < len && !done) {
+      header |= static_cast<uint64_t>(buf[pos] & 0x7f) << shift;
+      shift += 7;
+      done = (0 == (buf[pos] & 0x80));
+      ++pos;
+    }
+    if (header & 1) {
+      // bit-packed run: (header >> 1) groups of 8 values, each value `width` bits
+      const int64_t groups = static_cast<int64_t>(header >> 1);
+      const int64_t total = groups * 8;
+      const int64_t run_bytes = groups * width;
+      if (pos + run_bytes > len) { ret = OB_INVALID_DATA; break; }
+      const uint64_t mask = (width >= 64) ? ~static_cast<uint64_t>(0) : ((static_cast<uint64_t>(1) << width) - 1);
+      for (int64_t i = 0; i < total && static_cast<int64_t>(out.size()) < count; ++i) {
+        const int64_t bit = i * width;
+        const int64_t byte = pos + (bit >> 3);
+        uint64_t chunk = 0;
+        for (int b = 0; b < 8 && byte + b < len; ++b) {
+          chunk |= static_cast<uint64_t>(buf[byte + b]) << (8 * b);
+        }
+        out.push_back(static_cast<int64_t>((chunk >> (bit & 7)) & mask));
+      }
+      pos += run_bytes;
+    } else {
+      const int64_t run = static_cast<int64_t>(header >> 1);
+      if (pos + byte_width > len) { ret = OB_INVALID_DATA; break; }
+      int64_t v = 0;
+      for (int b = 0; b < byte_width; ++b) {
+        v |= static_cast<int64_t>(buf[pos + b]) << (8 * b);
+      }
+      pos += byte_width;
+      for (int64_t i = 0; i < run && static_cast<int64_t>(out.size()) < count; ++i) {
+        out.push_back(v);
+      }
+    }
+  }
+  return ret;
+}
+
+struct ParquetColumn
+{
+  std::string name;
+  int type;          // parquet physical type
+  bool optional;
+  ParquetColumn() : type(-1), optional(false) {}
+};
+
+struct ParquetChunk
+{
+  int64_t data_page_offset;
+  int64_t num_values;
+  int codec;
+  int type;
+  ParquetChunk() : data_page_offset(-1), num_values(0), codec(0), type(-1) {}
+};
+
+int parse_schema_element(CompactReader &rd, ParquetColumn &col, int32_t &num_children, bool &has_type)
+{
+  int ret = OB_SUCCESS;
+  int16_t id = 0; int type = 0; bool stop = false;
+  has_type = false;
+  num_children = 0;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(rd.nextField(id, type, stop))) {
+    } else if (stop) {
+      break;
+    } else if (1 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { col.type = static_cast<int>(v); has_type = true; }
+    } else if (3 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { col.optional = (1 == v); }
+    } else if (4 == id && 8 == type) {
+      if (OB_FAIL(rd.readBinary(col.name))) {}
+    } else if (5 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { num_children = static_cast<int32_t>(v); }
+    } else if (OB_FAIL(rd.skipValue(type))) {
+    }
+  }
+  (void)0;
+  return ret;
+}
+
+int parse_column_meta(CompactReader &rd, ParquetChunk &chunk)
+{
+  int ret = OB_SUCCESS;
+  int16_t id = 0; int type = 0; bool stop = false;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(rd.nextField(id, type, stop))) {
+    } else if (stop) {
+      break;
+    } else if (1 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { chunk.type = static_cast<int>(v); }
+    } else if (4 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { chunk.codec = static_cast<int>(v); }
+    } else if (5 == id && 6 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { chunk.num_values = v; }
+    } else if (9 == id && 6 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { chunk.data_page_offset = v; }
+    } else if (OB_FAIL(rd.skipValue(type))) {
+    }
+  }
+  return ret;
+}
+
+int parse_column_chunk(CompactReader &rd, ParquetChunk &chunk)
+{
+  int ret = OB_SUCCESS;
+  int16_t id = 0; int type = 0; bool stop = false;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(rd.nextField(id, type, stop))) {
+    } else if (stop) {
+      break;
+    } else if (3 == id && 12 == type) {
+      const int16_t outer = rd.pushStruct();
+      const int meta_ret = parse_column_meta(rd, chunk);
+      rd.popStruct(outer);
+      if (OB_FAIL(meta_ret)) {}
+    } else if (OB_FAIL(rd.skipValue(type))) {
+    }
+  }
+  return ret;
+}
+
+struct PageInfo
+{
+  int type;
+  int64_t uncompressed;
+  int64_t compressed;
+  int64_t num_values;
+  int encoding;
+  int def_encoding;
+  int64_t def_len;        // data page v2
+  int64_t rep_len;        // data page v2
+  bool v2_compressed;
+  PageInfo()
+      : type(-1), uncompressed(0), compressed(0), num_values(0), encoding(0), def_encoding(3),
+        def_len(0), rep_len(0), v2_compressed(true) {}
+};
+
+int parse_data_page_header(CompactReader &rd, PageInfo &page)
+{
+  int ret = OB_SUCCESS;
+  int16_t id = 0; int type = 0; bool stop = false;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(rd.nextField(id, type, stop))) {
+    } else if (stop) {
+      break;
+    } else if (1 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.num_values = v; }
+    } else if (2 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.encoding = static_cast<int>(v); }
+    } else if (3 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.def_encoding = static_cast<int>(v); }
+    } else if (OB_FAIL(rd.skipValue(type))) {
+    }
+  }
+  return ret;
+}
+
+int parse_v2_page_header(CompactReader &rd, PageInfo &page)
+{
+  int ret = OB_SUCCESS;
+  int16_t id = 0; int type = 0; bool stop = false;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(rd.nextField(id, type, stop))) {
+    } else if (stop) {
+      break;
+    } else if (1 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.num_values = v; }
+    } else if (4 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.encoding = static_cast<int>(v); }
+    } else if (5 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.def_len = v; }
+    } else if (6 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.rep_len = v; }
+    } else if (7 == id && (1 == type || 2 == type)) {
+      page.v2_compressed = (1 == type);
+    } else if (OB_FAIL(rd.skipValue(type))) {
+    }
+  }
+  return ret;
+}
+
+int parse_page_header(CompactReader &rd, PageInfo &page)
+{
+  int ret = OB_SUCCESS;
+  int16_t id = 0; int type = 0; bool stop = false;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(rd.nextField(id, type, stop))) {
+    } else if (stop) {
+      break;
+    } else if (1 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.type = static_cast<int>(v); }
+    } else if (2 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.uncompressed = v; }
+    } else if (3 == id && 5 == type) {
+      int64_t v = 0;
+      if (OB_FAIL(rd.readZigzag(v))) {} else { page.compressed = v; }
+    } else if (5 == id && 12 == type) {
+      const int16_t outer = rd.pushStruct();
+      const int dph_ret = parse_data_page_header(rd, page);
+      rd.popStruct(outer);
+      if (OB_FAIL(dph_ret)) {}
+    } else if (8 == id && 12 == type) {
+      const int16_t outer = rd.pushStruct();
+      const int v2_ret = parse_v2_page_header(rd, page);
+      rd.popStruct(outer);
+      if (OB_FAIL(v2_ret)) {}
+    } else if (OB_FAIL(rd.skipValue(type))) {
+    }
+  }
+  return ret;
+}
+
+std::string parquet_value_text(int ptype, const unsigned char *p, int64_t &used)
+{
+  std::string out;
+  used = 0;
+  char buf[64];
+  if (1 == ptype) {  // INT32
+    const int32_t v = static_cast<int32_t>(p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24));
+    snprintf(buf, sizeof(buf), "%d", v);
+    out = buf;
+    used = 4;
+  } else if (2 == ptype) {  // INT64
+    uint64_t u = 0;
+    for (int i = 0; i < 8; ++i) u |= static_cast<uint64_t>(p[i]) << (8 * i);
+    snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(static_cast<int64_t>(u)));
+    out = buf;
+    used = 8;
+  } else if (4 == ptype) {  // FLOAT
+    uint32_t u = 0;
+    for (int i = 0; i < 4; ++i) u |= static_cast<uint32_t>(p[i]) << (8 * i);
+    float f = 0;
+    memcpy(&f, &u, sizeof(f));
+    snprintf(buf, sizeof(buf), "%.9g", static_cast<double>(f));
+    out = buf;
+    used = 4;
+  } else if (5 == ptype) {  // DOUBLE
+    uint64_t u = 0;
+    for (int i = 0; i < 8; ++i) u |= static_cast<uint64_t>(p[i]) << (8 * i);
+    double d = 0;
+    memcpy(&d, &u, sizeof(d));
+    snprintf(buf, sizeof(buf), "%.17g", d);
+    out = buf;
+    used = 8;
+  } else if (6 == ptype) {  // BYTE_ARRAY
+    const uint32_t n = static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+                       (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+    out.assign(reinterpret_cast<const char *>(p + 4), n);
+    used = 4 + n;
+  } else if (0 == ptype) {  // BOOLEAN, bit packed per byte by the caller
+    out = (*p & 1) ? "true" : "false";
+    used = 1;
+  }
+  return out;
+}
+
+FileType parquet_to_file_type(int ptype)
+{
+  switch (ptype) {
+    case 0: return FT_BOOL;
+    case 1: return FT_BIGINT;
+    case 2: return FT_BIGINT;
+    case 4: return FT_DOUBLE;
+    case 5: return FT_DOUBLE;
+    default: return FT_VARCHAR;
+  }
+}
+
+int load_parquet(const std::string &path, std::vector<Column> &cols, Rows &data)
+{
+  int ret = OB_SUCCESS;
+  std::string content;
+  if (OB_FAIL(read_whole_file(path, content))) {
+  } else if (content.size() < 12) {
+    ret = OB_INVALID_DATA;
+  } else if (0 != memcmp(content.data(), "PAR1", 4) || 0 != memcmp(content.data() + content.size() - 4, "PAR1", 4)) {
+    ret = OB_INVALID_DATA;
+  } else {
+    const unsigned char *base = reinterpret_cast<const unsigned char *>(content.data());
+    const int64_t total = static_cast<int64_t>(content.size());
+    const int64_t footer_len = static_cast<int64_t>(
+        static_cast<uint32_t>(base[total - 8]) | (static_cast<uint32_t>(base[total - 7]) << 8) |
+        (static_cast<uint32_t>(base[total - 6]) << 16) | (static_cast<uint32_t>(base[total - 5]) << 24));
+    const int64_t footer_start = total - 8 - footer_len;
+    if (footer_start <= 0) {
+      ret = OB_INVALID_DATA;
+    } else {
+      CompactReader rd(base + footer_start, footer_len);
+      int64_t num_rows = 0;
+      std::vector<ParquetColumn> schema;
+      std::vector<std::vector<ParquetChunk>> groups;
+      std::vector<int64_t> group_rows;
+      int16_t id = 0; int type = 0; bool stop = false;
+      while (OB_SUCC(ret)) {
+        if (OB_FAIL(rd.nextField(id, type, stop))) {
+        } else if (stop) {
+          break;
+        } else if (2 == id && 9 == type) {
+          int et = 0; int64_t n = 0;
+          if (OB_FAIL(rd.readListHeader(et, n))) {
+          } else {
+            const int16_t saved = 0;
+            (void)saved;
+            for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+              ParquetColumn col;
+              int32_t nchild = 0;
+              bool has_type = false;
+              const int16_t outer_id = rd.pushStruct();
+              const int parse_ret = parse_schema_element(rd, col, nchild, has_type);
+              rd.popStruct(outer_id);
+              if (OB_FAIL(parse_ret)) {
+              } else if (has_type) {
+                schema.push_back(col);  // leaf column
+              }
+            }
+          }
+        } else if (3 == id && 6 == type) {
+          int64_t v = 0;
+          if (OB_FAIL(rd.readZigzag(v))) {} else { num_rows = v; }
+        } else if (4 == id && 9 == type) {
+          int et = 0; int64_t n = 0;
+          if (OB_FAIL(rd.readListHeader(et, n))) {
+          } else {
+            for (int64_t g = 0; OB_SUCC(ret) && g < n; ++g) {
+              // RowGroup
+              int16_t rid = 0; int rtype = 0; bool rstop = false;
+              std::vector<ParquetChunk> chunks;
+              int64_t rows = 0;
+              const int16_t rg_outer = rd.pushStruct();
+              while (OB_SUCC(ret)) {
+                if (OB_FAIL(rd.nextField(rid, rtype, rstop))) {
+                } else if (rstop) {
+                  break;
+                } else if (1 == rid && 9 == rtype) {
+                  int cet = 0; int64_t cn = 0;
+                  if (OB_FAIL(rd.readListHeader(cet, cn))) {
+                  } else {
+                    for (int64_t c = 0; OB_SUCC(ret) && c < cn; ++c) {
+                      ParquetChunk chunk;
+                      const int16_t cc_outer = rd.pushStruct();
+                      const int cc_ret = parse_column_chunk(rd, chunk);
+                      rd.popStruct(cc_outer);
+                      if (OB_FAIL(cc_ret)) {
+                      } else {
+                        chunks.push_back(chunk);
+                      }
+                    }
+                  }
+                } else if (3 == rid && 6 == rtype) {
+                  int64_t v = 0;
+                  if (OB_FAIL(rd.readZigzag(v))) {} else { rows = v; }
+                } else if (OB_FAIL(rd.skipValue(rtype))) {
+                }
+              }
+              rd.popStruct(rg_outer);
+              groups.push_back(chunks);
+              group_rows.push_back(rows);
+            }
+          }
+        } else if (OB_FAIL(rd.skipValue(type))) {
+        }
+      }
+
+               "groups", (int64_t)groups.size(), "g0rows", group_rows.empty() ? -1 : group_rows[0],
+               "g0cols", groups.empty() ? -1 : (int64_t)groups[0].size());
+      if (OB_FAIL(ret)) {
+      } else if (schema.empty() || groups.empty()) {
+        ret = OB_INVALID_DATA;
+      } else {
+        for (size_t c = 0; c < schema.size(); ++c) {
+          Column col(schema[c].name);
+          col.type = parquet_to_file_type(schema[c].type);
+          col.nullable = schema[c].optional;
+          cols.push_back(col);
+        }
+        // decode every row group, column by column
+        for (size_t g = 0; OB_SUCC(ret) && g < groups.size(); ++g) {
+          const int64_t rows = group_rows[g];
+          std::vector<std::vector<std::string>> col_values(cols.size());
+          std::vector<std::vector<bool>> col_null(cols.size());
+          for (size_t c = 0; OB_SUCC(ret) && c < cols.size() && c < groups[g].size(); ++c) {
+            const ParquetChunk &chunk = groups[g][c];
+            int64_t offset = chunk.data_page_offset;
+            int64_t produced = 0;
+            while (OB_SUCC(ret) && produced < rows && offset < total - 8) {
+              CompactReader ph(base + offset, total - 8 - offset);
+              PageInfo page;
+              if (OB_FAIL(parse_page_header(ph, page))) {
+              } else {
+                const int64_t page_start = offset + ph.pos();
+                         "nv", page.num_values, "enc", page.encoding, "comp", page.compressed,
+                         "replen", page.rep_len, "deflen", page.def_len, "v2c", page.v2_compressed);
+                if (0 != page.type && 3 != page.type) {  // only data pages are decoded
+                  offset = page_start + page.compressed;
+                } else if (page_start + page.compressed > total) {
+                  ret = OB_INVALID_DATA;
+                } else {
+                  const unsigned char *page_data = base + page_start;
+                  std::string plain;
+                  std::vector<int64_t> defs;
+                  const unsigned char *values_ptr = nullptr;
+                  int64_t values_len = 0;
+                  if (3 == page.type) {
+                    // v2: levels sit uncompressed in front of the values
+                    if (page.rep_len + page.def_len > page.compressed) {
+                      ret = OB_INVALID_DATA;
+                    } else if (schema[c].optional && page.def_len > 0) {
+                      if (OB_FAIL(decode_rle_bp(page_data + page.rep_len, page.def_len, 1,
+                                                page.num_values, defs))) {
+                      }
+                    }
+                    if (OB_SUCC(ret)) {
+                      values_ptr = page_data + page.rep_len + page.def_len;
+                      values_len = page.compressed - page.rep_len - page.def_len;
+                      if (page.v2_compressed && 1 == chunk.codec) {
+                        if (OB_FAIL(snappy_uncompress(values_ptr, values_len, plain))) {
+                        } else {
+                          values_ptr = reinterpret_cast<const unsigned char *>(plain.data());
+                          values_len = static_cast<int64_t>(plain.size());
+                        }
+                      } else if (page.v2_compressed && 0 != chunk.codec) {
+                        ret = OB_NOT_SUPPORTED;
+                      }
+                    }
+                  } else {
+                    // v1: the whole page is compressed
+                    const unsigned char *payload = page_data;
+                    int64_t payload_len = page.compressed;
+                    if (0 != chunk.codec) {
+                      if (1 == chunk.codec) {
+                        if (OB_FAIL(snappy_uncompress(page_data, page.compressed, plain))) {
+                        } else {
+                          payload = reinterpret_cast<const unsigned char *>(plain.data());
+                          payload_len = static_cast<int64_t>(plain.size());
+                        }
+                      } else {
+                        ret = OB_NOT_SUPPORTED;
+                      }
+                    }
+                    if (OB_SUCC(ret)) {
+                      int64_t pos = 0;
+                      if (schema[c].optional) {
+                        if (pos + 4 > payload_len) {
+                          ret = OB_INVALID_DATA;
+                        } else {
+                          const int64_t dl_len = static_cast<int64_t>(
+                              static_cast<uint32_t>(payload[pos]) | (static_cast<uint32_t>(payload[pos + 1]) << 8) |
+                              (static_cast<uint32_t>(payload[pos + 2]) << 16) |
+                              (static_cast<uint32_t>(payload[pos + 3]) << 24));
+                          pos += 4;
+                          if (pos + dl_len > payload_len) {
+                            ret = OB_INVALID_DATA;
+                          } else if (OB_FAIL(decode_rle_bp(payload + pos, dl_len, 1,
+                                                           page.num_values, defs))) {
+                          } else {
+                            pos += dl_len;
+                          }
+                        }
+                      }
+                      if (OB_SUCC(ret)) {
+                        values_ptr = payload + pos;
+                        values_len = payload_len - pos;
+                      }
+                    }
+                  }
+                  if (OB_SUCC(ret)) {
+                    int64_t pos = 0;
+                    for (int64_t i = 0; i < page.num_values && OB_SUCC(ret); ++i) {
+                      const bool present = schema[c].optional
+                                               ? (i < static_cast<int64_t>(defs.size()) && defs[i] > 0)
+                                               : true;
+                      if (!present) {
+                        col_null[c].push_back(true);
+                        col_values[c].push_back(std::string());
+                      } else if (0 != page.encoding) {
+                        ret = OB_NOT_SUPPORTED;  // dictionary / other encodings
+                      } else if (pos >= values_len) {
+                        ret = OB_INVALID_DATA;
+                      } else {
+                        int64_t used = 0;
+                        std::string v = parquet_value_text(chunk.type, values_ptr + pos, used);
+                        if (0 == used || pos + used > values_len) {
+                          ret = OB_INVALID_DATA;
+                        } else {
+                          pos += used;
+                          col_values[c].push_back(v);
+                          col_null[c].push_back(false);
+                        }
+                      }
+                    }
+                             "vals", (int64_t)col_values[c].size(), "vlen", values_len);
+                    if (OB_SUCC(ret)) {
+                      produced += page.num_values;
+                      offset = page_start + page.compressed;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          if (OB_SUCC(ret)) {
+            for (int64_t r = 0; r < rows; ++r) {
+              std::vector<std::string> row;
+              for (size_t c = 0; c < cols.size(); ++c) {
+                const bool is_null = (c < col_null.size() && r < static_cast<int64_t>(col_null[c].size()))
+                                         ? col_null[c][static_cast<size_t>(r)] : true;
+                if (is_null) {
+                  row.push_back(std::string());
+                } else {
+                  row.push_back(col_values[c][static_cast<size_t>(r)]);
+                }
+              }
+              data.push_back(row);
+            }
+          }
+        }
+        (void)num_rows;
+      }
+    }
+  }
+  return ret;
+}
+
 // ---------------------------------------------------------------- glob
 
 int load_glob(const std::string &pattern, std::vector<Column> &cols, Rows &data)
@@ -612,7 +1403,10 @@ std::string sql_quote_json(const std::string &s)
 
 std::string build_json_table(const std::vector<Column> &cols, const std::string &json)
 {
-  std::string sql = "JSON_TABLE(" + sql_quote_json(json) + ", '$[*]' COLUMNS(";
+  // file SQL is off unless the session turned it on, so the table is empty by
+  // default instead of exposing local files
+  std::string sql = "JSON_TABLE(IF(IFNULL(@__enable_file_sql, 0) = 1, " + sql_quote_json(json) +
+                    ", '[]'), '$[*]' COLUMNS(";
   for (size_t c = 0; c < cols.size(); ++c) {
     if (c > 0) sql += ", ";
     sql += "`" + cols[c].name + "` " + type_name(cols[c].type);
@@ -776,6 +1570,34 @@ int find_call_end(const std::string &sql, size_t open_pos, size_t &close_pos)
 
 }  // namespace
 
+// `set session enable_file_sql = ON` and friends are answered through a user
+// variable, so the flag needs no new system variable in the engine.
+int rewrite_session_flag(const std::string &sql, std::string &out, bool &done)
+{
+  int ret = OB_SUCCESS;
+  done = false;
+  const std::string lowered = lower_ascii(sql);
+  const std::string trimmed = trim(lowered);
+  const std::string target = "enable_file_sql";
+  const size_t pos = trimmed.find(target);
+  if (std::string::npos == pos) {
+    return ret;
+  }
+  const bool is_set = (0 == trimmed.compare(0, 3, "set"));
+  if (is_set && std::string::npos != trimmed.find('=')) {
+    std::string value = trim(trimmed.substr(trimmed.find('=') + 1));
+    while (!value.empty() && (';' == value[value.size() - 1] || ' ' == value[value.size() - 1])) {
+      value.erase(value.size() - 1);
+    }
+    std::string num = value;
+    if ("on" == value || "true" == value) num = "1";
+    else if ("off" == value || "false" == value) num = "0";
+    out = "SET @__enable_file_sql = " + num;
+    done = true;
+  }
+  return ret;
+}
+
 int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
                                      const common::ObString &stmt,
                                      common::ObString &out,
@@ -785,8 +1607,57 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
   rewritten = false;
   if (stmt.empty()) {
   } else {
-    const std::string sql(stmt.ptr(), stmt.length());
+    std::string sql(stmt.ptr(), stmt.length());
+    {
+      std::string flag_sql;
+      bool flag_done = false;
+      if (OB_SUCC(rewrite_session_flag(sql, flag_sql, flag_done)) && flag_done) {
+        char *fbuf = static_cast<char *>(alloc.alloc(flag_sql.size()));
+        if (OB_ISNULL(fbuf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(fbuf, flag_sql.data(), flag_sql.size());
+          out.assign_ptr(fbuf, static_cast<int32_t>(flag_sql.size()));
+          rewritten = true;
+        }
+        return ret;
+      }
+    }
+    // reading the flag back reports the default when it was never set
+    bool flag_read_rewritten = false;
+    {
+      const std::string read_marker = "enable_file_sql";
+      size_t at = sql.find(read_marker);
+      while (std::string::npos != at) {
+        const size_t dollar = sql.rfind("@@", at);
+        if (std::string::npos != dollar && dollar + 2 <= at &&
+            sql.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.",
+                                  dollar + 2) >= at) {
+          sql.replace(dollar, at + read_marker.size() - dollar,
+                      "IFNULL(@__enable_file_sql, 0)");
+          flag_read_rewritten = true;
+          at = sql.find(read_marker, dollar + 26);
+        } else {
+          at = sql.find(read_marker, at + read_marker.size());
+        }
+      }
+    }
     const std::string lowered = lower_ascii(sql);
+    if (flag_read_rewritten && std::string::npos == lowered.find("read_csv(") &&
+        std::string::npos == lowered.find("read_json(") &&
+        std::string::npos == lowered.find("read_ndjson(") &&
+        std::string::npos == lowered.find("read_parquet(") &&
+        std::string::npos == lowered.find("glob(")) {
+      char *rbuf = static_cast<char *>(alloc.alloc(sql.size()));
+      if (OB_ISNULL(rbuf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        MEMCPY(rbuf, sql.data(), sql.size());
+        out.assign_ptr(rbuf, static_cast<int32_t>(sql.size()));
+        rewritten = true;
+      }
+      return ret;
+    }
     // only statements that actually reference a file table function are touched
     size_t probe = lowered.find("read_csv(");
     if (std::string::npos == probe) probe = lowered.find("read_json(");
@@ -851,9 +1722,10 @@ int ObFileSQLRewriter::maybe_rewrite(ObIAllocator &alloc,
           const bool is_csv = (0 == strcmp(kFuncs[f], "read_csv"));
           const bool is_parquet = (0 == strcmp(kFuncs[f], "read_parquet"));
           if (OB_FAIL(parse_call_args(args, ca, is_csv))) { ok = false; break; }
-          if (is_parquet) { ok = false; break; }  // not implemented yet
           int load_ret = OB_SUCCESS;
-          if (is_glob) {
+          if (is_parquet) {
+            load_ret = load_parquet(ca.path, cols, data);
+          } else if (is_glob) {
             load_ret = load_glob(ca.path, cols, data);
           } else if (is_csv) {
             if (ca.has_format && "csv" != ca.format) { ok = false; break; }  // invalid format
