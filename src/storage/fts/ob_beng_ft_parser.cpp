@@ -35,6 +35,7 @@ int ObBEngFTParser::get_next_token(
   int ret = OB_SUCCESS;
   ObDatum token;
   int64_t token_freq = 0;
+  char *buf = nullptr;
   word = nullptr;
   word_len = 0;
   char_len = 0;
@@ -48,11 +49,11 @@ int ObBEngFTParser::get_next_token(
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    // The English analyzer writes normalized tokens into the caller-owned
-    // allocator, whose lifetime covers the word map, so avoid a second
-    // allocation and memcpy here.
-    word = token.ptr_;
+    MEMCPY(buf, token.ptr_, token.len_);
+    word = buf;
     word_len = token.len_;
     char_len = token.len_;
     word_freq = token_freq;
