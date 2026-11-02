@@ -130,13 +130,8 @@ public:
   virtual void reset() override;
   virtual void reuse() override;
   virtual int get_next(ObDatum &next_token, int64_t &token_freq) override;
-
-  // Use the caller's lifetime-bound allocator for normalized tokens when the
-  // analyzer result is consumed outside the parser object.
-  void set_output_allocator(ObIAllocator &allocator) { output_allocator_ = &allocator; }
 private:
   ObArenaAllocator norm_allocator_;
-  ObIAllocator *output_allocator_;
 };
 
 // group (deduplicate) and count
