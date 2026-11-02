@@ -401,9 +401,6 @@ int StandbyModule::Impl::activate_current_role_()
   if (standby_profile_
       && OB_FAIL(ObStandbyTimestampProvider::enable())) {
     LOG_WARN("failed to activate standby timestamp provider", KR(ret));
-  } else if (standby_profile_
-             && OB_FAIL(ObStandbyTimestampProvider::prepare_for_startup())) {
-    LOG_WARN("failed to prepare standby timestamp for startup", KR(ret));
   } else if (!standby_profile_
              && OB_FAIL(ObStandbyTimestampProvider::disable())) {
     LOG_WARN("failed to activate primary timestamp provider", KR(ret));

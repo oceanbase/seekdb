@@ -1451,17 +1451,25 @@ int ObServer::wait_for_server_runtime()
 {
   int ret = OB_SUCCESS;
   bool synced = false;
+  bool replay_ready = false;
   bool timestamp_ready = false;
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
-  while (OB_SUCC(ret) && !stop_ && (!synced || !timestamp_ready)) {
+  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
     if (OB_FAIL(startup_result_.error())) {
       LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
       break;
     }
     synced = server_runtime_controller_.has_synced();
-    if (synced && !timestamp_ready) {
+    if (synced && !replay_ready) {
+      if (OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
+        LOG_WARN("standby startup replay did not become ready", KR(ret));
+      } else if (!stop_) {
+        replay_ready = true;
+      }
+    }
+    if (OB_SUCC(ret) && !stop_ && replay_ready && !timestamp_ready) {
       SCN gts;
       if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
         if (OB_EAGAIN == ret) {
@@ -1472,16 +1480,12 @@ int ObServer::wait_for_server_runtime()
         timestamp_ready = true;
       }
     }
-    if (!synced || !timestamp_ready) {
+    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
       ob_usleep(10 * 1000);
     }
   }
-  if (OB_SUCC(ret) && !stop_
-      && OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
-    LOG_WARN("standby startup replay did not become ready", KR(ret));
-  }
-  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(timestamp_ready));
-  if (OB_SUCC(ret) && !stop_ && synced && timestamp_ready) {
+  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready), K(timestamp_ready));
+  if (OB_SUCC(ret) && !stop_ && synced && replay_ready && timestamp_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");

@@ -500,7 +500,8 @@ int ObSSTableCopyFinishTask::prepare_data_store_desc_(
       && FALSE_IT(storage_schema = ObMdsSchemaHelper::get_instance().get_storage_schema())) {
   } else if (OB_FAIL(get_merge_type_(sstable_param, merge_type))) {
     LOG_WARN("failed to get merge type", K(ret), KPC(sstable_param));
-  } else if (OB_FAIL(ls_->get_tablet(tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ls_->get_tablet(tablet_id, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
 
