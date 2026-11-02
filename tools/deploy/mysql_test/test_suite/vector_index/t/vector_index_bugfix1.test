@@ -663,3 +663,80 @@ order by p.cardinality, p.plan_id;
 drop table t_issue1439_or_selectivity;
 
 alter system set vector_memory_limit = 0;
+
+--disable_warnings
+drop table if exists t_inlist_distinct_rewrite;
+--enable_warnings
+--disable_query_log
+create table t_inlist_distinct_rewrite (
+  id int primary key,
+  category int,
+  embedding vector(3),
+  vector index idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=64, sync_mode=immediate)
+) organization heap;
+--let $row = 1
+while ($row <= 32)
+{
+  eval insert into t_inlist_distinct_rewrite values
+    ($row, case when $row <= 16 then 4 else mod($row - 17, 3) + 1 end, '[$row,0,0]');
+  --inc $row
+}
+--enable_query_log
+
+--echo # duplicate integers must retain a filter inside the vector scan
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+--echo # NULL remains part of the original IN predicate
+select /*+ opt_param('inlist_rewrite_threshold' 5) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,NULL,1,2,3,NULL)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+--echo # NOT IN preserves SQL NULL semantics
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category not in (4,NULL,4,NULL,4,NULL);
+--echo # a single distinct value remains correct for IN and NOT IN
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (4,4,4,4,4,4);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category not in (4,4,4,4,4,4);
+--echo # an all-NULL list must not become a regular equality
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (NULL,NULL,NULL,NULL,NULL,NULL);
+--echo # genuinely distinct lists still use the existing rewrite strategy
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,4,5,6,7,8,9);
+--echo # reuse every parameter position when the same SQL shape changes values
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,4,5,6,7,8,9);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3);
+--echo # a VALUES plan cached first must not capture a later duplicate-heavy list
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,4,5,6,7,8,9)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+--echo # mixed types and row-valued lists preserve their existing paths
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,'2',3,NULL,1,'2',3,NULL);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where (category,id) in ((1,17),(2,18),(3,19),(1,17),(2,18),(3,19));
+--echo # prepared statements with initially unknown binds remain valid
+--disable_query_log
+prepare p from "select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched from t_inlist_distinct_rewrite where category in (?,?,?,?,?,?)";
+set @a=1, @b=2, @c=3;
+--enable_query_log
+execute p using @a,@b,@c,@a,@b,@c;
+--disable_query_log
+set @a=4;
+--enable_query_log
+execute p using @a,@b,@c,@a,@b,@c;
+--disable_query_log
+deallocate prepare p;
+drop table t_inlist_distinct_rewrite;
+--enable_query_log

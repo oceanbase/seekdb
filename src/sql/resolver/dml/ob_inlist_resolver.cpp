@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -263,6 +264,81 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Count distinct scalar integer values only to choose a rewrite strategy.
+// Keep bind positions unchanged; expression simplification separately guards
+// the equalities it relies on when a cached plan is reused.
+static int check_small_integer_inlist(const ParseNode &in_list,
+                                     const ParamStore *param_store,
+                                     const int64_t threshold,
+                                     ObPCConstParamInfo &rewrite_constraint,
+                                     bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  bool supported = true;
+  bool has_null = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> values;
+  is_small = false;
+  if (OB_FAIL(values.create(MIN(threshold, 1024L),
+                            ObMemAttr("InlistDistinct")))) {
+    LOG_WARN("failed to create distinct integer set", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && supported
+       && values.size() + (has_null ? 1 : 0) < threshold
+       && i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    bool is_null = false;
+    bool is_new = false;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_NULL == node->type_) {
+      is_null = true;
+    } else if (T_QUESTIONMARK == node->type_ && NULL != param_store
+               && node->value_ >= 0 && node->value_ < param_store->count()) {
+      const ObObjParam &param = param_store->at(node->value_);
+      if (param.is_null()) {
+        is_null = true;
+      } else if (ObIntType == param.get_type()) {
+        value = param.get_int();
+      } else {
+        supported = false;
+      }
+    } else {
+      supported = false;
+    }
+    if (OB_FAIL(ret) || !supported) {
+    } else if (is_null) {
+      is_new = !has_null;
+      has_null = true;
+    } else if (OB_FAIL(values.set_refactored(value))) {
+      if (OB_HASH_EXIST == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("failed to count distinct integers", K(ret));
+      }
+    } else {
+      is_new = true;
+    }
+    if (OB_SUCC(ret) && is_new && T_QUESTIONMARK == node->type_) {
+      if (OB_FAIL(rewrite_constraint.const_idx_.push_back(node->value_))) {
+      } else if (OB_FAIL(rewrite_constraint.const_params_.push_back(param_store->at(node->value_)))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    is_small = supported && values.size() + (has_null ? 1 : 0) < threshold;
+  }
+  if (values.created()) {
+    const int tmp_ret = values.destroy();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to destroy distinct integer set", K(tmp_ret));
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +426,29 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && threshold > 1
+          && !(helper.is_prepare_stmt_ && is_question_mark)
+          && (ObIntType == rewrite_info.param_types_.at(0).obj_type_
+              || ObNullType == rewrite_info.param_types_.at(0).obj_type_)) {
+        bool is_small = false;
+        ObPCConstParamInfo rewrite_constraint;
+        if (OB_FAIL(check_small_integer_inlist(in_list, param_store, threshold,
+                                               rewrite_constraint, is_small))) {
+          LOG_WARN("failed to check distinct integer count", K(ret));
+        } else if (is_small) {
+          is_enable = false;
+        } else if (!rewrite_constraint.const_idx_.empty() && NULL != stmt) {
+          // Preserve at least threshold distinct values on a cached VALUES plan.
+          // Otherwise a later duplicate-heavy bind set could reuse that plan
+          // without going through this strategy check again.
+          if (OB_ISNULL(stmt->get_query_ctx())) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(stmt->get_query_ctx()->all_plan_const_param_constraints_.push_back(
+                              rewrite_constraint))) {
+            LOG_WARN("failed to guard integer rewrite strategy", K(ret));
+          }
+        }
+      }
     }
   }
   return ret;

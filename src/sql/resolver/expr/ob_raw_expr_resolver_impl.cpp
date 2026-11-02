@@ -20,6 +20,8 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "sql/resolver/expr/ob_shared_expr_resolver.h"
+#include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase
 {
@@ -3082,6 +3084,73 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
   return ret;
 }
 
+// Only simplify scalar integer lists with known values. In particular, keep
+// NULL expressions and leave unknown prepared-statement parameters untouched.
+static int deduplicate_integer_inlist(ObOpRawExpr &row, ObQueryCtx &query_ctx)
+{
+  int ret = OB_SUCCESS;
+  bool supported = true;
+  for (int64_t i = 0; supported && i < row.get_param_count(); ++i) {
+    const ObRawExpr *expr = row.get_param_expr(i);
+    if (NULL == expr || !expr->is_const_raw_expr()
+        || (T_INT != expr->get_expr_type() && T_NULL != expr->get_expr_type()
+            && T_QUESTIONMARK != expr->get_expr_type())) {
+      supported = false;
+    } else {
+      const ObConstRawExpr *constant = static_cast<const ObConstRawExpr *>(expr);
+      const ObObj &value = T_QUESTIONMARK == expr->get_expr_type()
+                          ? constant->get_param() : constant->get_value();
+      supported = value.is_null() || ObIntType == value.get_type();
+    }
+  }
+  if (supported && row.get_param_count() > 1 && !query_ctx.is_prepare_stmt()) {
+    hash::ObHashMap<int64_t, ObRawExpr *, hash::NoPthreadDefendMode> representatives;
+    ObSEArray<ObRawExpr *, 16> unique_exprs;
+    ObQuestionmarkEqualCtx cmp_ctx(false);
+    if (OB_FAIL(representatives.create(MIN(row.get_param_count(), 1024L),
+                                       ObMemAttr("InlistExprDedup")))) {
+      LOG_WARN("failed to create integer representatives", K(ret));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < row.get_param_count(); ++i) {
+      ObRawExpr *expr = row.get_param_expr(i);
+      const ObConstRawExpr *constant = static_cast<const ObConstRawExpr *>(expr);
+      const ObObj &value = T_QUESTIONMARK == expr->get_expr_type()
+                          ? constant->get_param() : constant->get_value();
+      ObRawExpr *representative = NULL;
+      bool duplicate = false;
+      if (value.is_null()) {
+        // Preserve NULL and its bind position, including its three-valued logic.
+      } else if (OB_FAIL(representatives.get_refactored(value.get_int(), representative))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = representatives.set_refactored(value.get_int(), expr);
+        }
+      } else if (OB_ISNULL(representative)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        // same_as checks the full result type as well as the integer value.
+        duplicate = expr->same_as(*representative, &cmp_ctx);
+        if (OB_SUCCESS != cmp_ctx.err_code_) {
+          ret = cmp_ctx.err_code_;
+        }
+      }
+      if (OB_SUCC(ret) && !duplicate && OB_FAIL(unique_exprs.push_back(expr))) {
+      }
+    }
+    if (OB_SUCC(ret) && unique_exprs.count() < row.get_param_count()) {
+      if (OB_FAIL(append(query_ctx.all_equal_param_constraints_, cmp_ctx.equal_pairs_))) {
+      } else if (OB_FAIL(row.get_param_exprs().assign(unique_exprs))) {
+      }
+    }
+    if (representatives.created()) {
+      const int tmp_ret = representatives.destroy();
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("failed to destroy integer representatives", K(tmp_ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
                                                      const bool is_root_expr,
                                                      ObRawExpr *&expr)
@@ -3128,6 +3197,9 @@ int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
       ObOpRawExpr *row_expr = static_cast<ObOpRawExpr *>(sub_expr2);
       if (OB_ISNULL(row_expr)) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (T_OP_ROW != sub_expr1->get_expr_type() && NULL != ctx_.query_ctx_
+                 && OB_FAIL(deduplicate_integer_inlist(*row_expr, *ctx_.query_ctx_))) {
+        LOG_WARN("failed to deduplicate integer IN list", K(ret));
       } else if (1 == row_expr->get_param_count()) {
         ObRawExpr *param = row_expr->get_param_expr(0);
         if (OB_FAIL(in_expr->set_param_exprs(sub_expr1, param))) {
