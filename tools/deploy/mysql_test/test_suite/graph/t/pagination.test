@@ -20,7 +20,7 @@ CREATE TABLE graph_page_edge (
   dst BIGINT NOT NULL,
   active INT NOT NULL
 );
-INSERT INTO graph_page_vertex VALUES (1,'seed'),(2,'target');
+INSERT INTO graph_page_vertex VALUES (1,'seed'),(2,'target'),(3,'later');
 INSERT INTO graph_page_edge
 SELECT sequence_no + 1,1,2,1
 FROM (
@@ -36,6 +36,9 @@ WHERE sequence_no < 4105;
 # edges that follow the first 4096-result page.
 INSERT INTO graph_page_edge
 SELECT id + 10000,2,2,active FROM graph_page_edge;
+# On hop two, a complete page of 2->2 edges is already visited. The later
+# 2->3 edge must still be read after that fully skipped page.
+INSERT INTO graph_page_edge VALUES (20000,2,3,1);
 
 CREATE PROPERTY GRAPH graph_page
   VERTEX TABLES (
@@ -74,6 +77,21 @@ WHERE statement_id='page_full_scan'
   AND operator='GRAPH FEEDBACK LOOP'
   AND special_predicates LIKE '%access=full-scan%';
 
+--echo shortest_skipped_full_scan_page_reaches_later_target
+SELECT destination,hops FROM GRAPH_TABLE(graph_page MATCH ANY SHORTEST
+  (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g ORDER BY destination;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='shortest_page_full'
+SELECT * FROM GRAPH_TABLE(graph_page MATCH ANY SHORTEST
+  (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_native_shortest_full_scan FROM plan_table
+WHERE statement_id='shortest_page_full' AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=full-scan%'
+  AND special_predicates LIKE '%runtime=native, states=binding_vertex_hop, search=any_shortest, visited=cross_hop%';
+
 CREATE INDEX graph_page_out ON graph_page_edge(src,id);
 
 --echo adjacency_index_matches_full_scan_across_page_boundary
@@ -93,6 +111,21 @@ FROM plan_table
 WHERE statement_id='page_index_scan'
   AND operator='GRAPH FEEDBACK LOOP'
   AND special_predicates LIKE '%access=index-scan%';
+
+--echo shortest_skipped_index_page_reaches_later_target
+SELECT destination,hops FROM GRAPH_TABLE(graph_page MATCH ANY SHORTEST
+  (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g ORDER BY destination;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='shortest_page_index'
+SELECT * FROM GRAPH_TABLE(graph_page MATCH ANY SHORTEST
+  (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_native_shortest_index_scan FROM plan_table
+WHERE statement_id='shortest_page_index' AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=index-scan%'
+  AND special_predicates LIKE '%runtime=native, states=binding_vertex_hop, search=any_shortest, visited=cross_hop%';
 
 DROP PROPERTY GRAPH graph_page;
 
