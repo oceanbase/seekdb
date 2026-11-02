@@ -30,6 +30,7 @@
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -1635,7 +1636,7 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
     } else if (input_srid != 0 && srs_item->is_geographical_srs()) {
       double sphere_radius = (srs_item->semi_major_axis() * 2 + srs_item->semi_minor_axis()) /  3;
       const double SPHERIOD_ERR_FRACTION = 0.005;
-      radius = ((1.0 + SPHERIOD_ERR_FRACTION) * distance) / sphere_radius;
+      radius = std::min(M_PI, (distance / sphere_radius) * (1.0 + SPHERIOD_ERR_FRACTION));
     } else {
       if (OB_FAIL(ObGeoTypeUtil::get_buffered_geo(&tmp_alloc, wkb_str, distance, srs_item, buffer_geo))) {
         if (ret == OB_INVALID_ARGUMENT) {
