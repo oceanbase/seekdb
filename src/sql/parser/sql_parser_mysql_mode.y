@@ -12378,6 +12378,7 @@ copy_option
 copy_option:
 copy_option_key opt_equal_mark copy_option_value
 {
+  (void)$2;
   COPY_MAKE_OPTION($$, $1, $3);
 }
 | copy_option_key
@@ -12389,6 +12390,7 @@ copy_option_key opt_equal_mark copy_option_value
 copy_option_key:
 NAME_OB
 {
+  UNUSED($1);
   get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
 }
 | FORMAT
