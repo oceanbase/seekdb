@@ -1122,8 +1122,6 @@ int load_parquet(const std::string &path, std::vector<Column> &cols, Rows &data)
         }
       }
 
-               "groups", (int64_t)groups.size(), "g0rows", group_rows.empty() ? -1 : group_rows[0],
-               "g0cols", groups.empty() ? -1 : (int64_t)groups[0].size());
       if (OB_FAIL(ret)) {
       } else if (schema.empty() || groups.empty()) {
         ret = OB_INVALID_DATA;
@@ -1149,8 +1147,6 @@ int load_parquet(const std::string &path, std::vector<Column> &cols, Rows &data)
               if (OB_FAIL(parse_page_header(ph, page))) {
               } else {
                 const int64_t page_start = offset + ph.pos();
-                         "nv", page.num_values, "enc", page.encoding, "comp", page.compressed,
-                         "replen", page.rep_len, "deflen", page.def_len, "v2c", page.v2_compressed);
                 if (0 != page.type && 3 != page.type) {  // only data pages are decoded
                   offset = page_start + page.compressed;
                 } else if (page_start + page.compressed > total) {
@@ -1249,7 +1245,6 @@ int load_parquet(const std::string &path, std::vector<Column> &cols, Rows &data)
                         }
                       }
                     }
-                             "vals", (int64_t)col_values[c].size(), "vlen", values_len);
                     if (OB_SUCC(ret)) {
                       produced += page.num_values;
                       offset = page_start + page.compressed;
