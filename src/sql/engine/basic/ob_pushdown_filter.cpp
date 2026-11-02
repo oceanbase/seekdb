@@ -776,6 +776,25 @@ int ObPushdownFilterConstructor::deduplicate_filter_node(
   return ret;
 }
 
+bool ObPushdownFilterConstructor::is_duplicated_filter_expr(
+    const ObIArray<ObRawExpr*> &exprs,
+    const int64_t cur_idx) const
+{
+  bool duplicated = false;
+  if (OB_UNLIKELY(0 > cur_idx || cur_idx >= exprs.count()) || OB_ISNULL(exprs.at(cur_idx))) {
+    // not duplicated; the caller reports the unexpected expr separately
+  } else {
+    for (int64_t i = 0; !duplicated && i < cur_idx; ++i) {
+      // comparing against skipped operands is still safe: a skipped one is
+      // identical to some kept operand with a smaller index
+      if (OB_NOT_NULL(exprs.at(i)) && exprs.at(i)->same_as(*exprs.at(cur_idx))) {
+        duplicated = true;
+      }
+    }
+  }
+  return duplicated;
+}
+
 int ObPushdownFilterConstructor::generate_and_deduplicate(
     const ObIArray<ObRawExpr*> &exprs,
     ObArray<ObPushdownFilterNode*> &filter_nodes,
@@ -788,6 +807,12 @@ int ObPushdownFilterConstructor::generate_and_deduplicate(
     ObPushdownFilterNode *sub_filter_node = nullptr;
     if (OB_ISNULL(raw_expr)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (is_duplicated_filter_expr(exprs, i)) {
+      // idempotence: X AND X ≡ X, X OR X ≡ X. Drop structurally identical
+      // operands before generating filter nodes, so each distinct predicate
+      // is executed once per micro block. Otherwise duplicated OR operands
+      // blow up the cost of pre-filter scans (e.g. filtered HNSW ANN search)
+      LOG_DEBUG("[PUSHDOWN] skip duplicated filter expr", K(i));
     } else if (OB_FAIL(generate(raw_expr, sub_filter_node))) {
     } else if (OB_FAIL(filter_nodes.push_back(sub_filter_node))) {
     }
