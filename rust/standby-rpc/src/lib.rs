@@ -166,6 +166,16 @@ impl Handler {
         ReceiverStream::new(receiver)
     }
 }
+fn request_trace(metadata: &tonic::metadata::MetadataMap) -> Trace {
+    Trace {
+        id: metadata
+            .get("custom-header")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split_once(','))
+            .map(|(_, id)| id.to_owned())
+            .unwrap_or_default(),
+    }
+}
 #[tonic::async_trait]
 impl StandbyService for Handler {
     type fetch_ls_viewStream = Pin<Box<dyn Stream<Item = Result<FetchLsViewRes, Status>> + Send>>;
@@ -173,15 +183,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchLsViewReq>,
     ) -> Result<Response<Self::fetch_ls_viewStream>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let stream = self.stream(
             Method::fetch_ls_view,
@@ -206,15 +208,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchTabletInfoReq>,
     ) -> Result<Response<Self::fetch_tablet_infoStream>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let stream = self.stream(
             Method::fetch_tablet_info,
@@ -238,15 +232,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchTabletSsTableInfoReq>,
     ) -> Result<Response<Self::fetch_tablet_sstable_infoStream>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let stream = self.stream(
             Method::fetch_tablet_sstable_info,
@@ -270,15 +256,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchSsTableMacroInfoReq>,
     ) -> Result<Response<Self::fetch_sstable_macro_infoStream>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let stream = self.stream(
             Method::fetch_sstable_macro_info,
@@ -302,15 +280,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchMacroBlockReq>,
     ) -> Result<Response<Self::fetch_macro_blockStream>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let stream = self.stream(
             Method::fetch_macro_block,
@@ -332,15 +302,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<GetLsViewTabletCountReq>,
     ) -> Result<Response<GetLsViewTabletCountRes>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let mut stream = self.stream(Method::get_ls_view_tablet_count, Frame::empty(), trace);
         let frame = stream
             .next()
@@ -356,15 +318,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<CheckRestorePreconditionReq>,
     ) -> Result<Response<CheckRestorePreconditionRes>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let mut stream = self.stream(Method::check_restore_precondition, Frame::empty(), trace);
         let frame = stream
             .next()
@@ -380,15 +334,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchStandbyPalfBaseInfoReq>,
     ) -> Result<Response<FetchStandbyPalfBaseInfoRes>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let mut stream = self.stream(
             Method::fetch_standby_palf_base_info,
@@ -416,15 +362,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<FetchLogReq>,
     ) -> Result<Response<Self::fetch_logStream>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let stream = self.stream(
             Method::fetch_log,
@@ -448,15 +386,7 @@ impl StandbyService for Handler {
         &self,
         request: Request<GetPromotionBoundaryReq>,
     ) -> Result<Response<GetPromotionBoundaryRes>, Status> {
-        let trace = Trace {
-            id: request
-                .metadata()
-                .get("custom-header")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.split_once(','))
-                .map(|(_, id)| id.to_owned())
-                .unwrap_or_default(),
-        };
+        let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let mut stream = self.stream(
             Method::get_promotion_boundary,

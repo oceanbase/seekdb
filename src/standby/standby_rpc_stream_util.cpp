@@ -33,7 +33,6 @@ using storage::ObCopySSTableMacroRangeObProducer;
 using storage::ObICopySSTableMacroRangeObProducer;
 
 int StandbyRpcStreamUtil::build_tablet_sstable_info(
-    rpc::ServerContext *context,
     const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
     storage::ObLS *ls,
     const rpc::Writer *writer)
@@ -59,7 +58,7 @@ int StandbyRpcStreamUtil::build_tablet_sstable_info(
     } else {
       int64_t sstable_count = header.sstable_count_;
       for (int64_t i = 0; OB_SUCC(ret) && i < sstable_count; ++i) {
-        if (context->cancelled()) {
+        if (writer->cancelled()) {
           ret = OB_CANCELED;
           LOG_WARN("client cancelled the request", K(ret));
           break;
@@ -89,7 +88,6 @@ int StandbyRpcStreamUtil::build_tablet_sstable_info(
 }
 
 int StandbyRpcStreamUtil::build_sstable_macro_info(
-    rpc::ServerContext *context,
     const obcall::ObCopySSTableMacroRangeInfoHeader &header,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
     const rpc::Writer *writer)
@@ -118,7 +116,7 @@ int StandbyRpcStreamUtil::build_sstable_macro_info(
       if (OB_SUCC(ret)) {
         SMART_VAR(ObCopyMacroRangeInfo, macro_range_info) {
           for (int64_t i = 0; OB_SUCC(ret) && i < header.macro_range_count_; ++i) {
-            if (context->cancelled()) {
+            if (writer->cancelled()) {
               ret = OB_CANCELED;
               LOG_WARN("client cancelled the request", K(ret));
               break;

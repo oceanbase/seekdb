@@ -32,12 +32,10 @@ class StandbyRpcStreamUtil final
 {
 public:
   static int build_tablet_sstable_info(
-      rpc::ServerContext *context,
       const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
       storage::ObLS *ls,
       const rpc::Writer *writer);
   static int build_sstable_macro_info(
-      rpc::ServerContext *context,
       const obcall::ObCopySSTableMacroRangeInfoHeader &header,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
       const rpc::Writer *writer);

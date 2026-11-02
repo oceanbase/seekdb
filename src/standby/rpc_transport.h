@@ -72,10 +72,6 @@ private:
   std::shared_ptr<rust::Box<ClientStream>> stream_;
   int error_ = 0;
 };
-struct ServerContext {
-  const Writer &writer;
-  bool cancelled() const { return writer.cancelled(); }
-};
 class Client {
 public:
   int init(const common::ObAddr &address, int64_t timeout, bool tls);
@@ -93,7 +89,6 @@ public:
   int start(int port, bool tls);
   void stop() { if (handle_) { (*handle_)->stop(); handle_.reset(); } }
   int64_t cert_expire_time() const { return handle_ ? (*handle_)->cert_expire_time() : 0; }
-  void wait() {}
   ~RpcServer() { stop(); }
 private:
   std::shared_ptr<Service> service_;

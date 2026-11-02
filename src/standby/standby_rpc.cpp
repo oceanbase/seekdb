@@ -148,45 +148,34 @@ public:
   {}
   virtual ~StandbyRpcService() {}
 
-  int fetch_ls_view(rpc::ServerContext* context,
-                             const rpc::Message* request,
-                             const rpc::Writer* writer) const;
+  int fetch_ls_view(const rpc::Message* request,
+      const rpc::Writer* writer) const;
 
-  int fetch_tablet_info(rpc::ServerContext* context,
-                                    const rpc::Message* request,
-                                    const rpc::Writer* writer) const;
+  int fetch_tablet_info(const rpc::Message* request,
+      const rpc::Writer* writer) const;
 
-  int fetch_tablet_sstable_info(rpc::ServerContext* context,
-                                            const rpc::Message* request,
-                                            const rpc::Writer* writer) const;
+  int fetch_tablet_sstable_info(const rpc::Message* request,
+      const rpc::Writer* writer) const;
 
-  int fetch_sstable_macro_info(rpc::ServerContext* context,
-                                            const rpc::Message* request,
-                                            const rpc::Writer* writer) const;
+  int fetch_sstable_macro_info(const rpc::Message* request,
+      const rpc::Writer* writer) const;
 
-  int fetch_macro_block(rpc::ServerContext* context,
-                                    const rpc::Message* request,
-                                    const rpc::Writer* writer) const;
+  int fetch_macro_block(const rpc::Message* request,
+      const rpc::Writer* writer) const;
 
-  int get_ls_view_tablet_count(rpc::ServerContext* context,
-                                            const rpc::Message* request,
-                                            rpc::Message* response) const;
+  int get_ls_view_tablet_count(const rpc::Message* request,
+      rpc::Message* response) const;
 
-  int check_restore_precondition(rpc::ServerContext* context,
-                                            const rpc::Message* request,
-                                            rpc::Message* response) const;
+  int check_restore_precondition(const rpc::Message* request,
+      rpc::Message* response) const;
 
-  int fetch_standby_palf_base_info(rpc::ServerContext* context,
-                                            const rpc::Message* request,
-                                            rpc::Message* response) const;
+  int fetch_standby_palf_base_info(const rpc::Message* request,
+      rpc::Message* response) const;
 
-  int fetch_log(rpc::ServerContext* context,
-                         const rpc::Message* request,
-                         const rpc::Writer* writer) const;
+  int fetch_log(const rpc::Message* request,
+      const rpc::Writer* writer) const;
 
-  int get_promotion_boundary(
-      rpc::ServerContext* context,
-      const rpc::Message* request,
+  int get_promotion_boundary(const rpc::Message* request,
       rpc::Message* response) const;
 
   int32_t dispatch(rpc::Method method, rpc::Frame frame, const rpc::Trace &trace, const rpc::Writer &writer) const override {
@@ -195,36 +184,35 @@ public:
     id.set(trace_text.c_str());
     common::ObTraceIdGuard trace_guard(id);
     rpc::Message request(std::move(frame));
-    rpc::ServerContext context{writer};
     const auto *self = this;
     switch (method) {
-      case rpc::Method::fetch_ls_view: return self->fetch_ls_view(&context, &request, &writer);
-      case rpc::Method::fetch_tablet_info: return self->fetch_tablet_info(&context, &request, &writer);
-      case rpc::Method::fetch_tablet_sstable_info: return self->fetch_tablet_sstable_info(&context, &request, &writer);
-      case rpc::Method::fetch_sstable_macro_info: return self->fetch_sstable_macro_info(&context, &request, &writer);
-      case rpc::Method::fetch_macro_block: return self->fetch_macro_block(&context, &request, &writer);
+      case rpc::Method::fetch_ls_view: return self->fetch_ls_view(&request, &writer);
+      case rpc::Method::fetch_tablet_info: return self->fetch_tablet_info(&request, &writer);
+      case rpc::Method::fetch_tablet_sstable_info: return self->fetch_tablet_sstable_info(&request, &writer);
+      case rpc::Method::fetch_sstable_macro_info: return self->fetch_sstable_macro_info(&request, &writer);
+      case rpc::Method::fetch_macro_block: return self->fetch_macro_block(&request, &writer);
       case rpc::Method::get_ls_view_tablet_count: {
         rpc::Message response;
-        const int error = self->get_ls_view_tablet_count(&context, &request, &response);
+        const int error = self->get_ls_view_tablet_count(&request, &response);
         if (error != 0) return error;
         return writer.write(response.take_frame()) ? 0 : OB_CANCELED;
       }
       case rpc::Method::check_restore_precondition: {
         rpc::Message response;
-        const int error = self->check_restore_precondition(&context, &request, &response);
+        const int error = self->check_restore_precondition(&request, &response);
         if (error != 0) return error;
         return writer.write(response.take_frame()) ? 0 : OB_CANCELED;
       }
       case rpc::Method::fetch_standby_palf_base_info: {
         rpc::Message response;
-        const int error = self->fetch_standby_palf_base_info(&context, &request, &response);
+        const int error = self->fetch_standby_palf_base_info(&request, &response);
         if (error != 0) return error;
         return writer.write(response.take_frame()) ? 0 : OB_CANCELED;
       }
-      case rpc::Method::fetch_log: return self->fetch_log(&context, &request, &writer);
+      case rpc::Method::fetch_log: return self->fetch_log(&request, &writer);
       case rpc::Method::get_promotion_boundary: {
         rpc::Message response;
-        const int error = self->get_promotion_boundary(&context, &request, &response);
+        const int error = self->get_promotion_boundary(&request, &response);
         if (error != 0) return error;
         return writer.write(response.take_frame()) ? 0 : OB_CANCELED;
       }
@@ -354,8 +342,7 @@ int StandbyPromotionBoundaryRequest::add_visited(const common::ObAddr &addr)
 
 
 int StandbyRpcService::fetch_ls_view(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     const rpc::Writer* writer) const
 {
   int ret = OB_SUCCESS;
@@ -368,9 +355,9 @@ int StandbyRpcService::fetch_ls_view(
     bool ls_meta_sent = false;
     int64_t total_tablet_count = 0;
     LOG_INFO("start to fetch ls view", K(ls_id));
-    auto fill_ls_meta_f = [&context, &writer, &ls_meta_sent](const ObStandbyLSViewMeta &ls_view_meta)->int {
+    auto fill_ls_meta_f = [&writer, &ls_meta_sent](const ObStandbyLSViewMeta &ls_view_meta)->int {
       int ret = OB_SUCCESS;
-      if (context->cancelled()) {
+      if (writer->cancelled()) {
         ret = OB_CANCELED;
         LOG_WARN("client cancelled fetch_ls_view request", K(ret));
       } else {
@@ -388,13 +375,11 @@ int StandbyRpcService::fetch_ls_view(
       return ret;
     };
 
-    auto fill_tablet_meta_f = [&context,
-                               &writer,
-                               &total_tablet_count]
+    auto fill_tablet_meta_f = [&writer, &total_tablet_count]
         (const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)->int {
       int ret = OB_SUCCESS;
       UNUSED(tablet_handle);
-      if (context->cancelled()) {
+      if (writer->cancelled()) {
         ret = OB_CANCELED;
         LOG_WARN("client cancelled fetch_ls_view request", K(ret));
       } else {
@@ -477,12 +462,10 @@ int StandbyRpcService::fetch_ls_view(
 }
 
 int StandbyRpcService::get_ls_view_tablet_count(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     rpc::Message* response) const
 {
   int ret = OB_SUCCESS;
-  UNUSED(context);
   UNUSED(request);
   ObStandbyLSViewTabletCountResult result;
 
@@ -516,8 +499,7 @@ int StandbyRpcService::get_ls_view_tablet_count(
 }
 
 int StandbyRpcService::fetch_tablet_info(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     const rpc::Writer* writer) const
 {
   int ret = OB_SUCCESS;
@@ -547,7 +529,7 @@ int StandbyRpcService::fetch_tablet_info(
       while (OB_SUCC(ret)) {
         tablet_info.reset();
 
-        if (context->cancelled()) {
+        if (writer->cancelled()) {
           ret = OB_CANCELED;
           LOG_WARN("client cancelled the request", K(ret));
           break;
@@ -585,8 +567,7 @@ int StandbyRpcService::fetch_tablet_info(
 }
 
 int StandbyRpcService::fetch_tablet_sstable_info(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     const rpc::Writer* writer) const
 {
   int ret = OB_SUCCESS;
@@ -614,7 +595,7 @@ int StandbyRpcService::fetch_tablet_sstable_info(
       }
       while (OB_SUCC(ret)) {
         tablet_arg.reset();
-        if (context->cancelled()) {
+        if (writer->cancelled()) {
           ret = OB_CANCELED;
           LOG_WARN("client cancelled the request", K(ret));
           break;
@@ -627,7 +608,7 @@ int StandbyRpcService::fetch_tablet_sstable_info(
             LOG_WARN("failed to get next tablet sstable info", K(ret), K(arg));
           }
         } else if (OB_FAIL(StandbyRpcStreamUtil::build_tablet_sstable_info(
-                       context, tablet_arg, ls, writer))) {
+                       tablet_arg, ls, writer))) {
           LOG_WARN("failed to build tablet sstable info", K(ret), K(tablet_arg));
         }
       }
@@ -644,8 +625,7 @@ int StandbyRpcService::fetch_tablet_sstable_info(
 }
 
 int StandbyRpcService::fetch_sstable_macro_info(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     const rpc::Writer* writer) const
 {
   int ret = OB_SUCCESS;
@@ -663,7 +643,7 @@ int StandbyRpcService::fetch_sstable_macro_info(
         LOG_WARN("failed to init copy sstable macro ob producer", K(ret), K(arg));
       } else {
         while (OB_SUCC(ret)) {
-          if (context->cancelled()) {
+          if (writer->cancelled()) {
             ret = OB_CANCELED;
             LOG_WARN("client cancelled the request", K(ret));
             break;
@@ -678,7 +658,7 @@ int StandbyRpcService::fetch_sstable_macro_info(
               LOG_WARN("failed to get next sstable macro range info", K(ret));
             }
           } else if (OB_FAIL(StandbyRpcStreamUtil::build_sstable_macro_info(
-                         context, header, arg, writer))) {
+                         header, arg, writer))) {
             LOG_WARN("failed to build sstable macro info", K(ret), K(header));
           }
         }
@@ -696,8 +676,7 @@ int StandbyRpcService::fetch_sstable_macro_info(
 }
 
 int StandbyRpcService::fetch_macro_block(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     const rpc::Writer* writer) const
 {
   int ret = OB_SUCCESS;
@@ -721,7 +700,7 @@ int StandbyRpcService::fetch_macro_block(
       }
       common::ObArenaAllocator header_allocator("MacroBlkHeader");
       while (OB_SUCC(ret)) {
-        if (context->cancelled()) {
+        if (writer->cancelled()) {
           ret = OB_CANCELED;
           LOG_WARN("client cancelled the request", K(ret));
           break;
@@ -770,8 +749,7 @@ int StandbyRpcService::fetch_macro_block(
 }
 
 int StandbyRpcService::check_restore_precondition(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     rpc::Message* response) const
 {
   int ret = OB_SUCCESS;
@@ -850,14 +828,12 @@ int StandbyRpcService::check_restore_precondition(
 }
 
 int StandbyRpcService::fetch_standby_palf_base_info(
-    rpc::ServerContext* context,
-    const rpc::Message* request,
+        const rpc::Message* request,
     rpc::Message* response) const
 {
   int ret = OB_SUCCESS;
   standby::ObFetchStandbyPalfBaseInfoArg arg;
   standby::ObFetchStandbyPalfBaseInfoResult result;
-  UNUSED(context);
 
   if (OB_ISNULL(request) || OB_ISNULL(response)) {
     ret = OB_INVALID_ARGUMENT;
@@ -876,15 +852,14 @@ int StandbyRpcService::fetch_standby_palf_base_info(
 }
 
 int StandbyRpcService::fetch_log(
-    rpc::ServerContext *context,
-    const rpc::Message *request,
+        const rpc::Message *request,
     const rpc::Writer *writer) const
 {
   int ret = OB_SUCCESS;
   static const int64_t MAX_FETCH_BYTES = 64L * 1024L * 1024L;
-  if (OB_ISNULL(context) || OB_ISNULL(request) || OB_ISNULL(writer)) {
+  if (OB_ISNULL(request) || OB_ISNULL(writer)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fetch log request", K(ret), KP(context), KP(request), KP(writer));
+    LOG_WARN("invalid fetch log request", K(ret), KP(request), KP(writer));
     return ret;
   }
 
@@ -939,7 +914,7 @@ int StandbyRpcService::fetch_log(
         share::SCN log_scn;
         palf::LSN log_lsn;
         palf::LogGroupEntry group_entry;
-        if (context->cancelled()) {
+        if (writer->cancelled()) {
           ret = OB_CANCELED;
         } else if (OB_FAIL(iterator.next())) {
           if (OB_ITER_END == ret) {
@@ -982,14 +957,12 @@ int StandbyRpcService::fetch_log(
 }
 
 int StandbyRpcService::get_promotion_boundary(
-    rpc::ServerContext *context,
-    const rpc::Message *request,
+        const rpc::Message *request,
     rpc::Message *response) const
 {
   int ret = OB_SUCCESS;
   StandbyPromotionBoundaryRequest boundary_request;
   StandbyPromotionBoundary boundary;
-  UNUSED(context);
   if (OB_ISNULL(request) || OB_ISNULL(response)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(decode_boundary_request(request->control(), boundary_request))) {
