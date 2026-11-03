@@ -587,7 +587,6 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) to get s
 </a>
 
 If seekdb is useful to you, **a star helps others find it.** ⭐
-OB-P:CyLUYwtgqUaCTI5y-HLhXQ
 
 ---
 
