@@ -48,10 +48,8 @@ int ObDBMSJobTask::init(
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(inited_));
   } else if (OB_ISNULL(ready_queue) || OB_ISNULL(needs_reconcile)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret), K(ready_queue), K(needs_reconcile));
   } else if (OB_FAIL(timer_.init())) {
     LOG_WARN("fail to init timer", K(ret));
   } else {
@@ -106,7 +104,6 @@ void ObDBMSJobTask::runTimerTask()
   ObSpinLockGuard guard(lock_);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("dbms job task not init", K(ret), K(inited_));
   } else if (reconfiguring_) {
     // A canceled timer token may already have been dispatched. The
     // reconciliation thread waits for this callback before freeing keys.
