@@ -290,7 +290,7 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("  }\n")
   cpp_file.write("}vars_init;\n")
   cpp_file.write("\n")
-  cpp_file.write("static int64_t var_amount = " + str(var_num) + ";"  + "\n")
+  cpp_file.write("static const int64_t var_amount = ObSysVarMeta::ALL_SYS_VARS_COUNT;\n")
   cpp_file.write("\n")
   cpp_file.write("int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}\n")
   cpp_file.write("ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}\n")

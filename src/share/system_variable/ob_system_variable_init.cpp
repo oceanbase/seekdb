@@ -9901,7 +9901,7 @@ static struct VarsInit{
   }
 }vars_init;
 
-static int64_t var_amount = 718;
+static const int64_t var_amount = ObSysVarMeta::ALL_SYS_VARS_COUNT;
 
 int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}
 ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}
