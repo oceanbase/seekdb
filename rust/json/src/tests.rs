@@ -2641,3 +2641,106 @@ fn numeric_order_preserves_signed_and_unsigned_integer_boundaries() {
         }
     }
 }
+
+mod mutation_order_tests {
+    use crate::{BinaryDocument, Path, Query, QueryOptions, construction::Scalar, writer::BinaryWriter};
+    use crate::mutation::editor::{Editor, Session, SqlOperation, StoredValue};
+
+    fn object(lexicographical: bool) -> Vec<u8> {
+        let mut writer = BinaryWriter::default();
+        let root = writer.begin(true, 2, 1).unwrap();
+        let keys = if lexicographical { [b"aa".as_slice(), b"b".as_slice()] }
+            else { [b"b".as_slice(), b"aa".as_slice()] };
+        for key in keys { writer.key(key).unwrap(); }
+        for key in keys { writer.string(key).unwrap(); }
+        writer.end(root).unwrap();
+        writer.finish(lexicographical).unwrap()
+    }
+
+    fn outer(lexicographical: bool, array: bool) -> Vec<u8> {
+        let mut writer = BinaryWriter::default();
+        let root = writer.begin(true, 1, 1).unwrap();
+        writer.key(b"target").unwrap();
+        let array = array.then(|| writer.begin(false, 1, 1).unwrap());
+        writer.string(b"old").unwrap();
+        if let Some(array) = array { writer.end(array).unwrap(); }
+        writer.end(root).unwrap();
+        writer.finish(lexicographical).unwrap()
+    }
+
+    fn apply(session: &mut Session, source: &[u8], operation: SqlOperation, path: &str, value: &BinaryDocument<Vec<u8>>) {
+        let prepared = session.prepare(source, &Path::parse_mysql(path.as_bytes()).unwrap(), operation).unwrap();
+        let value = prepared.needs_value().then(|| value.root().unwrap());
+        session.apply(source, prepared, value).unwrap();
+    }
+
+    fn assert_updated(session: &mut Session, source: &[u8], path: &str) {
+        let query = Query::from_binary(session.constructed_binary(source).unwrap()).unwrap();
+        let hits = query.query(&Path::parse_mysql(path.as_bytes()).unwrap(), QueryOptions::default()).unwrap();
+        assert_eq!(hits.len(), 1, "{path}");
+        assert_eq!(hits[0].string_bytes().unwrap(), b"updated", "{path}");
+    }
+
+    #[test]
+    fn sql_imports_keep_all_nested_objects_in_the_document_order() {
+        let updated = BinaryDocument::new(Scalar::String(b"updated").encode().unwrap()).unwrap();
+        for lexicographical in [false, true] {
+            let replacement = BinaryDocument::new(object(!lexicographical)).unwrap();
+            let key = if lexicographical { "aa" } else { "b" };
+            for (operation, path, array, selected) in [
+                (SqlOperation::Set, "$.target", false, format!("$.target.{key}")),
+                (SqlOperation::Replace, "$.target", false, format!("$.target.{key}")),
+                (SqlOperation::Insert, "$.new", false, format!("$.new.{key}")),
+                (SqlOperation::ArrayAppend, "$.target", false, format!("$.target[1].{key}")),
+                (SqlOperation::ArrayInsert, "$.target[0]", true, format!("$.target[0].{key}")),
+                (SqlOperation::Replace, "$", false, "$.b".into()),
+            ] {
+                let source = outer(lexicographical, array);
+                let mut session = Session::open_for_rebuild(source.as_slice()).unwrap();
+                apply(&mut session, &source, operation, path, &replacement);
+                apply(&mut session, &source, SqlOperation::Replace, &selected, &updated);
+                assert_updated(&mut session, &source, &selected);
+            }
+        }
+    }
+
+    #[test]
+    fn root_array_wrapping_normalizes_the_previous_document() {
+        let updated = BinaryDocument::new(Scalar::String(b"updated").encode().unwrap()).unwrap();
+        for lexicographical in [false, true] {
+            let source = object(lexicographical);
+            let mut session = Session::open_for_rebuild(source.as_slice()).unwrap();
+            apply(&mut session, &source, SqlOperation::ArrayAppend, "$", &updated);
+            apply(&mut session, &source, SqlOperation::Replace, "$[0].b", &updated);
+            assert_updated(&mut session, &source, "$[0].b");
+        }
+    }
+
+    #[test]
+    fn sparse_imports_preserve_lookup_order_after_insert_and_replace() {
+        for lexicographical in [false, true] {
+            let replacement = BinaryDocument::new(object(!lexicographical)).unwrap();
+            for insert in [false, true] {
+                let mut writer = BinaryWriter::default();
+                let root = writer.begin(false, 1, 1).unwrap();
+                writer.string(b"old").unwrap();
+                writer.end(root).unwrap();
+                let mut source = writer.finish(lexicographical).unwrap();
+                let mut editor = Editor::open(source.as_slice()).unwrap();
+                if insert { editor.insert(&[], 0, &[], replacement.root().unwrap()).unwrap(); }
+                else { editor.replace(&[], 0, replacement.root().unwrap()).unwrap(); }
+                let update = editor.finish();
+                for write in update.writes {
+                    if write.reset { source.clear(); }
+                    source.resize(source.len().max(write.offset as usize + write.bytes.len()), 0);
+                    source[write.offset as usize..write.offset as usize + write.bytes.len()].copy_from_slice(&write.bytes);
+                }
+                let root = StoredValue::encoded_position(source.as_slice(), 0).unwrap();
+                let root = StoredValue::open(source.as_slice(), root.offset, root.raw_type, root.entry_type).unwrap();
+                let child = root.child_position(0).unwrap();
+                let child = StoredValue::open(source.as_slice(), child.offset, child.raw_type, child.entry_type).unwrap();
+                assert!(child.find_key(if lexicographical { b"aa" } else { b"b" }).unwrap().is_some());
+            }
+        }
+    }
+}

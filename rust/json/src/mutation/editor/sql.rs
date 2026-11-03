@@ -172,20 +172,23 @@ impl<S: BinarySource + ?Sized> Editor<'_, S> {
         match prepared.action {
             Action::None | Action::Evaluate => Ok(()),
             Action::Replace(target) => {
-                self.replace_selected(&target, Value::from_binary(value.unwrap())?)
+                let order = !target.is_empty() && self.lexicographical;
+                self.replace_selected(&target, Value::from_binary(value.unwrap(), order)?)
             }
             Action::Insert { parent, index, key } => {
                 self.insert(&parent, index, &key, value.unwrap())
             }
             Action::Remove { parent, index } => self.remove(&parent, index),
             Action::Wrap { target, prepend } => {
-                let value = Value::from_binary(value.unwrap())?;
+                let source_order = self.lexicographical;
+                let output_order = !target.is_empty() && source_order;
+                let value = Value::from_binary(value.unwrap(), source_order)?;
                 self.atomic(|editor| {
                     let old = editor.selected_value(&target)?;
                     let array = if prepend {
-                        array_value(&[&value, &old])?
+                        array_value(&[&value, &old], source_order, output_order)?
                     } else {
-                        array_value(&[&old, &value])?
+                        array_value(&[&old, &value], source_order, output_order)?
                     };
                     editor.replace_selected_inner(&target, array)
                 })
@@ -270,14 +273,14 @@ fn insertion_index(index: ArrayIndex, length: u64) -> u64 {
     }
 }
 
-fn array_value(values: &[&Value]) -> Result<Value> {
+fn array_value(values: &[&Value], source_order: bool, output_order: bool) -> Result<Value> {
     let mut documents = Vec::new();
     for value in values {
         let mut bytes = Vec::new();
         if matches!(value.raw_type, 6 | 7) {
             bytes.resize(8, 0);
             bytes.extend_from_slice(&value.bytes);
-            let header = 30 | ((bytes.len() as u64) << 22);
+            let header = 30 | (u64::from(source_order) << 8) | ((bytes.len() as u64) << 22);
             bytes[..8].copy_from_slice(&header.to_le_bytes());
         } else {
             if !binary::needs_type_prefix(value.raw_type) {
@@ -293,7 +296,7 @@ fn array_value(values: &[&Value]) -> Result<Value> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let bytes = binary::serialize_array(&roots)?;
     let document = crate::BinaryDocument::new(bytes)?;
-    Value::from_binary(document.root()?)
+    Value::from_binary(document.root()?, output_order)
 }
 
 /// An owned overlay that borrows its stable source only for each synchronous call.

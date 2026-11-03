@@ -378,8 +378,8 @@ enum ContainerChange<'a> {
 }
 
 impl Value {
-    fn from_binary(value: BinaryValue<'_>) -> Result<Self> {
-        let mut bytes = binary::serialize_value(value)?;
+    fn from_binary(value: BinaryValue<'_>, lexicographical: bool) -> Result<Self> {
+        let mut bytes = binary::serialize_value_in_order(value, lexicographical)?;
         let kind = value.json_type()?;
         let raw_type = if kind == JsonType::MySqlDate {
             32
@@ -478,7 +478,7 @@ impl<'a, S: BinarySource + ?Sized> Editor<'a, S> {
     }
 
     pub fn replace(&mut self, ancestors: &[u64], index: u64, value: BinaryValue<'_>) -> Result<()> {
-        let value = Value::from_binary(value)?;
+        let value = Value::from_binary(value, self.lexicographical)?;
         self.atomic(|editor| {
             let (container, parents) = editor.locate(ancestors)?;
             editor.replace_child(container, &parents, index, value)
@@ -492,7 +492,7 @@ impl<'a, S: BinarySource + ?Sized> Editor<'a, S> {
         key: &[u8],
         value: BinaryValue<'_>,
     ) -> Result<()> {
-        let value = Value::from_binary(value)?;
+        let value = Value::from_binary(value, self.lexicographical)?;
         self.atomic(|editor| {
             let (container, parents) = editor.locate(ancestors)?;
             let mut index = index.min(container.count);

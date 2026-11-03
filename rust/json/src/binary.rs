@@ -940,11 +940,15 @@ fn write_scalar_value(output: &mut Vec<u8>, value: BinaryValue<'_>) -> BinaryRes
     Ok(())
 }
 pub fn serialize_value(value: BinaryValue<'_>) -> BinaryResult<Vec<u8>> {
+    serialize_value_in_order(value, value.lexicographical())
+}
+
+pub(crate) fn serialize_value_in_order(value: BinaryValue<'_>, lexicographical: bool) -> BinaryResult<Vec<u8>> {
     let mut output = Vec::new();
     if value.json_type()?.is_container() {
         output.resize(8, 0);
-        write_ordered_binary_value(&mut output, value, value.lexicographical())?;
-        let header = DOC_HEADER as u64 | (u64::from(value.lexicographical()) << 8) | ((output.len() as u64) << 22);
+        write_ordered_binary_value(&mut output, value, lexicographical)?;
+        let header = DOC_HEADER as u64 | (u64::from(lexicographical) << 8) | ((output.len() as u64) << 22);
         output[..8].copy_from_slice(&header.to_le_bytes());
     } else {
         if !needs_type_prefix(value.raw_type & !INLINE) {
