@@ -3546,6 +3546,8 @@ int rewrite_status_to_state_column(const ObString &src,
             ++i;
             ret = buf.append(&str[i], 1);
           } else {
+            // the quoted region is closed, the closing quote is consumed
+            ++i;
             break;
           }
         }
@@ -3587,18 +3589,17 @@ int rewrite_status_to_state_column(const ObString &src,
       ++i;
     }
   }
+  UNUSED(changed);
   if (OB_SUCC(ret)) {
-    if (changed) {
-      char *out = static_cast<char *>(alloc.alloc(buf.length() + 1));
-      if (OB_ISNULL(out)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        MEMCPY(out, buf.ptr(), buf.length());
-        out[buf.length()] = '\0';
-        dst.assign_ptr(out, static_cast<int32_t>(buf.length()));
-      }
+    // the text is always copied: the predicate outlives the parse tree when
+    // the statement is executed
+    char *out = static_cast<char *>(alloc.alloc(buf.length() + 1));
+    if (OB_ISNULL(out)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      dst = src;
+      MEMCPY(out, buf.ptr(), buf.length());
+      out[buf.length()] = '\0';
+      dst.assign_ptr(out, static_cast<int32_t>(buf.length()));
     }
   }
   return ret;
@@ -3649,6 +3650,28 @@ int ObAlterTableResolver::resolve_retry_ai_column(const ParseNode &node)
           info.state_column_id_ = state_col->get_column_id();
           info.column_name_ = col_name;
           info.has_where_ = (NULL != where_node);
+          // the request id of one row must be unique, the row key of the row
+          // is appended to the request id of the statement
+          ObSqlString rowkey_expr;
+          const ObRowkeyInfo &rowkey_info = table_schema_->get_rowkey_info();
+          for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info.get_size(); ++i) {
+            uint64_t rowkey_column_id = OB_INVALID_ID;
+            const ObColumnSchemaV2 *rowkey_column = NULL;
+            if (OB_FAIL(rowkey_info.get_column_id(i, rowkey_column_id))) {
+            } else if (OB_ISNULL(rowkey_column = table_schema_->get_column_schema(rowkey_column_id))) {
+              ret = OB_ERR_UNEXPECTED;
+              SQL_RESV_LOG(WARN, "rowkey column is missing", K(ret), K(rowkey_column_id));
+            } else if (i > 0 && OB_FAIL(rowkey_expr.append(", ':', "))) {
+            } else if (OB_FAIL(rowkey_expr.append_fmt("cast(`%.*s` as char)",
+                                                      static_cast<int32_t>(rowkey_column->get_column_name_str().length()),
+                                                      rowkey_column->get_column_name_str().ptr()))) {
+            }
+          }
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(ob_write_string(*allocator_, rowkey_expr.string(),
+                                             info.rowkey_expr_))) {
+            SQL_RESV_LOG(WARN, "fail to build the rowkey expression", K(ret));
+          }
           if (NULL != where_node) {
             const ObString where_text(where_node->str_len_, where_node->str_value_);
             if (where_text.empty()) {

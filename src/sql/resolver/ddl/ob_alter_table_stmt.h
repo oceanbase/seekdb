@@ -62,6 +62,9 @@ public:
     uint64_t state_column_id_;  // hidden column holding the generation status
     common::ObString column_name_;
     common::ObString where_text_;  // rewritten where clause (status -> state column)
+    // the expression of the columns that identify one row of the table, it is
+    // appended to the request id so that every row owns an unique request id
+    common::ObString rowkey_expr_;
     bool has_where_;
   };
   bool has_ai_column_retry() const { return ai_column_retry_.column_id_ != common::OB_INVALID_ID; }

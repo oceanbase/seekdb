@@ -25,6 +25,8 @@
 #include "query/command/ob_local_command_service.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_ai_column_sql_service.h"
+#include "share/schema/ob_schema_getter_guard.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_share_util.h"

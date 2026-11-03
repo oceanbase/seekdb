@@ -108,9 +108,6 @@ void ObCachedSchemaGuardInfo::try_revert_schema_guard()
 ObSQLSessionInfo::ObSQLSessionInfo() :
       ObVersionProvider(),
       ObBasicSessionInfo{},
-      ai_column_internal_mode_(ObSQLSessionInfo::AI_COL_MODE_NONE),
-      ai_column_publish_request_id_len_(0),
-      ai_column_publish_request_id_(),
       is_inited_(false),
       warnings_buf_(),
       show_warnings_buf_(),

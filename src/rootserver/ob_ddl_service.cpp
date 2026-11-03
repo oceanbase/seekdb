@@ -69,6 +69,7 @@
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 #include "share/schema/ob_schema_guard_wrapper.h"  // relocated-definition owner
 #include "share/schema/ob_table_sql_service.h"
+#include "share/schema/ob_ai_column_sql_service.h"
 #include "share/schema/ob_ddl_trans_controller.h"  // relocated-definition owner
 #include "share/schema/ob_part_mgr_util.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -8605,6 +8606,12 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
     }
   }
 
+  // keep the metadata rows of the AI columns in sync with the new schema
+  if (OB_SUCC(ret)
+      && OB_FAIL(ObAiColumnSqlService::sync_ai_column_meta(trans, new_table_schema,
+                                                           &origin_table_schema))) {
+    LOG_WARN("fail to sync ai column meta", K(ret), K(new_table_schema.get_table_id()));
+  }
   return ret;
 }
 

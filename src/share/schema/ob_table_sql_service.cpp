@@ -20,6 +20,7 @@
 #include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_partition_sql_helper.h"
+#include "share/schema/ob_ai_column_sql_service.h"
 #include "share/ob_timezone_mgr.h"
 
 namespace oceanbase
@@ -809,6 +810,11 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
         }
       }
     }
+  }
+  // the metadata rows of the AI columns of the dropped table are removed
+  if (OB_SUCC(ret) && !is_truncate_table
+      && OB_FAIL(ObAiColumnSqlService::delete_ai_column_meta(sql_client, table_id))) {
+    LOG_WARN("fail to delete ai column meta", K(ret), K(table_id));
   }
   return ret;
 }

@@ -580,6 +580,10 @@ int ObDDLOperator::create_table(ObTableSchema &table_schema,
                                                       table_schema.get_table_id(),
                                                       table_schema.get_exec_env()))) {
   }
+  // publish the metadata rows of the AI columns of the new table
+  if (OB_SUCC(ret) && OB_FAIL(ObAiColumnSqlService::sync_ai_column_meta(trans, table_schema, NULL))) {
+    RS_LOG(WARN, "fail to sync ai column meta", K(ret), K(table_schema.get_table_id()));
+  }
   return ret;
 }
 

@@ -2186,7 +2186,27 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
             SQL_RESV_LOG(WARN, "fail to get cascaded column ids", K(ret));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < dep_ids.count(); ++i) {
-              if (OB_FAIL(spec.add_dep_column_id(dep_ids.at(i)))) {
+              // an AI column cannot depend on another AI column: the
+              // referenced result may not be generated yet
+              const ObColumnSchemaV2 *dep_col = table_schema.get_column_schema(dep_ids.at(i));
+              bool is_ai_dep = false;
+              if (OB_ISNULL(dep_col)) {
+                // keep the unknown column id, the schema checker reports it
+              } else if (dep_col->is_ai_result_column()) {
+                is_ai_dep = true;
+              } else {
+                // the AI columns of the same statement are not flagged in the
+                // schema yet, match them by name
+                const ObString &dep_name = dep_col->get_column_name_str();
+                for (int64_t j = 0; !is_ai_dep && j < pending_ai_columns_.count(); ++j)
+                {
+                  is_ai_dep = (0 == pending_ai_columns_.at(j).result_name_.case_compare(dep_name));
+                }
+              }
+              if (OB_UNLIKELY(is_ai_dep)) {
+                ret = OB_NOT_SUPPORTED;
+                SQL_RESV_LOG(WARN, "ai column depends on another ai column", K(ret), K(dep_ids.at(i)));
+              } else if (OB_FAIL(spec.add_dep_column_id(dep_ids.at(i)))) {
                 SQL_RESV_LOG(WARN, "fail to push dep column id", K(ret));
               }
             }
@@ -2275,7 +2295,9 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
   if (OB_SUCC(ret)) {
     PendingAiColumn pending;
     SMART_VAR(char[OB_MAX_COLUMN_NAME_LENGTH + 16], name_buf) {
-      if (OB_FAIL(databuff_printf(name_buf, sizeof(name_buf), "__ai_state_%.*s",
+      if (OB_FAIL(ObAiColumnSpec::copy_str(*allocator_, column.get_column_name_str(),
+                                           pending.result_name_))) {
+      } else if (OB_FAIL(databuff_printf(name_buf, sizeof(name_buf), "__ai_state_%.*s",
                                   column.get_column_name_str().length(),
                                   column.get_column_name_str().ptr()))) {
       } else if (OB_FAIL(ObAiColumnSpec::copy_str(*allocator_,

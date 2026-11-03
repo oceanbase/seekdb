@@ -457,6 +457,7 @@ protected:
   // AI column (AI COLUMN) support -------------------------------------------
   struct PendingAiColumn {
     share::schema::ObAiColumnSpec spec_;
+    common::ObString result_name_;
     common::ObString state_name_;
     common::ObString request_name_;
     common::ObString spec_name_;

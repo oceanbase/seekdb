@@ -22,6 +22,7 @@
 #include "sql/session/ob_inner_sql_connection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/dml/ob_fk_checker.h"
+#include "sql/engine/dml/ob_ai_column_dml.h"
 
 namespace oceanbase
 {
@@ -225,6 +226,10 @@ public:
   }
 
 public:
+  // The pending work of the asynchronous AI column hook of this statement,
+  // it is flushed at the end of the statement.
+  ObAiColumnDmlState &get_ai_column_dml_state() { return ai_column_dml_state_; }
+
   int open_inner_conn();
   int close_inner_conn();
   int begin_nested_session(bool skip_cur_stmt_tables);
@@ -303,6 +308,7 @@ public:
   ObIInnerSQLConnection *inner_conn_;
   ObIInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
+  ObAiColumnDmlState ai_column_dml_state_;
   bool need_close_conn_;
 
   ObObjPrintParams obj_print_params_;

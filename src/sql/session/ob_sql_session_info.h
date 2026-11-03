@@ -417,30 +417,6 @@ public:
     AI_COL_MODE_PUBLISH = 1,
     AI_COL_MODE_INVALIDATE = 2
   };
-  int set_ai_column_internal_mode(const int32_t mode)
-  {
-    ai_column_internal_mode_ = mode;
-    return OB_SUCCESS;
-  }
-  int32_t get_ai_column_internal_mode() const { return ai_column_internal_mode_; }
-  int set_ai_column_publish_request_id(const common::ObString &request_id)
-  {
-    int ret = OB_SUCCESS;
-    if (request_id.length() >= sizeof(ai_column_publish_request_id_)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      if (request_id.length() > 0) {
-        MEMCPY(ai_column_publish_request_id_, request_id.ptr(), request_id.length());
-      }
-      ai_column_publish_request_id_[request_id.length()] = '\0';
-      ai_column_publish_request_id_len_ = static_cast<int32_t>(request_id.length());
-    }
-    return ret;
-  }
-  common::ObString get_ai_column_publish_request_id() const
-  {
-    return common::ObString(ai_column_publish_request_id_len_, ai_column_publish_request_id_);
-  }
 
 public:
   ObSQLSessionInfo();
@@ -924,9 +900,6 @@ public:
   { return data_plane::tx_desc_has_temporary_tables(tx_desc_); }
   int close_all_ps_stmt(ObPsCache &ps_cache);
 private:
-  int32_t ai_column_internal_mode_;
-  int32_t ai_column_publish_request_id_len_;
-  char ai_column_publish_request_id_[64];
   void release_all_ps_session_info();
   void set_cur_exec_ctx(ObExecContext *cur_exec_ctx) { cur_exec_ctx_ = cur_exec_ctx; }
 

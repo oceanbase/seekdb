@@ -319,6 +319,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_dml_0",
         language = "c++",
         srcs = [
+            "src/sql/engine/dml/ob_ai_column_dml.cpp",
             "src/sql/engine/dml/ob_conflict_checker.cpp",
             "src/sql/engine/dml/ob_dml_ctx_define.cpp",
             "src/sql/engine/dml/ob_dml_service.cpp",
@@ -1024,6 +1025,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_table_0",
         language = "c++",
         srcs = [
+            "src/sql/engine/table/ob_ai_column_strict_read.cpp",
             "src/sql/engine/table/ob_block_sample_scan_op.cpp",
             "src/sql/engine/table/ob_row_sample_scan_op.cpp",
             "src/sql/engine/table/ob_table_partition_ranges.cpp",

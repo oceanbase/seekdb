@@ -803,6 +803,11 @@ int ObTableModifyOp::inner_close()
       auto_service.release_handle(autoinc_params.at(i).cache_handle_);
     }
   }
+  // the pending work of the asynchronous AI column hook is executed at the
+  // end of the statement, inside the transaction of the business statement
+  if (OB_FAIL(ObAiColumnDml::flush(*this))) {
+    LOG_WARN("fail to flush the ai column dml work", K(ret));
+  }
   close_inner_conn();
   if (dml_rtctx_.das_ref_.has_task()) {
     if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {

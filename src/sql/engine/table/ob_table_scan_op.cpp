@@ -22,6 +22,7 @@
 #include "common/json_type/ob_json_bin.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "sql/engine/table/ob_ai_column_strict_read.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "share/geo/ob_geo_utils.h"
@@ -1436,6 +1437,9 @@ int ObTableScanOp::inner_open()
   if (OB_ISNULL(my_session = GET_MY_SESSION(ctx_))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObDASUtils::check_nested_sql_mutating(MY_SPEC.ref_table_id_, ctx_, true))) {
+  } else if (OB_FAIL(ObAiColumnStrictRead::check_table_scan(ctx_, MY_SPEC.ref_table_id_,
+                 MY_SPEC.tsc_ctdef_.scan_ctdef_.table_param_.get_read_info().get_columns_desc()))) {
+    // the strict read of an ai column is rejected before any row is returned
   } else if (OB_FAIL(init_table_scan_rtdef())) {
   } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(fts_index_.init(MY_SPEC.is_fts_index_aux_, MY_SPEC.parser_name_,
           MY_SPEC.parser_properties_))) {
