@@ -138,19 +138,19 @@ void ObDBMSSchedService::destroy()
 void ObDBMSSchedService::deactivate()
 {
   if (job_master_.is_inited()) {
-    job_master_.switch_to_follower();
+    job_master_.deactivate_scheduler();
     ObServerThreadHelper::switch_to_follower_gracefully();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService deactivate scheduler");
   }
 }
 int ObDBMSSchedService::activate()
 {
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
-    job_master_.switch_to_leader();
+    job_master_.activate_scheduler();
     if (OB_FAIL(ObServerThreadHelper::switch_to_leader())) {
     }
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader");
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService activate scheduler");
   }
   return ret;
 }

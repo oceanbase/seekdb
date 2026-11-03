@@ -165,6 +165,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "//src/oblib:oblib_foundation",
         ],
     ),
+    "internal_table_change_notifier": struct(
+        hdrs = ["ob_internal_table_change_notifier.h"],
+        deps = [
+            ":log_protocol",
+            "//src/oblib:oblib_base",
+        ],
+    ),
     "compaction_runtime": struct(
         hdrs = [
             "compaction/ob_array_with_map.h",

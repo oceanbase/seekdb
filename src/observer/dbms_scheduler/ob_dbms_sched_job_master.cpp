@@ -94,15 +94,15 @@ int ObDBMSSchedJobMaster::stop()
   return ret;
 }
 
-void ObDBMSSchedJobMaster::switch_to_leader()
+void ObDBMSSchedJobMaster::activate_scheduler()
 {
   ATOMIC_STORE(&has_loaded_primary_jobs_, false);
-  ATOMIC_STORE(&is_leader_, true);
+  ATOMIC_STORE(&is_active_, true);
   wakeup();
 }
-void ObDBMSSchedJobMaster::switch_to_follower()
+void ObDBMSSchedJobMaster::deactivate_scheduler()
 {
-  ATOMIC_STORE(&is_leader_, false);
+  ATOMIC_STORE(&is_active_, false);
   ATOMIC_STORE(&has_loaded_primary_jobs_, false);
   wakeup();
 }
@@ -149,11 +149,11 @@ int ObDBMSSchedJobMaster::scheduler()
       const int64_t now = ObTimeUtility::current_time();
       const int64_t max_deadline = now + CHECK_NEW_INTERVAL;
       int64_t deadline_us = max_deadline;
-      if (ATOMIC_LOAD(&is_leader_)) {
+      if (ATOMIC_LOAD(&is_active_)) {
         const int check_ret = check_runtime_jobs();
         if (OB_SUCCESS != check_ret) {
           LOG_WARN("fail to check runtime scheduler jobs", K(check_ret));
-        } else if (ATOMIC_LOAD(&is_leader_)
+        } else if (ATOMIC_LOAD(&is_active_)
                    && ATOMIC_LOAD(&has_loaded_primary_jobs_)) {
           const int schedule_ret = schedule_due_jobs();
           if (OB_EAGAIN == schedule_ret) {
@@ -197,7 +197,7 @@ int ObDBMSSchedJobMaster::schedule_due_jobs()
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && wait_vector_.count() > 0) {
     bool write_enabled = false;
-    if (!ATOMIC_LOAD(&is_leader_)) {
+    if (!ATOMIC_LOAD(&is_active_)) {
       ret = OB_EAGAIN;
     } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
       LOG_WARN("fail to verify scheduler write capability before execution", K(ret));
@@ -361,7 +361,7 @@ int ObDBMSSchedJobMaster::destroy()
   thread_cond_.destroy();
   inited_ = false;
   stoped_ = true;
-  ATOMIC_STORE(&is_leader_, false);
+  ATOMIC_STORE(&is_active_, false);
   ATOMIC_STORE(&has_loaded_primary_jobs_, false);
   return OB_SUCCESS;
 }

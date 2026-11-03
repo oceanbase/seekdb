@@ -91,7 +91,7 @@ public:
   ObDBMSSchedJobMaster()
     : inited_(false),
       stoped_(true),
-      is_leader_(false),
+      is_active_(false),
       wokeup_(false),
       schema_service_(NULL),
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
@@ -109,7 +109,7 @@ public:
   int start();
   int stop();
   bool is_stop() { return stoped_; }
-  bool is_leader() { return ATOMIC_LOAD(&is_leader_); }
+  bool is_active() { return ATOMIC_LOAD(&is_active_); }
   int scheduler();
   int destroy();
   void wakeup();
@@ -118,8 +118,8 @@ public:
     ObDBMSSchedJobKey *&job_key, uint64_t job_id, const common::ObString &job_name);
   void free_job_key(ObDBMSSchedJobKey *&job_key);
 
-  void switch_to_leader();
-  void switch_to_follower();
+  void activate_scheduler();
+  void deactivate_scheduler();
   int check_runtime_jobs();
   int check_new_jobs();
   int register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_infos);
@@ -138,7 +138,7 @@ private:
 
   bool inited_;
   bool stoped_;
-  bool is_leader_;
+  bool is_active_;
   bool wokeup_;
 
   common::ObThreadCond thread_cond_;
