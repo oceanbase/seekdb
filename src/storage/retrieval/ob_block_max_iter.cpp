@@ -369,10 +369,10 @@ int ObBlockMaxScoreIterator::calc_domain_id_range(const ObDatumRow &agg_row, con
       } else {
         // Since micro block is not divided by dimension boundary, max_datum in first statistic range
         // might comes from other dimension and not aligned with the data range covered by upper bound of max score.
-        const ObObj &scan_dim_obj = block_stat_scan_param_.get_scan_param()->key_ranges_.at(0).end_key_.get_obj_ptr()[dim_rowkey_idx];
-        ObStorageDatum scan_dim_datum;
-        if (OB_FAIL(scan_dim_datum.from_obj(scan_dim_obj))) {
-        } else if (OB_UNLIKELY(rowkey_dim_datum.is_ext() || scan_dim_datum.is_ext())) {
+        // The scan dim datum is immutable for the iterator lifetime and was already materialized
+        // once in inner_init(), so reuse the member instead of re-deriving it per block.
+        const ObStorageDatum &scan_dim_datum = scan_dim_datum_;
+        if (OB_UNLIKELY(rowkey_dim_datum.is_ext() || scan_dim_datum.is_ext())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(dim_cmp_(
                        rowkey_dim_datum, scan_dim_datum, cmp_ret, nullptr))) {
