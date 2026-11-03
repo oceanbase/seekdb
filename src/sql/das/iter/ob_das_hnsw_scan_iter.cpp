@@ -718,12 +718,30 @@ int ObDASHNSWScanIter::check_iter_filter_need_retry()
   return ret;
 }
 
-int ObDASHNSWScanIter::check_pre_filter_need_retry()
+int ObDASHNSWScanIter::check_pre_filter_need_retry(int64_t matched_row_cnt)
 {
   int ret = OB_SUCCESS;
+  // When the pre-filter still plans to brute-force the filtered rows, the observed
+  // match rate decides whether that plan is worth keeping: a predicate that keeps
+  // (almost) every row turns the pre-filter into a full table scan, while the graph
+  // search with an in-filter usually visits only a few hundred rows.  Sample the
+  // first batches and give up on the pre-filter path early in that case.
+  const int64_t MIN_BRUTE_FORCE_SAMPLE_CNT = 512;
+  const double MAX_BRUTE_FORCE_MATCH_RATE = 0.9;
   double pre_selectivity = double(adaptive_ctx_.pre_scan_row_cnt_) / double(adaptive_ctx_.row_count_);
   if (adaptive_ctx_.pre_scan_row_cnt_ <= MAX_HNSW_BRUTE_FORCE_SIZE) {
-    /*do nothing*/
+    if (go_brute_force_ && !is_parallel_with_block_granule()
+        && adaptive_ctx_.pre_scan_row_cnt_ >= MIN_BRUTE_FORCE_SAMPLE_CNT
+        && adaptive_ctx_.row_count_ > 0) {
+      // The question is how much of the *table* survives the predicate, not how much
+      // of the pre-scanned set does: a predicate that keeps almost every row turns
+      // the pre-filter into a full table scan, while a genuinely selective predicate
+      // still gets exact results cheaply from the few matched rows.
+      double match_rate = double(matched_row_cnt) / double(adaptive_ctx_.row_count_);
+      if (match_rate > MAX_BRUTE_FORCE_MATCH_RATE) {
+        ret = OB_VECTOR_INDEX_ADAPTIVE_NEED_RETRY;
+      }
+    }
   } else if (is_ipivf() && pre_selectivity > ObVecIdxExtraInfo::DEFAULT_SINDI_SELECTIVITY_RATE) {
     ret = OB_VECTOR_INDEX_ADAPTIVE_NEED_RETRY;
   } else if (is_parallel_with_block_granule()) {
@@ -1583,7 +1601,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
           }
         }
         if (OB_FAIL(ret)) {
-        } else if (can_retry_ && !go_brute_force_ && OB_FAIL(check_pre_filter_need_retry())) {
+        } else if (can_retry_ && OB_FAIL(check_pre_filter_need_retry(brute_cnt))) {
         }
       } // end while
     }
@@ -1836,7 +1854,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
         ret = OB_SUCCESS;
       }
       if (OB_FAIL(ret)) {
-      } else if (can_retry_ && !go_brute_force_ && OB_FAIL(check_pre_filter_need_retry())) {
+      } else if (can_retry_ && OB_FAIL(check_pre_filter_need_retry(brute_cnt))) {
       } else {
         ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
         guard.set_batch_size(scan_row_cnt);
@@ -1858,7 +1876,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
     } else if (!is_vectorized) {
       for (int i = 0; OB_SUCC(ret) && i < batch_row_count; ++i) {
         int64_t vid = 0;
-        if (can_retry_ && OB_FAIL(check_pre_filter_need_retry())) {
+        if (can_retry_ && OB_FAIL(check_pre_filter_need_retry(brute_cnt))) {
         } else if (OB_FAIL(get_vid_from_rowkey_vid_table(vid))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
           }
