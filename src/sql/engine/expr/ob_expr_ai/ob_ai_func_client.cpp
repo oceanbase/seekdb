@@ -128,7 +128,10 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString
 {
   int ret = OB_SUCCESS;
   int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
-  if (OB_ISNULL(url) || headers.empty()) {
+  // A provider may legitimately send no header at all: a local ollama server
+  // accepts the request without an Authorization header. Only the url is
+  // mandatory, so an empty header list must not abort the call.
+  if (OB_ISNULL(url) || url.empty()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     allocator_ = &allocator;
