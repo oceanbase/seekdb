@@ -204,6 +204,8 @@ public:
 
   void reset();
 
+  void rebind_allocator(common::ObIAllocator *allocator) { allocator_ = allocator; }
+
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
