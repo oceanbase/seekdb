@@ -12,11 +12,6 @@ bazel_dep(name = "rules_cc", version = "0.2.25")
 bazel_dep(name = "apple_support", version = "2.8.4")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_rust", version = "0.75.0")
-single_version_override(
-    module_name = "rules_rust",
-    patches = ["//bazel:rules-rust-windows-ldflags.diff"],
-    patch_strip = 1,
-)
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 # SDK installation belongs to build.py init.
@@ -43,17 +38,12 @@ crate.annotation(
     repositories = ["rust_crates"],
     additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
 )
-crate.annotation(
-    crate = "libz-sys",
-    version = "1.1.31",
-    repositories = ["rust_crates"],
-    additive_build_file = "//bazel:libz_sys_headers.BUILD.bazel",
-)
 crate.annotation_select(
     crate = "libz-sys",
     repositories = ["rust_crates"],
     triples = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"],
     build_script_env = {"CMAKE_GENERATOR": "Ninja"},
+    build_script_env_files = ["@@//bazel:windows_build_script_environment"],
 )
 crate.annotation_select(
     crate = "libz-sys",

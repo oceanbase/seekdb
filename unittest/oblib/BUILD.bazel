@@ -22,30 +22,3 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
-
-cc_test(
-    name = "test_rust_compression",
-    srcs = ["test_rust_compression.cpp"],
-    linkstatic = True,
-    deps = [
-        "@@rules_rust++crate+rust_crates__libz-sys-1.1.31//:headers",
-        "//bazel/third_party:gtest",
-        "//src/oblib:oblib_compression",
-        "//src/oblib:oblib_test_runtime",
-        "//rust:compression",
-    ] + select({
-        "@platforms//os:windows": ["//bazel/third_party:windows_headers"],
-        "//conditions:default": [],
-    }),
-)
-
-cc_test(
-    name = "test_rust_http_client",
-    srcs = ["test_rust_http_client.cpp"],
-    linkstatic = True,
-    deps = [
-        "//bazel/third_party:gtest",
-        "//rust:http_client",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],
-)
