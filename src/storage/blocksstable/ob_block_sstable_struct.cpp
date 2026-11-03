@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/checksum/ob_checksum_utils.h"
 #include "ob_block_sstable_struct.h"
 #include "share/ob_server_struct.h"
 

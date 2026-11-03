@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 OceanBase.
+ * Copyright (c) 2026 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,32 @@
  * limitations under the License.
  */
 
-#include "lib/encode/ob_uuencode.h"
+#pragma once
 
-#include "lib/oblog/ob_log.h"
+#include <stdint.h>
 
 namespace oceanbase
 {
 namespace common
 {
 
+inline void format_i64(const int64_t value, int16_t &check_sum)
+{
+  int i = 0;
+  while (i < 4) {
+    check_sum = static_cast<int16_t>(check_sum ^ ((value >> i * 16) & 0xFFFF));
+    ++i;
+  }
+}
 
+inline void format_i32(const int32_t value, int16_t &check_sum)
+{
+  int i = 0;
+  while (i < 2) {
+    check_sum = static_cast<int16_t>(check_sum ^ ((value >> i * 16) & 0xFFFF));
+    ++i;
+  }
+}
 
-
-} //namespace common
-} //namespace oceanbase
+} // namespace common
+} // namespace oceanbase
