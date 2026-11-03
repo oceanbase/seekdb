@@ -82,6 +82,7 @@ public:
   virtual int locate_by_lsn_coarsely(const palf::LSN &lsn, share::SCN &result_scn) = 0;
   virtual int advance_base_lsn(const palf::LSN &lsn) = 0;
   virtual int get_begin_lsn(palf::LSN &lsn) const = 0;
+  virtual int get_base_lsn(palf::LSN &lsn) const = 0;
   virtual int get_end_lsn(palf::LSN &lsn) const = 0;
   virtual int get_max_lsn(palf::LSN &lsn) const = 0;
 
@@ -266,6 +267,9 @@ public:
   // @brief, get begin lsn
   // @param[out] LSN&, begin lsn
   int get_begin_lsn(palf::LSN &lsn) const override final;
+  // @brief, get the persisted recyclable boundary of PALF.
+  // @param[out] LSN&, base lsn
+  int get_base_lsn(palf::LSN &lsn) const override final;
   int get_end_lsn(palf::LSN &lsn) const override final;
   // @brief, get max lsn.
   // @param[out] LSN&, max lsn.

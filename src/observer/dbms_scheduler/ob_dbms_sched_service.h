@@ -48,6 +48,7 @@ public:
       common::ObISQLClient &sql_client,
       int64_t job_id,
       const dbms_scheduler::ObDBMSSchedJobInfo &job_info) override;
+  int run_timer_driven_job(const common::ObString &job_name) override;
   void notify_scheduler() override { wakeup_scheduler(); }
   int init();
   int start();
