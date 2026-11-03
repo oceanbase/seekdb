@@ -142,9 +142,12 @@ public:
     if (OB_SUCC(ret)) {
       const ObPhysicalPlanCtx *plan_ctx = eval_ctx_.exec_ctx_.get_physical_plan_ctx();
       const GraphFeedbackRowDesc &row = spec.get_output_row_desc();
-      frontier_.set_retain_path_history(spec.get_path_mode() != GraphPathMode::WALK
+      const bool retain_path_history = spec.get_path_mode() != GraphPathMode::WALK
           || spec.get_path_desc().row_shape_ != GraphPathRowShape::PER_MATCH
-          || row.payload_expr_count_ != 0 || row.trail_key_expr_count_ != 0);
+          || row.payload_expr_count_ != 0 || row.trail_key_expr_count_ != 0;
+      frontier_.set_retain_path_history(retain_path_history);
+      expand_.set_edge_projection(
+          retain_path_history, row.payload_expr_count_ != 0);
       const bool ordinary_select = plan_ctx != nullptr && plan_ctx->get_phy_plan() != nullptr
           && plan_ctx->get_phy_plan()->is_plain_select();
       bidirectional_snapshot_eligible_ = ordinary_select
@@ -1188,6 +1191,7 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.any_shortest_,
                     path_desc_.shortest_single_segment_,
                     path_desc_.shortest_goal_key_filter_,
+                    path_desc_.shortest_dedup_in_feedback_,
                     expand_access_desc_,
                     reverse_access_desc_,
                     output_row_desc_,

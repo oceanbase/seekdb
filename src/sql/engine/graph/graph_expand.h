@@ -34,6 +34,9 @@ namespace sql
 // table is scanned only once; their size is governed by the work-area limit.
 static const int64_t GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE = 4096;
 static const int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
+// Long scans remain cancellable without entering the execution-context status
+// path for every physical edge row.
+static const int64_t GRAPH_EXPAND_STATUS_CHECK_INTERVAL = 256;
 
 // Distinguishes the anchor-existence lookup from the target-existence lookup
 // performed after an edge page. Access implementations may share machinery,
@@ -42,6 +45,25 @@ enum class GraphVertexLookupPhase : uint8_t
 {
   SOURCE = 0,
   TARGET
+};
+
+// One page request for the stateful edge cursor. The access implementation
+// owns cursor continuity; callers only state whether this is the first page.
+// Endpoint-only execution omits edge fields that no later graph operation can
+// observe, while source/target identities remain mandatory for expansion.
+struct GraphExpandScanRequest
+{
+  bool is_valid() const
+  {
+    return (direction_ == GraphPathDirection::OUT
+            || direction_ == GraphPathDirection::IN)
+        && limit_ > 0;
+  }
+  GraphPathDirection direction_{GraphPathDirection::OUT};
+  int64_t limit_{0};
+  bool continue_scan_{false};
+  bool need_edge_identity_{true};
+  bool need_edge_payload_{true};
 };
 
 // The DAS-facing adapter uses the statement's transaction, snapshot and schema
@@ -72,12 +94,11 @@ public:
   // scanned_edges is the number of rows delivered by DAS during this call,
   // before graph SQL filters and full-scan frontier matching.
   // Returned identities/payloads have the same borrowed lifetime as lookups.
-  // after_edge continues the current scan; it is not a random-seek interface.
+  // request.continue_scan_ resumes this adapter's current cursor; it is not a
+  // random-seek interface and is valid only for the same immutable sources.
   virtual int scan_edges(
       const common::ObIArray<GraphElementIdentity> &sources,
-      GraphPathDirection direction,
-      const GraphElementIdentity *after_edge,
-      int64_t limit,
+      const GraphExpandScanRequest &request,
       common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges,
       bool &end) = 0;
@@ -136,6 +157,11 @@ public:
   // Only the native frontier may assert this: roots came from the anchor
   // table, and every child passed target existence under the same snapshot.
   void set_sources_verified(bool verified) { sources_verified_ = verified; }
+  void set_edge_projection(bool need_identity, bool need_payload)
+  {
+    need_edge_identity_ = need_identity;
+    need_edge_payload_ = need_payload;
+  }
 
 private:
   int load_next_page();
@@ -179,8 +205,11 @@ private:
   GraphExpandEdgePage edge_page_;
   int64_t edge_index_{0};
   bool end_{false};
+  bool continue_edge_scan_{false};
   bool is_open_{false};
   bool input_group_started_{false};
+  bool need_edge_identity_{true};
+  bool need_edge_payload_{true};
   GraphExpandStats stats_{};
 };
 

@@ -75,7 +75,6 @@ GraphEdgeScanCursor::GraphEdgeScanCursor(ObExecContext &exec_ctx,
       edge_das_ref_(eval_ctx, exec_ctx),
       identity_page_allocator_(exec_ctx.get_allocator()),
       payload_scratch_allocator_(work_area_allocator),
-      edge_cursor_allocator_(exec_ctx.get_allocator()),
       edge_source_index_(work_area_allocator),
       probe_edges_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                    ModulePageAllocator(work_area_allocator, "GraphEdgeProbe"))
@@ -121,7 +120,6 @@ int GraphEdgeScanCursor::release()
   probe_edges_.reset();
   identity_page_allocator_.reset();
   payload_scratch_allocator_.reset();
-  edge_cursor_allocator_.reset();
   return ret;
 }
 
@@ -132,19 +130,18 @@ bool GraphEdgeScanCursor::EdgeScanBinding::is_valid() const
       && access_ctdef_->ref_table_id_ != OB_INVALID_ID
       && (output_ctdef_ == access_ctdef_
           || output_ctdef_->ref_table_id_ == scan_desc_->ref_table_id_)
-      && source_.is_valid() && edge_.is_valid() && target_.is_valid();
+      && source_.is_valid() && target_.is_valid();
 }
 
 int64_t GraphEdgeScanCursor::used_memory() const
 {
   const int64_t page_bytes = identity_page_allocator_.total();
-  const int64_t cursor_bytes = edge_cursor_allocator_.total();
   const int64_t edge_das_used = edge_das_ref_.get_das_mem_used();
   const int64_t edge_das_bytes = edge_das_used > 0 ? edge_das_used : 0;
   const int64_t source_index_bytes = edge_source_index_.used_memory();
   int64_t used = page_bytes;
   const int64_t memory_parts[] = {
-      cursor_bytes, edge_das_bytes, source_index_bytes,
+      edge_das_bytes, source_index_bytes,
       payload_scratch_allocator_.total(), probe_edges_.get_data_size()};
   for (int64_t i = 0; i < ARRAYSIZEOF(memory_parts); ++i) {
     if (used > INT64_MAX - memory_parts[i]) {
@@ -188,14 +185,11 @@ int GraphEdgeScanCursor::reset_edge_scan(int ret, bool retain_allocator_page)
   }
   edge_das_ref_.reuse(retain_allocator_page);
   edge_result_iter_ = DASOpResultIter();
-  edge_cursor_allocator_.reuse();
   edge_source_index_.reset();
-  edge_cursor_.reset();
   edge_sources_data_ = nullptr;
   edge_source_count_ = 0;
   edge_batch_count_ = 0;
   edge_batch_index_ = 0;
-  has_edge_cursor_ = false;
   edge_scan_active_ = false;
   return ret;
 }
@@ -243,12 +237,14 @@ int GraphEdgeScanCursor::init_edge_binding(
   } else if (OB_ISNULL(output_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
+    const bool need_edge_identity = path_desc.need_path_
+        || !scan_desc.payload_exprs_.empty();
     candidate.scan_desc_ = &scan_desc;
     candidate.access_ctdef_ = access_ctdef;
     candidate.output_ctdef_ = output_ctdef;
     if (OB_FAIL(candidate.source_.init(
             *output_ctdef, access_desc.edge_current_columns_, access_desc.source_key_count_))) {
-    } else if (OB_FAIL(candidate.edge_.init(
+    } else if (need_edge_identity && OB_FAIL(candidate.edge_.init(
             *output_ctdef, access_desc.edge_key_columns_, access_desc.edge_key_count_))) {
     } else if (OB_FAIL(candidate.target_.init(
             *output_ctdef, access_desc.edge_next_columns_, access_desc.target_key_count_))) {
@@ -271,36 +267,14 @@ int GraphEdgeScanCursor::check_status()
   return exec_ctx_.check_status();
 }
 
-int GraphEdgeScanCursor::save_edge_cursor(
-    const GraphElementIdentity &identity)
-{
-  int ret = OB_SUCCESS;
-  edge_cursor_allocator_.reuse();
-  edge_cursor_.reset();
-  has_edge_cursor_ = false;
-  if (OB_UNLIKELY(!identity.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    edge_cursor_.graph_id_ = identity.graph_id_;
-    edge_cursor_.element_id_ = identity.element_id_;
-    if (OB_FAIL(identity.rowkey_.deep_copy(edge_cursor_.rowkey_,
-                                           edge_cursor_allocator_))) {
-      edge_cursor_.reset();
-    } else {
-      has_edge_cursor_ = true;
-    }
-  }
-  return ret;
-}
-
 int GraphEdgeScanCursor::validate_edge_scan_request(
     const ObIArray<GraphElementIdentity> &sources,
-    GraphPathDirection direction,
-    const GraphElementIdentity *after_edge,
-    int64_t limit) const
+    const GraphExpandScanRequest &request) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(direction != path_desc_.direction_ || limit <= 0
+  if (OB_UNLIKELY(!request.is_valid()
+                  || request.direction_ != path_desc_.direction_
+                  || (request.need_edge_identity_ && !edge_binding_.edge_.is_valid())
                   || (can_partition_sources()
                       && sources.count()
                          > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE))) {
@@ -309,23 +283,17 @@ int GraphEdgeScanCursor::validate_edge_scan_request(
   // Validate every source when a scan starts. Continuations use the immutable
   // array token below, so pagination remains O(1) in frontier width.
   for (int64_t i = 0;
-       OB_SUCC(ret) && after_edge == nullptr && i < sources.count(); ++i) {
+       OB_SUCC(ret) && !request.continue_scan_ && i < sources.count(); ++i) {
     if (!identity_matches(sources.at(i), path_desc_.graph_id_,
                           path_desc_.source_element_id_,
                           edge_binding_.source_.key_count_)) {
       ret = OB_INVALID_ARGUMENT;
     }
   }
-  if (OB_SUCC(ret) && after_edge != nullptr
-      && !identity_matches(*after_edge, path_desc_.graph_id_,
-                           path_desc_.edge_element_id_,
-                           edge_binding_.edge_.key_count_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_SUCC(ret) && after_edge != nullptr
-             && (!edge_scan_active_ || !has_edge_cursor_
-                 || edge_sources_data_ != sources.get_data()
-                 || edge_source_count_ != sources.count()
-                 || !(*after_edge == edge_cursor_))) {
+  if (OB_SUCC(ret) && request.continue_scan_
+      && (!edge_scan_active_
+          || edge_sources_data_ != sources.get_data()
+          || edge_source_count_ != sources.count())) {
     ret = OB_INVALID_ARGUMENT;
   }
   return ret;
@@ -389,41 +357,38 @@ int GraphEdgeScanCursor::build_adjacency_ranges(
              K(rowkey_count), K_(edge_binding));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sources.count(); ++i) {
-    bool duplicate = false;
-    for (int64_t j = 0; !duplicate && j < i; ++j) {
-      duplicate = sources.at(i) == sources.at(j);
-    }
-    if (!duplicate) {
-      ObObj *keys = static_cast<ObObj *>(edge_das_ref_.get_das_alloc().alloc(
-          sizeof(ObObj) * rowkey_count * 2));
-      if (OB_ISNULL(keys)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        new(keys) ObObj[rowkey_count * 2];
-        ObObj *start_keys = keys;
-        ObObj *end_keys = keys + rowkey_count;
-        for (int64_t key = 0; OB_SUCC(ret) && key < prefix_count; ++key) {
-          if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
-                                   sources.at(i).rowkey_.get_obj_ptr()[key],
-                                   start_keys[key]))) {
-          } else if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
-                                          sources.at(i).rowkey_.get_obj_ptr()[key],
-                                          end_keys[key]))) {
-          }
+    // build_edge_source_index() has already validated that this immutable
+    // request contains one entry per source. Rechecking every earlier identity
+    // here made range construction quadratic in the frontier width.
+    ObObj *keys = static_cast<ObObj *>(edge_das_ref_.get_das_alloc().alloc(
+        sizeof(ObObj) * rowkey_count * 2));
+    if (OB_ISNULL(keys)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      new(keys) ObObj[rowkey_count * 2];
+      ObObj *start_keys = keys;
+      ObObj *end_keys = keys + rowkey_count;
+      for (int64_t key = 0; OB_SUCC(ret) && key < prefix_count; ++key) {
+        if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
+                                 sources.at(i).rowkey_.get_obj_ptr()[key],
+                                 start_keys[key]))) {
+        } else if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
+                                        sources.at(i).rowkey_.get_obj_ptr()[key],
+                                        end_keys[key]))) {
         }
-        for (int64_t key = prefix_count; key < rowkey_count; ++key) {
-          start_keys[key].set_min_value();
-          end_keys[key].set_max_value();
-        }
-        if (OB_SUCC(ret)) {
-          ObNewRange range;
-          range.table_id_ = access_desc_.edge_access_table_id_;
-          range.start_key_.assign(start_keys, rowkey_count);
-          range.end_key_.assign(end_keys, rowkey_count);
-          range.border_flag_.set_inclusive_start();
-          range.border_flag_.set_inclusive_end();
-          if (OB_FAIL(ranges.push_back(range))) {
-          }
+      }
+      for (int64_t key = prefix_count; key < rowkey_count; ++key) {
+        start_keys[key].set_min_value();
+        end_keys[key].set_max_value();
+      }
+      if (OB_SUCC(ret)) {
+        ObNewRange range;
+        range.table_id_ = access_desc_.edge_access_table_id_;
+        range.start_key_.assign(start_keys, rowkey_count);
+        range.end_key_.assign(end_keys, rowkey_count);
+        range.border_flag_.set_inclusive_start();
+        range.border_flag_.set_inclusive_end();
+        if (OB_FAIL(ranges.push_back(range))) {
         }
       }
     }
@@ -629,7 +594,7 @@ int GraphEdgeScanCursor::clear_edge_eval_flags(bool vectorized)
 
 int GraphEdgeScanCursor::get_edge_page(
     const ObIArray<GraphElementIdentity> &sources,
-    int64_t limit,
+    const GraphExpandScanRequest &request,
     ObIArray<GraphExpandEdge> &edges,
     int64_t &scanned_edges,
     bool &end, int64_t raw_row_limit, bool count_only,
@@ -651,9 +616,10 @@ int GraphEdgeScanCursor::get_edge_page(
       && edge_scan_rtdef_->p_pd_expr_op_->is_vectorized();
   const int64_t batch_capacity = vectorized
       ? edge_scan_rtdef_->p_pd_expr_op_->get_batch_size() : 1;
-  while (OB_SUCC(ret) && !finished && edges.count() < limit
+  while (OB_SUCC(ret) && !finished && edges.count() < request.limit_
          && scanned_edges < raw_row_limit) {
-    if (OB_FAIL(check_status())) {
+    if (scanned_edges % GRAPH_EXPAND_STATUS_CHECK_INTERVAL == 0
+        && OB_FAIL(check_status())) {
     } else if (vectorized && edge_batch_index_ >= edge_batch_count_) {
       edge_batch_count_ = 0;
       edge_batch_index_ = 0;
@@ -741,7 +707,8 @@ int GraphEdgeScanCursor::get_edge_page(
         if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
                                      filtered))) {
         } else if (!filtered && OB_FAIL(materializer.materialize_edge(
-                       edge_binding_.source_, edge_binding_.edge_, edge_binding_.target_, edge, matches))) {
+                       edge_binding_.source_, edge_binding_.edge_, edge_binding_.target_,
+                       request.need_edge_identity_, edge, matches))) {
         } else if (!filtered && matches
                    && OB_FAIL(edge_source_index_.find(
                        edge.source_identity_, source_index, source_found))) {
@@ -752,13 +719,12 @@ int GraphEdgeScanCursor::get_edge_page(
           LOG_WARN("graph adjacency scan returned a non-frontier edge", K(ret),
                    K(edge), K(sources));
         } else if (!filtered && matches && source_found) {
-          // edge_cursor_ is a continuity token for this stateful result
-          // iterator, not a global seek key. Tablet task order need not match
-          // edge rowkey order, and no output ordering is exposed without an
-          // outer ORDER BY.
-          if (OB_FAIL(materializer.materialize_payload(*scan_desc, edge.payload_))) {
+          // The DAS result iterator itself owns page continuity. Tablet task
+          // order need not match edge rowkey order, and no output ordering is
+          // exposed without an outer ORDER BY.
+          if (request.need_edge_payload_
+              && OB_FAIL(materializer.materialize_payload(*scan_desc, edge.payload_))) {
           } else if (OB_FAIL(edges.push_back(edge))) {
-          } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
           }
         }
       }
@@ -777,14 +743,12 @@ int GraphEdgeScanCursor::get_edge_page(
 
 int GraphEdgeScanCursor::scan_edges(
     const ObIArray<GraphElementIdentity> &sources,
-    GraphPathDirection direction,
-    const GraphElementIdentity *after_edge,
-    int64_t limit,
+    const GraphExpandScanRequest &request,
     ObIArray<GraphExpandEdge> &edges,
     int64_t &scanned_edges,
     bool &end)
 {
-  return scan_edges_impl(sources, direction, after_edge, limit, edges,
+  return scan_edges_impl(sources, request, edges,
                          scanned_edges, end, INT64_MAX, false, nullptr);
 }
 
@@ -800,7 +764,12 @@ int GraphEdgeScanCursor::probe_adjacency_rows(
   if (OB_UNLIKELY(!can_partition_sources() || raw_row_limit <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ret = scan_edges_impl(sources, direction, nullptr, raw_row_limit,
+    GraphExpandScanRequest request;
+    request.direction_ = direction;
+    request.limit_ = raw_row_limit;
+    request.need_edge_identity_ = false;
+    request.need_edge_payload_ = false;
+    ret = scan_edges_impl(sources, request,
                           probe_edges_, scanned_rows, complete,
                           raw_row_limit, true, &peak_memory);
     if (OB_SUCC(ret) && OB_FAIL(check_status())) {
@@ -818,9 +787,7 @@ int GraphEdgeScanCursor::probe_adjacency_rows(
 
 int GraphEdgeScanCursor::scan_edges_impl(
     const ObIArray<GraphElementIdentity> &sources,
-    GraphPathDirection direction,
-    const GraphElementIdentity *after_edge,
-    int64_t limit,
+    const GraphExpandScanRequest &request,
     ObIArray<GraphExpandEdge> &edges,
     int64_t &scanned_edges,
     bool &end, int64_t raw_row_limit, bool count_only,
@@ -836,21 +803,22 @@ int GraphEdgeScanCursor::scan_edges_impl(
   } else if (OB_UNLIKELY(raw_row_limit <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_status())) {
-  } else if (OB_FAIL(validate_edge_scan_request(sources, direction,
-                                                after_edge, limit))) {
+  } else if (OB_FAIL(validate_edge_scan_request(sources, request))) {
     LOG_WARN("invalid graph edge scan request", K(ret), K(sources),
-             K(direction), KPC(after_edge), K(limit));
+             K(request.direction_), K(request.continue_scan_),
+             K(request.limit_));
   } else {
-    // Validation above still sees the previous page's cursor. The caller owns
-    // a stable copy in after_edge, so the page arena can now be reused.
+    // Validation above still sees the previous page's live cursor. Returned
+    // identities have already been stabilized by GraphExpand, so its scratch
+    // arena can now be reused.
     identity_page_allocator_.reuse();
   }
-  if (OB_SUCC(ret) && after_edge == nullptr
+  if (OB_SUCC(ret) && !request.continue_scan_
       && OB_FAIL(reset_edge_scan(OB_SUCCESS, true))) {
     LOG_WARN("failed to reset graph edge scan", K(ret));
   } else if (OB_SUCC(ret) && sources.empty()) {
     end = true;
-  } else if (OB_SUCC(ret) && after_edge == nullptr) {
+  } else if (OB_SUCC(ret) && !request.continue_scan_) {
     if (!count_only && OB_FAIL(build_edge_source_index(sources))) {
       LOG_WARN("failed to build graph edge source index", K(ret));
     } else {
@@ -874,7 +842,7 @@ int GraphEdgeScanCursor::scan_edges_impl(
     *peak_memory = std::max(*peak_memory, used_memory());
   }
   if (OB_SUCC(ret) && !end
-      && OB_FAIL(get_edge_page(sources, limit, edges, scanned_edges, end,
+      && OB_FAIL(get_edge_page(sources, request, edges, scanned_edges, end,
                                raw_row_limit, count_only, peak_memory))) {
     LOG_WARN("failed to read graph edge page", K(ret));
   }

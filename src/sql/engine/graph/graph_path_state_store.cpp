@@ -169,7 +169,7 @@ int GraphPathStateStore::add_child(const GraphExpandOutput &extension,
   GraphPathState child;
   path_state_id = GRAPH_INVALID_PATH_STATE_ID;
   if (OB_UNLIKELY(extension.binding_id_ < 0
-                  || !extension.edge_identity_.is_valid()
+                  || (retain_history && !extension.edge_identity_.is_valid())
                   || !extension.target_identity_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph path extension", K(ret), K(extension));
@@ -178,8 +178,9 @@ int GraphPathStateStore::add_child(const GraphExpandOutput &extension,
   } else if (OB_UNLIKELY(extension.binding_id_ != parent.binding_id_
                          || (retain_history && !parent.retains_history_)
                          || parent.hop_ >= GRAPH_PATH_MAX_HOPS
-                         || parent.current_identity_.graph_id_
-                                != extension.edge_identity_.graph_id_
+                         || (retain_history
+                             && parent.current_identity_.graph_id_
+                                != extension.edge_identity_.graph_id_)
                          || parent.current_identity_.graph_id_
                                 != extension.target_identity_.graph_id_)) {
     ret = OB_INVALID_ARGUMENT;

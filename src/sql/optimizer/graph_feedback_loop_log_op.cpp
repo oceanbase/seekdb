@@ -305,6 +305,7 @@ int enable_graph_vertex_lookup(ObLogTableScan &scan)
 int retain_graph_edge_columns(
     ObLogTableScan &scan,
     const GraphExpandAccessDesc &access_desc,
+    bool need_edge_identity,
     share::schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
@@ -316,7 +317,7 @@ int retain_graph_edge_columns(
       access_desc.edge_next_columns_};
   const int64_t column_counts[] = {
       access_desc.source_key_count_,
-      access_desc.edge_key_count_,
+      need_edge_identity ? access_desc.edge_key_count_ : 0,
       access_desc.target_key_count_};
   if (OB_ISNULL(plan) || OB_UNLIKELY(!access_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -473,6 +474,41 @@ const ObLogTableScan *find_internal_scan(const ObLogicalOperator *root,
         table_alias);
   }
   return result;
+}
+
+// ANY SHORTEST emits at most one endpoint per seed. Before the first eligible
+// level the same endpoint can still be expanded once per depth; after that,
+// the feedback visited set admits it only once across all remaining levels.
+// Bound the generic exponential estimate by that execution invariant so the
+// outer DISTINCT/ORDER BY is not costed and sized for impossible path counts.
+void cap_shortest_feedback_estimate(const GraphPathDesc &path_desc,
+                                    const ObLogicalOperator *step,
+                                    double seed_rows,
+                                    double first_step_rows,
+                                    double &recursive_work_rows,
+                                    double &output_rows,
+                                    double *step_cost_factor)
+{
+  if (path_desc.shortest_dedup_in_feedback_) {
+    const ObLogTableScan *target = find_internal_scan(step, GRAPH_STEP_VERTEX_ALIAS);
+    const double vertex_rows = target == nullptr
+        ? 0.0 : static_cast<double>(target->get_table_row_count());
+    if (vertex_rows > 0.0 && seed_rows > 0.0) {
+      const double endpoint_cap = bounded_graph_estimate_multiply(seed_rows,
+                                                                  vertex_rows);
+      const double retained_levels = static_cast<double>(
+          std::max<int64_t>(1, path_desc.lower_bound_));
+      const double work_cap = bounded_graph_estimate_multiply(endpoint_cap,
+                                                               retained_levels);
+      output_rows = std::min(output_rows, endpoint_cap);
+      recursive_work_rows = std::min(recursive_work_rows, work_cap);
+      if (step_cost_factor != nullptr && first_step_rows > 0.0) {
+        *step_cost_factor = std::min(
+            *step_cost_factor,
+            std::max(1.0, work_cap / first_step_rows));
+      }
+    }
+  }
 }
 
 const char *access_method_name(GraphFeedbackAccessMethod access_method)
@@ -670,10 +706,6 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
                  expand_access_desc_))) {
     LOG_WARN("failed to initialize graph expand access", K(ret), K_(path_desc),
              "edge_access_table_id", edge_scan->get_index_table_id());
-  } else if (OB_FAIL(retain_graph_edge_columns(
-                 *edge_scan, expand_access_desc_, *schema_guard))) {
-    LOG_WARN("failed to retain graph edge access columns", K(ret),
-             K_(expand_access_desc));
   } else if (OB_FAIL(enable_graph_vertex_lookup(*source_scan))) {
   } else if (OB_FAIL(enable_graph_vertex_lookup(*target_scan))) {
   } else {
@@ -692,6 +724,15 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
       LOG_WARN("failed to retain graph edge range filters", K(ret));
     } else if (OB_FAIL(initialize_path_payloads(*edge_scan))) {
       LOG_WARN("failed to bind native graph path payloads", K(ret));
+    } else if (OB_FAIL(retain_graph_edge_columns(
+                   *edge_scan, expand_access_desc_,
+                   path_desc_.need_path_ || !path_payload_exprs_.empty(),
+                   *schema_guard))) {
+      // MATCHNUM() and composed patterns can retain internal path payloads
+      // even when no public path value is projected. Their payload append
+      // still needs the edge key that identifies each traversed step.
+      LOG_WARN("failed to retain graph edge access columns", K(ret),
+               K_(expand_access_desc));
     } else if (OB_FAIL(initialize_reverse_access(*edge_scan, *schema_guard))) {
       LOG_WARN("failed to initialize graph reverse adjacency access", K(ret));
     }
@@ -737,8 +778,10 @@ int GraphFeedbackLoopLogOp::initialize_reverse_access(
       ret = OB_SCHEMA_ERROR;
     } else if (OB_FAIL(edge_table->get_simple_index_infos(indexes))) {
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < indexes.count()
-                        && !reverse_expand_access_desc_.uses_adjacency_index(); ++i) {
+    uint64_t best_index_table_id = common::OB_INVALID_ID;
+    int64_t best_covered_columns = -1;
+    int64_t best_index_key_count = INT64_MAX;
+    for (int64_t i = 0; OB_SUCC(ret) && i < indexes.count(); ++i) {
       const share::schema::ObTableSchema *index = nullptr;
       if (OB_FAIL(schema_guard.get_table_schema(indexes.at(i).table_id_, index))) {
       } else if (OB_ISNULL(index)) {
@@ -757,13 +800,58 @@ int GraphFeedbackLoopLogOp::initialize_reverse_access(
           matches = column != nullptr && column->column_id_
               == expand_access_desc_.edge_next_columns_[j];
         }
-        if (matches && OB_FAIL(build_graph_expand_access_desc(
-                reverse_path, index->get_table_id(), schema_guard,
-                reverse_expand_access_desc_))) {
-          LOG_WARN("failed to bind reverse graph adjacency index", K(ret),
-                   K(indexes.at(i).table_id_));
+        int64_t covered_columns = 0;
+        const uint64_t *required_groups[] = {
+            expand_access_desc_.edge_next_columns_,
+            expand_access_desc_.edge_current_columns_};
+        const int64_t required_counts[] = {
+            expand_access_desc_.target_key_count_,
+            expand_access_desc_.source_key_count_};
+        for (int64_t group = 0; OB_SUCC(ret) && matches
+             && group < ARRAYSIZEOF(required_groups); ++group) {
+          for (int64_t column = 0; OB_SUCC(ret)
+               && column < required_counts[group]; ++column) {
+            const uint64_t column_id = required_groups[group][column];
+            bool already_counted = false;
+            bool covered = false;
+            for (int64_t prior_group = 0; !already_counted
+                 && prior_group <= group; ++prior_group) {
+              const int64_t prior_limit = prior_group == group
+                  ? column : required_counts[prior_group];
+              for (int64_t prior = 0; !already_counted
+                   && prior < prior_limit; ++prior) {
+                already_counted = required_groups[prior_group][prior]
+                    == column_id;
+              }
+            }
+            if (!already_counted
+                && OB_FAIL(index->has_column(column_id, covered))) {
+              LOG_WARN("failed to inspect reverse adjacency index coverage",
+                       K(ret), K(column_id), KPC(index));
+            } else if (!already_counted && covered) {
+              ++covered_columns;
+            }
+          }
+        }
+        const int64_t index_key_count = columns.get_size();
+        if (OB_SUCC(ret) && matches
+            && (covered_columns > best_covered_columns
+                || (covered_columns == best_covered_columns
+                    && (index_key_count < best_index_key_count
+                        || (index_key_count == best_index_key_count
+                            && index->get_table_id() < best_index_table_id))))) {
+          best_index_table_id = index->get_table_id();
+          best_covered_columns = covered_columns;
+          best_index_key_count = index_key_count;
         }
       }
+    }
+    if (OB_SUCC(ret) && best_index_table_id != common::OB_INVALID_ID
+        && OB_FAIL(build_graph_expand_access_desc(
+               reverse_path, best_index_table_id, schema_guard,
+               reverse_expand_access_desc_))) {
+      LOG_WARN("failed to bind reverse graph adjacency index", K(ret),
+               K(best_index_table_id));
     }
     if (OB_SUCC(ret) && reverse_expand_access_desc_.uses_adjacency_index()) {
       // Reverse filters run after the secondary-index scan and base lookup.
@@ -775,6 +863,19 @@ int GraphFeedbackLoopLogOp::initialize_reverse_access(
                      reverse_rowkey_exprs_))) {
         LOG_WARN("failed to retain reverse edge lookup rowkeys", K(ret),
                  K(edge_scan.get_table_id()));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < reverse_rowkey_exprs_.count(); ++i) {
+        ObRawExpr *expr = reverse_rowkey_exprs_.at(i);
+        if (OB_ISNULL(expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(add_var_to_array_no_dup(
+                       edge_scan.get_access_exprs(), expr))) {
+          LOG_WARN("failed to retain reverse edge rowkey access expression",
+                   K(ret), K(i));
+        } else if (OB_FAIL(edge_scan.add_runtime_access_expr(expr))) {
+          LOG_WARN("failed to retain reverse edge rowkey result expression",
+                   K(ret), K(i));
+        }
       }
     }
   }
@@ -904,7 +1005,14 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
   const bool fallback_shortest = shortest
       && path_desc_.direction_ == GraphPathDirection::BOTH
       && path_desc_.source_element_id_ == path_desc_.target_element_id_;
-  bool safe = (can_use_basic_native_runtime() || fallback_shortest)
+  const bool feedback_shortest = path_desc_.shortest_dedup_in_feedback_;
+  const bool native_runtime = can_use_basic_native_runtime();
+  if (feedback_shortest && !native_runtime) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("shortest feedback optimization requires native graph runtime",
+             K(ret), K_(path_desc));
+  }
+  bool safe = OB_SUCC(ret) && (native_runtime || fallback_shortest)
       && path_desc_.path_mode_ == GraphPathMode::WALK
       && (shortest || (path_desc_.row_shape_ == GraphPathRowShape::PER_MATCH
                       && !path_desc_.need_path_ && path_payload_exprs_.empty()));
@@ -977,7 +1085,8 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
   }
   ObLogicalOperator *boundary = get_parent();
   const auto boundary_type = shortest ? LOG_WINDOW_FUNCTION : LOG_DISTINCT;
-  while (safe && boundary != nullptr && boundary->get_type() != boundary_type) {
+  while (safe && !feedback_shortest && boundary != nullptr
+         && boundary->get_type() != boundary_type) {
     const auto type = boundary->get_type();
     safe = type == LOG_SUBPLAN_SCAN || type == LOG_JOIN
         || type == LOG_SORT || type == LOG_MATERIAL;
@@ -989,7 +1098,7 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
   // aggregate/window/LIMIT or volatile sibling can observe path multiplicity.
   // Keep this allowlist conservative; unsupported plans retain ordinary WALK.
   ObArray<ObLogicalOperator *> pending;
-  if (OB_SUCC(ret) && safe && boundary != nullptr
+  if (OB_SUCC(ret) && safe && !feedback_shortest && boundary != nullptr
       && OB_FAIL(pending.push_back(boundary))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && safe && i < pending.count(); ++i) {
@@ -1075,7 +1184,8 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
       }
     }
   }
-  can_prune = OB_SUCC(ret) && safe && boundary != nullptr;
+  can_prune = OB_SUCC(ret) && safe
+      && (feedback_shortest || boundary != nullptr);
   return ret;
 }
 
@@ -1281,6 +1391,9 @@ int GraphFeedbackLoopLogOp::do_re_est_cost(EstimateCostInfo &param,
                                     recursive_work_rows,
                                     output_rows,
                                     step_cost_factor);
+    cap_shortest_feedback_estimate(path_desc_, step, seed_rows,
+                                   first_step_rows, recursive_work_rows,
+                                   output_rows, &step_cost_factor);
     // This remains a forward-step estimate: the bound-pair reverse search is
     // runtime-selective and uses only a separately planned adjacency index.
     // Without that index the ordinary one-way shortest search keeps this cost
@@ -1321,6 +1434,9 @@ int GraphFeedbackLoopLogOp::get_card_without_filter(double &card)
                                     recursive_work_rows,
                                     card,
                                     step_cost_factor);
+    cap_shortest_feedback_estimate(path_desc_, step, seed->get_card(),
+                                   step->get_card(), recursive_work_rows,
+                                   card, nullptr);
   }
   return ret;
 }
@@ -1341,6 +1457,7 @@ uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
   seed = do_hash(path_desc_.any_shortest_, seed);
   seed = do_hash(path_desc_.shortest_single_segment_, seed);
   seed = do_hash(path_desc_.shortest_goal_key_filter_, seed);
+  seed = do_hash(path_desc_.shortest_dedup_in_feedback_, seed);
   seed = expand_access_desc_.hash(seed);
   if (reverse_expand_access_desc_.is_valid()) {
     seed = reverse_expand_access_desc_.hash(seed);

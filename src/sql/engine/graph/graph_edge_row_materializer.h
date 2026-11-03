@@ -50,6 +50,7 @@ public:
   int materialize_edge(const GraphIdentityExprBinding &source,
                        const GraphIdentityExprBinding &edge_binding,
                        const GraphIdentityExprBinding &target,
+                       bool need_edge_identity,
                        GraphExpandEdge &edge, bool &matches);
   int materialize_payload(const GraphExpandScanDesc &scan_desc, GraphEdgePayload &payload);
 

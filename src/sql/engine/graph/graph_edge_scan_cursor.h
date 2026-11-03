@@ -45,9 +45,7 @@ public:
   bool edge_scan_resources_released() const;
   bool can_partition_sources() const { return access_desc_.uses_adjacency_index(); }
   int scan_edges(const common::ObIArray<GraphElementIdentity> &sources,
-                 GraphPathDirection direction,
-                 const GraphElementIdentity *after_edge,
-                 int64_t limit,
+                 const GraphExpandScanRequest &request,
                  common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end);
   // Cost-only indexed scan. No edge is published or retained, and the DAS
@@ -81,12 +79,9 @@ private:
                         const GraphExpandAccessDesc &access_desc,
                         const GraphExpandScanDesc &scan_desc,
                         EdgeScanBinding &binding);
-  int save_edge_cursor(const GraphElementIdentity &identity);
   int validate_edge_scan_request(
       const common::ObIArray<GraphElementIdentity> &sources,
-      GraphPathDirection direction,
-      const GraphElementIdentity *after_edge,
-      int64_t limit) const;
+      const GraphExpandScanRequest &request) const;
   int init_edge_scan_rtdefs(bool uses_index_back);
   int build_adjacency_ranges(
       const common::ObIArray<GraphElementIdentity> &sources,
@@ -100,15 +95,15 @@ private:
   int clear_edge_eval_flags(bool vectorized);
   int get_edge_page(
       const common::ObIArray<GraphElementIdentity> &sources,
-      int64_t limit,
+      const GraphExpandScanRequest &request,
       common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges,
       bool &end, int64_t raw_row_limit, bool count_only,
       int64_t *peak_memory);
   int scan_edges_impl(
       const common::ObIArray<GraphElementIdentity> &sources,
-      GraphPathDirection direction, const GraphElementIdentity *after_edge,
-      int64_t limit, common::ObIArray<GraphExpandEdge> &edges,
+      const GraphExpandScanRequest &request,
+      common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges, bool &end,
       int64_t raw_row_limit, bool count_only, int64_t *peak_memory);
   int reset_edge_scan(int ret, bool retain_allocator_page);
@@ -123,9 +118,6 @@ private:
   common::ObArenaAllocator identity_page_allocator_;
   // Reusable JSON conversion scratch; never backs returned edge payloads.
   common::ObArenaAllocator payload_scratch_allocator_;
-  // The scan cursor must outlive page identities and the vertex lookup between
-  // two edge pages, so it owns a separate deep copy of the last edge rowkey.
-  common::ObArenaAllocator edge_cursor_allocator_;
   GraphIdentityIndex edge_source_index_;
   common::ObArray<GraphExpandEdge> probe_edges_;
   GraphPathDesc path_desc_{};
@@ -134,12 +126,10 @@ private:
   ObDASScanRtDef *edge_scan_rtdef_{nullptr};
   ObDASScanRtDef *edge_lookup_rtdef_{nullptr};
   DASOpResultIter edge_result_iter_{};
-  GraphElementIdentity edge_cursor_{};
   const GraphElementIdentity *edge_sources_data_{nullptr};
   int64_t edge_source_count_{0};
   int64_t edge_batch_count_{0};
   int64_t edge_batch_index_{0};
-  bool has_edge_cursor_{false};
   bool edge_scan_active_{false};
   bool initialized_{false};
 };

@@ -83,6 +83,8 @@ GraphBidirectionalShortest::SearchSide::SearchSide(
       probe_sources_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                      ModulePageAllocator(allocator, "GraphBidirPrb"))
 {
+  // Distance-only bidirectional search never exposes an edge witness.
+  expand_.set_edge_projection(false, false);
 }
 
 int GraphBidirectionalShortest::SearchSide::copy_identity(

@@ -216,7 +216,9 @@ int GraphAdjacencyCache::record(const ObIArray<GraphElementIdentity> &sources,
     } else if (!found || pos < first_new_entry_ || pos >= entries_.count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(copy_identity(edge.source_identity_, stable.value_.source_identity_))) {
-    } else if (OB_FAIL(copy_identity(edge.edge_identity_, stable.value_.edge_identity_))) {
+    } else if (edge.edge_identity_.is_valid()
+               && OB_FAIL(copy_identity(
+                   edge.edge_identity_, stable.value_.edge_identity_))) {
     } else if (OB_FAIL(copy_identity(edge.target_identity_, stable.value_.target_identity_))) {
     } else if (OB_FAIL(stable.value_.payload_.deep_copy(edge.payload_, identities_))) {
     } else if (OB_FAIL(cached_edges_.push_back(stable))) {

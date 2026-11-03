@@ -49,8 +49,8 @@ public:
                       GraphVertexLookupPhase phase) override
   { return child_.lookup_vertices(requested, existing, phase); }
   int scan_edges(const common::ObIArray<GraphElementIdentity> &sources,
-                 GraphPathDirection direction, const GraphElementIdentity *after_edge,
-                 int64_t limit, common::ObIArray<GraphExpandEdge> &edges,
+                 const GraphExpandScanRequest &request,
+                 common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
   bool supports_adjacency_probe() const override
   { return child_.supports_adjacency_probe(); }
@@ -67,13 +67,11 @@ private:
   // Request-local arrays are not backed by the optional cache sub-budget.
   common::ObArray<int64_t> hits_;
   common::ObArray<GraphElementIdentity> misses_;
-  common::ObArenaAllocator cursor_allocator_;
-  GraphElementIdentity child_cursor_{};
   int64_t hit_position_{0};
   int64_t hit_edge_{-1};
   bool enabled_{false};
   bool bypass_{true};
-  bool child_has_cursor_{false};
+  bool child_scan_active_{false};
 };
 
 } // namespace sql

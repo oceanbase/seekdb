@@ -148,13 +148,15 @@ int GraphEdgeRowMaterializer::materialize_edge(
     const GraphIdentityExprBinding &source,
     const GraphIdentityExprBinding &edge_binding,
     const GraphIdentityExprBinding &target,
+    bool need_edge_identity,
     GraphExpandEdge &edge, bool &matches)
 {
   int ret = OB_SUCCESS;
   bool has_null_endpoint = false;
   edge = GraphExpandEdge();
   matches = false;
-  if (OB_UNLIKELY(!source.is_valid() || !edge_binding.is_valid() || !target.is_valid())) {
+  if (OB_UNLIKELY(!source.is_valid() || !target.is_valid()
+                  || (need_edge_identity && !edge_binding.is_valid()))) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(row_has_null_endpoint(source, target, has_null_endpoint))) {
   } else if (has_null_endpoint) {
@@ -162,7 +164,7 @@ int GraphEdgeRowMaterializer::materialize_edge(
     // so this physical row is not a graph-edge match.
   } else if (OB_FAIL(materialize_identity(
                  path_desc_.source_element_id_, source, edge.source_identity_))) {
-  } else if (OB_FAIL(materialize_identity(
+  } else if (need_edge_identity && OB_FAIL(materialize_identity(
                  path_desc_.edge_element_id_, edge_binding, edge.edge_identity_))) {
   } else if (OB_FAIL(materialize_identity(
                  path_desc_.target_element_id_, target, edge.target_identity_))) {
