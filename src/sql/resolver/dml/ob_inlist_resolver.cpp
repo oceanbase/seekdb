@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -28,6 +29,61 @@ using namespace common;
 
 namespace sql
 {
+namespace
+{
+// Only the rewrite decision depends on the domain size. Keep every original
+// operand so that parameter positions and SQL comparison semantics are intact.
+int check_small_integer_domain(const ParseNode &in_list,
+                               const ParamStore *param_store,
+                               const int64_t threshold,
+                               bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  bool all_integer = true;
+  is_small = false;
+  hash::ObHashSet<uint64_t, hash::NoPthreadDefendMode> values;
+  if (OB_ISNULL(in_list.children_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(values.create(threshold, "InlistDomain", "InlistDomain"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_integer && values.size() < threshold
+                        && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      uint64_t value = 0;
+      if (OB_ISNULL(node)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (T_INT == node->type_ || T_UINT64 == node->type_) {
+        value = static_cast<uint64_t>(node->value_);
+      } else if (T_QUESTIONMARK == node->type_
+                 && OB_NOT_NULL(param_store)
+                 && node->value_ >= 0 && node->value_ < param_store->count()
+                 && param_store->at(node->value_).is_integer_type()) {
+        const ObObjParam &param = param_store->at(node->value_);
+        value = param.is_unsigned_integer() ? param.get_uint64()
+                                           : static_cast<uint64_t>(param.get_int());
+      } else {
+        // NULL, non-integer values and unknown prepared parameters retain the
+        // existing path. Their equality can require coercion or collation.
+        all_integer = false;
+      }
+      if (OB_SUCC(ret) && all_integer && OB_FAIL(values.set_refactored(value))) {
+        if (OB_HASH_EXIST == ret) {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+    is_small = OB_SUCC(ret) && all_integer && values.size() < threshold;
+  }
+  if (values.created()) {
+    const int tmp_ret = values.destroy();
+    if (OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+  }
+  return ret;
+}
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -350,6 +406,13 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt && threshold > 1 && !is_prepare_stmt) {
+        bool is_small = false;
+        if (OB_FAIL(check_small_integer_domain(in_list, param_store, threshold, is_small))) {
+        } else if (is_small) {
+          is_enable = false;
+        }
+      }
     }
   }
   return ret;
