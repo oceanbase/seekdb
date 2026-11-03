@@ -166,5 +166,29 @@ int GraphCachedAccess::scan_edges(const ObIArray<GraphElementIdentity> &sources,
   return ret;
 }
 
+int GraphCachedAccess::probe_adjacency_rows(
+    const ObIArray<GraphElementIdentity> &sources,
+    GraphPathDirection direction, int64_t raw_row_limit,
+    int64_t &scanned_rows, bool &complete, int64_t &peak_memory)
+{
+  int ret = OB_SUCCESS;
+  scanned_rows = 0;
+  complete = false;
+  peak_memory = 0;
+  // A cost probe is deliberately independent of adjacency reuse: cached rows
+  // do not describe the physical DAS work of the next indexed level. Abort
+  // any request-local playback/recording before delegating to the child.
+  release();
+  if (OB_FAIL(check_status())) {
+  } else {
+    ret = child_.probe_adjacency_rows(
+        sources, direction, raw_row_limit,
+        scanned_rows, complete, peak_memory);
+  }
+  // Enforce the probe contract even if a child failure left a live cursor.
+  child_.release();
+  return ret;
+}
+
 } // namespace sql
 } // namespace oceanbase

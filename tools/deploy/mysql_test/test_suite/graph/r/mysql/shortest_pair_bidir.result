@@ -158,4 +158,10 @@ distance
 3
 DROP PROPERTY GRAPH shortest_fanout;
 DROP TABLE shortest_fanout_e,shortest_fanout_v,shortest_skew_digit;
+cached_forward_delegates_bounded_adjacency_probe
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_probe MATCH ANY SHORTEST
+(a IS node WHERE a.k='seed')-[e IS link]->{1,3}(b IS node WHERE b.k='goal')
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+2
 DROP TABLE plan_table;

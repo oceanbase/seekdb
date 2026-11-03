@@ -52,6 +52,12 @@ public:
                  GraphPathDirection direction, const GraphElementIdentity *after_edge,
                  int64_t limit, common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
+  bool supports_adjacency_probe() const override
+  { return child_.supports_adjacency_probe(); }
+  int probe_adjacency_rows(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      GraphPathDirection direction, int64_t raw_row_limit,
+      int64_t &scanned_rows, bool &complete, int64_t &peak_memory) override;
 private:
   int begin(const common::ObIArray<GraphElementIdentity> &sources);
 

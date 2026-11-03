@@ -132,4 +132,45 @@ INSERT INTO shortest_fanout_e SELECT 11000+a.d*100+b.d*10+c.d,
 SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,3}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
 DROP PROPERTY GRAPH shortest_fanout;
 DROP TABLE shortest_fanout_e,shortest_fanout_v,shortest_skew_digit;
+
+# The forward access is wrapped by GraphCachedAccess. With no probe delegation,
+# equal-width frontiers choose the goal side and materialize 3001 large keys,
+# exceeding this work-area budget. A delegated count-only probe chooses the
+# two-edge source path without retaining the unrelated goal-side identities.
+--disable_query_log
+CREATE TABLE shortest_probe_digit(d INT PRIMARY KEY);
+INSERT INTO shortest_probe_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE shortest_probe_v(k VARBINARY(2048) PRIMARY KEY);
+CREATE TABLE shortest_probe_e(id BIGINT PRIMARY KEY,src VARBINARY(2048),dst VARBINARY(2048));
+INSERT INTO shortest_probe_v VALUES('seed'),('middle'),('goal');
+INSERT INTO shortest_probe_e VALUES(1,'seed','middle'),(2,'middle','goal');
+INSERT INTO shortest_probe_v
+ SELECT CONCAT('dead',LPAD(a.d*1000+b.d*100+c.d*10+d.d,4,'0'),REPEAT('x',1990))
+ FROM shortest_probe_digit a,shortest_probe_digit b,
+      shortest_probe_digit c,shortest_probe_digit d WHERE a.d<3;
+INSERT INTO shortest_probe_e
+ SELECT 10000+a.d*1000+b.d*100+c.d*10+d.d,
+ CONCAT('dead',LPAD(a.d*1000+b.d*100+c.d*10+d.d,4,'0'),REPEAT('x',1990)),'goal'
+ FROM shortest_probe_digit a,shortest_probe_digit b,
+      shortest_probe_digit c,shortest_probe_digit d WHERE a.d<3;
+CREATE PROPERTY GRAPH shortest_probe
+ VERTEX TABLES(shortest_probe_v KEY(k) LABEL node PROPERTIES(k))
+ EDGE TABLES(shortest_probe_e KEY(id) SOURCE KEY(src) REFERENCES shortest_probe_v(k)
+ DESTINATION KEY(dst) REFERENCES shortest_probe_v(k) LABEL link PROPERTIES(id));
+CREATE INDEX shortest_probe_out ON shortest_probe_e(src,dst);
+CREATE INDEX shortest_probe_in ON shortest_probe_e(dst,src);
+let $saved_hash_area_size=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+ALTER SYSTEM SET _hash_area_size='4M';
+sleep 6;
+--enable_query_log
+--echo cached_forward_delegates_bounded_adjacency_probe
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_probe MATCH ANY SHORTEST
+ (a IS node WHERE a.k='seed')-[e IS link]->{1,3}(b IS node WHERE b.k='goal')
+ COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--disable_query_log
+eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
+sleep 6;
+DROP PROPERTY GRAPH shortest_probe;
+DROP TABLE shortest_probe_e,shortest_probe_v,shortest_probe_digit;
+--enable_query_log
 DROP TABLE plan_table;
