@@ -1,0 +1,58 @@
+#owner: kkw030607-svg
+#description: prune implied integer bounds in approximate vector search
+# Regression test for redundant upper bounds on an HNSW pre-filter path.
+
+--disable_warnings
+drop table if exists t_issue1534;
+--enable_warnings
+
+create table t_issue1534(
+  id bigint primary key,
+  embedding vector(3) not null,
+  age int,
+  key idx_age(age),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16,
+          ef_construction=128, ef_search=64, sync_mode=immediate));
+
+insert into t_issue1534 values
+  (1, '[0,0,0]', 1),
+  (2, '[0,2,0]', 5),
+  (3, '[0,0,3]', 10),
+  (4, '[4,0,0]', 50),
+  (5, '[5,0,0]', 1000);
+analyze table t_issue1534;
+
+--let $filter = age < 10
+--let $threshold = 20
+--let $i = 0
+while ($i < 128)
+{
+  --let $filter = $filter AND age < $threshold
+  --inc $threshold
+  --inc $i
+}
+
+eval select count(*) from t_issue1534 where $filter;
+select count(*) from t_issue1534 where age < 10;
+eval explain basic select id from t_issue1534
+where $filter
+order by l2_distance(embedding, '[1,0,0]') approximate
+limit 2;
+
+select count(*) from t_issue1534 where 20 > age and 10 > age;
+select count(*) from t_issue1534 where age > 5 and age > 1;
+select count(*) from t_issue1534 where age <= 10 and age < 10;
+
+prepare ann_bounds_stmt from
+  'select id from t_issue1534 where age < ? and age < ?
+   order by l2_distance(embedding, ''[1,0,0]'') approximate limit 10';
+set @a = 20, @b = 10;
+execute ann_bounds_stmt using @a, @b;
+set @a = 10, @b = 5;
+execute ann_bounds_stmt using @a, @b;
+set @a = null, @b = 30;
+execute ann_bounds_stmt using @a, @b;
+deallocate prepare ann_bounds_stmt;
+
+drop table t_issue1534;
