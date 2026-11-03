@@ -107,6 +107,13 @@ private:
     bool frontier_a_active_{true};
   };
 
+  struct LevelProbe
+  {
+    int64_t scanned_rows_{0};
+    bool measured_{false};
+    bool complete_{false};
+  };
+
   int validate_and_seed(SearchSide &side,
                         const GraphElementIdentity &identity,
                         bool &exists);
@@ -115,8 +122,9 @@ private:
   int accept_extension(SearchSide &side, const SearchSide &opposite,
                        const GraphElementIdentity &target_identity,
                        int64_t &best_distance);
-  int probe_reverse_level(bool &complete);
-  SearchSide &choose_side();
+  int probe_level(SearchSide &side, LevelProbe &probe);
+  int choose_side(SearchSide *&side);
+  SearchSide &choose_side_by_frontier();
   int accumulate_stats(const GraphExpandStats &batch);
   int check_memory_limit();
   void release_state();
@@ -126,7 +134,6 @@ private:
   int64_t memory_limit_;
   GraphExpandStats stats_{};
   int64_t expanded_hop_count_{0};
-  bool reverse_deferred_{false};
 
   DISALLOW_COPY_AND_ASSIGN(GraphBidirectionalShortest);
 };

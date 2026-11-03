@@ -36,11 +36,13 @@ static constexpr int64_t GRAPH_SHORTEST_INDEXED_BATCH_SIZE =
     GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE;
 static constexpr int64_t GRAPH_SHORTEST_EDGE_PAGE_SIZE =
     GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE;
-// One indexed source batch and a small number of physical rows bound each
-// reverse cost probe, including scans whose graph filters reject every row.
+// Bound one adjacency-cost probe to the same physical row count as an edge
+// page. This is large enough to distinguish ordinary degree skew without
+// allowing cost selection itself to scan an unbounded adjacency list.
 static constexpr int64_t GRAPH_SHORTEST_PROBE_MAX_SOURCES =
     GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE;
-static constexpr int64_t GRAPH_SHORTEST_PROBE_RAW_ROWS = 128;
+static constexpr int64_t GRAPH_SHORTEST_PROBE_RAW_ROWS =
+    GRAPH_SHORTEST_EDGE_PAGE_SIZE;
 
 int add_nonnegative(int64_t value, int64_t &total)
 {
@@ -224,13 +226,8 @@ int GraphBidirectionalShortest::validate_and_seed(
 }
 
 GraphBidirectionalShortest::SearchSide &
-GraphBidirectionalShortest::choose_side()
+GraphBidirectionalShortest::choose_side_by_frontier()
 {
-  if (reverse_deferred_) {
-    // The complete reverse visited set remains valid, but forward BFS must
-    // now make progress without materializing the costly reverse level.
-    return forward_;
-  }
   const bool forward_indexed = forward_.expand_.can_partition_sources();
   const bool reverse_indexed = reverse_.expand_.can_partition_sources();
   const int64_t forward_count = forward_.current().count();
@@ -250,22 +247,23 @@ GraphBidirectionalShortest::choose_side()
   return reverse_count <= forward_count ? reverse_ : forward_;
 }
 
-int GraphBidirectionalShortest::probe_reverse_level(bool &complete)
+int GraphBidirectionalShortest::probe_level(
+    SearchSide &side, LevelProbe &probe)
 {
   int ret = OB_SUCCESS;
-  complete = false;
-  const int64_t source_count = reverse_.current().count();
+  probe = LevelProbe();
+  const int64_t source_count = side.current().count();
   if (source_count > GRAPH_SHORTEST_PROBE_MAX_SOURCES) {
-    // Building more than one indexed source batch is already beyond the
-    // bounded probe; the forward side can still prove the exact distance.
+    // More than one physical source batch is already beyond this bounded
+    // comparison. The frontier-width fallback will select a side.
   } else {
-    reverse_.probe_sources_.reuse();
+    side.probe_sources_.reuse();
     for (int64_t i = 0; OB_SUCC(ret) && i < source_count; ++i) {
       if (i % GRAPH_SHORTEST_PROBE_RAW_ROWS == 0
-          && OB_FAIL(reverse_.access_.check_status())) {
-      } else if (OB_FAIL(reverse_.probe_sources_.push_back(
-                     reverse_.current().at(i)))) {
-        LOG_WARN("failed to collect reverse shortest probe sources", K(ret), K(i));
+          && OB_FAIL(side.access_.check_status())) {
+      } else if (OB_FAIL(side.probe_sources_.push_back(
+                     side.current().at(i)))) {
+        LOG_WARN("failed to collect shortest-path probe sources", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
@@ -274,39 +272,76 @@ int GraphBidirectionalShortest::probe_reverse_level(bool &complete)
       // The adapter releases root-lookup scratch before probing. Exclude its
       // current bytes so the measured probe peak is not counted twice.
       const int64_t resident_before = used_memory();
-      const int64_t adapter_before = reverse_.access_.used_memory();
+      const int64_t adapter_before = side.access_.used_memory();
       const int64_t base_memory = resident_before >= adapter_before
           ? resident_before - adapter_before : resident_before;
-      int64_t scanned_rows = 0;
       int64_t probe_memory = 0;
-      if (reverse_.access_.supports_adjacency_probe()) {
-        ret = reverse_.access_.probe_adjacency_rows(
-            reverse_.probe_sources_, reverse_.direction_,
-            GRAPH_SHORTEST_PROBE_RAW_ROWS, scanned_rows, complete, probe_memory);
+      if (side.access_.supports_adjacency_probe()) {
+        ret = side.access_.probe_adjacency_rows(
+            side.probe_sources_, side.direction_,
+            GRAPH_SHORTEST_PROBE_RAW_ROWS, probe.scanned_rows_,
+            probe.complete_, probe_memory);
+        probe.measured_ = OB_SUCC(ret);
         // The adapter closes its cursor internally; this also handles a
         // partial implementation that returned an access error.
-        reverse_.access_.release();
+        side.access_.release();
       }
       if (OB_SUCC(ret)
-          && OB_UNLIKELY(scanned_rows < 0
-                         || scanned_rows > GRAPH_SHORTEST_PROBE_RAW_ROWS
+          && OB_UNLIKELY(probe.scanned_rows_ < 0
+                         || probe.scanned_rows_ > GRAPH_SHORTEST_PROBE_RAW_ROWS
                          || probe_memory < 0)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_SUCC(ret)
-                 && OB_FAIL(add_nonnegative(scanned_rows, stats_.scanned_edges_))) {
+                 && OB_FAIL(add_nonnegative(
+                        probe.scanned_rows_, stats_.scanned_edges_))) {
       } else if (OB_SUCC(ret)) {
         const int64_t peak_memory = saturated_add(base_memory, probe_memory);
         stats_.peak_path_memory_ = std::max(stats_.peak_path_memory_, peak_memory);
         if (OB_UNLIKELY(peak_memory > memory_limit_)) {
           ret = OB_EXCEED_QUERY_MEM_LIMIT;
-          LOG_WARN("reverse shortest probe exceeded graph work-area limit",
+          LOG_WARN("shortest-path probe exceeded graph work-area limit",
                    K(ret), K(peak_memory), K_(memory_limit));
         }
       }
     }
-    reverse_.probe_sources_.reset();
+    side.probe_sources_.reset();
     if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
     }
+  }
+  return ret;
+}
+
+int GraphBidirectionalShortest::choose_side(SearchSide *&side)
+{
+  int ret = OB_SUCCESS;
+  side = &choose_side_by_frontier();
+  // Cost probes compare physical adjacency work only when both directions
+  // have independent indexed ranges. A full-scan side must still receive the
+  // complete BFS frontier and is selected by the frontier policy above.
+  if (forward_.expand_.can_partition_sources()
+      && reverse_.expand_.can_partition_sources()
+      && forward_.access_.supports_adjacency_probe()
+      && reverse_.access_.supports_adjacency_probe()) {
+    LevelProbe forward_probe;
+    LevelProbe reverse_probe;
+    if (OB_FAIL(probe_level(forward_, forward_probe))) {
+      LOG_WARN("failed to probe forward shortest-path level", K(ret));
+    } else if (OB_FAIL(probe_level(reverse_, reverse_probe))) {
+      LOG_WARN("failed to probe reverse shortest-path level", K(ret));
+    } else if (!forward_probe.measured_ || !reverse_probe.measured_) {
+      // The bounded frontier policy remains valid when either side has too
+      // many source ranges to measure in one physical batch.
+    } else if (forward_probe.complete_ != reverse_probe.complete_) {
+      // An incomplete probe has at least one full page of physical rows. A
+      // complete probe is therefore no more expensive than that lower bound.
+      side = forward_probe.complete_ ? &forward_ : &reverse_;
+    } else if (forward_probe.scanned_rows_ != reverse_probe.scanned_rows_) {
+      side = forward_probe.scanned_rows_ < reverse_probe.scanned_rows_
+          ? &forward_ : &reverse_;
+    }
+    // Equal probes, including two page-sized lower bounds, keep the indexed
+    // frontier decision. It remains exact because either side completes one
+    // whole BFS level before the next choice.
   }
   return ret;
 }
@@ -485,17 +520,12 @@ int GraphBidirectionalShortest::search(
         if (OB_FAIL(forward_.expand_.check_status())) {
         } else if (OB_FAIL(reverse_.expand_.check_status())) {
         } else {
-          SearchSide *side = &choose_side();
-          if (side == &reverse_) {
-            bool probe_complete = false;
-            if (OB_FAIL(probe_reverse_level(probe_complete))) {
-              LOG_WARN("failed to probe reverse shortest-path level", K(ret));
-            } else if (!probe_complete) {
-              reverse_deferred_ = true;
-              side = &forward_;
-            }
-          }
-          if (OB_SUCC(ret)) {
+          SearchSide *side = nullptr;
+          if (OB_FAIL(choose_side(side))) {
+            LOG_WARN("failed to choose shortest-path expansion side", K(ret));
+          } else if (OB_ISNULL(side)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
             SearchSide &opposite = side == &forward_ ? reverse_ : forward_;
             if (OB_FAIL(expand_level(*side, opposite, best_distance))) {
               LOG_WARN("failed to expand shortest-path BFS level", K(ret));
@@ -526,7 +556,6 @@ void GraphBidirectionalShortest::release()
   release_state();
   stats_ = GraphExpandStats();
   expanded_hop_count_ = 0;
-  reverse_deferred_ = false;
 }
 
 } // namespace sql

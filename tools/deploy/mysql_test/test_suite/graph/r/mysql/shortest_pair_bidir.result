@@ -144,6 +144,15 @@ SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST
 distance
 SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,6}(b IS node WHERE b.id=11) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
 distance
+exact_six_hop_bound
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=20)-[e IS link]->{1,6}(b IS node WHERE b.id=26) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+6
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=20)-[e IS link]->{1,5}(b IS node WHERE b.id=26) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=26)<-[e IS link]-{1,6}(b IS node WHERE b.id=20) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+6
 SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,3}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
 distance
 3
