@@ -188,6 +188,15 @@ int ObDMLService::check_column_type(const ExprFixedArray &dml_row,
                                                expr->datum_meta_.type_);
     } else if (OB_ISNULL(datum)) {
       // impossible
+    } else if (T_FUN_COLUMN_CONV == expr->type_
+               && ob_is_integer_type(expr->datum_meta_.type_)
+               && expr->arg_cnt_ > 4
+               && T_QUESTIONMARK == expr->args_[4]->type_
+               && expr->args_[4]->get_eval_info(dml_op.get_eval_ctx()).integer_range_warning_
+               && row_num > 0) {
+      // A constant assignment can reuse its converted datum across DML rows.
+      // Publish its retained diagnostic once for this target column and row.
+      LOG_USER_WARN(OB_DATA_OUT_OF_RANGE, column_name.length(), column_name.ptr(), row_num);
     } else if (OB_FAIL(check_geometry_type(dml_op.get_eval_ctx(),
                                            dml_row,
                                            column_info,

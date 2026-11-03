@@ -151,6 +151,8 @@ struct ObEvalInfo
 			uint16_t notnull_:1;
 			// pointer is point to reserved buffer in frame.
 			uint16_t point_to_frame_:1;
+      // Diagnostic belongs to the cached integer table-assignment datum.
+      uint16_t integer_range_warning_:1;
 		};
 		uint16_t flag_;
 	};

@@ -787,6 +787,7 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
 int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
+  expr.get_eval_info(ctx).integer_range_warning_ = false;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session) || OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
@@ -833,6 +834,11 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       } else if (OB_FAIL(datum_param.from_objparam(dst_obj, &allocator))) {
       } else {
         expr_datum = datum_param.datum_;
+        expr.get_eval_info(ctx).integer_range_warning_ =
+            OB_DATA_OUT_OF_RANGE == cast_ctx.warning_
+            && CM_IS_WARN_ON_FAIL(cast_mode)
+            && ob_is_integer_type(v.get_type())
+            && ob_is_integer_type(dst_meta.get_type());
       }
     }
   }
