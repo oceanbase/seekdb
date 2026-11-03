@@ -104,12 +104,19 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "$CACHE_ROOT/cargo/bin" >> "$GITHUB_PATH"
 
+      # The worker image's system Python does not include pip. Keep Python 3.10
+      # coverage and install its TOML fallback using a managed Python environment.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
       - name: Prepare Python TOML parser
         shell: bash
         run: |
           set -euo pipefail
           if ! python3 -c 'import tomllib' 2>/dev/null; then
-            python3 -m pip install --user 'tomli==2.2.1'
+            python3 -m pip install 'tomli==2.2.1'
           fi
           python3 cmake/plugin_boundary_check.py .
 

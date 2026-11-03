@@ -662,8 +662,8 @@
           "FILE:@@//rust/rpc/Cargo.toml 7ee5001818ba0a0b1d355bd2118bfa826b15df2abae9441054998384b986a388",
           "FILE:@@//rust/seekdb-host/Cargo.toml 5a4f65bc4020f33e7612a6b91d9b7f8d365f303e3349fd5ec714942eed6d71cf",
           "FILE:@@//bazel/prost-codegen/Cargo.toml 56f7456a7300cc576d376ee4cdf81c03e34d4260029f910e8b8ab9f4e2b5703e",
-          "FILE:@@//build/external/+cxxbridge_repository+cxxbridge_source/Cargo.lock 051ae4d78c8864487f3d49cf50000cd54926b21ca898941ec141e4aa064f3bc2",
-          "FILE:@@//build/external/+cxxbridge_repository+cxxbridge_source/Cargo.toml fc22614b5738a85940088e56d7d2211208151ac69af7cb03e31500c88b1493cf",
+          "FILE:@@+cxxbridge_repository+cxxbridge_source//Cargo.lock 051ae4d78c8864487f3d49cf50000cd54926b21ca898941ec141e4aa064f3bc2",
+          "FILE:@@+cxxbridge_repository+cxxbridge_source//Cargo.toml fc22614b5738a85940088e56d7d2211208151ac69af7cb03e31500c88b1493cf",
           "FILE:@@//deps/external/Cargo.lock 30e31d86bfbede24b05eddb6760ece50b771cfd676f924053bcb8be9e8136ac3",
           "FILE:@@//deps/external/Cargo.toml c9abddd63c6627e8de660b60baf13c8b233aaa06dc721667cf2bd89fb704efd2"
         ],
