@@ -1,0 +1,4 @@
+drop table if exists t_ai_prompt_enhancement;
+create table t_ai_prompt_enhancement (id int primary key, template_text text, argument_text longtext);
+insert into t_ai_prompt_enhancement values(1, '你好 {0}', '世界');
+drop table t_ai_prompt_enhancement;
