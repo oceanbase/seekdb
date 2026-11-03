@@ -2586,46 +2586,10 @@ int ObSQLUtils::generate_new_name_with_escape_character(
     const ObString &src,
     ObString &dst)
 {
-  int ret = OB_SUCCESS;
-  const ObString::obstr_size_t src_len = src.length();
-  ObString::obstr_size_t dst_len = src_len;
-  const char escape_character = '`';
-  char *ptr = NULL;
-
-  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
-    dst.assign(NULL, 0);
-  } else if (NULL == src.find(escape_character)) {
-    dst = src;
-  } else {
-    for (int64_t i = 0; i < src_len; ++i) {
-      if (src[i] == escape_character) {
-        ++dst_len;
-      }
-    }
-    if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
-      dst = NULL;
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("allocate memory failed", K(ret), "size", dst_len);
-    } else {
-      int64_t tmp_dst_pos = 0;
-      for (int64_t i = 0; i < src_len; i++) {
-        if (src[i] == escape_character) {
-          ptr[tmp_dst_pos++] = escape_character;
-          ptr[tmp_dst_pos++] = escape_character;
-        } else {
-          ptr[tmp_dst_pos++] = src[i];
-        }
-      }
-      if (tmp_dst_pos != dst_len) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ptr[dst_len] = '\0';
-        dst.assign_ptr(ptr, dst_len);
-      }
-    }
-  }
-
-  return ret;
+  // The escaping primitive lives in OBLib so that lower modules, for example
+  // the terminal `share` module, can escape SQL identifiers without depending
+  // on this upper module.
+  return common::ob_escape_sql_identifier(allocator, src, dst);
 }
 
 

@@ -953,6 +953,56 @@ int ob_sub_str(AllocatorT &allocator, const ObString &src, int32_t start_index, 
   return ret;
 }
 
+/**
+ * Escape the SQL identifier quote character (backtick) of @a src by doubling
+ * every occurrence of it.
+ *
+ * The result is the body of a backtick quoted SQL identifier and still denotes
+ * the very same identifier as @a src. When @a src does not contain the escape
+ * character, no memory is allocated and @a dst simply refers to @a src.
+ *
+ * The helper lives in OBLib on purpose. Lower modules, for example the
+ * terminal `share` module, have to escape SQL identifiers as well, and they
+ * must not reach out to the upper `sql` module to do that.
+ */
+template <typename AllocatorT>
+int ob_escape_sql_identifier(AllocatorT &allocator, const ObString &src, ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const char escape_character = '`';
+  const ObString::obstr_size_t src_len = src.length();
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dst = src;
+  } else {
+    ObString::obstr_size_t dst_len = src_len;
+    for (ObString::obstr_size_t i = 0; i < src_len; ++i) {
+      if (escape_character == src[i]) {
+        ++dst_len;
+      }
+    }
+    void *ptr = NULL;
+    if (NULL == (ptr = allocator.alloc(dst_len + 1))) {
+      dst.assign(NULL, 0);
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LIB_LOG(ERROR, "allocate memory failed", K(ret), "size", dst_len);
+    } else {
+      char *dst_ptr = static_cast<char *>(ptr);
+      ObString::obstr_size_t dst_pos = 0;
+      for (ObString::obstr_size_t i = 0; i < src_len; ++i) {
+        if (escape_character == src[i]) {
+          dst_ptr[dst_pos++] = escape_character;
+        }
+        dst_ptr[dst_pos++] = src[i];
+      }
+      dst_ptr[dst_len] = '\0';
+      dst.assign_ptr(dst_ptr, dst_len);
+    }
+  }
+  return ret;
+}
+
 template <typename AllocatorT>
 int ob_dup_cstring(AllocatorT &allocator, const ObString &src, char* &dst)
 {

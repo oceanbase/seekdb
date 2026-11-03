@@ -455,6 +455,7 @@ psmall_test=[
 'vector_index.vector_calc_utf8_mysql',
 'vector_index.vector_index_basic',
 'vector_index.vector_index_bugfix1',
+'vector_index.vector_index_identifier_escaping',
 'vector_index.vector_index_ivfflat_basic',
 'vector_index.vector_index_ivfflat_dml',
 'vector_index.vector_index_ivfflat_post_create',
