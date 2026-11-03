@@ -31,17 +31,16 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            uint8_t char_len,
+                            ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  // the caller (process_one_char) already fetched the current char and its
+  // type from the context; re-fetching them per processor was redundant work
+  // on the per-character hot path (4 processors x 2 context calls per char).
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
   }
   return ret;
 }
@@ -100,6 +99,10 @@ int TokenizeContext::reinit(ObCollationType coll_type,
 void TokenizeContext::release_scratch()
 {
   reset_resource();
+  // the containers' blocks live in the per-call scratch allocator; forget
+  // them before the caller recycles the arena pages
+  token_list_.tokens().release_blocks();
+  result_list_.release_blocks();
   // drop the per-character cache table: the buffer lives in the per-call
   // scratch allocator which is recycled after this point, and a stale table
   // must never be visible to the next fulltext (see Task-2 char_infos_ note).
@@ -350,8 +353,8 @@ TokenizeContext::~TokenizeContext()
     char_info_cnt_ = 0;
     char_info_cap_ = 0;
   }
-  token_list_.reset();
-  result_list_.reset();
+  token_list_.tokens().release_blocks();
+  result_list_.release_blocks();
 }
 
 int TokenizeContext::get_next_token(const char *&word,
@@ -384,7 +387,7 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  ObFTTokenQueue<ObIKToken> &list = result_list_;
   if (is_smart_) {
     if (!list.empty()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {

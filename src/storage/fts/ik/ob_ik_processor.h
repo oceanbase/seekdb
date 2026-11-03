@@ -21,6 +21,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
+#include "storage/fts/ik/ob_ft_token_vec.h"
 #include "storage/fts/ik/ob_ik_token.h"
 
 namespace oceanbase
@@ -95,7 +96,7 @@ public:
 
   ObFTSortList &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObFTTokenQueue<ObIKToken> &result_list() { return result_list_; }
 
   int32_t handle_size() const { return handle_size_; }
 
@@ -133,7 +134,7 @@ private:
   bool is_smart_;
 
   ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObFTTokenQueue<ObIKToken> result_list_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
@@ -146,7 +147,7 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx, const char *ch, uint8_t char_len, ObFTCharUtil::CharType type);
 
   // Reset the cross-call mutable state of this processor so that a reused
   // processor never carries pending-token state from one fulltext into the

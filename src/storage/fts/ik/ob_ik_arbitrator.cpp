@@ -36,7 +36,7 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
 
-  ObList<ObIKToken, ObIAllocator> &tokens = ctx.token_list().tokens();
+  ObFTSegVec<ObIKToken> &tokens = ctx.token_list().tokens();
   ObIKTokenChain *chain_need_arbitrate = nullptr;
   bool use_smart = ctx.is_smart();
   if (OB_FAIL(prepare(ctx))) {
@@ -44,11 +44,15 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed");
   } else {
-    while (OB_SUCC(ret) && !tokens.empty()) {
-      ObIKToken token = tokens.get_first();
+    // consume the sorted token list by index instead of pop_front(): the
+    // array's pop_front shifts every remaining element (O(n) per pop, O(n^2)
+    // per batch of n tokens). The array is read-only inside this loop and is
+    // cleared by reset_resource() before the next batch, so nothing depends
+    // on it being drained here. Iteration order (ascending offset) unchanged.
+    for (int64_t ti = 0; OB_SUCC(ret) && ti < tokens.size(); ++ti) {
+      const ObIKToken &token = tokens.at(ti);
       bool is_add = false;
-      if (OB_FAIL(tokens.pop_front())) {
-      } else if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
+      if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
       } else if (!is_add) {
         ObFTSortList::CellIter iter = chain_need_arbitrate->list().tokens().begin();
         ObIKTokenChain *judge_result = nullptr;
@@ -154,7 +158,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
       }
       current += char_len;
     } else {
-      for (ObList<ObIKToken, ObIAllocator>::const_iterator iter = chain->list().tokens().begin();
+      for (ObFTSortList::CellIter iter = chain->list().tokens().begin();
            OB_SUCC(ret) && iter != chain->list().tokens().end();
            iter++) {
         const ObIKToken &token = *iter;
@@ -220,7 +224,7 @@ int ObIKArbitrator::optimize(TokenizeContext &ctx,
   int ret = OB_SUCCESS;
 
   ObIKTokenChain *option = nullptr;
-  ObList<ObFTSortList::CellIter, ObIAllocator> conflict_stack(alloc_);
+  ObFTSegVec<ObFTSortList::CellIter> conflict_stack(alloc_);
 
   if (OB_ISNULL(option = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -264,7 +268,7 @@ int ObIKArbitrator::try_add_next_words(ObIKTokenChain *chain,
                                        ObFTSortList::CellIter iter,
                                        ObIKTokenChain *option,
                                        bool need_conflict,
-                                       ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack)
+                                       ObFTSegVec<ObFTSortList::CellIter> &conflict_stack)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(chain) || OB_ISNULL(option)) {

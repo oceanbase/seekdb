@@ -55,7 +55,7 @@ public:
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
-        segmenters_(obj_alloc),
+        segmenters_{nullptr, nullptr, nullptr, nullptr},
         cache_main_(obj_alloc),
         cache_quan_(obj_alloc),
         cache_stop_(obj_alloc),
@@ -140,7 +140,11 @@ private:
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
-  ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+  // fixed slot array instead of an ObList: 4 segmenters, insertion order
+  // (letter -> quantifier -> cjk -> surrogate) is the processing order and
+  // is preserved; the per-character loop no longer walks list nodes.
+  static constexpr int64_t SEGMENTER_SLOT_CNT = 4;
+  ObIIKProcessor *segmenters_[SEGMENTER_SLOT_CNT];
 
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;

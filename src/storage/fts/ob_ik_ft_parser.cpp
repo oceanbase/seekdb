@@ -136,11 +136,11 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
                                    const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-  // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+  // proces by char with all segmenters (fixed insertion order preserved)
+  for (int64_t si = 0; OB_SUCC(ret) && si < SEGMENTER_SLOT_CNT; ++si) {
+    if (OB_NOT_NULL(segmenters_[si])) {
+      if (OB_FAIL(segmenters_[si]->process(ctx, ch, char_len, type))) {
+      }
     }
   }
   return ret;
@@ -461,14 +461,17 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &obj_alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
-  } else if (FALSE_IT(letter_seg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
-  } else if (FALSE_IT(cnqsg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
-  } else if (FALSE_IT(cjksg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
-  } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
+  } else {
+    // push back by order, quantifier is before cjk (same order as the old
+    // ObList: letter -> quantifier -> cjk -> surrogate)
+    segmenters_[0] = letter_seg;
+    segmenters_[1] = cnqsg;
+    segmenters_[2] = cjksg;
+    segmenters_[3] = surrogate_seg;
+    letter_seg = nullptr;
+    cnqsg = nullptr;
+    cjksg = nullptr;
+    surrogate_seg = nullptr;
   }
   // push back by order, quantifier is before cjk
 
@@ -488,13 +491,13 @@ void ObIKFTParser::reset()
     obj_alloc_.free(ctx_);
   }
 
-  for (ObIIKProcessor *segmenter : segmenters_) {
-    if (!OB_ISNULL(segmenter)) {
-      segmenter->~ObIIKProcessor();
-      obj_alloc_.free(segmenter);
+  for (int64_t si = 0; si < SEGMENTER_SLOT_CNT; ++si) {
+    if (!OB_ISNULL(segmenters_[si])) {
+      segmenters_[si]->~ObIIKProcessor();
+      obj_alloc_.free(segmenters_[si]);
+      segmenters_[si] = nullptr;
     }
   }
-  segmenters_.clear();
 
   cache_main_.reset();
   cache_quan_.reset();
@@ -543,7 +546,7 @@ int ObIKFTParser::reuse_parser(const ObFTParserParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (CS_TYPE_INVALID == (coll_type_ = ObCharset::collation_type(param.cs_->name))) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(ctx_) || OB_UNLIKELY(segmenters_.empty())) {
+  } else if (OB_ISNULL(ctx_) || OB_ISNULL(segmenters_[0])) {
     // persistent objects were never built (or were torn down): fall back to
     // a full init() on the next acquire
     built_ = false;
@@ -556,11 +559,9 @@ int ObIKFTParser::reuse_parser(const ObFTParserParam &param)
     // the pending-token state of every segmenter was already dropped by
     // release_to_pool(); reset it here as well so reuse_parser alone never
     // carries cross-call state even when called without a prior release.
-    for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-         iter != segmenters_.end();
-         iter++) {
-      if (OB_NOT_NULL(*iter)) {
-        (*iter)->reset_state();
+    for (int64_t si = 0; OB_SUCC(ret) && si < SEGMENTER_SLOT_CNT; ++si) {
+      if (OB_NOT_NULL(segmenters_[si])) {
+        segmenters_[si]->reset_state();
       }
     }
     is_inited_ = true;
@@ -580,11 +581,9 @@ void ObIKFTParser::release_to_pool()
   // 1. segmenters first: drop the pending-token state; the quantifier/cjk
   //    hit lists live in the scratch arena and are walked here while their
   //    memory is still valid.
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       iter != segmenters_.end();
-       iter++) {
-    if (OB_NOT_NULL(*iter)) {
-      (*iter)->reset_state();
+  for (int64_t si = 0; si < SEGMENTER_SLOT_CNT; ++si) {
+    if (OB_NOT_NULL(segmenters_[si])) {
+      segmenters_[si]->reset_state();
     }
   }
 

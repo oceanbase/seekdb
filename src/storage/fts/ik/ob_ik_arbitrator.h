@@ -19,6 +19,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/hash/ob_hashmap.h"
+#include "storage/fts/ik/ob_ft_token_vec.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_token.h"
 
@@ -53,7 +54,7 @@ private:
                          ObFTSortList::CellIter iter,
                          ObIKTokenChain *option,
                          bool need_conflict,
-                         ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
+                         ObFTSegVec<ObFTSortList::CellIter> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 

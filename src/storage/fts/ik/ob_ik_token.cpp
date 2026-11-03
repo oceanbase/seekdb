@@ -29,6 +29,9 @@ int ObFTSortList::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
+  // sorted insert over the reuse array: the ordering key and the dedup rule
+  // are byte-identical to the ObList version (operator< / operator== above);
+  // only the storage changed (contiguous blocks instead of per-node alloc).
   if (tokens_.empty()) {
     if (OB_FAIL(tokens_.push_back(token))) {
     }
@@ -41,14 +44,15 @@ int ObFTSortList::add_token(const ObIKToken &token)
     if (OB_FAIL(tokens_.push_front(token))) {
     }
   } else {
-    for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
-         --iter) {
-      if (token < *iter) {
+    const int64_t cnt = tokens_.size();
+    // scan from the tail for the last element that is not greater than token
+    for (int64_t i = cnt - 1; OB_SUCC(ret) && i >= 0; --i) {
+      if (token < tokens_.at(i)) {
         continue;
       }
-      if (*iter == token) {
+      if (tokens_.at(i) == token) {
         // no need to add again
-      } else if (OB_FAIL(tokens_.insert(++iter, token))) {
+      } else if (OB_FAIL(tokens_.insert_at(i + 1, token))) {
       } else {
         // insert ok
       }

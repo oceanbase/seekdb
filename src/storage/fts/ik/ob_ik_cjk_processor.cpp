@@ -37,11 +37,11 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
   int ret = OB_SUCCESS;
 
   if (ObFTCharUtil::CharType::USELESS != type) {
-    // handle previous hits_ first and then check from this char
-    for (ObList<ObDATrieHit, ObIAllocator>::iterator iter = hits_.begin();
-         OB_SUCC(ret) && iter != hits_.end();
-         iter++) {
-      ObDATrieHit &hit = *iter;
+    // handle previous hits_ first and then check from this char.
+    // array storage: after erasing the element at hi the next one slides into
+    // place, so the index must NOT advance past it in that branch.
+    for (int64_t hi = 0; OB_SUCC(ret) && hi < hits_.size();) {
+      ObDATrieHit &hit = hits_.at(hi);
       if (OB_FAIL(dict_main_.match_with_hit({char_len, ch}, hit, hit))) {
       } else if (hit.is_match()) {
         if (OB_FAIL(ctx.add_token(ctx.fulltext(),
@@ -55,10 +55,12 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
       } else if (hit.is_prefix()) {
         // nothing
       } else if (hit.is_unmatch()) {
-        hits_.erase(hit);
+        hits_.erase_at(hi);
+        continue;
       } else {
         ret = OB_UNEXPECT_INTERNAL_ERROR;
       }
+      ++hi;
     }
     if (OB_SUCC(ret)) {
       // Start from this char
@@ -81,15 +83,15 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
     }
   } else {
     // stop previous match
-    hits_.clear();
+    hits_.reset();
   }
 
   if (OB_SUCC(ret)) {
     if (ctx.is_last()) {
-      hits_.clear();
+      hits_.reset();
     }
   } else {
-    hits_.clear();
+    hits_.reset();
   }
 
   return ret;

@@ -233,9 +233,26 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
       // parser-owned buffer that is reused by the next get_next_token() call
       // (e.g. the beng normalizer buffer). Materialize the key into the parse
       // allocator once per distinct word instead of once per occurrence.
+      // With the casedown flag on, `word` is already a fresh copy produced by
+      // casedown_word() in this parse allocator (it can never alias the
+      // transient token buffer), so it serves as the map key directly and the
+      // extra per-distinct-word memcpy is skipped. Any other producer still
+      // goes through dup_word(). Note OB_FAIL() assigns the callee's return
+      // value to ret; the direct-key path must clear the OB_HASH_NOT_EXIST
+      // left behind by get_refactored() explicitly.
       ObFTWord stable_word;
-      if (OB_FAIL(dup_word(word, stable_word))) {
-      } else if (OB_FAIL(word_map_.set_refactored(stable_word, word_count, 1/*overwrite*/))) {
+      if (flag_.casedown()) {
+        stable_word = word;
+        ret = OB_SUCCESS;
+      } else if (OB_FAIL(dup_word(word, stable_word))) {
+        // ret already carries the dup_word failure
+      } else {
+        ret = OB_SUCCESS;
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(word_map_.set_refactored(stable_word, word_count, 1/*overwrite*/))) {
+        } else {
+        }
       }
     } else {
       // Update the aggregate in place. set_refactored() with the cover flag
