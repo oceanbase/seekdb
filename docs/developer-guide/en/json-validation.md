@@ -111,7 +111,11 @@ build/bin/unittest/oblib/test_json_parser
 build/bin/unittest/oblib/test_json_direct_benchmark differential
 ```
 
-The local native run used an isolated manifest copied from `rust/json/Cargo.toml`, with its `src` symlink pointing at the checkout's `rust/json/src`. It used offline cached dependencies and the configured registry mirror. This avoids resolving unrelated workspace dependencies. The repository's Bazel Rust test target currently inherits `-Cpanic=abort`, which prevents that test harness from building on this toolchain. The production panic policy was not changed for this migration.
+The initial local native run used an isolated manifest copied from `rust/json/Cargo.toml`, with its `src` symlink pointing at the checkout's `rust/json/src`. It used offline cached dependencies and the configured registry mirror. The standard Bazel entry now also passes all 117 tests. Native test commands compile the complete target Rust dependency graph with `panic=unwind`; ordinary builds retain `panic=abort`. Wasm keeps its existing abort policy. See [native Rust tests](unittest.md#run-native-rust-tests).
+
+```sh
+python3 build.py test //rust/json:test --test_output=errors
+```
 
 Run the differential drivers against separate baseline and candidate instances. The storage driver creates task-owned fixture tables and tests mutations there.
 
