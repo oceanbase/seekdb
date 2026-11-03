@@ -16,4 +16,3 @@ rust_library(
     aliases = aliases(),
     tags = ["no-remote"],
 )
-

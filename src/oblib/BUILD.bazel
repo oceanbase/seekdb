@@ -445,20 +445,6 @@ cc_library(
 )
 
 cc_library(
-    name = "oblib_db_log",
-    hdrs = [
-    ],
-    deps = [
-        ":oblib_base",
-        ":oblib_common",
-    ],
-    includes = ["."],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = _OBLIB_INTERFACE_VISIBILITY,
-)
-
-cc_library(
     name = "oblib_db_meta",
     hdrs = [
         "common/expression/ob_expr_string_buf.h",
@@ -743,7 +729,6 @@ cc_library(
         ":oblib_common",
         ":oblib_compression",
         ":oblib_concurrency_primitives",
-        ":oblib_db_log",
         ":oblib_db_meta",
         ":oblib_diagnostics_primitives",
         ":oblib_encoding_primitives",
