@@ -61,7 +61,7 @@ pub(crate) fn view_definition(node: &Node) -> ViewDefinition<'_> {
 }
 
 use crate::bridge::ffi::{
-    AlterSubpartitionAddition, AnalyzeAction, AnalyzeDefinition, ColumnDefinition, ColumnGeneration, ColumnPosition, ColumnSkipIndexSyntax, DropBehavior,
+    AlterSubpartitionAddition, AnalyzeAction, AnalyzeDefinition, ColumnDefinition, ColumnGeneration, ColumnPosition, ColumnSkipIndexSyntax,
     ForeignKeyDefinition, JsonStorageDefinition, RestoreDatabaseDefinition,
     IndexDefinition, IndexKind, IndexMethod, PartitionDefinition, PartitionElement, PartitionKind,
     PartitionValues, ReferenceAction, ReferenceEvent, ReferentialAction, TableDefinition,
@@ -430,9 +430,6 @@ pub(crate) fn index_column_has_prefix(node: &Node) -> bool {
 pub(crate) fn index_column_prefix(node: &Node) -> u64 {
     node.children[1].value
 }
-pub(crate) fn index_column_descending(node: &Node) -> bool {
-    node.children[2].kind == Kind::Desc
-}
 pub(crate) fn primary_key_columns(node: &Node) -> &[Node] {
     &node.children[0].children
 }
@@ -441,13 +438,6 @@ pub(crate) fn primary_key_method(node: &Node) -> IndexMethod {
         IndexMethod::Hash
     } else {
         IndexMethod::Default
-    }
-}
-pub(crate) fn primary_key_options(node: &Node) -> &[Node] {
-    if node.children[1].kind == Kind::TableOptions {
-        &node.children[1].children
-    } else {
-        &[]
     }
 }
 
@@ -601,9 +591,6 @@ pub(crate) fn foreign_key_definition(node: &Node) -> ForeignKeyDefinition<'_> {
 }
 pub(crate) fn foreign_key_name(node: &Node) -> &Node {
     &child(node, Kind::CheckConstraint).unwrap().children[0]
-}
-pub(crate) fn foreign_key_index_name(node: &Node) -> &Node {
-    child(node, Kind::Ident).unwrap()
 }
 pub(crate) fn referential_action(node: &Node) -> ReferentialAction {
     ReferentialAction {
@@ -774,14 +761,6 @@ pub(crate) fn alter_column_has_default(node: &Node) -> bool {
 }
 pub(crate) fn alter_column_default(node: &Node) -> &Node {
     &node.children[1]
-}
-pub(crate) fn alter_column_drop_behavior(node: &Node) -> DropBehavior {
-    match node.value {
-        0 => DropBehavior::Default,
-        1 => DropBehavior::Restrict,
-        2 => DropBehavior::Cascade,
-        _ => unreachable!(),
-    }
 }
 pub(crate) fn alter_constraint_names(node: &Node) -> &[Node] {
     &node.children

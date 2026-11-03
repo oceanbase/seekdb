@@ -1188,12 +1188,6 @@ pub(crate) mod ffi {
         Last,
     }
 
-    enum IntoPosition {
-        Absent,
-        AfterProjection,
-        AfterQuery,
-    }
-
     enum InsertSource {
         Rows,
         Query,
@@ -1901,11 +1895,6 @@ pub(crate) mod ffi {
         NoAction,
         SetDefault,
     }
-    enum DropBehavior {
-        Default,
-        Restrict,
-        Cascade,
-    }
     enum TableOrganization {
         Index,
         Heap,
@@ -2084,7 +2073,6 @@ pub(crate) mod ffi {
         fn integer_literal_is_nonnegative(value: i64, text: &[u8]) -> bool;
         fn identifier_requires_quotes(input: &[u8]) -> bool;
         fn decode_binary_literal(text: &[u8], notation: BinaryNotation) -> Vec<u8>;
-        unsafe fn syntax_literals<'a>(syntax: &'a Node) -> Vec<LiteralReference<'a>>;
         fn index_column_has_direction(node: &Node) -> bool;
         fn primary_key_has_comment(node: &Node) -> bool;
         fn primary_key_comment(node: &Node) -> &Node;
@@ -2184,10 +2172,8 @@ pub(crate) mod ffi {
         fn index_column_expression(node: &Node) -> &Node;
         fn index_column_has_prefix(node: &Node) -> bool;
         fn index_column_prefix(node: &Node) -> u64;
-        fn index_column_descending(node: &Node) -> bool;
         fn primary_key_columns(node: &Node) -> &[Node];
         fn primary_key_method(node: &Node) -> IndexMethod;
-        fn primary_key_options(node: &Node) -> &[Node];
         unsafe fn partition_definition<'a>(node: &'a Node) -> PartitionDefinition<'a>;
         fn partition_subpartition(node: &Node) -> &Node;
         unsafe fn partition_element<'a>(node: &'a Node) -> PartitionElement<'a>;
@@ -2197,7 +2183,6 @@ pub(crate) mod ffi {
         fn check_constraint_enforced(node: &Node) -> bool;
         unsafe fn foreign_key_definition<'a>(node: &'a Node) -> ForeignKeyDefinition<'a>;
         fn foreign_key_name(node: &Node) -> &Node;
-        fn foreign_key_index_name(node: &Node) -> &Node;
         fn referential_action(node: &Node) -> ReferentialAction;
         unsafe fn json_storage_definition<'a>(node: &'a Node) -> JsonStorageDefinition<'a>;
         fn table_option_value(node: &Node) -> &Node;
@@ -2235,7 +2220,6 @@ pub(crate) mod ffi {
         fn alter_column_new_name(node: &Node) -> &Node;
         fn alter_column_has_default(node: &Node) -> bool;
         fn alter_column_default(node: &Node) -> &Node;
-        fn alter_column_drop_behavior(node: &Node) -> DropBehavior;
         fn alter_constraint_names(node: &Node) -> &[Node];
         fn alter_constraint_name(node: &Node) -> &Node;
         fn alter_constraint_check_only(node: &Node) -> bool;
@@ -2366,7 +2350,6 @@ pub(crate) mod ffi {
         fn explain_has_statement_id(explain: &Node) -> bool;
         fn explain_statement_id(explain: &Node) -> &Node;
 
-        fn is_call_expression(expression: &Node) -> bool;
         fn explain_statement(explain: &Node) -> &Node;
         fn named_argument_name(argument: &Node) -> &Node;
         fn named_argument_value(argument: &Node) -> &Node;
@@ -2376,8 +2359,6 @@ pub(crate) mod ffi {
         unsafe fn relation_references<'a>(query: &'a Node) -> Box<RelationReferences<'a>>;
         fn advance_relation(self: &mut RelationReferences<'_>) -> bool;
         unsafe fn relation_reference<'a>(self: &RelationReferences<'a>) -> &'a Node;
-        fn collation_argument(expression: &Node) -> &Node;
-        fn collation_specification(expression: &Node) -> &Node;
         fn collation_name(expression: &Node) -> &[u8];
         type Scanner<'a>;
         // The SQL buffer must remain valid and unchanged until the scanner is dropped.
@@ -2451,7 +2432,6 @@ pub(crate) mod ffi {
         fn query_recursive(query: &Node) -> bool;
         fn query_set_operator(query: &Node) -> SetOperator;
         fn query_set_operands(query: &Node) -> &[Node];
-        fn query_into_position(query: &Node) -> IntoPosition;
         fn query_into_variables(query: &Node) -> &[Node];
         fn query_approximate(query: &Node) -> bool;
         fn query_vector_parameters(query: &Node) -> &[Node];
@@ -2461,8 +2441,6 @@ pub(crate) mod ffi {
         fn query_assignments(query: &Node) -> &[Node];
         fn delete_targets(query: &Node) -> &[Node];
         fn projection_expression(projection: &Node) -> &Node;
-        fn projection_alias_form(projection: &Node) -> AliasForm;
-        fn projection_alias(projection: &Node) -> &Node;
         fn grouping_keys(grouping: &Node) -> &[Node];
         fn grouping_with_rollup(grouping: &Node) -> bool;
         fn sort_expression(sort: &Node) -> &Node;
@@ -2471,7 +2449,6 @@ pub(crate) mod ffi {
         fn limit_count(limit: &Node) -> &Node;
         fn limit_has_offset(limit: &Node) -> bool;
         fn limit_offset(limit: &Node) -> &Node;
-        fn limit_comma_form(limit: &Node) -> bool;
         fn lock_kind(lock: &Node) -> LockKind;
         fn lock_wait(lock: &Node) -> LockWait;
         fn lock_wait_seconds(lock: &Node) -> &str;
@@ -2500,7 +2477,6 @@ pub(crate) mod ffi {
         fn table_alias(table: &Node) -> &Node;
         fn table_columns(table: &Node) -> &[Node];
         fn table_lateral(table: &Node) -> bool;
-        fn table_parenthesized(table: &Node) -> bool;
         fn table_partitions(table: &Node) -> &[Node];
         fn table_index_hints(table: &Node) -> &[Node];
         fn table_has_sample(table: &Node) -> bool;
@@ -2529,7 +2505,6 @@ pub(crate) mod ffi {
         unsafe fn expression_literal<'a>(expression: &'a Node) -> ExpressionLiteral<'a>;
         fn integer_literal_value(literal: &Node) -> u64;
         fn placeholder_index(parameter: &Node) -> usize;
-        fn placeholder_name(parameter: &Node) -> &str;
         fn parenthesized_expression(expression: &Node) -> &Node;
         fn odbc_action(expression: &Node) -> OdbcAction;
         fn odbc_operand(expression: &Node) -> &Node;
@@ -2572,12 +2547,6 @@ pub(crate) mod ffi {
         fn cast_target(cast: &Node) -> &Node;
         fn cast_ignore(cast: &Node) -> bool;
         fn cast_array(cast: &Node) -> bool;
-        fn type_name(target: &Node) -> &str;
-        fn type_parameters(target: &Node) -> &[Node];
-        fn type_charset(target: &Node) -> &[u8];
-        fn type_collation(target: &Node) -> &[u8];
-        fn type_unsigned(target: &Node) -> bool;
-        fn type_zerofill(target: &Node) -> bool;
         unsafe fn type_syntax<'a>(target: &'a Node) -> TypeSyntax<'a>;
         fn type_element(target: &Node) -> &Node;
         fn type_key(target: &Node) -> &Node;
@@ -2620,9 +2589,6 @@ pub(crate) mod ffi {
         fn json_path(expression: &Node) -> &Node;
         fn json_returning(expression: &Node) -> &Node;
         fn json_options(expression: &Node) -> JsonOptions;
-        fn json_error_clause(expression: &Node) -> &Node;
-        fn json_empty_clause(expression: &Node) -> &Node;
-        fn json_mismatch_clause(expression: &Node) -> &Node;
         fn json_error_default(expression: &Node) -> &Node;
         fn json_empty_default(expression: &Node) -> &Node;
         fn json_table_columns(table: &Node) -> &[Node];
@@ -2759,18 +2725,18 @@ use crate::query::{
     hint_topk_precision, identifier_is_quoted, index_hint_kind, index_hint_names,
     insert_assignments, insert_columns, insert_on_duplicate, insert_query, insert_replace, insert_row_alias_table,
     insert_rows, insert_source, insert_target, join_columns, join_condition, join_kind, join_left,
-    join_predicate, join_right, limit_comma_form, limit_count, limit_has_offset, limit_offset,
-    lock_kind, lock_wait, lock_wait_seconds, name_is_wildcard, name_parts, projection_alias,
-    projection_alias_form, projection_expression, query_approximate, query_assignments, query_ctes,
+    join_predicate, join_right, limit_count, limit_has_offset, limit_offset,
+    lock_kind, lock_wait, lock_wait_seconds, name_is_wildcard, name_parts,
+    projection_expression, query_approximate, query_assignments, query_ctes,
     query_filter, query_grouping, query_has_filter, query_has_grouping, query_has_having,
-    query_has_limit, query_has_lock, query_having, query_hints, query_ignore, query_into_position,
+    query_has_limit, query_has_lock, query_having, query_hints, query_ignore,
     query_into_variables, query_limit, query_lock, query_options, query_order, query_projection,
     query_recursive, query_set_operands, query_set_operator, query_sources,
     query_vector_parameters, query_windows, relation_database, relation_has_database,
     relation_name, relation_references, row_elements, sample_has_seed, sample_method,
     sample_percent, sample_scope, sample_seed, sort_direction, sort_expression, sort_null_placement, table_alias,
     table_columns, table_has_alias, table_has_sample, table_has_snapshot, table_index_hints,
-    table_lateral, table_parenthesized, table_partitions, table_sample, table_snapshot,
+    table_lateral, table_partitions, table_sample, table_snapshot,
     table_source, values_rows, vector_parameter_name, vector_parameter_value, RelationReferences,
 };
 
@@ -2779,21 +2745,21 @@ use crate::expression::{
     between_lower, between_upper, binary_left, binary_operator, binary_right, call_arguments,
     call_name, call_qualifiers, case_arms, case_condition, case_else, case_has_else,
     case_has_operand, case_operand, case_result, cast_argument, cast_ignore, cast_target,
-    collation_argument, collation_name, collation_specification, collection_lambda, exists_query,
+    collation_name, collection_lambda, exists_query,
     expression_literal, frame_bound, frame_bound_has_unit, frame_bound_offset, frame_bound_unit,
     frame_end, frame_has_end, frame_start,
     frame_unit, fulltext_columns, fulltext_mode, fulltext_search, fulltext_options,
     fulltext_column_reference, fulltext_column_boost, integer_literal_value,
-    is_call_expression, is_literal, is_test, json_column_kind, json_column_name, json_column_type,
-    json_document, json_empty_clause, json_empty_default, json_error_clause, json_error_default,
-    json_mismatch_clause, json_nested_columns, json_options, json_path, json_returning,
+    is_literal, is_test, json_column_kind, json_column_name, json_column_type,
+    json_document, json_empty_default, json_error_default,
+    json_nested_columns, json_options, json_path, json_returning,
     json_table_columns, lambda_body, lambda_parameters, like_escape, like_has_escape,
     logical_operands, membership_expressions, membership_query, membership_source, named_argument_name,
     named_argument_value, named_window_definition, named_window_name, parenthesized_expression,
-    odbc_action, odbc_operand, placeholder_index, placeholder_name, predicate_negated, predicate_subject,
-    quantified_comparison, quantified_query, type_charset, type_collation, type_element, type_key,
-    type_members, type_name, type_parameters, type_syntax, type_unsigned, type_value,
-    type_zerofill, unary_operand, unary_operator, variable_assignment_value, variable_name,
+    odbc_action, odbc_operand, placeholder_index, predicate_negated, predicate_subject,
+    quantified_comparison, quantified_query, type_element, type_key,
+    type_members, type_syntax, type_value,
+    unary_operand, unary_operator, variable_assignment_value, variable_name,
     variable_scope, vector_metric, window_definition, window_frame, window_function,
     window_has_frame, window_has_reference, window_nth_origin, window_null_treatment, window_order,
     window_partition, window_reference,
@@ -2840,7 +2806,7 @@ use crate::inspect::embedded_sql_references;
 
 use crate::ddl::{
     alter_charset_collation, alter_charset_has_collation, alter_charset_name, alter_column_default,
-    alter_column_definitions, alter_column_storage, alter_column_drop_behavior, alter_column_has_default,
+    alter_column_definitions, alter_column_storage, alter_column_has_default,
     alter_column_name, alter_column_new_name, alter_constraint_names, alter_constraint_name, alter_constraint_check_only,
     alter_constraint_enforced, alter_partition_additions, alter_subpartition_addition,
     alter_partition_definition, alter_partition_exchange_name, alter_partition_exchange_table,
@@ -2850,12 +2816,12 @@ use crate::ddl::{
     column_generation_expression, column_position_name, column_skip_index, column_srid,
     database_if_not_exists,
     database_name, database_has_name, database_options, drop_if_exists, drop_index_name, drop_index_relation,
-    drop_relations, drop_temporary, foreign_key_definition, foreign_key_index_name,
-    foreign_key_name, fork_destination, fork_source, merge_table_definition, diff_table_definition, index_column_descending,
+    drop_relations, drop_temporary, foreign_key_definition,
+    foreign_key_name, fork_destination, fork_source, merge_table_definition, diff_table_definition,
     index_column_expression, index_column_has_prefix, index_column_prefix, index_definition,
     index_definition_name, index_definition_partition, index_definition_table, index_option_global,
     partition_definition, partition_element, partition_subpartition, primary_key_columns,
-    primary_key_method, primary_key_options, referential_action, rename_actions,
+    primary_key_method, referential_action, rename_actions,
     rename_destination, rename_source, table_definition, table_definition_partition,
     table_definition_query, table_like_if_not_exists, table_like_relation, table_like_source,
     table_like_temporary, table_option_charset, table_option_engine_name, table_option_names,
@@ -2900,7 +2866,6 @@ use crate::ddl::partition_element_values;
 use crate::expression::{cast_array, weight_string_definition, weight_string_level};
 
 use crate::ddl::{alter_index_name, alter_index_new_name, index_visible, alter_index_parallel, alter_table_options};
-use crate::inspect::syntax_literals;
 use crate::lex::{decode_binary_literal, identifier_requires_quotes};
 use crate::embedded_sql::{embedded_sql_symbols, rewrite_embedded_sql};
 

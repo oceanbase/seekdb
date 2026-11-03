@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::bridge::ffi::{
-    WindowDistributionOptions, AggregationSort, AliasForm, ExplainDisplay, ExplainFormat, IndexHintKind, InsertSource, IntoPosition,
+    WindowDistributionOptions, AggregationSort, AliasForm, ExplainDisplay, ExplainFormat, IndexHintKind, InsertSource,
     JoinCondition, JoinKind, LockKind, LockWait, MergeDirection, NullPlacement, ParallelPolicy, PlanCachePolicy,
     ReadConsistency, SampleMethod, SampleScope, SetOperator, SortDirection,
 };
@@ -241,14 +241,6 @@ pub(crate) fn into(query: &Node) -> Option<&Node> {
         )
     })
 }
-pub(crate) fn query_into_position(query: &Node) -> IntoPosition {
-    match into(query).map(|into| into.kind) {
-        None => IntoPosition::Absent,
-        Some(Kind::IntoVariables | Kind::IntoOutfile | Kind::IntoDumpfile) => IntoPosition::AfterProjection,
-        Some(Kind::TrailingIntoVariables | Kind::TrailingIntoOutfile | Kind::TrailingIntoDumpfile) => IntoPosition::AfterQuery,
-        _ => unreachable!(),
-    }
-}
 pub(crate) fn query_into_variables(query: &Node) -> &[Node] {
     into(query).map_or(&[], |into| list(into, Kind::IntoVariableList))
 }
@@ -323,9 +315,6 @@ pub(crate) fn limit_has_offset(limit: &Node) -> bool {
 }
 pub(crate) fn limit_offset(limit: &Node) -> &Node {
     &limit.children[usize::from(limit.kind == Kind::Limit)]
-}
-pub(crate) fn limit_comma_form(limit: &Node) -> bool {
-    limit.kind == Kind::CommaLimit
 }
 pub(crate) fn lock_kind(lock: &Node) -> LockKind {
     if lock.kind == Kind::SkipLocked {

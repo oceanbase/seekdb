@@ -1,7 +1,7 @@
 # Rust SQL 解析器
 
-使用 `peg 0.8.6`，输入为 UTF-8。支持 ANSI_QUOTES、NO_BACKSLASH_ESCAPES、
-PIPES_AS_CONCAT、HIGH_NOT_PRECEDENCE。
+使用 `peg 0.8.6`，输入为 SQL 原始字节，标识符按 UTF-8 校验。
+支持 ANSI_QUOTES、NO_BACKSLASH_ESCAPES、PIPES_AS_CONCAT、HIGH_NOT_PRECEDENCE、REAL_AS_FLOAT。
 
 `src/grammar.rs` 定义 SQL、PL、表达式和统计选项语法。Rust 拥有语法树、源码范围、
 占位符编号、语句拆分、参数化规则、批量 SQL 改写和全文检索语法。

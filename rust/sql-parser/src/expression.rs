@@ -182,9 +182,6 @@ pub(crate) fn integer_literal_value(literal: &Node) -> u64 {
 pub(crate) fn placeholder_index(parameter: &Node) -> usize {
     parameter.value as usize
 }
-pub(crate) fn placeholder_name(parameter: &Node) -> &str {
-    parameter.text.as_str()
-}
 pub(crate) fn parenthesized_expression(expression: &Node) -> &Node {
     &expression.children[0]
 }
@@ -385,9 +382,6 @@ pub(crate) fn collation_specification(expression: &Node) -> &Node {
     &call_arguments(expression)[1]
 }
 
-pub(crate) fn type_name(target: &Node) -> &str {
-    target.text.as_str()
-}
 pub(crate) fn type_parameters(target: &Node) -> &[Node] {
     let count = target
         .children
