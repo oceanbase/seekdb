@@ -15,14 +15,18 @@
 use std::os::raw::c_long;
 use std::time::Duration;
 
-use curl::easy::{Easy2, Handler, List, WriteError};
+use curl::easy::{Easy2, Handler, List, SslOpt, WriteError};
 use curl::multi::{Easy2Handle, Multi};
+
+#[path = "tls.rs"]
+mod tls;
 
 use crate::{BatchProgress, ErrorKind, HttpError, Protocols, RequestOptions, Response};
 
 struct Collector {
     body: Vec<u8>,
     discard: bool,
+    host_check: Option<Box<tls::HostCheck>>,
 }
 
 impl Handler for Collector {
@@ -59,7 +63,8 @@ impl Client {
 
     pub fn post(&self, body: &[u8]) -> Result<Response, HttpError> {
         let mut easy = self.build_easy(body)?;
-        easy.perform().map_err(HttpError::from_easy)?;
+        easy.perform()
+            .map_err(|error| transfer_error(error, easy.get_ref()))?;
         response(&mut easy)
     }
 
@@ -79,6 +84,7 @@ impl Client {
         let mut easy = Easy2::new(Collector {
             body: Vec::new(),
             discard: self.options.discard_body,
+            host_check: None,
         });
         easy.url(&self.url).map_err(HttpError::from_easy)?;
         easy.signal(false).map_err(HttpError::from_easy)?;
@@ -90,6 +96,12 @@ impl Client {
         easy.ssl_verify_peer(self.options.verify_peer)
             .map_err(HttpError::from_easy)?;
         easy.ssl_verify_host(self.options.verify_host)
+            .map_err(HttpError::from_easy)?;
+        if self.options.verify_peer {
+            easy.ssl_options(SslOpt::new().native_ca(true))
+                .map_err(HttpError::from_easy)?;
+        }
+        easy.proxy_ssl_options(SslOpt::new().native_ca(true))
             .map_err(HttpError::from_easy)?;
         easy.follow_location(self.options.follow_redirects)
             .map_err(HttpError::from_easy)?;
@@ -109,6 +121,13 @@ impl Client {
         easy.post(true).map_err(HttpError::from_easy)?;
         easy.post_fields_copy(body).map_err(HttpError::from_easy)?;
         set_protocols(&mut easy, self.options.protocols)?;
+        if !self.options.verify_peer && self.options.verify_host {
+            easy.get_mut().host_check = Some(tls::HostCheck::new(easy.raw()));
+            // The boxed state stays at one address as Easy2 moves into a Multi.
+            // Easy2 cleans up libcurl before dropping its Collector and state.
+            let state = easy.get_mut().host_check.as_mut().unwrap().as_mut() as *mut tls::HostCheck;
+            tls::install(easy.raw(), state).map_err(HttpError::from_easy)?;
+        }
         Ok(easy)
     }
 }
@@ -207,7 +226,7 @@ impl Batch {
             };
             let reply = match message.result_for2(handle) {
                 Some(Ok(())) => handle_response(handle),
-                Some(Err(error)) => Err(HttpError::from_easy(error)),
+                Some(Err(error)) => Err(transfer_error(error, handle.get_ref())),
                 None => Err(HttpError::new(
                     ErrorKind::Multi,
                     0,
@@ -235,6 +254,22 @@ impl Batch {
 
     pub fn result_count(&self) -> usize {
         self.replies.len()
+    }
+}
+
+fn transfer_error(error: curl::Error, collector: &Collector) -> HttpError {
+    if let Some(reason) = collector
+        .host_check
+        .as_ref()
+        .and_then(|check| check.failure())
+    {
+        HttpError::new(
+            ErrorKind::Transport,
+            curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
+            reason,
+        )
+    } else {
+        HttpError::from_easy(error)
     }
 }
 
