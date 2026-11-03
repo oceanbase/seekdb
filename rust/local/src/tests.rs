@@ -282,6 +282,77 @@ fn conditional_updates_count_affected_rows_and_clamp_to_another_column() {
     assert_eq!(all(&store, query), vec![vec![Cell::Integer(50)]]);
 }
 #[test]
+fn ordering_by_an_indexed_primary_column_uses_row_keys() {
+    let directory = Directory::new();
+    let store = kv::Store::open(&directory.0).unwrap();
+    let descriptor = ffi::Schema {
+        namespace_id: 10,
+        columns: vec![
+            ffi::Column {
+                kind: I,
+                nullable: false,
+            };
+            2
+        ],
+        primary: vec![0],
+        indexes: vec![0],
+    };
+    let schema = Arc::new(Schema::from_descriptor(&descriptor).unwrap());
+    let mut tx = store.begin().unwrap();
+    for id in [-3, 0, 9] {
+        Mutation {
+            action: LocalAction::Insert,
+            query: Query::all(schema.clone()),
+            assignments: vec![
+                Assignment {
+                    column: 0,
+                    value: Cell::Integer(id),
+                    clamp_column: None,
+                },
+                Assignment {
+                    column: 1,
+                    value: Cell::Integer(100),
+                    clamp_column: None,
+                },
+            ],
+        }
+        .execute(&mut tx)
+        .unwrap();
+    }
+    tx.commit().unwrap();
+    let mut query = Query::all(schema);
+    query.order = Some(0);
+    query.predicates = vec![predicate(0, LocalCompare::GreaterEqual, 0)];
+    let expected = vec![
+        vec![Cell::Integer(0), Cell::Integer(100)],
+        vec![Cell::Integer(9), Cell::Integer(100)],
+    ];
+    assert_eq!(all(&store, query.clone()), expected);
+    let tx = store.begin().unwrap();
+    let mut rows = vec![];
+    query
+        .visit_transaction(&tx, |row| {
+            rows.push(row.to_vec());
+            true
+        })
+        .unwrap();
+    assert_eq!(rows, expected);
+    tx.rollback();
+    let mut tx = store.begin().unwrap();
+    assert_eq!(
+        Mutation {
+            action: LocalAction::Delete,
+            query,
+            assignments: vec![],
+        }
+        .execute(&mut tx)
+        .unwrap(),
+        2
+    );
+    tx.commit().unwrap();
+}
+
+#[test]
 fn aggregates_and_paginated_queries_preserve_empty_and_null_semantics() {
     let directory = Directory::new();
     let store = kv::Store::open(&directory.0).unwrap();
