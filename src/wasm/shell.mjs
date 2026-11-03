@@ -20,7 +20,8 @@ import {ENGINE_VERSION} from './engine-version.mjs';
 
 const engineURL = name => new URL(`./${name}`, import.meta.url);
 const MODULE_URL = engineURL('seekdb_wasm_database.mjs');
-const WASM_URL = engineURL('seekdb_wasm_database.wasm');
+const WEBKIT = navigator.vendor === 'Apple Computer, Inc.';
+const WASM_URL = engineURL(WEBKIT ? 'seekdb_wasm_database.webkit.wasm' : 'seekdb_wasm_database.wasm');
 const engineCompilation = globalThis.crossOriginIsolated ? compileEngine() : undefined;
 engineCompilation?.catch(() => {});
 
@@ -623,7 +624,7 @@ async function openDatabase() {
   resetBlocked = false;
   setStartupStage('engine', 'Loading engine');
   setState('loading', firstStart
-    ? 'Loading, compiling, and starting the seekdb WebAssembly engine (~57 MB uncompressed)…'
+    ? `Loading, compiling, and starting the seekdb WebAssembly engine (~${WEBKIT ? 59 : 57} MB uncompressed)…`
     : persistentStorage()
       ? 'Starting the browser-persistent seekdb database…'
       : 'Starting a fresh in-memory seekdb database…');

@@ -25,8 +25,9 @@ The startup panel shows engine loading, SQL-session setup, and readiness.
 Examples run only when selected from the **Examples** menu or the welcome panel.
 Keep the server running; press Ctrl+C in its terminal to stop it.
 
-The launcher copies `seekdb_wasm_database.mjs`, `seekdb_wasm_database.wasm`, and
-`engine-version.mjs` into this checkout's ignored `build_wasm_shell/`
+The launcher copies `seekdb_wasm_database.mjs`, `seekdb_wasm_database.wasm`,
+`seekdb_wasm_database.webkit.wasm`, and `engine-version.mjs` into this
+checkout's ignored `build_wasm_shell/`
 directory. It serves the shell and JavaScript API from this checkout, so reloading
 the page picks up source edits. The server binds to `127.0.0.1` and serves an
 explicit list of assets. It does not expose the repository or execute SQL.
@@ -302,8 +303,18 @@ for exclusive OPFS access, with bounded retries that preserve the final error.
 
 The current engine uses a 512 MiB initial Wasm memory, can grow to 2 GiB, and
 prewarms 16 pthread workers; it creates more when its threads need them. Every
-pthread worker instantiates the whole engine, which costs Safari about 37 MB per
-worker, so the page needs about 2.4 GB in Safari and does not fit the 1.5 GB a
-4 GB iPhone allows a page. These build settings make the shell most suitable
-for a desktop browser. The engine binary is large, and startup can take several
-seconds on the first load.
+pthread worker instantiates the whole engine. Safari 26 then creates a
+JavaScript function object for each of the engine's about 89,000 function table
+entries in each worker, about 33 MB per worker, which takes the page to about
+2.4 GB, above the 1.5 GB a 4 GB iPhone allows a page. The build therefore also
+writes `seekdb_wasm_database.webkit.wasm`: `bazel/dispatch-call-indirect`
+replaces each `call_indirect` with a call to a dispatch function for its
+signature, which finds the target by its table index, and leaves a one-entry
+table. With that file Safari needs about 1 GB. The shell loads it when
+`navigator.vendor` is `Apple Computer, Inc.`, which covers Safari and every
+browser on iOS, and the original file elsewhere, because CPU-bound queries run
+about 20% slower in V8 without the table. The engine is linked with
+`-sDYNCALLS=1`, so its JavaScript runtime calls function pointers through
+exported `dynCall_*` functions instead of reading the table, and the same
+`seekdb_wasm_database.mjs` loads either file. The engine binary is large, and
+startup can take several seconds on the first load.

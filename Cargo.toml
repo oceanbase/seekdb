@@ -2,7 +2,7 @@
 # (OceanBase-lite) C++ server. In-tree path dependencies are members automatically.
 [workspace]
 resolver = "2"
-members = ["rust/seekdb-rust", "bazel/prost-codegen"]
+members = ["rust/seekdb-rust", "bazel/prost-codegen", "bazel/dispatch-call-indirect"]
 
 [profile.release]
 opt-level = 3

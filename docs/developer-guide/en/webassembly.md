@@ -30,6 +30,7 @@ The engine and its JS, HTML and CSS assets are in `build/bin/src/wasm/dist/`. `p
 ## Build directory contents
 
 - `seekdb_wasm_database.mjs` and `seekdb_wasm_database.wasm`: the engine, its Rust libraries and third-party libraries linked into one module, with Emscripten's JavaScript runtime
+- `seekdb_wasm_database.webkit.wasm`: the same module without its function table, for Safari and the other WebKit browsers (see `docs/webassembly-shell.md`); it works with the same `seekdb_wasm_database.mjs`
 - `database.mjs`: the JavaScript API, with the `database-worker.mjs`, `worker-server.mjs`, `runtime-host.mjs`, `storage-cleanup-worker.mjs` and `mysql-*.mjs` modules it loads
 - `shell.html`, `shell.css`, `shell.mjs` and `shell-*.mjs`: the browser SQL shell
 - `engine-version.mjs`: the engine version shown by the shell
