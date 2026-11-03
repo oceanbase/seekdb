@@ -41,5 +41,5 @@ inline void format_i32(const int32_t value, int16_t &check_sum)
   }
 }
 
-} // namespace common
-} // namespace oceanbase
+}
+}
