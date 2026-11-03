@@ -378,6 +378,7 @@ private:
   int preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened);
 
   int flatten_conditions(ObDMLStmt *stmt, bool &trans_happened);
+  int simplify_vector_range_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_flatten_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
   int do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int preserve_order_for_pagination(ObDMLStmt *stmt, 
