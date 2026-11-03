@@ -18,6 +18,9 @@
 //! Physical changes describe writes to a caller-owned LOB cursor. The delta owns
 //! every logical record, so recording never borrows cursor scratch buffers.
 
+pub mod editor;
+pub mod merge;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Operation {
@@ -92,6 +95,43 @@ pub enum DeltaError {
     Allocation,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UpdateState {
+    Unchanged,
+    Partial,
+    Rebuilt,
+}
+
+impl UpdateState {
+    pub fn from_flags(rebuilt: bool, unchanged: bool) -> Self {
+        if rebuilt {
+            Self::Rebuilt
+        } else if unchanged {
+            Self::Unchanged
+        } else {
+            Self::Partial
+        }
+    }
+}
+
+pub(crate) fn should_pack_state(
+    state: UpdateState,
+    total: u64,
+    extension: u64,
+    root_offset: u64,
+) -> Result<bool, DeltaError> {
+    if total == 0 || extension == 0 || extension > total {
+        return Err(DeltaError::InvalidRange);
+    }
+    if state == UpdateState::Rebuilt || root_offset == 0 {
+        return Ok(false);
+    }
+    let appended = total - extension;
+    Ok(appended == 0
+        || state == UpdateState::Unchanged
+        || (appended as f64 / extension as f64) < 0.3)
+}
+
 #[derive(Debug, Default)]
 pub struct Delta {
     logical: Vec<LogicalDiff>,
@@ -100,6 +140,20 @@ pub struct Delta {
 }
 
 impl Delta {
+    pub fn append(&mut self, other: &mut Delta) -> Result<(), DeltaError> {
+        self.logical
+            .try_reserve(other.logical.len())
+            .map_err(|_| DeltaError::Allocation)?;
+        self.physical
+            .try_reserve(other.physical.len())
+            .map_err(|_| DeltaError::Allocation)?;
+        self.logical.append(&mut other.logical);
+        self.physical.append(&mut other.physical);
+        self.rebuilt |= other.rebuilt;
+        other.rebuilt = false;
+        Ok(())
+    }
+
     pub fn logical(&self) -> &[LogicalDiff] {
         &self.logical
     }
@@ -146,6 +200,19 @@ impl Delta {
             .map_err(|_| DeltaError::Allocation)?;
         self.physical.push(diff);
         Ok(())
+    }
+
+    pub fn state(&self) -> UpdateState {
+        UpdateState::from_flags(self.rebuilt, self.is_unchanged())
+    }
+
+    pub fn should_pack(
+        &self,
+        total: u64,
+        extension: u64,
+        root_offset: u64,
+    ) -> Result<bool, DeltaError> {
+        should_pack_state(self.state(), total, extension, root_offset)
     }
 
     pub fn intersects(&self, offset: u64, length: u64) -> bool {

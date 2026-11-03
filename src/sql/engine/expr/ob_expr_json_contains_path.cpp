@@ -80,7 +80,7 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
   int ret = OB_SUCCESS;
   bool is_null_result = false;
   ObString json_doc;
-  ObJsonInType input_type = ObJsonInType::JSON_TREE;
+  ObJsonInType input_type = ObJsonInType::JSON_TEXT;
   ObIJsonBase *partial_document = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

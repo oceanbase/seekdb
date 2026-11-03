@@ -41,24 +41,24 @@ public:
   virtual int send_post(common::ObIAllocator &allocator, 
                         const ObString &url,
                         ObArray<ObString> &headers, 
-                        ObJsonObject *data,
-                        ObJsonObject *&response) override;
+                        ObIJsonBase *data,
+                        ObIJsonBase *&response) override;
   virtual int send_post_batch(common::ObIAllocator &allocator,
                               const ObString &url, 
                               ObArray<ObString> &headers,
-                              ObArray<ObJsonObject *> &data_array,
-                              ObArray<ObJsonObject *> &responses) override;
+                              ObArray<ObIJsonBase *> &data_array,
+                              ObArray<ObIJsonBase *> &responses) override;
   // embedding service interface
-  int send_post_batch_no_wait(ObArray<ObJsonObject *> &data_array);
+  int send_post_batch_no_wait(ObArray<ObIJsonBase *> &data_array);
   bool check_batch_finished();
-  int get_batch_result(ObArray<ObJsonObject *> &responses);
+  int get_batch_result(ObArray<ObIJsonBase *> &responses);
 private:
 #ifndef __EMSCRIPTEN__
   int error_handle(const oceanbase::http::Result &result);
-  int add_http_request(ObJsonObject *data);
+  int add_http_request(ObIJsonBase *data);
 #endif
-  int send_post(ObJsonObject *data, ObJsonObject *&response);
-  int send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray<ObJsonObject *> &responses);
+  int send_post(ObIJsonBase *data, ObIJsonBase *&response);
+  int send_post_batch(ObArray<ObIJsonBase *> &data_array, ObArray<ObIJsonBase *> &responses);
   bool is_retryable_status_code(int64_t http_code);
   bool is_timeout();
 private:

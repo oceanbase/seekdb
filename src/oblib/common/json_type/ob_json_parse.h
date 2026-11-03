@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_JSON_PARSE
 #define OCEANBASE_SQL_OB_JSON_PARSE
 
-#include "ob_json_tree.h"
+#include "ob_json_base.h"
 
 namespace oceanbase {
 namespace common {
@@ -40,24 +40,9 @@ public:
   static const uint32_t JSN_SCHEMA_FLAG = 8;
   static const uint32_t JSN_PRESERVE_DUP_FLAG = 16;
 
-  static const int PARSE_SYNTAXERR_MESSAGE_LENGTH = 256;
-  static int get_tree(ObIAllocator *allocator, const ObString &text,
-                      ObJsonNode *&j_tree, uint32_t parse_flag = 0,
-                      uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
-  static int get_tree(ObIAllocator *allocator, const char *text, uint64_t length,
-                      ObJsonNode *&j_tree, uint32_t parse_flag = 0,
-                      uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
   static int get_binary(ObIAllocator *allocator, const char *text, uint64_t length,
                         ObString &binary, uint32_t parse_flag = 0,
                         uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
-
-  // Parse one complete standard JSON document. offset is a zero-based byte
-  // offset, including for input containing multibyte UTF-8 characters.
-  static int parse_json_text(ObIAllocator *allocator,
-                             const char *text, uint64_t length,
-                             const char *&syntaxerr, uint64_t *offset,
-                             ObJsonNode *&j_tree, uint32_t parse_flag = 0,
-                             uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
 
   static int check_json_syntax(const ObString &j_doc, ObIAllocator *allocator = NULL,
                                uint32_t parse_flag = 0,

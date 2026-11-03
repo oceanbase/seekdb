@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    binary, BinaryDocument, BinaryResult, BinaryValue, CompareResult, JsonType, ParseOptions,
+    binary, BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, CompareResult, JsonType, ParseOptions,
 };
 use std::fmt;
 
@@ -99,6 +99,10 @@ impl Query {
         path.query(self.document.root()?, options)
     }
 
+    pub fn into_value(self) -> BinaryResult<crate::Value> {
+        crate::Value::root(self.document)
+    }
+
     pub fn query_output(&self, path: &Path, wrap_result: bool) -> BinaryResult<QueryOutput> {
         self.query_output_with_options(
             path,
@@ -113,12 +117,17 @@ impl Query {
         )
     }
 
+    pub fn first_value(&self, path: &Path, auto_wrap: bool) -> BinaryResult<Option<Vec<u8>>> {
+        let matches = self.query(path, QueryOptions { auto_wrap, first_only: true })?;
+        matches.first().map(|value| binary::serialize_constructed_value(*value)).transpose()
+    }
+
     pub fn root_output(&self, wrap_result: bool) -> BinaryResult<QueryOutput> {
         let root = self.document.root()?;
         let binary = if wrap_result {
-            Some(binary::serialize_array(&[root])?)
+            Some(constructed_array(&[root])?)
         } else {
-            Some(binary::serialize_value(root)?)
+            Some(binary::serialize_constructed_value(root)?)
         };
         Ok(QueryOutput {
             match_count: 1,
@@ -141,40 +150,7 @@ impl Query {
                 first_only: false,
             },
         )?;
-        let value_type = match matches.first() {
-            Some(value) => Some(value.json_type()?),
-            None => None,
-        };
-        let scalar_disallowed =
-            matches.len() == 1 && !options.allow_scalar && !matches[0].json_type()?.is_container();
-        let wrapper_required = !matches.is_empty()
-            && ((matches.len() > 1
-                && !options.wrap_multiple
-                && options.wrapper == WrapperPolicy::Without)
-                || (scalar_disallowed
-                    && !options.wrap_single
-                    && options.wrapper == WrapperPolicy::Without));
-        let use_wrapper = !wrapper_required
-            && !matches.is_empty()
-            && ((matches.len() == 1 && options.wrap_single)
-                || (matches.len() > 1 && options.wrap_multiple)
-                || options.wrapper == WrapperPolicy::With
-                || (options.wrapper == WrapperPolicy::Conditional
-                    && (matches.len() > 1 || scalar_disallowed)));
-        let binary = if use_wrapper {
-            Some(binary::serialize_array(&matches)?)
-        } else if matches.len() == 1 && !wrapper_required {
-            Some(binary::serialize_value(matches[0])?)
-        } else {
-            None
-        };
-        Ok(QueryOutput {
-            match_count: matches.len(),
-            value_type,
-            binary,
-            use_wrapper,
-            wrapper_required,
-        })
+        build_query_output(matches, options)
     }
 
     pub fn extract(&self, paths: &[Path]) -> BinaryResult<Option<Vec<u8>>> {
@@ -187,9 +163,9 @@ impl Query {
         if matches.is_empty() {
             Ok(None)
         } else if matches.len() == 1 && !force_array {
-            binary::serialize_value(matches[0]).map(Some)
+            binary::serialize_constructed_value(matches[0]).map(Some)
         } else {
-            binary::serialize_array(&matches).map(Some)
+            constructed_array(&matches).map(Some)
         }
     }
 
@@ -217,6 +193,29 @@ impl Query {
     }
 
     pub fn contains(&self, candidate: &Query, path: Option<&Path>) -> CompareResult<Option<bool>> {
+        crate::compare::without_temporal(self.contains_with(
+            candidate,
+            path,
+            &mut crate::compare::NoTemporal,
+        ))
+    }
+
+    pub fn overlaps(&self, other: &Query) -> CompareResult<bool> {
+        crate::compare::without_temporal(self.overlaps_with(other, &mut crate::compare::NoTemporal))
+    }
+
+    pub fn member_of(&self, target: &Query) -> CompareResult<bool> {
+        crate::compare::without_temporal(
+            self.member_of_with(target, &mut crate::compare::NoTemporal),
+        )
+    }
+
+    pub fn contains_with<C: crate::compare::ScalarComparator>(
+        &self,
+        candidate: &Query,
+        path: Option<&Path>,
+        scalar: &mut C,
+    ) -> Result<Option<bool>, crate::compare::OrderError<C::Error>> {
         let target = if let Some(path) = path {
             let matches = self.query(path, QueryOptions::default())?;
             let Some(target) = matches.first() else {
@@ -226,15 +225,23 @@ impl Query {
         } else {
             self.document.root()?
         };
-        crate::compare::contains(target, candidate.document.root()?).map(Some)
+        crate::compare::contains_with(target, candidate.document.root()?, scalar).map(Some)
     }
 
-    pub fn overlaps(&self, other: &Query) -> CompareResult<bool> {
-        crate::compare::overlaps(self.document.root()?, other.document.root()?)
+    pub fn overlaps_with<C: crate::compare::ScalarComparator>(
+        &self,
+        other: &Query,
+        scalar: &mut C,
+    ) -> Result<bool, crate::compare::OrderError<C::Error>> {
+        crate::compare::overlaps_with(self.document.root()?, other.document.root()?, scalar)
     }
 
-    pub fn member_of(&self, target: &Query) -> CompareResult<bool> {
-        crate::compare::member_of(self.document.root()?, target.document.root()?)
+    pub fn member_of_with<C: crate::compare::ScalarComparator>(
+        &self,
+        target: &Query,
+        scalar: &mut C,
+    ) -> Result<bool, crate::compare::OrderError<C::Error>> {
+        crate::compare::member_of_with(self.document.root()?, target.document.root()?, scalar)
     }
 }
 
@@ -263,6 +270,51 @@ impl fmt::Display for PathError {
 impl std::error::Error for PathError {}
 
 pub type PathResult<T> = std::result::Result<T, PathError>;
+
+fn constructed_array(values: &[crate::BinaryValue<'_>]) -> BinaryResult<Vec<u8>> {
+    let entries: Vec<_> = values.iter().map(|value| (&[][..], *value)).collect();
+    binary::serialize_constructed(false, &entries)
+}
+
+pub(crate) fn build_query_output(
+    matches: Vec<BinaryValue<'_>>,
+    options: QueryOutputOptions,
+) -> BinaryResult<QueryOutput> {
+    let value_type = match matches.first() {
+        Some(value) => Some(value.json_type()?),
+        None => None,
+    };
+    let scalar_disallowed =
+        matches.len() == 1 && !options.allow_scalar && !matches[0].json_type()?.is_container();
+    let wrapper_required = !matches.is_empty()
+        && ((matches.len() > 1
+            && !options.wrap_multiple
+            && options.wrapper == WrapperPolicy::Without)
+            || (scalar_disallowed
+                && !options.wrap_single
+                && options.wrapper == WrapperPolicy::Without));
+    let use_wrapper = !wrapper_required
+        && !matches.is_empty()
+        && ((matches.len() == 1 && options.wrap_single)
+            || (matches.len() > 1 && options.wrap_multiple)
+            || options.wrapper == WrapperPolicy::With
+            || (options.wrapper == WrapperPolicy::Conditional
+                && (matches.len() > 1 || scalar_disallowed)));
+    let binary = if use_wrapper {
+        Some(constructed_array(&matches)?)
+    } else if matches.len() == 1 && !wrapper_required {
+        Some(binary::serialize_constructed_value(matches[0])?)
+    } else {
+        None
+    };
+    Ok(QueryOutput {
+        match_count: matches.len(),
+        value_type,
+        binary,
+        use_wrapper,
+        wrapper_required,
+    })
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct QueryOptions {
@@ -532,32 +584,46 @@ fn evaluate<'a>(
             )? {
                 return Ok(true);
             }
-            let mut stack = Vec::new();
-            if value.json_type()?.is_container() {
-                stack.push((value, 0));
-            }
-            while let Some((container, child_index)) = stack.last_mut() {
-                if *child_index == container.len()? {
-                    stack.pop();
-                    continue;
+            let original_length = location.len();
+            let result = (|| {
+                let mut stack = Vec::new();
+                let mut active = std::collections::HashSet::new();
+                if value.json_type()?.is_container() {
+                    active.insert(value.storage_offset());
+                    stack.push((value, 0, location.len()));
                 }
-                let child = container.value(*child_index)?;
-                *child_index += 1;
-                if evaluate(
-                    child,
-                    steps,
-                    index + 1,
-                    options,
-                    matches,
-                    locations.as_deref_mut(),
-                    location,
-                )? {
-                    return Ok(true);
+                while let Some((container, child_index, location_length)) = stack.last_mut() {
+                    location.truncate(*location_length);
+                    if *child_index == container.len()? {
+                        active.remove(&container.storage_offset());
+                        stack.pop();
+                        continue;
+                    }
+                    let index_in_container = *child_index;
+                    let child = container.value(index_in_container)?;
+                    *child_index += 1;
+                    if locations.is_some() {
+                        if container.json_type()? == JsonType::Object {
+                            append_raw_member(location, &String::from_utf8_lossy(container.key(index_in_container)?));
+                        } else {
+                            append_array_location(location, index_in_container);
+                        }
+                    }
+                    if evaluate(child, steps, index + 1, options, matches,
+                        locations.as_deref_mut(), location)? {
+                        return Ok(true);
+                    }
+                    if child.json_type()?.is_container() {
+                        if !active.insert(child.storage_offset()) {
+                            return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, child.storage_offset()));
+                        }
+                        stack.push((child, 0, location.len()));
+                    }
                 }
-                if child.json_type()?.is_container() {
-                    stack.push((child, 0));
-                }
-            }
+                Ok(false)
+            })();
+            location.truncate(original_length);
+            return result;
         }
     }
     Ok(false)

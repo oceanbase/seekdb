@@ -107,10 +107,13 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
   }
 
   if (OB_FAIL(ret)) {
+  } else if (comparison.platform_error != OB_SUCCESS) {
+    ret = comparison.platform_error;
   } else if (comparison.status != common::json::Status::Ok) {
     ret = comparison.status == common::json::Status::NumericOverflow
               ? OB_NUMERIC_OVERFLOW
-              : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+              : comparison.status == common::json::Status::UnsupportedComparison
+                    ? OB_OP_NOT_ALLOW : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
   } else if (comparison.is_null || is_null_result) {
     res.set_null();
   } else {

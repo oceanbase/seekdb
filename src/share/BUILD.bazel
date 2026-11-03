@@ -1795,6 +1795,7 @@ grouped_unity_cc_library(
         ":_share_implementation_headers",
         "//rust:config_headers",
         "//rust:mvt_headers",
+        "//rust:json",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",

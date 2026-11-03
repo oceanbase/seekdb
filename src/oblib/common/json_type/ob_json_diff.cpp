@@ -28,6 +28,40 @@ public:
   rust::Box<json::Delta> value_;
 };
 
+namespace json {
+uint64_t BinarySource::binary_length() const noexcept
+{
+  return cursor_.get_length();
+}
+
+rust::Slice<const uint8_t> BinarySource::binary_view() const noexcept
+{
+  ObString data;
+  if (cursor_.is_full_mode() && cursor_.get_data(data) == OB_SUCCESS
+      && data.length() == cursor_.get_length() && data.length() > 0) {
+    return {reinterpret_cast<const uint8_t *>(data.ptr()), static_cast<size_t>(data.length())};
+  }
+  return {};
+}
+
+int32_t BinarySource::binary_read(uint64_t offset, rust::Slice<uint8_t> output) const noexcept
+{
+  int ret = OB_SUCCESS;
+  ObString data;
+  if (offset > static_cast<uint64_t>(INT64_MAX)
+      || output.size() > static_cast<uint64_t>(INT64_MAX) - offset
+      || offset + output.size() > static_cast<uint64_t>(cursor_.get_length())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(cursor_.get(offset, output.size(), data))) {
+  } else if (data.length() != output.size()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!output.empty()) {
+    MEMCPY(output.data(), data.ptr(), output.size());
+  }
+  return ret;
+}
+} // namespace json
+
 
 namespace {
 int delta_status(int32_t status)
@@ -134,6 +168,28 @@ int ObJsonBinUpdateCtx::record_binary_diff(int64_t offset, int64_t len)
 {
   return delta_ == nullptr ? OB_ALLOCATE_MEMORY_FAILED
       : delta_status(delta_->value_->delta_record_physical(offset, len));
+}
+
+int ObJsonBinUpdateCtx::merge_edit(BinaryEdit &edit)
+{
+  return delta_ == nullptr ? OB_ALLOCATE_MEMORY_FAILED
+      : delta_status(delta_->value_->merge_edit(edit));
+}
+
+int ObJsonBinUpdateCtx::should_pack_diff(uint64_t total, uint64_t extension,
+    uint64_t root_offset, bool &pack) const
+{
+  int ret = init_status();
+  pack = false;
+  if (OB_SUCC(ret)) {
+    const int32_t decision = delta_->value_->delta_should_pack(total, extension, root_offset);
+    if (decision < 0) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      pack = decision == 1;
+    }
+  }
+  return ret;
 }
 
 int ObJsonBinUpdateCtx::serialize_logical(char *buf, int64_t buf_len, int64_t &pos) const

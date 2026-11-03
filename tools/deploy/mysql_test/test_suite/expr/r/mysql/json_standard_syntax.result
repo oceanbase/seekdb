@@ -198,6 +198,46 @@ json_depth(json_query(concat(repeat('[',101),'0',repeat(']',101)), '$' returning
 select json_depth(json_value(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
 json_depth(json_value(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json))
 102
+select ord,a from json_table('[{"a":1},{"a":2}]', '$[*]' columns(ord for ordinality,a int path '$.a')) jt;
+ord	a
+1	1
+2	2
+select * from json_table('[{"a":10,"b":[1,2]},{"a":20,"b":[]}]', '$[*]' columns(ord for ordinality,a int path '$.a',nested path '$.b[*]' columns(b int path '$'))) jt;
+ord	a	b
+1	10	1
+1	10	2
+2	20	NULL
+select * from json_table('[{"a":[{"b":[1]}]},{"a":[{"b":[2]}]}]','$[*]' columns(nested path '$.a[*]' columns(nested path '$.b[*]' columns(v int path '$')))) jt;
+v
+1
+2
+select * from json_table('{"a":[1,2],"b":[3,4]}', '$' columns(nested path '$.a[*]' columns(a int path '$'),nested path '$.b[*]' columns(b int path '$'))) jt;
+a	b
+1	NULL
+2	NULL
+NULL	3
+NULL	4
+select * from json_table('[{"a":[1,2]},{"a":null},{}]', '$[*]' columns(a json path '$.a[*]')) jt;
+a
+[1, 2]
+NULL
+NULL
+select * from json_table('[{"a":1},{}]', '$[*]' columns(a int path '$.missing' default '9' on empty)) jt;
+a
+9
+9
+prepare json_table_scan from 'select a from json_table(?, ''$[*]'' columns(a int path ''$.a'')) jt';
+set @json_table_document = '[{"a":1},{"a":2}]';
+execute json_table_scan using @json_table_document;
+a
+1
+2
+set @json_table_document = '[{"a":3}]';
+execute json_table_scan using @json_table_document;
+a
+3
+deallocate prepare json_table_scan;
+set @json_table_document = null;
 select json_length(cast('{"a":1}' as json), '$**');
 ERROR 42000: Invalid JSON path expression.
 select json_contains_path(cast('{"a":1}' as json), 'one', '$.0a');
@@ -205,7 +245,58 @@ ERROR 42000: Invalid JSON path expression.
 select json_schema_valid('{"type":"object"}', '{"a":1}');
 json_schema_valid('{"type":"object"}', '{"a":1}')
 1
+select json_schema_valid('{"dependencies":{"a":{"required":["b"]}}}', 'null');
+ERROR HY000: Unknown error
+select json_schema_validation_report('{"dependencies":{"a":{"required":["b"]}}}', 'null');
+ERROR HY000: Unknown error
+select json_schema_valid('{"properties":{"a":{"not":{"minimum":0}}},"patternProperties":{"a":{"not":{"type":"integer"}}}}', '{"ba":1}');
+json_schema_valid('{"properties":{"a":{"not":{"minimum":0}}},"patternProperties":{"a":{"not":{"type":"integer"}}}}', '{"ba":1}')
+0
+select json_schema_valid(schema_text,document_text) from (select '{"properties":{"a":{"not":{"minimum":0}}},"patternProperties":{"a":{"not":{"type":"integer"}}}}' schema_text,'{"ba":1}' document_text union all select '{}','{}') inputs;
+ERROR 23000: Column cannot be null
 select json_schema_valid('{"type":"object"}', '{a:1}');
 ERROR 22032: Invalid JSON text in argument.
 select cast('{"a":1,}' as json);
 ERROR 22032: Invalid JSON text in argument.
+select json_replace('{"a":[1,2]}', '$.a[*]', 9);
+ERROR 42000: Invalid JSON path expression.
+set @json_invalid_mutation_value = 'invalid json';
+select json_insert('1', '$.a', cast(@json_invalid_mutation_value as json));
+ERROR 22032: Invalid JSON text in argument.
+select json_insert('1', '$.missing.a', cast(@json_invalid_mutation_value as json));
+json_insert('1', '$.missing.a', cast(@json_invalid_mutation_value as json))
+1
+set @json_invalid_mutation_value = null;
+select json_set('{"a":[1,2]}', '$.a[0]', 9, '$.a[1]', 8);
+json_set('{"a":[1,2]}', '$.a[0]', 9, '$.a[1]', 8)
+{"a": [9, 8]}
+select json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'));
+json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'))
+1
+select json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'));
+json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'))
+0
+prepare json_table_nested_scan from 'select * from json_table(?, ''$[*]'' columns(nested path ''$.a[*]'' columns(nested path ''$.b[*]'' columns(v int path ''$'')))) jt';
+set @json_nested_document = '[{"a":[{"b":[1,2]}]},{"a":[{"b":[3]}]}]';
+execute json_table_nested_scan using @json_nested_document;
+v
+1
+2
+3
+set @json_nested_document = '[{"a":[{"b":[4]}]},{"a":[{"b":[5,6]}]}]';
+execute json_table_nested_scan using @json_nested_document;
+v
+4
+5
+6
+deallocate prepare json_table_nested_scan;
+set @json_nested_document = null;
+select json_contains('[[2],1]', '1') as nested_scalar, json_contains('[{"a":2},1]', '[1]') as candidate_array, json_contains('[[3],1,2]', '[1,2]') as multiple_candidates, json_contains('{"b":{}}', '{"b":{"x":2}}') as empty_first, json_contains('{"a":1,"b":{}}', '{"a":1,"b":{"x":2}}') as empty_after_match;
+nested_scalar	candidate_array	multiple_candidates	empty_first	empty_after_match
+1	1	1	0	1
+select json_extract(json_array(repeat('x',300),-1),'$[1]') as constructed_negative, json_extract(cast(concat('["',repeat('x',300),'",-1]') as json),'$[1]') as parsed_negative;
+constructed_negative	parsed_negative
+-1	-1
+select json_search('{"a":"leaf","nested":{"a":"leaf"}}','all','leaf',null,'$**.a') as recursive_locations;
+recursive_locations
+["$.a", "$.nested.a"]

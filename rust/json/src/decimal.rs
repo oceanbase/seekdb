@@ -69,6 +69,23 @@ impl Decimal {
         })
     }
 
+    pub(crate) fn to_f64(self) -> f64 {
+        use std::fmt::Write;
+        if self.len == 0 {
+            return 0.0;
+        }
+        let mut text = String::with_capacity(self.len * 9 + 8);
+        if self.negative {
+            text.push('-');
+        }
+        for digit in &self.digits[..self.len] {
+            write!(&mut text, "{digit:09}").expect("writing to a String");
+        }
+        write!(&mut text, "e{}", 9 * (self.exponent - self.len as i32 + 1))
+            .expect("writing to a String");
+        text.parse().expect("decimal digits and exponent")
+    }
+
     pub(crate) fn serialized_size(self) -> usize {
         8 + self.len * 4
     }
@@ -184,18 +201,6 @@ impl Decimal {
         })
     }
 
-    fn equal(mut self, mut other: Self) -> bool {
-        self.normalize();
-        other.normalize();
-        if self.len == 0 || other.len == 0 {
-            return self.len == other.len;
-        }
-        self.negative == other.negative
-            && self.exponent == other.exponent
-            && self.len == other.len
-            && self.digits[..self.len] == other.digits[..other.len]
-    }
-
     fn normalize(&mut self) {
         while self.len != 0 && self.digits[self.len - 1] == 0 {
             self.len -= 1;
@@ -207,17 +212,103 @@ impl Decimal {
     }
 }
 
-pub(crate) fn equal_decimal_number(
-    left: Decimal,
-    right: crate::Number,
-) -> Result<bool, DecimalOverflow> {
-    match right {
-        crate::Number::I64(right) => Ok(left.equal(Decimal::from_i64(right))),
-        crate::Number::U64(right) => Ok(left.equal(Decimal::from_u64(right))),
-        crate::Number::F64(right) => Decimal::from_f64(right).map(|right| left.equal(right)),
+pub(crate) fn compare_values(
+    left: crate::BinaryValue<'_>,
+    right: crate::BinaryValue<'_>,
+) -> crate::CompareResult<std::cmp::Ordering> {
+    fn decimal(value: crate::BinaryValue<'_>) -> crate::CompareResult<Decimal> {
+        if matches!(
+            value.json_type()?,
+            crate::JsonType::Decimal | crate::JsonType::ODecimal
+        ) {
+            return Ok(value.decimal()?);
+        }
+        match value.number()? {
+            crate::Number::I64(value) => Ok(Decimal::from_i64(value)),
+            crate::Number::U64(value) => Ok(Decimal::from_u64(value)),
+            crate::Number::F64(value) => {
+                Decimal::from_f64(value).map_err(|_| crate::CompareError::NumericOverflow)
+            }
+        }
     }
-}
-
-pub(crate) fn equal_decimals(left: Decimal, right: Decimal) -> bool {
-    left.equal(right)
+    fn decimal_double_zero_or_sign(value: Decimal, double: f64) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        let mut value = value;
+        value.normalize();
+        if value.negative != (double < 0.0) {
+            Some(if value.negative {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            })
+        } else if value.len == 0 {
+            Some(if double == 0.0 {
+                Ordering::Equal
+            } else {
+                Ordering::Less
+            })
+        } else if double == 0.0 {
+            Some(Ordering::Greater)
+        } else {
+            None
+        }
+    }
+    let is_decimal = |kind| matches!(kind, crate::JsonType::Decimal | crate::JsonType::ODecimal);
+    if is_decimal(left.json_type()?) && !is_decimal(right.json_type()?) {
+        if let crate::Number::F64(double) = right.number()? {
+            if let Some(order) = decimal_double_zero_or_sign(left.decimal()?, double) {
+                return Ok(order);
+            }
+        }
+    } else if is_decimal(right.json_type()?) && !is_decimal(left.json_type()?) {
+        if let crate::Number::F64(double) = left.number()? {
+            if let Some(order) = decimal_double_zero_or_sign(right.decimal()?, double) {
+                return Ok(order.reverse());
+            }
+        }
+    }
+    if !matches!(
+        left.json_type()?,
+        crate::JsonType::Decimal | crate::JsonType::ODecimal
+    ) && !matches!(
+        right.json_type()?,
+        crate::JsonType::Decimal | crate::JsonType::ODecimal
+    ) {
+        let a = left.number()?;
+        let b = right.number()?;
+        if let (crate::Number::F64(a), crate::Number::F64(b)) = (&a, &b) {
+            return Ok(a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        }
+        if matches!(a, crate::Number::F64(_)) || matches!(b, crate::Number::F64(_)) {
+            let to_double = |n: crate::Number| match n {
+                crate::Number::I64(n) => n as f64,
+                crate::Number::U64(n) => n as f64,
+                crate::Number::F64(n) => n,
+            };
+            let order = to_double(a)
+                .partial_cmp(&to_double(b))
+                .unwrap_or(std::cmp::Ordering::Equal);
+            if order != std::cmp::Ordering::Equal {
+                return Ok(order);
+            }
+        }
+    }
+    let mut left = decimal(left)?;
+    let mut right = decimal(right)?;
+    left.normalize();
+    right.normalize();
+    let ordering = if left.len == 0 || right.len == 0 {
+        left.len.cmp(&right.len)
+    } else {
+        left.exponent
+            .cmp(&right.exponent)
+            .then_with(|| left.digits[..left.len].cmp(&right.digits[..right.len]))
+    };
+    Ok(if left.negative != right.negative {
+        right.negative.cmp(&left.negative)
+    } else if left.negative {
+        ordering.reverse()
+    } else {
+        ordering
+    })
 }

@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{BinaryError, BinaryValue, JsonType, Number};
+use crate::{BinaryError, BinaryErrorKind, BinaryValue, JsonType};
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CompareError {
     Binary(BinaryError),
     NumericOverflow,
+    UnsupportedTypes,
 }
 
 pub type CompareResult<T> = std::result::Result<T, CompareError>;
@@ -33,6 +34,9 @@ impl fmt::Display for CompareError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Binary(error) => error.fmt(formatter),
+            Self::UnsupportedTypes => {
+                formatter.write_str("JSON types are not comparable without a scalar capability")
+            }
             Self::NumericOverflow => {
                 formatter.write_str("JSON number exceeds decimal comparison range")
             }
@@ -44,216 +48,261 @@ impl std::error::Error for CompareError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Binary(error) => Some(error),
-            Self::NumericOverflow => None,
+            Self::NumericOverflow | Self::UnsupportedTypes => None,
         }
     }
+}
+
+pub trait ScalarComparator {
+    type Error;
+    fn compare_temporal(
+        &mut self,
+        left: BinaryValue<'_>,
+        right: BinaryValue<'_>,
+    ) -> Result<std::cmp::Ordering, Self::Error>;
+}
+
+impl<F, E> ScalarComparator for F
+where
+    F: FnMut(BinaryValue<'_>, BinaryValue<'_>) -> Result<std::cmp::Ordering, E>,
+{
+    type Error = E;
+    fn compare_temporal(
+        &mut self,
+        left: BinaryValue<'_>,
+        right: BinaryValue<'_>,
+    ) -> Result<std::cmp::Ordering, E> {
+        self(left, right)
+    }
+}
+
+pub(crate) struct NoTemporal;
+impl ScalarComparator for NoTemporal {
+    type Error = CompareError;
+    fn compare_temporal(
+        &mut self,
+        _: BinaryValue<'_>,
+        _: BinaryValue<'_>,
+    ) -> CompareResult<std::cmp::Ordering> {
+        Err(CompareError::UnsupportedTypes)
+    }
+}
+
+pub(crate) fn without_temporal<T>(result: Result<T, OrderError<CompareError>>) -> CompareResult<T> {
+    result.map_err(|error| match error {
+        OrderError::Value(error) | OrderError::Scalar(error) => error,
+        OrderError::UnsupportedTypes => CompareError::UnsupportedTypes,
+    })
 }
 
 pub fn equal(left: BinaryValue<'_>, right: BinaryValue<'_>) -> CompareResult<bool> {
-    let left_type = left.json_type()?;
-    let right_type = right.json_type()?;
-    if is_number(left_type) && is_number(right_type) {
-        if matches!(left_type, JsonType::Decimal | JsonType::ODecimal)
-            || matches!(right_type, JsonType::Decimal | JsonType::ODecimal)
-        {
-            return decimal_equal(left, right);
-        }
-        return Ok(number_equal(left.number()?, right.number()?));
-    }
-    match (left_type, right_type) {
-        (JsonType::Null, JsonType::Null) => Ok(true),
-        (JsonType::Boolean, JsonType::Boolean) => Ok(left.boolean()? == right.boolean()?),
-        (JsonType::String, JsonType::String) => Ok(left.string_bytes()? == right.string_bytes()?),
-        (JsonType::Array, JsonType::Array) => {
-            if left.len()? != right.len()? {
-                return Ok(false);
-            }
-            for index in 0..left.len()? {
-                if !equal(left.value(index)?, right.value(index)?)? {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
-        (JsonType::Object, JsonType::Object) => {
-            if left.len()? != right.len()? {
-                return Ok(false);
-            }
-            for index in 0..left.len()? {
-                if left.key(index)? != right.key(index)?
-                    || !equal(left.value(index)?, right.value(index)?)?
-                {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
-        (JsonType::Opaque, JsonType::Opaque) => {
-            if left.opaque_field_type()? != right.opaque_field_type()? {
-                return Ok(false);
-            }
-            let left = crate::binary::serialize_value(left)?;
-            let right = crate::binary::serialize_value(right)?;
-            Ok(left == right)
-        }
-        _ if left_type == right_type => {
-            let left = crate::binary::serialize_value(left)?;
-            let right = crate::binary::serialize_value(right)?;
-            Ok(left == right)
-        }
-        _ => Ok(false),
-    }
+    without_temporal(equal_with(left, right, &mut NoTemporal))
+}
+
+pub fn equal_with<C: ScalarComparator>(
+    left: BinaryValue<'_>,
+    right: BinaryValue<'_>,
+    scalar: &mut C,
+) -> Result<bool, OrderError<C::Error>> {
+    order(left, right, scalar).map(|order| order.is_eq())
 }
 
 pub fn contains(target: BinaryValue<'_>, candidate: BinaryValue<'_>) -> CompareResult<bool> {
-    let mut result = false;
-    contains_with_state(target, candidate, &mut result)?;
-    Ok(result)
+    without_temporal(contains_with(target, candidate, &mut NoTemporal))
 }
 
 pub fn overlaps(left: BinaryValue<'_>, right: BinaryValue<'_>) -> CompareResult<bool> {
+    without_temporal(overlaps_with(left, right, &mut NoTemporal))
+}
+
+pub fn member_of(candidate: BinaryValue<'_>, target: BinaryValue<'_>) -> CompareResult<bool> {
+    without_temporal(member_of_with(candidate, target, &mut NoTemporal))
+}
+
+pub fn contains_with<C: ScalarComparator>(
+    target: BinaryValue<'_>,
+    candidate: BinaryValue<'_>,
+    scalar: &mut C,
+) -> Result<bool, OrderError<C::Error>> {
+    let mut result = false;
+    contains_with_state(target, candidate, &mut result, scalar)?;
+    Ok(result)
+}
+
+pub fn overlaps_with<C: ScalarComparator>(
+    left: BinaryValue<'_>,
+    right: BinaryValue<'_>,
+    scalar: &mut C,
+) -> Result<bool, OrderError<C::Error>> {
     match (left.json_type()?, right.json_type()?) {
-        (JsonType::Array, _) => overlaps_array(left, right),
-        (_, JsonType::Array) => overlaps_array(right, left),
+        (JsonType::Array, _) => overlaps_array(left, right, scalar),
+        (_, JsonType::Array) => overlaps_array(right, left, scalar),
         (JsonType::Object, JsonType::Object) => {
             if left.len()? == 0 && right.len()? == 0 {
                 return Ok(true);
             }
             for index in 0..right.len()? {
                 if let Some(left_value) = left.member(right.key(index)?)? {
-                    if equal(left_value, right.value(index)?)? {
+                    if equal_with(left_value, right.value(index)?, scalar)? {
                         return Ok(true);
                     }
                 }
             }
             Ok(false)
         }
-        _ => equal(left, right),
+        _ => equal_with(left, right, scalar),
     }
 }
 
-pub fn member_of(candidate: BinaryValue<'_>, target: BinaryValue<'_>) -> CompareResult<bool> {
+pub fn member_of_with<C: ScalarComparator>(
+    candidate: BinaryValue<'_>,
+    target: BinaryValue<'_>,
+    scalar: &mut C,
+) -> Result<bool, OrderError<C::Error>> {
     if target.json_type()? != JsonType::Array {
-        return equal(candidate, target);
+        return equal_with(candidate, target, scalar);
     }
     for index in 0..target.len()? {
-        if equal(candidate, target.value(index)?)? {
+        if equal_with(candidate, target.value(index)?, scalar)? {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-fn contains_with_state(
+fn contains_with_state<C: ScalarComparator>(
     target: BinaryValue<'_>,
     candidate: BinaryValue<'_>,
     result: &mut bool,
-) -> CompareResult<()> {
-    match target.json_type()? {
-        JsonType::Array => contains_array(target, candidate, result),
-        JsonType::Object => contains_object(target, candidate, result),
-        _ => {
-            *result = equal(target, candidate)?;
-            Ok(())
-        }
+    scalar: &mut C,
+) -> Result<(), OrderError<C::Error>> {
+    enum Task<'a, 'b> {
+        Value(BinaryValue<'a>, BinaryValue<'b>, usize),
+        Object(BinaryValue<'a>, BinaryValue<'b>, u64, usize),
+        ArrayCandidate(BinaryValue<'a>, BinaryValue<'b>, u64, usize),
+        ArraySearch(BinaryValue<'a>, BinaryValue<'b>, u64, u64, bool, usize),
+        ArrayChild(BinaryValue<'a>, BinaryValue<'b>, u64, u64, usize),
+        Leave(usize),
     }
-}
-
-fn contains_array(
-    target: BinaryValue<'_>,
-    candidate: BinaryValue<'_>,
-    result: &mut bool,
-) -> CompareResult<()> {
-    let candidate_count = if candidate.json_type()? == JsonType::Array {
-        candidate.len()?
-    } else {
-        1
-    };
-    let mut state = true;
-    for candidate_index in 0..candidate_count {
-        let candidate_value = if candidate.json_type()? == JsonType::Array {
-            candidate.value(candidate_index)?
-        } else {
-            candidate
-        };
-        let candidate_is_array = candidate_value.json_type()? == JsonType::Array;
-        let mut found = false;
-        if candidate_value.json_type()? == JsonType::Object {
-            for target_index in 0..target.len()? {
-                let target_value = target.value(target_index)?;
-                if target_value.json_type()? == JsonType::Object
-                    && (target_value.len()? == 0 || candidate_value.len()? == 0)
-                {
-                    state = true;
-                    found = true;
-                    break;
+    let mut active = std::collections::HashSet::new();
+    let depth_bound = target.traversal_limit();
+    let mut tasks = vec![Task::Value(target, candidate, 0)];
+    while let Some(task) = tasks.pop() {
+        match task {
+            Task::Value(target, candidate, depth) => {
+                if depth > depth_bound {
+                    return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, target.storage_offset()).into());
+                }
+                let kind = target.json_type()?;
+                if kind.is_container() {
+                    let position = target.storage_offset();
+                    if !active.insert(position) {
+                        return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, position).into());
+                    }
+                    tasks.push(Task::Leave(position));
+                }
+                match kind {
+                    JsonType::Array => tasks.push(Task::ArrayCandidate(target, candidate, 0, depth)),
+                    JsonType::Object => {
+                        if candidate.json_type()? != JsonType::Object {
+                            *result = false;
+                        } else if target.len()? == 0 && candidate.len()? == 0 {
+                            *result = true;
+                        } else if target.len()? != 0 && candidate.len()? != 0 {
+                            tasks.push(Task::Object(target, candidate, 0, depth));
+                        }
+                    }
+                    _ => *result = equal_with(target, candidate, scalar)?,
                 }
             }
-        }
-        for target_index in 0..target.len()? {
-            if found {
-                break;
-            }
-            let target_value = target.value(target_index)?;
-            let target_type = target_value.json_type()?;
-            if candidate_is_array {
-                if target_type != JsonType::Array {
+            Task::Object(target, candidate, index, depth) => {
+                if (index != 0 && !*result) || index == candidate.len()? {
                     continue;
                 }
-                contains_with_state(target_value, candidate_value, &mut state)?;
-                found = state;
-            } else if target_type.is_container() {
-                contains_with_state(target_value, candidate_value, &mut state)?;
-                found = state;
-            } else if equal(target_value, candidate_value)? {
-                found = true;
+                if let Some(child) = target.member(candidate.key(index)?)? {
+                    tasks.push(Task::Object(target, candidate, index + 1, depth));
+                    tasks.push(Task::Value(child, candidate.value(index)?, depth + 1));
+                } else {
+                    *result = false;
+                }
             }
-            if found {
-                break;
+            Task::ArrayCandidate(target, candidate, index, depth) => {
+                let array = candidate.json_type()? == JsonType::Array;
+                let count = if array { candidate.len()? } else { 1 };
+                if index == count {
+                    *result = true;
+                    continue;
+                }
+                let value = if array { candidate.value(index)? } else { candidate };
+                let mut empty_object = false;
+                if value.json_type()? == JsonType::Object {
+                    for target_index in 0..target.len()? {
+                        let child = target.value(target_index)?;
+                        if child.json_type()? == JsonType::Object
+                            && (child.len()? == 0 || value.len()? == 0)
+                        {
+                            empty_object = true;
+                            break;
+                        }
+                    }
+                }
+                if empty_object {
+                    tasks.push(Task::ArrayCandidate(target, candidate, index + 1, depth));
+                } else {
+                    tasks.push(Task::ArraySearch(target, candidate, index, 0, true, depth));
+                }
             }
-        }
-        if !found {
-            state = false;
-        }
-        if !state {
-            break;
+            Task::ArraySearch(target, candidate, candidate_index, mut index, state, depth) => {
+                let value = if candidate.json_type()? == JsonType::Array {
+                    candidate.value(candidate_index)?
+                } else { candidate };
+                let candidate_array = value.json_type()? == JsonType::Array;
+                let mut scheduled = false;
+                while index < target.len()? {
+                    let child = target.value(index)?;
+                    index += 1;
+                    let kind = child.json_type()?;
+                    if candidate_array && kind != JsonType::Array {
+                        continue;
+                    }
+                    if kind.is_container() {
+                        *result = state;
+                        tasks.push(Task::ArrayChild(target, candidate, candidate_index, index, depth));
+                        tasks.push(Task::Value(child, value, depth + 1));
+                        scheduled = true;
+                        break;
+                    }
+                    if equal_with(child, value, scalar)? {
+                        tasks.push(Task::ArrayCandidate(target, candidate, candidate_index + 1, depth));
+                        scheduled = true;
+                        break;
+                    }
+                }
+                if !scheduled { *result = false; }
+            }
+            Task::ArrayChild(target, candidate, candidate_index, index, depth) => {
+                if *result {
+                    tasks.push(Task::ArrayCandidate(target, candidate, candidate_index + 1, depth));
+                } else {
+                    tasks.push(Task::ArraySearch(target, candidate, candidate_index, index, false, depth));
+                }
+            }
+            Task::Leave(position) => { active.remove(&position); }
         }
     }
-    *result = state;
     Ok(())
 }
 
-fn contains_object(
-    target: BinaryValue<'_>,
-    candidate: BinaryValue<'_>,
-    result: &mut bool,
-) -> CompareResult<()> {
-    if candidate.json_type()? != JsonType::Object {
-        *result = false;
-    } else if target.len()? == 0 && candidate.len()? == 0 {
-        *result = true;
-    } else if target.len()? == 0 || candidate.len()? == 0 {
-    } else {
-        for index in 0..candidate.len()? {
-            let Some(target_value) = target.member(candidate.key(index)?)? else {
-                *result = false;
-                break;
-            };
-            contains_with_state(target_value, candidate.value(index)?, result)?;
-            if !*result {
-                break;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn overlaps_array(array: BinaryValue<'_>, other: BinaryValue<'_>) -> CompareResult<bool> {
+fn overlaps_array<C: ScalarComparator>(
+    array: BinaryValue<'_>,
+    other: BinaryValue<'_>,
+    scalar: &mut C,
+) -> Result<bool, OrderError<C::Error>> {
     if other.json_type()? == JsonType::Array {
         for other_index in 0..other.len()? {
             let other_value = other.value(other_index)?;
             for array_index in 0..array.len()? {
-                if equal(array.value(array_index)?, other_value)? {
+                if equal_with(array.value(array_index)?, other_value, scalar)? {
                     return Ok(true);
                 }
             }
@@ -261,7 +310,7 @@ fn overlaps_array(array: BinaryValue<'_>, other: BinaryValue<'_>) -> CompareResu
         Ok(false)
     } else {
         for array_index in 0..array.len()? {
-            if equal(array.value(array_index)?, other)? {
+            if equal_with(array.value(array_index)?, other, scalar)? {
                 return Ok(true);
             }
         }
@@ -284,52 +333,244 @@ fn is_number(kind: JsonType) -> bool {
     )
 }
 
-fn number_equal(left: Number, right: Number) -> bool {
-    match (left, right) {
-        (Number::I64(left), Number::I64(right)) => left == right,
-        (Number::U64(left), Number::U64(right)) => left == right,
-        (Number::F64(left), Number::F64(right)) => left == right,
-        (Number::I64(left), Number::U64(right)) | (Number::U64(right), Number::I64(left)) => {
-            left >= 0 && left as u64 == right
-        }
-        (Number::I64(left), Number::F64(right)) | (Number::F64(right), Number::I64(left)) => {
-            double_equals_int(right, left)
-        }
-        (Number::U64(left), Number::F64(right)) | (Number::F64(right), Number::U64(left)) => {
-            double_equals_uint(right, left)
-        }
+#[derive(Debug)]
+pub enum OrderError<E> {
+    Value(CompareError),
+    UnsupportedTypes,
+    Scalar(E),
+}
+
+impl<E> From<BinaryError> for OrderError<E> {
+    fn from(error: BinaryError) -> Self {
+        Self::Value(error.into())
     }
 }
 
-fn decimal_equal(left: BinaryValue<'_>, right: BinaryValue<'_>) -> CompareResult<bool> {
-    match (left.json_type()?, right.json_type()?) {
-        (JsonType::Decimal | JsonType::ODecimal, JsonType::Decimal | JsonType::ODecimal) => Ok(
-            crate::decimal::equal_decimals(left.decimal()?, right.decimal()?),
-        ),
-        (JsonType::Decimal | JsonType::ODecimal, _) => {
-            crate::decimal::equal_decimal_number(left.decimal()?, right.number()?)
-                .map_err(|_| CompareError::NumericOverflow)
-        }
-        (_, JsonType::Decimal | JsonType::ODecimal) => {
-            crate::decimal::equal_decimal_number(right.decimal()?, left.number()?)
-                .map_err(|_| CompareError::NumericOverflow)
-        }
-        _ => unreachable!("one side must be a decimal"),
+/// Orders JSON values, retaining database tag compatibility and object entry order.
+/// The scalar capability runs synchronously, only for temporal values. It must not
+/// retain the borrowed values beyond the call.
+pub fn order<C: ScalarComparator>(
+    left: BinaryValue<'_>,
+    right: BinaryValue<'_>,
+    temporal: &mut C,
+) -> Result<std::cmp::Ordering, OrderError<C::Error>> {
+    use std::cmp::Ordering;
+    enum Task<'a, 'b> {
+        Pair(BinaryValue<'a>, BinaryValue<'b>, usize),
+        Entries(BinaryValue<'a>, BinaryValue<'b>, u64, u64, u64, usize),
     }
+    let depth_bound = left.traversal_limit().min(right.traversal_limit());
+    let mut tasks = vec![Task::Pair(left, right, 0)];
+    while let Some(task) = tasks.pop() {
+        let (left, right, depth) = match task {
+            Task::Pair(left, right, depth) => (left, right, depth),
+            Task::Entries(left, right, index, count_a, count_b, depth) => {
+                if index == count_a.min(count_b) {
+                    if count_a != count_b {
+                        return Ok(count_a.cmp(&count_b));
+                    }
+                } else {
+                    if left.json_type()? == JsonType::Object {
+                        let key_order = left.key(index)?.cmp(right.key(index)?);
+                        if key_order != Ordering::Equal {
+                            return Ok(key_order);
+                        }
+                    }
+                    tasks.push(Task::Entries(
+                        left,
+                        right,
+                        index + 1,
+                        count_a,
+                        count_b,
+                        depth,
+                    ));
+                    tasks.push(Task::Pair(
+                        left.value(index)?,
+                        right.value(index)?,
+                        depth + 1,
+                    ));
+                }
+                continue;
+            }
+        };
+        if depth > depth_bound {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, 0).into());
+        }
+        let a = left.json_type()?;
+        let b = right.json_type()?;
+        match TYPE_COMPARISON[a as usize][b as usize] {
+            -1 => return Ok(Ordering::Less),
+            1 => return Ok(Ordering::Greater),
+            2 => return Err(OrderError::UnsupportedTypes),
+            _ => {}
+        }
+        let result = if is_number(a) {
+            crate::decimal::compare_values(left, right).map_err(OrderError::Value)?
+        } else if a.is_string() {
+            left.string_bytes()?.cmp(right.string_bytes()?)
+        } else {
+            match a {
+                JsonType::Null => Ordering::Equal,
+                JsonType::Boolean => left.boolean()?.cmp(&right.boolean()?),
+                JsonType::Array | JsonType::Object => {
+                    let count_a = left.len()?;
+                    let count_b = right.len()?;
+                    if a == JsonType::Object && count_a != count_b {
+                        return Ok(count_a.cmp(&count_b));
+                    }
+                    tasks.push(Task::Entries(left, right, 0, count_a, count_b, depth));
+                    continue;
+                }
+                JsonType::Opaque => {
+                    let kind = left.opaque_field_type()?.cmp(&right.opaque_field_type()?);
+                    if kind != Ordering::Equal {
+                        return Ok(kind);
+                    }
+                    left.opaque_bytes()?.cmp(right.opaque_bytes()?)
+                }
+                _ => temporal
+                    .compare_temporal(left, right)
+                    .map_err(OrderError::Scalar)?,
+            }
+        };
+        if result != Ordering::Equal {
+            return Ok(result);
+        }
+    }
+    Ok(Ordering::Equal)
 }
 
-fn double_equals_int(double: f64, integer: i64) -> bool {
-    const I64_UPPER_EXCLUSIVE: f64 = 9_223_372_036_854_775_808.0;
-    double >= i64::MIN as f64
-        && double < I64_UPPER_EXCLUSIVE
-        && double.fract() == 0.0
-        && double as i64 == integer
-}
-
-fn double_equals_uint(double: f64, integer: u64) -> bool {
-    const U64_UPPER_EXCLUSIVE: f64 = 18_446_744_073_709_551_616.0;
-    double >= 0.0
-        && double < U64_UPPER_EXCLUSIVE
-        && double.fract() == 0.0
-        && double as u64 == integer
-}
+const TYPE_COMPARISON: [[i8; 33]; 33] = [
+    [
+        0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, -1, -1, 2,
+    ],
+    [
+        1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, -1, -1, 2,
+    ],
+    [
+        1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, -1, -1, 2,
+    ],
+    [
+        1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, -1, -1, 2,
+    ],
+    [
+        1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, -1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2,
+        2, 2, -1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, -1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, -1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, -1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, -1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        1, -1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2,
+        1, 0, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        1, 1, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2,
+        2, 2, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0,
+        2, 2, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 0, 1, 2,
+    ],
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, -1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        1, 0, 2,
+    ],
+    [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2,
+    ],
+];

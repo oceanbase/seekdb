@@ -66,7 +66,7 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
   bool is_null = false;
   uint32_t res_len = 0;
   ObString j_doc;
-  ObJsonInType j_in_type = ObJsonInType::JSON_TREE;
+  ObJsonInType j_in_type = ObJsonInType::JSON_TEXT;
   ObObjType type1 = meta1.type_;
   ObCollationType cs_type1 = meta1.cs_type_;
   // handle data1(json text)

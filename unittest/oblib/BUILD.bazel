@@ -26,6 +26,7 @@ cc_test(
 cc_library(
     name = "json_parser_cases",
     srcs = ["test_json_parser.cpp"],
+    hdrs = ["json_mutation_golden.h", "json_hash_inputs.h", "json_hash_golden.h"],
     alwayslink = True,
     deps = [
         "//src/oblib:oblib_unit_test_internal_headers",

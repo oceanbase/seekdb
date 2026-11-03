@@ -12,17 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Standard JSON parsing with explicit duplicate-key and depth policies.
-//! Documents own all strings and values; error offsets are zero-based bytes.
+//! JSON parsing, binary values, queries, schema validation, construction and mutation.
+//! Owned documents and selections keep their backing bytes alive. Borrowed values
+//! and database capabilities are used synchronously; text errors use byte offsets.
 
 pub mod binary;
 mod bridge;
 pub mod compare;
+pub mod construction;
+pub mod format;
+pub mod hash;
 pub mod mutation;
 mod decimal;
 pub mod path;
 mod search;
+pub mod schema;
 pub mod sql_path;
+mod value;
+pub mod writer;
 
 pub use binary::{
     BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType,
@@ -35,6 +42,7 @@ pub use path::{
 };
 pub use search::SearchOptions;
 pub use sql_path::SqlPath;
+pub use value::{Selection, Value};
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;

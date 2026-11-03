@@ -69,7 +69,7 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   INIT_SUCC(ret);
   bool is_null_result = false;
   ObString json_doc;
-  ObJsonInType input_type = ObJsonInType::JSON_TREE;
+  ObJsonInType input_type = ObJsonInType::JSON_TEXT;
   ObIJsonBase *partial_document = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

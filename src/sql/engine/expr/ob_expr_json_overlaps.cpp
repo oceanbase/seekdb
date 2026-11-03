@@ -76,10 +76,13 @@ int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, O
                  expr, ctx, temp_allocator, 1, json_b, is_null_result))) {
   } else if (!is_null_result) {
     common::json::BoolResult comparison = (*json_a)->overlaps(**json_b);
-    if (comparison.status != common::json::Status::Ok) {
+    if (comparison.platform_error != OB_SUCCESS) {
+      ret = comparison.platform_error;
+    } else if (comparison.status != common::json::Status::Ok) {
       ret = comparison.status == common::json::Status::NumericOverflow
                 ? OB_NUMERIC_OVERFLOW
-                : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+                : comparison.status == common::json::Status::UnsupportedComparison
+                    ? OB_OP_NOT_ALLOW : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     } else {
       res.set_int(static_cast<int64_t>(comparison.value));
     }

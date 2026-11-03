@@ -44,6 +44,7 @@ struct BinaryDiff
 };
 
 class DeltaState;
+class BinaryEdit;
 
 class ObJsonBinUpdateCtx {
 public:
@@ -68,6 +69,8 @@ public:
   BinaryDiff binary_diff(int64_t index) const;
   bool intersects(uint64_t offset, uint64_t length) const;
   int64_t logical_serialize_size() const;
+  int merge_edit(BinaryEdit &edit);
+  int should_pack_diff(uint64_t total, uint64_t extension, uint64_t root_offset, bool &pack) const;
   int serialize_logical(char *buf, int64_t buf_len, int64_t &pos) const;
   int restore_delta(const char *buf, int64_t buf_len, const ObIArray<BinaryDiff> &physical);
 

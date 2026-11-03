@@ -67,17 +67,15 @@ int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, 
     ObDatum *json_datum = NULL;
     ObExpr *json_arg = expr.args_[0];
     ObObjType target_type = expr.args_[1]->datum_meta_.type_;
-    ObIJsonBase *candidate_value = NULL;
     ObString candidate_binary;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (json_datum->is_null()) {
       is_null_result = true;
-    } else if (OB_FAIL(ObJsonExprHelper::get_json_val(
-                   expr, ctx, &temp_allocator, 0, candidate_value))) {
+    } else if (OB_FAIL(ObJsonExprHelper::get_json_binary(
+                   expr, ctx, temp_allocator, 0, candidate_binary))) {
     } else if (!ObJsonExprHelper::is_convertible_to_json(target_type)) {
       ret = OB_ERR_INVALID_TYPE_FOR_JSON;
       LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 2, N_JSON_MEMBER_OF);
-    } else if (OB_FAIL(candidate_value->get_raw_binary(candidate_binary, &temp_allocator))) {
     } else if (OB_FAIL(get_native_json_query(
                    expr, ctx, temp_allocator, 1, target, is_null_result))) {
     } else if (!is_null_result) {
@@ -98,10 +96,13 @@ int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, 
     }
   } else {
     common::json::BoolResult comparison = (*candidate)->member_of(**target);
-    if (comparison.status != common::json::Status::Ok) {
+    if (comparison.platform_error != OB_SUCCESS) {
+      ret = comparison.platform_error;
+    } else if (comparison.status != common::json::Status::Ok) {
       ret = comparison.status == common::json::Status::NumericOverflow
                 ? OB_NUMERIC_OVERFLOW
-                : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+                : comparison.status == common::json::Status::UnsupportedComparison
+                    ? OB_OP_NOT_ALLOW : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     } else {
       res.set_int(static_cast<int64_t>(comparison.value));
     }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::path::append_member;
-use crate::{binary, BinaryResult, BinaryValue, JsonType, Path, Query, QueryOptions};
+use crate::{binary, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType, Path, Query, QueryOptions};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
@@ -107,47 +107,62 @@ fn find_matches(
     first_only: bool,
     hits: &mut HashSet<Hit>,
 ) -> BinaryResult<()> {
-    if first_only && !hits.is_empty() {
-        return Ok(());
+    struct Frame<'a> {
+        value: BinaryValue<'a>,
+        next: u64,
+        count: u64,
+        object: bool,
+        location_length: usize,
     }
-    match value.json_type()? {
-        JsonType::String => {
-            if pattern.matches(value.string_bytes()?) {
-                let order = hits.len();
-                hits.insert(Hit {
-                    path: location.clone(),
-                    order,
-                });
-            }
-        }
-        JsonType::Object => {
-            for index in 0..value.len()? {
-                let previous_length = location.len();
-                let key = String::from_utf8_lossy(value.key(index)?);
-                append_member(location, &key, false);
-                find_matches(value.value(index)?, location, pattern, first_only, hits)?;
-                location.truncate(previous_length);
-                if first_only && !hits.is_empty() {
-                    break;
+    let original_length = location.len();
+    let mut frames = Vec::<Frame<'_>>::new();
+    let mut active = HashSet::new();
+    let mut next = Some(value);
+    let result = (|| {
+        loop {
+            if first_only && !hits.is_empty() { return Ok(()); }
+            if let Some(value) = next.take() {
+                match value.json_type()? {
+                    JsonType::String => {
+                        if pattern.matches(value.string_bytes()?) {
+                            let order = hits.len();
+                            hits.insert(Hit { path: location.clone(), order });
+                        }
+                    }
+                    JsonType::Object | JsonType::Array => {
+                        if !active.insert(value.storage_offset()) {
+                            return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, value.storage_offset()));
+                        }
+                        frames.push(Frame { value, next: 0, count: value.len()?,
+                            object: value.json_type()? == JsonType::Object,
+                            location_length: location.len() });
+                    }
+                    _ => {}
                 }
             }
-        }
-        JsonType::Array => {
-            for index in 0..value.len()? {
-                let previous_length = location.len();
+            if first_only && !hits.is_empty() { return Ok(()); }
+            let Some(frame) = frames.last_mut() else { return Ok(()); };
+            location.truncate(frame.location_length);
+            if frame.next == frame.count {
+                active.remove(&frame.value.storage_offset());
+                frames.pop();
+                continue;
+            }
+            let index = frame.next;
+            frame.next += 1;
+            if frame.object {
+                let key = String::from_utf8_lossy(frame.value.key(index)?);
+                append_member(location, &key, false);
+            } else {
                 location.push('[');
                 location.push_str(&index.to_string());
                 location.push(']');
-                find_matches(value.value(index)?, location, pattern, first_only, hits)?;
-                location.truncate(previous_length);
-                if first_only && !hits.is_empty() {
-                    break;
-                }
             }
+            next = Some(frame.value.value(index)?);
         }
-        _ => {}
-    }
-    Ok(())
+    })();
+    location.truncate(original_length);
+    result
 }
 
 #[derive(Clone, Copy)]

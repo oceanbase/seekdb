@@ -77,7 +77,7 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   } else if (allow_partial_update) {
     ObIJsonBase *json_doc = nullptr;
     if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
-                                               json_doc, is_null_result, false))) {
+                                               json_doc, is_null_result))) {
     } else if (!is_null_result) {
       metadata.depth_ = json_doc->depth();
     }

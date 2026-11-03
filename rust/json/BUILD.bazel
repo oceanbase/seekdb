@@ -1,9 +1,10 @@
+load("//bazel:defs.bzl", "cc_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
 
 package(default_visibility = ["//rust:__subpackages__"])
 
-exports_files(["src/bridge.rs"], visibility = ["//rust:__pkg__"])
+exports_files(["src/bridge.rs", "include/binary_source.h", "include/schema_pattern.h", "include/read.h"], visibility = ["//rust:__pkg__"])
 
 rust_library(
     name = "json",
@@ -22,4 +23,12 @@ rust_test(
     crate = ":json",
     edition = crate_edition(),
     tags = ["no-remote"],
+)
+
+cc_library(
+    name = "schema_pattern",
+    srcs = ["src/schema_pattern.cpp"],
+    hdrs = ["include/schema_pattern.h"],
+    deps = ["//rust:cxx_headers"],
+    visibility = ["//rust:__pkg__"],
 )

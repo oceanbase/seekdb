@@ -25,6 +25,7 @@ namespace oceanbase
 {
 namespace common 
 {
+class JsonContainerBuilder;
 
 class ObOpenAIUtils 
 {
@@ -41,14 +42,14 @@ public:
                          common::ObString &model, 
                          common::ObString &prompt,
                          common::ObString &content,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
-    virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObJsonObject *config) override;
-    static int construct_messages_array(ObIAllocator &allocator, ObString &prompt, ObString &content, ObJsonArray *&messages);
-    static int construct_message_obj(ObIAllocator &allocator, ObString &role, ObString &content, ObJsonObject *&message);
+    virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObIJsonBase *&config) override;
+    static int construct_messages_array(ObIAllocator &allocator, ObString &prompt, ObString &content, ObIJsonBase *&messages);
+    static int construct_message_obj(ObIAllocator &allocator, ObString &role, ObString &content, ObIJsonBase *&message);
   private:
     DISALLOW_COPY_AND_ASSIGN(ObOpenAIComplete);
   };
@@ -64,10 +65,10 @@ public:
     virtual int get_body(common::ObIAllocator &allocator,
                          common::ObString &model, 
                          common::ObArray<ObString> &contents,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
   private:
     DISALLOW_COPY_AND_ASSIGN(ObOpenAIEmbed);
@@ -94,12 +95,12 @@ public:
                          common::ObString &model, 
                          common::ObString &prompt,
                          common::ObString &content,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
-    virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObJsonObject *config) override;
+    virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObIJsonBase *&config) override;
   private:
     DISALLOW_COPY_AND_ASSIGN(ObOllamaComplete);
   };
@@ -115,10 +116,10 @@ public:
     virtual int get_body(common::ObIAllocator &allocator,
                          common::ObString &model,
                          common::ObArray<ObString> &contents,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
   private:
     DISALLOW_COPY_AND_ASSIGN(ObOllamaEmbed);
@@ -142,14 +143,14 @@ public:
                          common::ObString &model, 
                          common::ObString &prompt,
                          common::ObString &content,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
-    virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObJsonObject *config) override;
-    static int set_config_result_format(common::ObIAllocator &allocator, common::ObJsonObject *config);
-    static int construct_input_obj(ObIAllocator &allocator, ObString &prompt, ObString &content, ObJsonObject *&input_obj);
+    virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObIJsonBase *&config) override;
+    static int set_config_result_format(common::ObIAllocator &allocator, common::ObIJsonBase *&config);
+    static int construct_input_obj(ObIAllocator &allocator, ObString &prompt, ObString &content, ObIJsonBase *&input_obj);
   private:
     DISALLOW_COPY_AND_ASSIGN(ObDashscopeComplete);
   };
@@ -164,10 +165,10 @@ public:
     virtual int get_body(common::ObIAllocator &allocator,
                          common::ObString &model, 
                          common::ObArray<ObString> &contents,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
   private:
     DISALLOW_COPY_AND_ASSIGN(ObDashscopeEmbed);
@@ -183,17 +184,17 @@ public:
     virtual int get_body(common::ObIAllocator &allocator,
                          common::ObString &model,
                          common::ObString &query,
-                         common::ObJsonArray *document_array,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *document_array,
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
   private:
     static int get_input_obj(common::ObIAllocator &allocator,
                              common::ObString &query,
-                             common::ObJsonArray *document_array,
-                             common::ObJsonObject *&input_obj);
+                             common::ObIJsonBase *document_array,
+                             common::ObIJsonBase *&input_obj);
     DISALLOW_COPY_AND_ASSIGN(ObDashscopeRerank);
   };
   static int get_header(common::ObIAllocator &allocator, common::ObString &api_key, common::ObArray<ObString> &headers);
@@ -215,11 +216,11 @@ public:
     virtual int get_body(common::ObIAllocator &allocator,
                          common::ObString &model,
                          common::ObString &query,
-                         common::ObJsonArray *document_array,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
+                         common::ObIJsonBase *document_array,
+                         common::ObIJsonBase *&config,
+                         common::ObIJsonBase *&body) override;
     virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *http_response,
                              common::ObIJsonBase *&result) override;
   private:
     DISALLOW_COPY_AND_ASSIGN(ObSiliconflowRerank);
@@ -235,16 +236,24 @@ class ObAIFuncJsonUtils
 public:
   ObAIFuncJsonUtils() {}
   virtual ~ObAIFuncJsonUtils() {}
-  static bool ob_is_json_array_all_str(ObJsonArray* json_array);
-  static int transform_array_to_json_array(ObIAllocator &allocator, ObArray<ObString> &contents, ObJsonArray *&array);
-  static int get_json_object(ObIAllocator &allocator, ObJsonObject *&obj_node);
-  static int get_json_array(ObIAllocator &allocator, ObJsonArray *&array_node);
-  static int get_json_string(ObIAllocator &allocator, ObString &str, ObJsonString *&str_node);
-  static int get_json_int(ObIAllocator &allocator, int64_t num, ObJsonInt *&int_node);
-  static int get_json_boolean(ObIAllocator &allocator, bool value, ObJsonBoolean *&boolean_node);
-  static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
+  static int rename_key(ObIAllocator &allocator, ObIJsonBase *&object, const ObString &old_key, const ObString &new_key);
+  static int object_set(ObIAllocator &allocator, ObIJsonBase *&object, const ObString &key, ObIJsonBase *value);
+  static int append_value(ObIAllocator &allocator, JsonContainerBuilder &builder, ObIJsonBase *value);
+  static int finish_array(ObIAllocator &allocator, JsonContainerBuilder &builder, ObIJsonBase *&result);
+  static ObIJsonBase *get_value(ObIJsonBase *value, const ObString &key);
+  static ObIJsonBase *get_value(ObIJsonBase *value, uint64_t index);
+  static ObString string_value(ObIJsonBase *value);
+  static ObIJsonBase *clone_json(ObIAllocator &allocator, ObIJsonBase *value);
+  static bool ob_is_json_array_all_str(ObIJsonBase* json_array);
+  static int transform_array_to_json_array(ObIAllocator &allocator, ObArray<ObString> &contents, ObIJsonBase *&array);
+  static int get_json_object(ObIAllocator &allocator, ObIJsonBase *&obj_node);
+  static int get_json_array(ObIAllocator &allocator, ObIJsonBase *&array_node);
+  static int get_json_string(ObIAllocator &allocator, ObString &str, ObIJsonBase *&str_node);
+  static int get_json_int(ObIAllocator &allocator, int64_t num, ObIJsonBase *&int_node);
+  static int get_json_boolean(ObIAllocator &allocator, bool value, ObIJsonBase *&boolean_node);
+  static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObIJsonBase *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
-  static int compact_json_object(ObIAllocator &allocator, ObJsonObject *obj_node, ObJsonObject *compact_obj);
+  static int compact_json_object(ObIAllocator &allocator, ObIJsonBase *obj_node, ObIJsonBase *&compact_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
 };
@@ -300,33 +309,33 @@ public:
                                const share::ObAiModelEndpointInfo &endpoint_info,
                                ObString &prompt,
                                ObString &content, 
-                               ObJsonObject *config,
-                               ObJsonObject *&body);
-  static int set_json_format_config(ObIAllocator &allocator, const ObString &provider, ObJsonObject *config);
+                               ObIJsonBase *&config,
+                               ObIJsonBase *&body);
+  static int set_json_format_config(ObIAllocator &allocator, const ObString &provider, ObIJsonBase *&config);
   static int get_embed_body(ObIAllocator &allocator, 
                             const ObAIFuncExprInfo &info,
                             const share::ObAiModelEndpointInfo &endpoint_info,
                             ObArray<ObString> &contents,
-                            ObJsonObject *config,
-                            ObJsonObject *&body);
+                            ObIJsonBase *&config,
+                            ObIJsonBase *&body);
   static int get_rerank_body(ObIAllocator &allocator, 
                              const ObAIFuncExprInfo &info,
                              const share::ObAiModelEndpointInfo &endpoint_info,
                              ObString &query,
-                             ObJsonArray *document_array,
-                             ObJsonObject *config,
-                             ObJsonObject *&body);
+                             ObIJsonBase *document_array,
+                             ObIJsonBase *&config,
+                             ObIJsonBase *&body);
   static int parse_complete_output(ObIAllocator &allocator, 
                                    const share::ObAiModelEndpointInfo &endpoint_info,
-                                   ObJsonObject *http_response,
+                                   ObIJsonBase *http_response,
                                    ObIJsonBase *&result);
   static int parse_embed_output(ObIAllocator &allocator, 
                                 const share::ObAiModelEndpointInfo &endpoint_info,
-                                ObJsonObject *http_response,
+                                ObIJsonBase *http_response,
                                 ObIJsonBase *&result);
   static int parse_rerank_output(ObIAllocator &allocator, 
                                  const share::ObAiModelEndpointInfo &endpoint_info,
-                                 ObJsonObject *http_response,
+                                 ObIJsonBase *http_response,
                                  ObIJsonBase *&result);
   static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str);
   static bool is_provider_support_base64(const ObString &provider);
@@ -352,14 +361,14 @@ public:
   {}
    virtual ~ObAIFuncModel() {}
    // completion
-   int call_completion(ObString &prompt, ObJsonObject *config, ObString &result);
-   int call_completion_vector(ObArray<ObString> &prompts, ObJsonObject *config, ObArray<ObString> &results);
+   int call_completion(ObString &prompt, ObIJsonBase *&config, ObString &result);
+   int call_completion_vector(ObArray<ObString> &prompts, ObIJsonBase *&config, ObArray<ObString> &results);
    // dense_embedding
-   int call_dense_embedding(ObString &content, ObJsonObject *config, ObString &result);
-   int call_dense_embedding_vector(ObArray<ObString> &contents, ObJsonObject *config, ObArray<ObString> &results);
-   int call_dense_embedding_vector_v2(ObArray<ObString> &contents, ObJsonObject *config, ObArray<ObString> &results);
+   int call_dense_embedding(ObString &content, ObIJsonBase *&config, ObString &result);
+   int call_dense_embedding_vector(ObArray<ObString> &contents, ObIJsonBase *&config, ObArray<ObString> &results);
+   int call_dense_embedding_vector_v2(ObArray<ObString> &contents, ObIJsonBase *&config, ObArray<ObString> &results);
    // rerank
-   int call_rerank(ObString &query, ObJsonArray *contents, ObJsonArray *&results);
+   int call_rerank(ObString &query, ObIJsonBase *contents, ObIJsonBase *&results);
  private:
    bool is_completion_type() {return info_.type_ == share::EndpointType::COMPLETION;}
    bool is_dense_embedding_type() {return info_.type_ == share::EndpointType::DENSE_EMBEDDING;}
@@ -376,9 +385,9 @@ class ObAIFuncPromptObjectUtils
 public:
   ObAIFuncPromptObjectUtils() {}
   virtual ~ObAIFuncPromptObjectUtils() {}
-  static bool is_valid_prompt_object(ObJsonObject* prompt_object);
-  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
-  static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
+  static bool is_valid_prompt_object(ObIJsonBase* prompt_object);
+  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObIJsonBase* prompt_object, ObString& replaced_prompt_str);
+  static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObIJsonBase *args_array, ObIJsonBase *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
 private:

@@ -713,13 +713,13 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
     } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(endpoint_str, endpoint_info))) {
     } else {
       int64_t dim = param.dim_;
-      ObJsonInt *dim_json = nullptr;
-      ObJsonObject *config = nullptr;
+      ObIJsonBase *dim_json = nullptr;
+      ObIJsonBase *config = nullptr;
       ObAIFuncModel model(allocator, *ai_fun_info, *endpoint_info);
       ObString query_text_copy = query_text;  // Create a non-const copy
       if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, config))) {
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, dim, dim_json))) {
-      } else if (OB_FAIL(config->add("dimensions", dim_json))) {
+      } else if (OB_FAIL(ObAIFuncJsonUtils::object_set(allocator, config, "dimensions", dim_json))) {
       } else if (OB_FAIL(model.call_dense_embedding(query_text_copy, config, result))) {
       }
     }

@@ -105,7 +105,7 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   MultimodeAlloctor allocator(tmp_alloc_g.get_allocator());
   ObString json_doc;
-  ObJsonInType input_type = ObJsonInType::JSON_TREE;
+  ObJsonInType input_type = ObJsonInType::JSON_TEXT;
   ObIJsonBase *partial_document = nullptr;
   DEFER(if (partial_document != nullptr) { partial_document->reset(); });
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {

@@ -18,10 +18,15 @@
 #include "common/json_type/ob_json_bin.h"
 #include "common/json_type/ob_json_diff.h"
 #include "common/json_type/ob_json_parse.h"
+#include "common/json_type/json_builder.h"
+#include "json_mutation_golden.h"
+#include "json_hash_inputs.h"
+#include "json_hash_golden.h"
 #include "rust/json.h"
 #include "lib/allocator/page_arena.h"
 #include <gtest/gtest.h>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -33,10 +38,13 @@ namespace common
 class TestJsonParser : public ::testing::Test
 {
 protected:
-  int parse(const std::string &text, ObJsonNode *&node, uint32_t flags = 0)
+  int parse(const std::string &text, ObIJsonBase *&node, uint32_t flags = 0)
   {
     node = nullptr;
-    return ObJsonParser::get_tree(&allocator_, text.data(), text.size(), node, flags);
+    ObString binary;
+    const int ret = ObJsonParser::get_binary(&allocator_, text.data(), text.size(), binary, flags);
+    return ret == OB_SUCCESS ? ObJsonBaseFactory::get_json_base(&allocator_, binary,
+        ObJsonInType::JSON_BIN, node) : ret;
   }
 
   ObArenaAllocator allocator_;
@@ -50,7 +58,7 @@ TEST_F(TestJsonParser, StandardSyntaxCorpus)
       "\"\\u4f60\\u597d\\ud83d\\ude00\"", "\"雪😀\"",
       "0", "-0", "0.0", "-0.0", "1e308", "5e-324"};
   for (const auto &text : valid) {
-    ObJsonNode *node = nullptr;
+    ObIJsonBase *node = nullptr;
     ASSERT_EQ(OB_SUCCESS, parse(text, node)) << text;
     ASSERT_NE(nullptr, node) << text;
   }
@@ -61,67 +69,70 @@ TEST_F(TestJsonParser, StandardSyntaxCorpus)
       "Infinity", "1.", "\"unterminated", "[1 2]", "true false",
       "\"\\x20\"", "\"\\ud800\""};
   for (const auto &text : rejected) {
-    ObJsonNode *node = nullptr;
+    ObIJsonBase *node = nullptr;
     EXPECT_EQ(OB_ERR_INVALID_JSON_TEXT, parse(text, node)) << text;
     EXPECT_EQ(OB_ERR_INVALID_JSON_TEXT,
         ObJsonParser::check_json_syntax(ObString(text.size(), text.data()), &allocator_)) << text;
   }
   const std::string invalid_utf8("\"\xff\"", 3);
-  ObJsonNode *node = nullptr;
+  ObIJsonBase *node = nullptr;
   EXPECT_EQ(OB_ERR_INVALID_JSON_TEXT, parse(invalid_utf8, node));
 }
 
 TEST_F(TestJsonParser, NumericClassification)
 {
-  ObJsonNode *node = nullptr;
+  ObIJsonBase *node = nullptr;
   ASSERT_EQ(OB_SUCCESS, parse("9223372036854775807", node));
   ASSERT_EQ(ObJsonNodeType::J_UINT, node->json_type());
-  EXPECT_EQ(INT64_MAX, static_cast<ObJsonUint *>(node)->value());
+  EXPECT_EQ(INT64_MAX, node->get_uint());
   ASSERT_EQ(OB_SUCCESS, parse("4294967295", node));
   ASSERT_EQ(ObJsonNodeType::J_INT, node->json_type());
-  EXPECT_EQ(UINT32_MAX, static_cast<ObJsonInt *>(node)->value());
+  EXPECT_EQ(UINT32_MAX, node->get_int());
   ASSERT_EQ(OB_SUCCESS, parse("4294967296", node));
   ASSERT_EQ(ObJsonNodeType::J_UINT, node->json_type());
-  EXPECT_EQ(UINT64_C(4294967296), static_cast<ObJsonUint *>(node)->value());
+  EXPECT_EQ(UINT64_C(4294967296), node->get_uint());
   ASSERT_EQ(OB_SUCCESS, parse("9223372036854775808", node));
   ASSERT_EQ(ObJsonNodeType::J_UINT, node->json_type());
-  EXPECT_EQ(UINT64_C(9223372036854775808), static_cast<ObJsonUint *>(node)->value());
+  EXPECT_EQ(UINT64_C(9223372036854775808), node->get_uint());
   ASSERT_EQ(OB_SUCCESS, parse("18446744073709551615", node));
   ASSERT_EQ(ObJsonNodeType::J_UINT, node->json_type());
-  EXPECT_EQ(UINT64_MAX, static_cast<ObJsonUint *>(node)->value());
+  EXPECT_EQ(UINT64_MAX, node->get_uint());
   ASSERT_EQ(OB_SUCCESS, parse("18446744073709551616", node));
   EXPECT_EQ(ObJsonNodeType::J_DOUBLE, node->json_type());
   ASSERT_EQ(OB_SUCCESS, parse("-0", node));
   ASSERT_EQ(ObJsonNodeType::J_INT, node->json_type());
-  EXPECT_EQ(0, static_cast<ObJsonInt *>(node)->value());
+  EXPECT_EQ(0, node->get_int());
   ASSERT_EQ(OB_SUCCESS, parse("-0.0", node));
   ASSERT_EQ(ObJsonNodeType::J_DOUBLE, node->json_type());
-  EXPECT_TRUE(std::signbit(static_cast<ObJsonDouble *>(node)->value()));
+  EXPECT_TRUE(std::signbit(node->get_double()));
 }
 
 TEST_F(TestJsonParser, DuplicatePolicies)
 {
   const std::string text = "{\"a\":[1,2],\"b\":0,\"a\":{\"x\":3},\"c\":4}";
-  ObJsonNode *node = nullptr;
+  ObIJsonBase *node = nullptr;
   ASSERT_EQ(OB_SUCCESS, parse(text, node));
   ASSERT_EQ(ObJsonNodeType::J_OBJECT, node->json_type());
-  ObJsonObject *object = static_cast<ObJsonObject *>(node);
+  ObIJsonBase *object = node;
   EXPECT_EQ(3, object->element_count());
-  ASSERT_NE(nullptr, object->get_value("a"));
-  EXPECT_EQ(ObJsonNodeType::J_OBJECT, object->get_value("a")->json_type());
+  ObIJsonBase *member = nullptr;
+  ASSERT_EQ(OB_SUCCESS, object->get_object_value(ObString("a"), member));
+  ASSERT_NE(nullptr, member);
+  EXPECT_EQ(ObJsonNodeType::J_OBJECT, member->json_type());
 
   ASSERT_EQ(OB_SUCCESS, parse(text, node, ObJsonParser::JSN_PRESERVE_DUP_FLAG));
-  EXPECT_EQ(4, static_cast<ObJsonObject *>(node)->element_count());
+  EXPECT_EQ(4, node->element_count());
   EXPECT_EQ(OB_ERR_DUPLICATE_KEY, parse(text, node, ObJsonParser::JSN_UNIQUE_FLAG));
   ASSERT_EQ(OB_SUCCESS, parse(text, node, ObJsonParser::JSN_SCHEMA_FLAG));
-  object = static_cast<ObJsonObject *>(node);
-  ASSERT_NE(nullptr, object->get_value("a"));
-  EXPECT_EQ(ObJsonNodeType::J_ARRAY, object->get_value("a")->json_type());
+  object = node;
+  ASSERT_EQ(OB_SUCCESS, object->get_object_value(ObString("a"), member));
+  ASSERT_NE(nullptr, member);
+  EXPECT_EQ(ObJsonNodeType::J_ARRAY, member->json_type());
 }
 
 TEST_F(TestJsonParser, DepthSchemaAndByteOffsets)
 {
-  ObJsonNode *node = nullptr;
+  ObIJsonBase *node = nullptr;
   const std::string at_limit(101, '[');
   const std::string valid = at_limit + "0" + std::string(101, ']');
   EXPECT_EQ(OB_SUCCESS, parse(valid, node));
@@ -133,14 +144,79 @@ TEST_F(TestJsonParser, DepthSchemaAndByteOffsets)
       parse("{\"$ref\":\"https://example.com/a\"}", node, ObJsonParser::JSN_SCHEMA_FLAG));
 
   const std::string malformed = "{\"雪\":1,}";
-  char message_buffer[ObJsonParser::PARSE_SYNTAXERR_MESSAGE_LENGTH] = {0};
-  const char *message = message_buffer;
-  uint64_t offset = 0;
-  EXPECT_EQ(OB_ERR_INVALID_JSON_TEXT,
-      ObJsonParser::parse_json_text(&allocator_, malformed.data(), malformed.size(),
-          message, &offset, node));
-  EXPECT_EQ(malformed.size() - 1, offset);
-  ASSERT_NE(nullptr, message);
+  const auto malformed_result = json::parse_binary(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(malformed.data()), malformed.size()),
+      json::Duplicate::Overwrite, 101, false);
+  EXPECT_EQ(json::Status::Syntax, malformed_result.status);
+  EXPECT_EQ(malformed.size() - 1, malformed_result.byte_offset);
+  EXPECT_FALSE(malformed_result.message.empty());
+}
+
+TEST_F(TestJsonParser, NativeScalarAdaptersPreserveDatabasePayloads)
+{
+  ObString binary;
+  ObJsonBin value(&allocator_);
+  ASSERT_EQ(OB_SUCCESS, encode_json_integer(allocator_, INT64_MIN, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(INT64_MIN, value.get_int());
+  ASSERT_EQ(OB_SUCCESS, encode_json_unsigned(allocator_, UINT64_MAX, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(UINT64_MAX, value.get_uint());
+  ASSERT_EQ(OB_SUCCESS, encode_json_real(allocator_, -0.0, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_TRUE(std::signbit(value.get_double()));
+  EXPECT_EQ(OB_INVALID_NUMERIC,
+      encode_json_real(allocator_, std::numeric_limits<double>::infinity(), binary));
+  ASSERT_EQ(OB_SUCCESS, encode_json_boolean(allocator_, true, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_TRUE(value.get_boolean());
+  const char embedded_null[] = {'a', '\0', 'b'};
+  const ObString text(sizeof(embedded_null), embedded_null);
+  ASSERT_EQ(OB_SUCCESS, encode_json_text(allocator_, text, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(text, ObString(value.get_data_length(), value.get_data()));
+  ASSERT_EQ(OB_SUCCESS, encode_json_opaque(allocator_, text, static_cast<uint16_t>(ObBitType), binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(ObBitType, value.field_type());
+  EXPECT_EQ(text, ObString(value.get_data_length(), value.get_data()));
+
+  number::ObNumber number;
+  ASSERT_EQ(OB_SUCCESS, number.from("123.4500", allocator_));
+  ASSERT_EQ(OB_SUCCESS, encode_json_decimal(allocator_, number, 19, 4, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(19, value.get_decimal_precision());
+  EXPECT_EQ(4, value.get_decimal_scale());
+  EXPECT_EQ(0, number.compare(value.get_decimal_data()));
+
+  ObTime date(DT_TYPE_DATE);
+  ASSERT_EQ(OB_SUCCESS, ObTimeConverter::date_to_ob_time(20000, date));
+  ASSERT_EQ(OB_SUCCESS, encode_json_time(allocator_, ObJsonNodeType::J_DATE, date, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(ObJsonNodeType::J_DATE, value.json_type());
+  EXPECT_EQ(20000, value.get_int());
+  ASSERT_EQ(OB_SUCCESS, encode_json_time(allocator_, ObJsonNodeType::J_MYSQL_DATE, date, binary));
+  ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+  EXPECT_EQ(ObJsonNodeType::J_MYSQL_DATE, value.json_type());
+  ObTime decoded_date(DT_TYPE_DATE);
+  ASSERT_EQ(OB_SUCCESS, value.get_obtime(decoded_date));
+  EXPECT_EQ(20000, ObTimeConverter::ob_time_to_date(decoded_date));
+
+  ObTime datetime(DT_TYPE_DATETIME);
+  const int64_t timestamp = INT64_C(17280000123456);
+  ASSERT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_ob_time(timestamp, nullptr, datetime));
+  for (const auto type : {ObJsonNodeType::J_DATETIME, ObJsonNodeType::J_TIMESTAMP,
+                         ObJsonNodeType::J_MYSQL_DATETIME}) {
+    ASSERT_EQ(OB_SUCCESS, encode_json_time(allocator_, type, datetime, binary));
+    ASSERT_EQ(OB_SUCCESS, value.reset(binary, 0, nullptr));
+    EXPECT_EQ(type, value.json_type());
+    ObTime decoded(DT_TYPE_DATETIME);
+    ASSERT_EQ(OB_SUCCESS, value.get_obtime(decoded));
+    decoded.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(decoded);
+    ObTimeConvertCtx context(nullptr, false);
+    int64_t restored = 0;
+    ASSERT_EQ(OB_SUCCESS, ObTimeConverter::ob_time_to_datetime(decoded, context, restored));
+    EXPECT_EQ(timestamp, restored);
+  }
 }
 
 TEST_F(TestJsonParser, BinaryConversionRejectsActiveUpdateContext)
@@ -154,7 +230,7 @@ TEST_F(TestJsonParser, BinaryConversionRejectsActiveUpdateContext)
 
   EXPECT_EQ(OB_ERR_UNEXPECTED,
       ObJsonBaseFactory::get_json_base(&allocator_, text.data(), text.size(),
-          ObJsonInType::JSON_TREE, ObJsonInType::JSON_BIN, result));
+          ObJsonInType::JSON_TEXT, result));
   EXPECT_EQ(&json_bin, result);
   EXPECT_EQ(&update_ctx, json_bin.get_update_ctx());
 }
@@ -261,6 +337,104 @@ TEST_F(TestJsonParser, MutationDeltaLifetimeAndAllocationFailure)
   EXPECT_EQ(0, pos);
 }
 
+TEST_F(TestJsonParser, NativeMutationPreservesBinaryMutationGoldens)
+{
+  struct EditCase {
+    std::string document;
+    std::string value;
+    std::vector<uint64_t> ancestors;
+    uint8_t operation;
+    uint64_t index;
+    std::string key;
+  };
+  std::vector<EditCase> cases = {
+      {"[1,2]", "-128", {}, 1, 0, ""},
+      {"[1,2]", "128", {}, 1, 0, ""},
+      {"[1,2]", "null", {}, 1, 1, ""},
+      {"[1,2]", "true", {}, 1, 1, ""},
+      {"[1,2]", "\"new string\"", {}, 1, 0, ""},
+      {"[\"original long string\",2]", "\"x\"", {}, 1, 0, ""},
+      {"[\"original long string\",2]", "1.25", {}, 1, 0, ""},
+      {"[1,2]", "42", {}, 2, 0, ""},
+      {"[1,2]", "42", {}, 2, 1, ""},
+      {"[1,2]", "42", {}, 2, 99, ""},
+      {"{\"a\":1,\"bb\":2}", "42", {}, 2, 0, "c"},
+      {"{\"a\":1,\"bb\":2}", "42", {}, 2, 0, "a"},
+      {"{\"a\":1,\"bb\":2}", "null", {}, 3, 0, ""},
+      {"{\"a\":1,\"bb\":2}", "null", {}, 3, 1, ""},
+      {"[1,2,3]", "null", {}, 3, 0, ""},
+      {"[1,2,3]", "null", {}, 3, 1, ""},
+      {"{\"a\":[1,2],\"b\":{\"c\":3}}", "42", {0}, 2, 1, ""},
+      {"{\"a\":[1,2],\"b\":{\"c\":3}}", "42", {1}, 2, 0, "d"},
+      {"{\"a\":[1,2],\"b\":{\"c\":3}}", "null", {0}, 3, 0, ""},
+      {"{\"a\":[1,2],\"b\":{\"c\":3}}", "null", {1}, 3, 0, ""},
+  };
+  for (int length : {120, 240, 250, 256, 1000, 65500, 65540}) {
+    cases.push_back({"[1,2]", "\"" + std::string(length, 'x') + "\"", {}, 1, 0, ""});
+    cases.push_back({"[1,2]", "\"" + std::string(length, 'x') + "\"", {}, 2, 0, ""});
+    cases.push_back({"{\"a\":[1,2],\"b\":3}", "\"" + std::string(length, 'x') + "\"", {0}, 2, 0, ""});
+  }
+  size_t golden_index = 0;
+  for (const auto &test : cases) {
+    SCOPED_TRACE(test.document.substr(0, 100) + " op=" + std::to_string(test.operation)
+        + " index=" + std::to_string(test.index) + " value bytes=" + std::to_string(test.value.size()));
+    ObString original;
+    ASSERT_EQ(OB_SUCCESS, ObJsonParser::get_binary(&allocator_,
+        test.document.data(), test.document.size(), original));
+    ObLobInRowCursor initial(original);
+    ObLobInRowUpdateCursor native_cursor(&allocator_);
+    ASSERT_EQ(OB_SUCCESS, native_cursor.init(&initial));
+    ObJsonBinUpdateCtx native_delta(&allocator_);
+    const int rounds = test.operation == 3 ? 1 : 3;
+    for (int round = 0; round < rounds; ++round) {
+      SCOPED_TRACE("round=" + std::to_string(round));
+      const std::string value = round == 0 ? test.value
+          : "\"" + std::string(round * 300, 'y') + "\"";
+      ObString replacement;
+      ASSERT_EQ(OB_SUCCESS, ObJsonParser::get_binary(&allocator_, value.data(), value.size(), replacement));
+      json::BinarySource source(native_cursor);
+      rust::Box<BinaryEdit> edit = json::plan_binary_edit(source,
+          rust::Slice<const uint64_t>(test.ancestors.data(), test.ancestors.size()),
+          test.operation, test.index,
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(test.key.data()), test.key.size()),
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(replacement.ptr()), replacement.length()));
+      ASSERT_EQ(0, edit->edit_status());
+      for (size_t index = 0; index < edit->edit_write_count(); ++index) {
+        const auto bytes = edit->edit_write_bytes(index);
+        ASSERT_EQ(OB_SUCCESS, native_cursor.set(edit->edit_write_offset(index),
+            reinterpret_cast<const char *>(bytes.data()), bytes.size()));
+      }
+      ObString native_bytes;
+      ASSERT_EQ(OB_SUCCESS, native_cursor.get_data(native_bytes));
+      ASSERT_EQ(OB_SUCCESS, native_delta.merge_edit(*edit));
+      ASSERT_LT(golden_index, sizeof(MUTATION_GOLDENS) / sizeof(MUTATION_GOLDENS[0]));
+      const MutationGolden &golden = MUTATION_GOLDENS[golden_index++];
+      const auto hash_bytes = [](const char *data, size_t length) {
+        uint64_t hash = UINT64_C(14695981039346656037);
+        for (size_t index = 0; index < length; ++index) {
+          hash = (hash ^ static_cast<unsigned char>(data[index])) * UINT64_C(1099511628211);
+        }
+        return hash;
+      };
+      EXPECT_EQ(golden.binary_hash, hash_bytes(native_bytes.ptr(), native_bytes.length()));
+      EXPECT_EQ(golden.binary_length, native_bytes.length());
+      EXPECT_EQ(golden.rebuilt, native_delta.is_rebuild_all());
+      ASSERT_EQ(golden.physical.size(), native_delta.binary_diff_count());
+      int64_t range_index = 0;
+      for (const auto &range : golden.physical) {
+        EXPECT_EQ(range.first, native_delta.binary_diff(range_index).offset);
+        EXPECT_EQ(range.second, native_delta.binary_diff(range_index).length);
+        ++range_index;
+      }
+      std::vector<char> native_wire(native_delta.logical_serialize_size());
+      int64_t native_pos = 0;
+      ASSERT_EQ(OB_SUCCESS, native_delta.serialize_logical(native_wire.data(), native_wire.size(), native_pos));
+      EXPECT_EQ(golden.logical_hash, hash_bytes(native_wire.data(), native_wire.size()));
+    }
+  }
+  EXPECT_EQ(sizeof(MUTATION_GOLDENS) / sizeof(MUTATION_GOLDENS[0]), golden_index);
+}
+
 TEST_F(TestJsonParser, BinaryMetadata)
 {
   const std::string text = "{\"a\":[1,{\"b\":2}]}";
@@ -310,6 +484,105 @@ TEST_F(TestJsonParser, RustPathQuery)
       true, false, 101);
   ASSERT_EQ(json::Status::Ok, result.status);
   EXPECT_EQ(2, result.match_count);
+}
+
+TEST_F(TestJsonParser, NativeSchemaRegexCacheAndCodec)
+{
+  auto slice = [](const std::string &text) {
+    return rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.data()), text.size());
+  };
+  auto cache = json::new_schema_cache();
+  struct Case { const char *schema; const char *document; bool valid; };
+  const Case cases[] = {
+      {"{\"pattern\": \"a(?=b)\"}", "\"ab\"", true},
+      {"{\"pattern\": \"(a)\\\\1\"}", "\"aa\"", true},
+      {"{\"pattern\": \"b\"}", "\"a\\u0000b\"", false},
+      {"{\"pattern\": \"a\\u0000b\"}", "\"a\\u0000b\"", false},
+      {"{\"pattern\": \"[\"}", "\"anything\"", true},
+      {"{\"patternProperties\": {\"b\": {}}, \"additionalProperties\": false}", "{\"b\":1}", true},
+      {"{\"properties\": {\"x\": {\"type\": \"integer\"}}}", "{\"x\":1.0}", false},
+      {"{\"enum\": [{\"x\": 1}, [2]]}", "{\"x\":1.0}", true},
+  };
+  for (const auto &item : cases) {
+    const std::string schema_text(item.schema), document_text(item.document);
+    ASSERT_EQ(json::Status::Ok, cache->prepare(1, slice(schema_text), false, false).status);
+    auto input = json::parse_binary(slice(document_text), json::Duplicate::Preserve, 101, false);
+    ASSERT_EQ(json::Status::Ok, input.status);
+    const rust::Slice<const uint8_t> document(input.binary.data(), input.binary.size());
+    auto result = cache->validate_schema(1, document, true);
+    ASSERT_EQ(json::Status::Ok, result.status);
+    EXPECT_EQ(item.valid, result.valid) << schema_text << " " << document_text;
+    ObJsonBin report(reinterpret_cast<const char *>(result.report.data()), result.report.size(), &allocator_);
+    ASSERT_EQ(OB_SUCCESS, report.reset_iter());
+    ObIJsonBase *valid = nullptr;
+    ASSERT_EQ(OB_SUCCESS, report.get_object_value(ObString::make_string("valid"), valid));
+    EXPECT_EQ(item.valid, valid->get_boolean());
+
+    auto source = json::parse_binary(slice(schema_text), json::Duplicate::Overwrite, 101, true);
+    ASSERT_EQ(json::Status::Ok, source.status);
+    auto normalized = json::compile_schema({source.binary.data(), source.binary.size()}, true, 101);
+    ASSERT_EQ(json::Status::Ok, normalized.status);
+    ASSERT_EQ(json::Status::Ok, cache->prepare(2, {normalized.binary.data(), normalized.binary.size()}, true, true).status);
+    auto decoded = cache->validate_schema(2, document, true);
+    ASSERT_EQ(json::Status::Ok, decoded.status);
+    EXPECT_EQ(result.valid, decoded.valid);
+    EXPECT_EQ(std::string(reinterpret_cast<const char *>(result.report.data()), result.report.size()),
+              std::string(reinterpret_cast<const char *>(decoded.report.data()), decoded.report.size()));
+  }
+  const std::string invalid_schema = R"({"allOf":[false]})";
+  EXPECT_EQ(json::Status::InvalidSchema, cache->prepare(1, slice(invalid_schema), false, false).status);
+}
+
+TEST_F(TestJsonParser, NativeHashPreservesCppGoldens)
+{
+  const auto inputs = json_hash_inputs();
+  ASSERT_EQ(59, inputs.size());
+  size_t golden_index = 0;
+  const hash_algo algorithms[] = {nullptr, ObMurmurHash::hash, ObXxHash::hash, ObWyHash::hash, json_hash_fixture_fnv};
+  const uint64_t seeds[] = {0, 1, UINT64_C(0x123456789abcdef), UINT64_MAX};
+  for (size_t index = 0; index < inputs.size(); ++index) {
+    const auto &input = inputs[index];
+    ObJsonBin value(reinterpret_cast<const char *>(input.binary.data()), input.binary.size(), &allocator_);
+    ASSERT_EQ(OB_SUCCESS, value.reset_iter()) << input.name;
+    for (size_t algorithm = 0; algorithm < 5; ++algorithm) {
+      for (size_t seed = 0; seed < 4; ++seed) {
+        uint64_t result = UINT64_C(0x1122334455667788);
+        const int status = value.calc_json_hash_value(seeds[seed], algorithms[algorithm], result);
+        ASSERT_LT(golden_index, sizeof(JSON_HASH_GOLDENS) / sizeof(JSON_HASH_GOLDENS[0]));
+        const auto &golden = JSON_HASH_GOLDENS[golden_index++];
+        EXPECT_EQ(golden.status, status) << input.name << " algorithm " << algorithm << " seed " << seed;
+        EXPECT_EQ(golden.value, result) << input.name << " algorithm " << algorithm << " seed " << seed;
+      }
+    }
+  }
+  EXPECT_EQ(sizeof(JSON_HASH_GOLDENS) / sizeof(JSON_HASH_GOLDENS[0]), golden_index);
+}
+
+TEST_F(TestJsonParser, NativeHashHandlesDeepBinaryWithoutRecursiveTraversal)
+{
+  for (const bool object : {false, true}) {
+    auto writer = json::new_binary_writer();
+    std::vector<uint64_t> containers;
+    for (int64_t i = 0; i < 12000; ++i) {
+      const auto container = writer->writer_begin(object, 1, 2);
+      ASSERT_EQ(0, container.status);
+      containers.push_back(container.handle);
+      if (object) { ASSERT_EQ(0, writer->writer_key({reinterpret_cast<const uint8_t *>("a"), 1})); }
+    }
+    ASSERT_EQ(0, writer->writer_string({reinterpret_cast<const uint8_t *>("leaf"), 4}));
+    for (auto it = containers.rbegin(); it != containers.rend(); ++it) { ASSERT_EQ(0, writer->writer_end(*it)); }
+    auto output = json::writer_finish(std::move(writer));
+    ASSERT_EQ(0, output.status);
+    const json::HashCapability capability(json_hash_fixture_fnv);
+    const auto direct = json::hash_binary({output.binary.data(), output.binary.size()}, 123, capability);
+    ASSERT_EQ(json::Status::Ok, direct.status);
+    ASSERT_EQ(0, direct.platform_error);
+    ObJsonBin value(reinterpret_cast<const char *>(output.binary.data()), output.binary.size(), &allocator_);
+    ASSERT_EQ(OB_SUCCESS, value.reset_iter());
+    uint64_t adapted = 0;
+    ASSERT_EQ(OB_SUCCESS, value.calc_json_hash_value(123, json_hash_fixture_fnv, adapted));
+    EXPECT_EQ(direct.value, adapted);
+  }
 }
 
 } // namespace common

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bridge::{ffi, parse as parse_events};
+use crate::bridge::{ffi, parse_binary as parse_bridge_binary};
 use crate::{binary, Query, SearchOptions};
 use crate::{
     parse, parse_binary, validate, BinaryDocument, BinaryErrorKind, Document, DuplicatePolicy,
@@ -329,50 +329,14 @@ fn bridge_options(policy: DuplicatePolicy) -> ffi::Duplicate {
     }
 }
 
-fn document_from_events(events: &[ffi::Event], index: &mut usize) -> Document {
-    let event = &events[*index];
-    *index += 1;
-    match event.kind {
-        ffi::EventKind::Null => Document::Null,
-        ffi::EventKind::Bool => Document::Bool(event.bool_value),
-        ffi::EventKind::I64 => Document::Number(Number::I64(event.i64_value)),
-        ffi::EventKind::U64 => Document::Number(Number::U64(event.u64_value)),
-        ffi::EventKind::F64 => Document::Number(Number::F64(event.f64_value)),
-        ffi::EventKind::String => Document::String(String::from_utf8(event.bytes.clone()).unwrap()),
-        ffi::EventKind::StartArray => {
-            let mut values = Vec::new();
-            while events[*index].kind != ffi::EventKind::EndArray {
-                values.push(document_from_events(events, index));
-            }
-            *index += 1;
-            Document::Array(values)
-        }
-        ffi::EventKind::StartObject => {
-            let mut entries = Vec::new();
-            while events[*index].kind != ffi::EventKind::EndObject {
-                assert_eq!(events[*index].kind, ffi::EventKind::Key);
-                let key = String::from_utf8(events[*index].bytes.clone()).unwrap();
-                *index += 1;
-                entries.push((key, document_from_events(events, index)));
-            }
-            *index += 1;
-            Document::Object(entries)
-        }
-        _ => panic!("unexpected bridge event"),
-    }
-}
-
 fn assert_bridge_matches_native(input: &[u8], policy: DuplicatePolicy) {
-    let result = parse_events(input, bridge_options(policy), 100, false);
+    let result = parse_bridge_binary(input, bridge_options(policy), 100, false);
     assert_eq!(result.status, ffi::Status::Ok, "{}", result.message);
-    let mut index = 0;
-    let document = document_from_events(&result.events, &mut index);
-    assert_eq!(index, result.events.len());
-    assert_eq!(document, parse(input, options(policy)).unwrap());
+    assert_eq!(result.binary, parse_binary(input, options(policy)).unwrap());
 }
 
 #[test]
-fn direct_bridge_event_policies() {
+fn direct_bridge_binary_policies() {
     let complex = br#"{"a":[1,2],"b":0,"a":{"x":3},"c":4}"#;
     for policy in [
         DuplicatePolicy::Overwrite,
@@ -381,9 +345,9 @@ fn direct_bridge_event_policies() {
     ] {
         assert_bridge_matches_native(complex, policy);
     }
-    let rejected = parse_events(complex, ffi::Duplicate::Reject, 100, false);
+    let rejected = parse_bridge_binary(complex, ffi::Duplicate::Reject, 100, false);
     assert_eq!(rejected.status, ffi::Status::DuplicateKey);
-    assert!(rejected.events.is_empty());
+    assert!(rejected.binary.is_empty());
 
     let nested = br#"{"a":{"x":1},"b":[true],"a":{"y":[2]},"b":null}"#;
     assert_bridge_matches_native(nested, DuplicatePolicy::Overwrite);
@@ -402,7 +366,7 @@ fn direct_bridge_numbers_schema_and_offsets() {
         assert_bridge_matches_native(input, DuplicatePolicy::Overwrite);
     }
 
-    let schema = parse_events(
+    let schema = parse_bridge_binary(
         br#"{"$ref":"https://example.com/a"}"#,
         ffi::Duplicate::KeepFirst,
         100,
@@ -411,7 +375,7 @@ fn direct_bridge_numbers_schema_and_offsets() {
     assert_eq!(schema.status, ffi::Status::UnsupportedSchemaRef);
 
     let input = "{\"雪\":1,}".as_bytes();
-    let malformed = parse_events(input, ffi::Duplicate::Overwrite, 100, false);
+    let malformed = parse_bridge_binary(input, ffi::Duplicate::Overwrite, 100, false);
     assert_eq!(malformed.status, ffi::Status::Syntax);
     assert_eq!(malformed.byte_offset as usize, input.len() - 1);
 }
@@ -937,6 +901,15 @@ fn containment_membership_and_overlap_preserve_sql_semantics() {
 fn numeric_equality_checks_exact_integer_boundaries() {
     let query = |text: &str| Query::from_text(text.as_bytes(), ParseOptions::default()).unwrap();
     assert!(query("1").member_of(&query("1.0")).unwrap());
+    for (integer, double) in [
+        ("9223372036854775808", "9223372036854775808.0"),
+        ("-9223372036854775808", "-9223372036854775808.0"),
+    ] {
+        assert!(!query(integer).member_of(&query(double)).unwrap());
+        assert!(!query(integer).contains(&query(double), None).unwrap().unwrap());
+        assert!(!query(integer).overlaps(&query(double)).unwrap());
+    }
+
     assert!(query("-0").member_of(&query("-0.0")).unwrap());
     assert!(!query("9007199254740993")
         .member_of(&query("9007199254740992.0"))
@@ -1200,4 +1173,1449 @@ fn mutation_delta_preserves_unis_trailing_field_and_count_contracts() {
     let mut restored = Delta::default();
     assert_eq!(restored.restore(&bytes, &[]).unwrap(), 2);
     assert!(restored.logical().is_empty());
+}
+
+fn publish_native_update(mut bytes: Vec<u8>, update: &crate::mutation::editor::Update) -> Vec<u8> {
+    for write in &update.writes {
+        if write.reset { bytes = write.bytes.clone(); continue; }
+        let offset = write.offset as usize;
+        bytes.resize(bytes.len().max(offset + write.bytes.len()), 0);
+        bytes[offset..offset + write.bytes.len()].copy_from_slice(&write.bytes);
+    }
+    bytes
+}
+
+#[test]
+fn sparse_editor_replaces_inline_inplace_and_forwarded_values() {
+    use crate::mutation::editor::Editor;
+    let binary = crate::parse_binary(
+        br#"{"a":1,"b":"long initial string"}"#,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    let value = BinaryDocument::new(crate::parse_binary(b"-128", ParseOptions::default()).unwrap())
+        .unwrap();
+    let mut editor = Editor::open(binary.as_slice()).unwrap();
+    editor.replace(&[], 0, value.root().unwrap()).unwrap();
+    let update = editor.finish();
+    assert!(!update.delta.is_rebuilt());
+    assert_eq!(update.delta.logical()[0].value_type, 0x82);
+    assert_eq!(update.delta.physical().len(), 1);
+    let bytes = publish_native_update(binary, &update);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(
+        document.root().unwrap().value(0).unwrap().number().unwrap(),
+        Number::I64(-128)
+    );
+
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"\"x\"", ParseOptions::default()).unwrap())
+            .unwrap();
+    let mut editor = Editor::open(document.as_bytes()).unwrap();
+    editor.replace(&[], 1, value.root().unwrap()).unwrap();
+    let update = editor.finish();
+    assert!(!update.delta.is_rebuilt());
+    assert_eq!(update.delta.physical().len(), 1);
+    let bytes = publish_native_update(document.into_bytes(), &update);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(
+        document
+            .root()
+            .unwrap()
+            .value(1)
+            .unwrap()
+            .string_bytes()
+            .unwrap(),
+        b"x"
+    );
+
+    let value = BinaryDocument::new(
+        crate::parse_binary(
+            b"\"larger string after inplace shrink\"",
+            ParseOptions::default(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut editor = Editor::open(document.as_bytes()).unwrap();
+    editor.replace(&[], 1, value.root().unwrap()).unwrap();
+    let update = editor.finish();
+    assert!(!update.delta.is_rebuilt());
+    assert_eq!(update.delta.physical().len(), 2);
+    let bytes = publish_native_update(document.into_bytes(), &update);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(
+        document
+            .root()
+            .unwrap()
+            .value(1)
+            .unwrap()
+            .string_bytes()
+            .unwrap(),
+        b"larger string after inplace shrink"
+    );
+
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"\"small\"", ParseOptions::default()).unwrap())
+            .unwrap();
+    let mut editor = Editor::open(document.as_bytes()).unwrap();
+    editor.replace(&[], 1, value.root().unwrap()).unwrap();
+    let update = editor.finish();
+    assert!(!update.delta.is_rebuilt());
+    assert_eq!(update.delta.physical().len(), 1);
+    let bytes = publish_native_update(document.into_bytes(), &update);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(
+        document
+            .root()
+            .unwrap()
+            .value(1)
+            .unwrap()
+            .string_bytes()
+            .unwrap(),
+        b"small"
+    );
+}
+
+#[test]
+fn sparse_editor_rebuilds_ancestors_and_removes_objects_and_arrays() {
+    use crate::mutation::editor::Editor;
+    let binary = crate::parse_binary(
+        br#"{"a":[1,2,3],"b":{"x":4,"y":5}}"#,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"10", ParseOptions::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(binary.as_slice()).unwrap();
+    editor.insert(&[0], 1, b"", value.root().unwrap()).unwrap();
+    editor.remove(&[1], 0).unwrap();
+    editor.remove(&[0], 2).unwrap();
+    let update = editor.finish();
+    let binary = publish_native_update(binary, &update);
+    let document = BinaryDocument::new(binary).unwrap();
+    let root = document.root().unwrap();
+    let array = root.value(0).unwrap();
+    assert_eq!(array.len().unwrap(), 3);
+    assert_eq!(array.value(0).unwrap().number().unwrap(), Number::I64(1));
+    assert_eq!(array.value(1).unwrap().number().unwrap(), Number::I64(10));
+    assert_eq!(array.value(2).unwrap().number().unwrap(), Number::I64(3));
+    let object = root.value(1).unwrap();
+    assert_eq!(object.len().unwrap(), 1);
+    assert_eq!(object.key(0).unwrap(), b"y");
+
+    let binary = crate::parse_binary(b"[0,1]", ParseOptions::default()).unwrap();
+    let mut editor = Editor::open(binary.as_slice()).unwrap();
+    for _ in 0..24 {
+        editor.insert(&[], 0, b"", value.root().unwrap()).unwrap();
+    }
+    editor.remove(&[], 0).unwrap();
+    let update = editor.finish();
+    assert!(update.delta.is_rebuilt());
+    let binary = publish_native_update(binary, &update);
+    assert_eq!(
+        BinaryDocument::new(binary)
+            .unwrap()
+            .root()
+            .unwrap()
+            .len()
+            .unwrap(),
+        25
+    );
+}
+
+#[test]
+fn sparse_editor_preserves_successful_changes_after_a_failed_operation() {
+    use crate::mutation::editor::{BinarySource, Editor};
+    use std::cell::Cell;
+    struct CountingSource {
+        bytes: Vec<u8>,
+        read: Cell<usize>,
+    }
+    impl BinarySource for CountingSource {
+        fn len(&self) -> u64 {
+            self.bytes.len() as u64
+        }
+        fn read_exact(&self, offset: u64, output: &mut [u8]) -> std::io::Result<()> {
+            self.read.set(self.read.get() + output.len());
+            self.bytes.as_slice().read_exact(offset, output)
+        }
+    }
+    let text = format!("{{\"a\":1,\"b\":\"{}\"}}", "x".repeat(1024 * 1024));
+    let source = CountingSource {
+        bytes: crate::parse_binary(text.as_bytes(), ParseOptions::default()).unwrap(),
+        read: Cell::new(0),
+    };
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"2", ParseOptions::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(&source).unwrap();
+    editor.replace(&[], 0, value.root().unwrap()).unwrap();
+    assert!(editor.replace(&[], 99, value.root().unwrap()).is_err());
+    let update = editor.finish();
+    assert!(source.read.get() < 128, "read {} bytes", source.read.get());
+    assert_eq!(update.delta.logical().len(), 1);
+    assert_eq!(update.delta.physical().len(), 1);
+    assert!(!update.delta.is_rebuilt());
+    let bytes = publish_native_update(source.bytes, &update);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(
+        document.root().unwrap().value(0).unwrap().number().unwrap(),
+        Number::I64(2)
+    );
+    assert_eq!(
+        document
+            .root()
+            .unwrap()
+            .value(1)
+            .unwrap()
+            .string_bytes()
+            .unwrap()
+            .len(),
+        1024 * 1024
+    );
+}
+
+#[test]
+fn sparse_editor_reports_source_failures_without_publishing_writes() {
+    use crate::mutation::editor::{BinarySource, Editor};
+    struct ShortSource(Vec<u8>);
+    impl BinarySource for ShortSource {
+        fn len(&self) -> u64 {
+            self.0.len() as u64
+        }
+        fn read_exact(&self, offset: u64, output: &mut [u8]) -> std::io::Result<()> {
+            if offset > 10 {
+                return Err(std::io::ErrorKind::UnexpectedEof.into());
+            }
+            self.0.as_slice().read_exact(offset, output)
+        }
+    }
+    let source = ShortSource(crate::parse_binary(b"[1,2]", ParseOptions::default()).unwrap());
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"2", ParseOptions::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(&source).unwrap();
+    assert!(editor.replace(&[], 0, value.root().unwrap()).is_err());
+    let update = editor.finish();
+    assert!(update.writes.is_empty());
+    assert!(update.delta.is_unchanged());
+    assert!(update.delta.logical().is_empty());
+}
+
+#[test]
+fn sparse_editor_rejects_corrupt_offsets_and_lengths() {
+    use crate::mutation::editor::Editor;
+    let original =
+        crate::parse_binary(br#"{"a":[1,2],"b":"value"}"#, ParseOptions::default()).unwrap();
+    let replacement =
+        BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
+    for index in 0..original.len() {
+        for byte in [0, 0x80, 0xff] {
+            let mut bytes = original.clone();
+            bytes[index] = byte;
+            let outcome = std::panic::catch_unwind(|| {
+                if let Ok(mut editor) = Editor::open(bytes.as_slice()) {
+                    let _ = editor.replace(&[], 0, replacement.root().unwrap());
+                    let _ = editor.insert(&[], 1, b"c", replacement.root().unwrap());
+                    let _ = editor.remove(&[], 0);
+                }
+            });
+            assert!(outcome.is_ok(), "panicked after byte {index} became {byte}");
+        }
+    }
+}
+
+#[test]
+fn mutation_delta_owns_partial_lob_rebuild_policy() {
+    use crate::mutation::{Delta, PhysicalDiff};
+    let mut delta = Delta::default();
+    assert!(delta.should_pack(130, 100, 8).unwrap());
+    delta
+        .record_physical(PhysicalDiff::new(20, 2).unwrap())
+        .unwrap();
+    assert!(delta.should_pack(129, 100, 8).unwrap());
+    assert!(!delta.should_pack(130, 100, 8).unwrap());
+    assert!(!delta.should_pack(131, 100, 8).unwrap());
+    assert!(delta.should_pack(100, 100, 8).unwrap());
+    assert!(!delta.should_pack(100, 100, 0).unwrap());
+    assert!(delta.should_pack(100, 0, 8).is_err());
+    assert!(delta.should_pack(0, 0, 8).is_err());
+    delta.mark_rebuilt();
+    assert!(!delta.should_pack(100, 100, 8).unwrap());
+}
+
+
+#[test]
+fn sparse_editor_rebuilds_headerless_root_containers() {
+    use crate::mutation::editor::Editor;
+    let binary = crate::parse_binary(b"[1,2]", ParseOptions::default()).unwrap()[8..].to_vec();
+    let value = BinaryDocument::new(crate::parse_binary(b"3", ParseOptions::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(binary.as_slice()).unwrap();
+    editor.insert(&[], 1, b"", value.root().unwrap()).unwrap();
+    let update = editor.finish();
+    assert!(update.delta.is_rebuilt());
+    let bytes = publish_native_update(binary, &update);
+    let document = BinaryDocument::new(bytes).unwrap();
+    let root = document.root().unwrap();
+    assert_eq!(root.len().unwrap(), 3);
+    for (index, expected) in [1, 3, 2].into_iter().enumerate() {
+        assert_eq!(root.value(index as u64).unwrap().number().unwrap(), Number::I64(expected));
+    }
+}
+
+#[test]
+fn selected_values_outlive_query_and_parent_selection() {
+    let root = Query::from_text(
+        br#"{"a":[{"b":[-129,256]},{"b":[9]}]}"#,
+        ParseOptions::default(),
+    ).unwrap().into_value().unwrap();
+    let rows = root.select(&Path::parse_mysql(b"$.a[*]").unwrap(), QueryOptions::default()).unwrap();
+    let row = rows.get(0).unwrap().clone();
+    let other_row = rows.get(1).unwrap().clone();
+    drop(rows);
+    drop(root);
+    let children = row.select(&Path::parse_mysql(b"$.b[*]").unwrap(), QueryOptions::default()).unwrap();
+    let child = children.get(0).unwrap().clone();
+    drop(children);
+    drop(row);
+    assert_eq!(child.as_binary().number().unwrap(), Number::I64(-129));
+    let output = other_row.query_output(
+        &Path::parse_mysql(b"$.b[*]").unwrap(), crate::QueryOutputOptions::default(),
+    ).unwrap();
+    let output = BinaryDocument::new(output.binary.unwrap()).unwrap();
+    assert_eq!(output.root().unwrap().number().unwrap(), Number::I64(9));
+}
+
+#[test]
+fn native_order_preserves_container_and_numeric_rules() {
+    use std::cmp::Ordering::*;
+    let cases = [
+        ("null", "false", Less), ("{}", "[]", Less), ("[]", "false", Less),
+        ("[1,2]", "[1,2,0]", Less), ("[2]", "[1,9]", Greater),
+        (r#"{"z":0}"#, r#"{"a":0,"b":0}"#, Less),
+        (r#"{"b":0}"#, r#"{"a":1}"#, Greater),
+        ("9223372036854775808.0", "9223372036854775808", Greater),
+        ("9007199254740992.0", "9007199254740993", Less),
+        ("18446744073709551616.0", "18446744073709551615", Greater),
+        ("-9223372036854775808.0", "-9223372036854775808", Less),
+        ("1.0", "1", Equal), ("-0.0", "0", Equal),
+    ];
+    for (a,b,expected) in cases {
+        let a = BinaryDocument::new(parse_binary(a.as_bytes(), ParseOptions::default()).unwrap()).unwrap();
+        let b = BinaryDocument::new(parse_binary(b.as_bytes(), ParseOptions::default()).unwrap()).unwrap();
+        let actual = crate::compare::order(a.root().unwrap(), b.root().unwrap(), &mut |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<_, ()> { panic!("ordinary values need no database callback") }).unwrap();
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn native_order_preserves_database_type_matrix_and_scalar_errors() {
+    use std::cmp::Ordering::*;
+    let timestamp = BinaryDocument::new([12,0,0,0,0,0,0,0,0]).unwrap();
+    let date = BinaryDocument::new([32,0,0,0,0]).unwrap();
+    let datetime = BinaryDocument::new([33,0,0,0,0,0,0,0,0]).unwrap();
+    let mut no_callback = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<_, ()> { panic!("matrix decided the order") };
+    assert_eq!(crate::compare::order(date.root().unwrap(), datetime.root().unwrap(), &mut no_callback).unwrap(), Greater);
+    assert_eq!(crate::compare::order(datetime.root().unwrap(), date.root().unwrap(), &mut no_callback).unwrap(), Greater);
+    let mut callback = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| Err(37);
+    assert!(matches!(crate::compare::order(timestamp.root().unwrap(), datetime.root().unwrap(), &mut callback), Err(crate::compare::OrderError::Scalar(37))));
+    let oracle_number = BinaryDocument::new([18,1]).unwrap();
+    assert!(matches!(crate::compare::order(oracle_number.root().unwrap(), date.root().unwrap(), &mut no_callback), Err(crate::compare::OrderError::UnsupportedTypes)));
+}
+
+#[test]
+fn native_format_preserves_pretty_escaping_and_number_bytes() {
+    let cases = [
+        ("-0.0", "-0.0"), ("1.0", "1.0"), ("1e15", "1e15"),
+        ("1e-15", "0.000000000000001"), ("1e-16", "1e-16"),
+        ("1e23", "1e23"), ("5e-324", "5e-324"),
+        ("1.7976931348623157e308", "1.7976931348623157e308"),
+        (r#"{"z":[],"a":[null,true,"雪😀\u0000\b\t\n\f\r\"\\/"]}"#,
+         r#"{"a": [null, true, "雪😀\u0000\b\t\n\f\r\"\\/"], "z": []}"#),
+    ];
+    let mut no_callback = |_: crate::BinaryValue<'_>, _: bool| -> Result<Vec<u8>, ()> { panic!("ordinary values need no database callback") };
+    for (input, expected) in cases {
+        let value = BinaryDocument::new(parse_binary(input.as_bytes(), ParseOptions::default()).unwrap()).unwrap();
+        let output = crate::format::format(value.root().unwrap(), crate::format::FormatOptions::default(), &mut no_callback).unwrap();
+        assert_eq!(output, expected.as_bytes(), "{input}");
+    }
+    let value = BinaryDocument::new(parse_binary(br#"{"a":[1,{}],"b":[]}"#, ParseOptions::default()).unwrap()).unwrap();
+    let output = crate::format::format(value.root().unwrap(), crate::format::FormatOptions { pretty:true, ..Default::default() }, &mut no_callback).unwrap();
+    assert_eq!(output, b"{\n  \"a\": [\n    1,\n    {}\n  ],\n  \"b\": []\n}");
+}
+
+#[test]
+fn native_format_retains_byte_strings_and_special_scalar_capability() {
+    let mut bytes = vec![20,4];
+    bytes.extend_from_slice(&[0, 255, b'"', b'\\']);
+    let value = BinaryDocument::new(bytes.clone()).unwrap();
+    let mut no_callback = |_: crate::BinaryValue<'_>, _: bool| -> Result<Vec<u8>, ()> { panic!("extended strings are native") };
+    let output = crate::format::format(value.root().unwrap(), crate::format::FormatOptions { quoted:false, ..Default::default() }, &mut no_callback).unwrap();
+    assert_eq!(output, [0, 255, b'"', b'\\']);
+    assert_eq!(binary::serialize_value(value.root().unwrap()).unwrap(), bytes);
+    let scalar = decimal_document(false, 0, &[1]);
+    let array = binary::serialize_array(&[scalar.root().unwrap(), value.root().unwrap()]).unwrap();
+    let array = BinaryDocument::new(array).unwrap();
+    let mut calls = 0;
+    let output = crate::format::format(array.root().unwrap(), crate::format::FormatOptions::default(), &mut |value, quoted| -> Result<_, ()> {
+        calls += 1;
+        assert_eq!(value.json_type().unwrap(), JsonType::Decimal);
+        assert!(quoted);
+        Ok(b"1.00".to_vec())
+    }).unwrap();
+    assert_eq!(calls, 1);
+    assert_eq!(output, b"[1.00, \"\\u0000\xff\\\"\\\\\"]");
+    assert!(matches!(crate::format::format(scalar.root().unwrap(), Default::default(), &mut |_,_| Err::<Vec<u8>,_>(41)), Err(crate::format::FormatError::Scalar(41))));
+}
+
+#[test]
+fn native_predicates_share_temporal_capability_and_type_compatibility() {
+    struct IgnoreFractions;
+    impl crate::compare::ScalarComparator for IgnoreFractions {
+        type Error = u32;
+        fn compare_temporal(&mut self, left: crate::BinaryValue<'_>, right: crate::BinaryValue<'_>) -> Result<std::cmp::Ordering, u32> {
+            assert_eq!(left.json_type().unwrap(), JsonType::Time);
+            assert_eq!(right.json_type().unwrap(), JsonType::Time);
+            Ok(std::cmp::Ordering::Equal)
+        }
+    }
+    let a = BinaryDocument::new([10, 1,0,0,0,0,0,0,0]).unwrap();
+    let b = BinaryDocument::new([10, 2,0,0,0,0,0,0,0]).unwrap();
+    let a = Query::from_binary(binary::serialize_array(&[a.root().unwrap()]).unwrap()).unwrap();
+    let b = Query::from_binary(binary::serialize_array(&[b.root().unwrap()]).unwrap()).unwrap();
+    assert!(a.contains_with(&b, None, &mut IgnoreFractions).unwrap().unwrap());
+    assert!(a.overlaps_with(&b, &mut IgnoreFractions).unwrap());
+    let path = Path::parse_mysql(b"$[0]").unwrap();
+    assert!(a.contains_with(&b, Some(&path), &mut IgnoreFractions).unwrap().is_some());
+    let mut error = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| Err(99u32);
+    assert!(matches!(a.overlaps_with(&b, &mut error), Err(crate::compare::OrderError::Scalar(99))));
+    let standard = BinaryDocument::new([5,1,b'x']).unwrap();
+    let extended = BinaryDocument::new([20,1,b'x']).unwrap();
+    assert!(crate::compare::equal(standard.root().unwrap(), extended.root().unwrap()).unwrap());
+    let scalar = Query::from_binary(standard.into_bytes().to_vec()).unwrap();
+    let array = Query::from_binary(binary::serialize_array(&[extended.root().unwrap()]).unwrap()).unwrap();
+    assert!(scalar.member_of(&array).unwrap());
+}
+
+#[test]
+fn read_operations_reject_binary_cycles_without_recursive_descent() {
+    let document = BinaryDocument::new([7, 0, 1, 6, 0, 7]).unwrap();
+    let mut no_scalar = |_: crate::BinaryValue<'_>, _: bool| -> Result<Vec<u8>, ()> { unreachable!() };
+    assert!(matches!(crate::format::format(document.root().unwrap(), Default::default(), &mut no_scalar), Err(crate::format::FormatError::Binary(error)) if error.kind == BinaryErrorKind::InvalidDepth));
+    let mut no_temporal = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<std::cmp::Ordering, ()> { unreachable!() };
+    assert!(matches!(crate::compare::order(document.root().unwrap(), document.root().unwrap(), &mut no_temporal), Err(crate::compare::OrderError::Value(crate::CompareError::Binary(error))) if error.kind == BinaryErrorKind::InvalidDepth));
+}
+
+
+#[test]
+fn sql_mutation_prepares_paths_and_preserves_lazy_value_evaluation() {
+    use crate::mutation::editor::{Editor, SqlOperation};
+    let original = crate::parse_binary(br#"{"a":[1,2],"b":3}"#, ParseOptions::default()).unwrap();
+    let mut editor = Editor::open(original.as_slice()).unwrap();
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
+    assert!(editor
+        .prepare(&Path::parse_mysql(b"$.b.member").unwrap(), SqlOperation::Insert)
+        .unwrap()
+        .needs_value());
+    assert!(!editor
+        .prepare(&Path::parse_mysql(b"$.a[0]").unwrap(), SqlOperation::Insert)
+        .unwrap()
+        .needs_value());
+    assert!(editor
+        .prepare(&Path::parse_mysql(b"$.missing").unwrap(), SqlOperation::Set)
+        .unwrap()
+        .needs_value());
+    assert!(editor
+        .prepare(
+            &Path::parse_mysql(b"$.missing").unwrap(),
+            SqlOperation::Replace
+        )
+        .unwrap()
+        .needs_value());
+    assert!(!editor
+        .prepare(
+            &Path::parse_mysql(b"$.missing.x").unwrap(),
+            SqlOperation::Insert
+        )
+        .unwrap()
+        .needs_value());
+    assert!(!editor
+        .prepare(
+            &Path::parse_mysql(b"$.missing").unwrap(),
+            SqlOperation::ArrayAppend
+        )
+        .unwrap()
+        .needs_value());
+    let stale = editor
+        .prepare(
+            &Path::parse_mysql(b"$.a[1]").unwrap(),
+            SqlOperation::Replace,
+        )
+        .unwrap();
+    let edit = editor
+        .prepare(&Path::parse_mysql(b"$.a[9]").unwrap(), SqlOperation::Set)
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    assert!(editor.apply(stale, Some(value.root().unwrap())).is_err());
+    let edit = editor
+        .prepare(&Path::parse_mysql(b"$.b[9]").unwrap(), SqlOperation::Set)
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    let edit = editor
+        .prepare(&Path::parse_mysql(b"$.new").unwrap(), SqlOperation::Insert)
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    let edit = editor
+        .prepare(&Path::parse_mysql(b"$.a[0]").unwrap(), SqlOperation::Remove)
+        .unwrap();
+    editor.apply(edit, None).unwrap();
+    let update = editor.finish();
+    let document = BinaryDocument::new(publish_native_update(original, &update)).unwrap();
+    let expected = crate::parse_binary(
+        br#"{"a":[2,42],"b":[3,42],"new":42}"#,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        binary::serialize_value(document.root().unwrap()).unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn sql_mutation_handles_root_replacement_wrapping_and_array_insert() {
+    use crate::mutation::editor::{Editor, SqlOperation};
+    let original = crate::parse_binary(b"1", ParseOptions::default()).unwrap();
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(original.as_slice()).unwrap();
+    let edit = editor
+        .prepare(&Path::parse_mysql(b"$").unwrap(), SqlOperation::ArrayAppend)
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    let edit = editor
+        .prepare(
+            &Path::parse_mysql(b"$[last-99]").unwrap(),
+            SqlOperation::ArrayInsert,
+        )
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    let update = editor.finish();
+    let document = BinaryDocument::new(publish_native_update(original, &update)).unwrap();
+    assert_eq!(
+        binary::serialize_value(document.root().unwrap()).unwrap(),
+        crate::parse_binary(b"[42,1,42]", ParseOptions::default()).unwrap()
+    );
+    let original = document.into_bytes();
+    let mut editor = Editor::open(original.as_slice()).unwrap();
+    let edit = editor
+        .prepare(&Path::parse_mysql(b"$").unwrap(), SqlOperation::Replace)
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    assert!(editor
+        .prepare(&Path::parse_mysql(b"$").unwrap(), SqlOperation::Remove)
+        .is_err());
+    let edit = editor
+        .prepare(
+            &Path::parse_mysql(b"$[last-99]").unwrap(),
+            SqlOperation::Set,
+        )
+        .unwrap();
+    editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    let update = editor.finish();
+    let document = BinaryDocument::new(publish_native_update(original, &update)).unwrap();
+    assert_eq!(
+        binary::serialize_value(document.root().unwrap()).unwrap(),
+        crate::parse_binary(b"[42,42]", ParseOptions::default()).unwrap()
+    );
+}
+
+#[test]
+fn sql_mutation_full_results_accept_empty_keys_and_drop_delta_records() {
+    use crate::mutation::editor::{Session, SqlOperation};
+    let original = crate::parse_binary(b"{}", ParseOptions::default()).unwrap();
+    let value =
+        BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
+    let mut session = Session::open_for_rebuild(original.as_slice()).unwrap();
+    let path = Path::parse_mysql(br#"$."""#).unwrap();
+    let edit = session
+        .prepare(original.as_slice(), &path, SqlOperation::Set)
+        .unwrap();
+    session
+        .apply(original.as_slice(), edit, Some(value.root().unwrap()))
+        .unwrap();
+    let binary = session.binary(original.as_slice()).unwrap();
+    let document = BinaryDocument::new(binary).unwrap();
+    assert_eq!(document.root().unwrap().key(0).unwrap(), b"");
+    assert_eq!(
+        document.root().unwrap().value(0).unwrap().number().unwrap(),
+        Number::I64(42)
+    );
+    let edit = session
+        .prepare(original.as_slice(), &path, SqlOperation::Remove)
+        .unwrap();
+    session.apply(original.as_slice(), edit, None).unwrap();
+    let binary = session.binary(original.as_slice()).unwrap();
+    assert_eq!(
+        BinaryDocument::new(binary)
+            .unwrap()
+            .root()
+            .unwrap()
+            .len()
+            .unwrap(),
+        0
+    );
+    let update = session.finish();
+    assert!(update.delta.logical().is_empty());
+}
+
+#[test]
+fn first_value_owns_output_and_preserves_array_wrap_policy() {
+    let query = Query::from_text(br#"{"choices":[{"message":{"content":"answer"}}]}"#, Default::default()).unwrap();
+    let path = Path::parse_mysql(b"$.choices[0].message.content").unwrap();
+    let selected = query.first_value(&path, false).unwrap().unwrap();
+    drop(query);
+    assert_eq!(BinaryDocument::new(selected).unwrap().root().unwrap().string_bytes().unwrap(), b"answer");
+    let query = Query::from_text(br#"{"choices":{"message":{"content":"answer"}}}"#, Default::default()).unwrap();
+    assert!(query.first_value(&path, false).unwrap().is_none());
+    assert!(query.first_value(&path, true).unwrap().is_some());
+}
+
+#[test]
+fn schema_references_reject_remote_strings_in_every_subtree() {
+    for (text, expected) in [
+        (r##"{"$ref":"#"}"##, true),
+        (r##"{"$ref":""}"##, true),
+        (r##"{"$ref":12}"##, true),
+        (r##"{"ignored":[{"$ref":"#/local"}]}"##, true),
+        (r##"{"ignored":[{"$ref":"https://remote"}]}"##, false),
+    ] {
+        let query = Query::from_text(text.as_bytes(), Default::default()).unwrap();
+        assert_eq!(crate::schema::references_are_local(query.document.root().unwrap()).unwrap(), expected);
+    }
+}
+
+#[test]
+fn stored_value_packing_preserves_existing_widths_and_inline_contracts() {
+    use crate::mutation::editor::StoredValue;
+    let wide_array = [7, 0x51, 1, 8, 0, 1, 0, 0x82];
+    let value = StoredValue::open(wide_array.as_slice(), 0, 7, 0).unwrap();
+    assert_eq!(value.area_size().unwrap(), 8);
+    assert_eq!(value.serialized_size().unwrap(), 8);
+    assert_eq!(value.pack_payload().unwrap(), wide_array);
+    let inline = StoredValue::open(wide_array.as_slice(), 5, 0x82, 1).unwrap();
+    assert!(inline.area_size().is_err());
+    assert!(inline.serialized_size().is_err());
+    assert_eq!(inline.pack_payload().unwrap(), [1]);
+    assert!(StoredValue::open(wide_array.as_slice(), 5, 0x82, 4).is_err());
+    for text in [br#"{"a":[1,2],"b":"long"}"#.as_slice(), br#""long""#, b"-1024"] {
+        let binary = crate::parse_binary(text, Default::default()).unwrap();
+        let offset = if binary[0] == 30 { 8 } else { 0 };
+        let kind = binary[offset];
+        let payload = offset + usize::from(!crate::binary::needs_type_prefix(kind));
+        let value = StoredValue::open(binary.as_slice(), payload as u64, kind, 0).unwrap();
+        assert_eq!(value.pack_payload().unwrap(), binary[payload..]);
+    }
+}
+
+
+#[test]
+fn native_construction_owns_binary_children_and_applies_duplicate_policy() {
+    use crate::construction::{BuildError, ContainerBuilder, Scalar};
+    let mut object = ContainerBuilder::object();
+    object.insert(b"bb", &Scalar::Signed(1).encode().unwrap()).unwrap();
+    object.insert(b"a", &Scalar::String(b"old").encode().unwrap()).unwrap();
+    object.insert(b"a", &Scalar::String(b"new").encode().unwrap()).unwrap();
+    let output = object.finish(DuplicatePolicy::Overwrite, true, false, Some(2)).unwrap();
+    assert_eq!((output.input_count, output.output_count), (3, 2));
+    let document = BinaryDocument::new(output.binary).unwrap();
+    let root = document.root().unwrap();
+    assert_eq!(root.key(0).unwrap(), b"a");
+    assert_eq!(root.value(0).unwrap().string_bytes().unwrap(), b"new");
+    assert!(matches!(object.finish(DuplicatePolicy::Reject, true, false, None), Err(BuildError::DuplicateKey)));
+    let first = object.finish(DuplicatePolicy::KeepFirst, true, false, None).unwrap();
+    assert_eq!(BinaryDocument::new(first.binary).unwrap().root().unwrap().value(0).unwrap().string_bytes().unwrap(), b"old");
+    let preserved = object.finish(DuplicatePolicy::Preserve, false, true, None).unwrap();
+    let preserved = BinaryDocument::new(preserved.binary).unwrap();
+    assert_eq!(preserved.root().unwrap().key(0).unwrap(), b"bb");
+    assert_eq!(preserved.root().unwrap().len().unwrap(), 3);
+    assert!(matches!(object.finish(DuplicatePolicy::Overwrite, true, false, Some(1)), Err(BuildError::Depth)));
+}
+
+#[test]
+fn native_construction_preserves_scalar_tags_and_aggregate_layout() {
+    use crate::construction::{ContainerBuilder, Scalar};
+    let scalars = [Scalar::Null, Scalar::Boolean(true), Scalar::Signed(-1), Scalar::Unsigned(u64::MAX),
+        Scalar::Float(1.5), Scalar::String(b"x"), Scalar::Opaque { field_type: 27, bytes: b"abc" },
+        Scalar::Database { kind: 10, payload: &123456_i64.to_le_bytes() }];
+    let mut builder = ContainerBuilder::array();
+    for scalar in scalars { builder.append(&scalar.encode().unwrap()).unwrap(); }
+    for aggregate in [false, true] {
+        let output = builder.finish(DuplicatePolicy::Preserve, false, aggregate, Some(2)).unwrap();
+        let output = BinaryDocument::new(output.binary).unwrap();
+        let root = output.root().unwrap();
+        assert_eq!(root.len().unwrap(), 8);
+        assert_eq!(root.value(3).unwrap().number().unwrap(), Number::U64(u64::MAX));
+        assert_eq!(root.value(6).unwrap().json_type().unwrap(), JsonType::Opaque);
+        assert_eq!(root.value(7).unwrap().json_type().unwrap(), JsonType::Time);
+    }
+    let mut builder = ContainerBuilder::array();
+    builder.append(&Scalar::Signed(1).encode().unwrap()).unwrap();
+    builder.append(&Scalar::Signed(2).encode().unwrap()).unwrap();
+    assert_eq!(builder.approximate_length(), 2);
+    let output = builder.finish(DuplicatePolicy::Preserve, false, true, None).unwrap();
+    assert_eq!(output.binary, [7, 64, 2, 10, 8, 2, 9, 2, 1, 2]);
+}
+
+#[test]
+fn native_construction_keeps_oracle_string_tags() {
+    use crate::construction::{ContainerBuilder, Scalar};
+    let mut builder = ContainerBuilder::array();
+    for kind in [20, 21, 22, 23, 28, 29] {
+        let binary = Scalar::Database { kind, payload: &[1, b'x'] }.encode().unwrap();
+        builder.append(&binary).unwrap();
+    }
+    for aggregate in [false, true] {
+        let output = builder.finish(DuplicatePolicy::Preserve, false, aggregate, None).unwrap();
+        let output = BinaryDocument::new(output.binary).unwrap();
+        for (index, kind) in [JsonType::OBinary, JsonType::OOid, JsonType::ORawHex, JsonType::ORawId,
+                              JsonType::ODaySecond, JsonType::OYearMonth].into_iter().enumerate() {
+            let value = output.root().unwrap().value(index as u64).unwrap();
+            assert_eq!(value.json_type().unwrap(), kind);
+            assert_eq!(value.string_bytes().unwrap(), b"x");
+        }
+    }
+}
+
+#[test]
+fn native_construction_matches_text_constructor_size_estimates() {
+    use crate::construction::{ContainerBuilder, Scalar};
+    for length in [0, 1, 220, 230, 240, 250, 255, 256, 257, 65520, 65536] {
+        let text = "x".repeat(length);
+        let mut array = ContainerBuilder::array();
+        array.append(&Scalar::String(text.as_bytes()).encode().unwrap()).unwrap();
+        let nested = crate::parse_binary(br#"[1,2,{"a":null}]"#, ParseOptions::default()).unwrap();
+        array.append(&nested).unwrap();
+        let output = array.finish(DuplicatePolicy::Overwrite, true, false, None).unwrap();
+        let expected = crate::parse_binary(format!(r#"["{}",[1,2,{{"a":null}}]]"#, text).as_bytes(), ParseOptions::default()).unwrap();
+        assert_eq!(output.binary, expected, "array length {}", length);
+        let mut object = ContainerBuilder::object();
+        object.insert(b"bb", &nested).unwrap();
+        object.insert(b"a", &Scalar::String(text.as_bytes()).encode().unwrap()).unwrap();
+        let output = object.finish(DuplicatePolicy::Overwrite, true, false, None).unwrap();
+        let expected = crate::parse_binary(format!(r#"{{"a":"{}","bb":[1,2,{{"a":null}}]}}"#, text).as_bytes(), ParseOptions::default()).unwrap();
+        assert_eq!(output.binary, expected, "object length {}", length);
+    }
+}
+
+#[test]
+fn native_merge_preserves_sql_null_and_binary_domain_semantics() {
+    use crate::mutation::merge::{MergeAccumulator, MergeInput, MergeMode};
+    let left = BinaryDocument::new(
+        crate::parse_binary(
+            br#"{"a":[1],"b":{"x":1},"n":null}"#,
+            ParseOptions::default(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let right = BinaryDocument::new(
+        crate::parse_binary(br#"{"a":[2],"b":{"y":2},"n":3}"#, ParseOptions::default()).unwrap(),
+    )
+    .unwrap();
+    let merge = MergeAccumulator::new(MergeMode::Preserve)
+        .push(MergeInput::Value(left.root().unwrap()))
+        .unwrap()
+        .push(MergeInput::Value(right.root().unwrap()))
+        .unwrap();
+    let expected = crate::parse_binary(
+        br#"{"a":[1,2],"b":{"x":1,"y":2},"n":[null,3]}"#,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(merge.finish().unwrap().unwrap(), expected);
+    let merge = MergeAccumulator::new(MergeMode::Preserve)
+        .push(MergeInput::SqlNull)
+        .unwrap();
+    assert!(!merge.needs_input());
+    assert!(merge.finish().unwrap().is_none());
+
+    let patch = BinaryDocument::new(
+        crate::parse_binary(
+            br#"{"a":null,"b":{"x":null,"z":4},"n":null}"#,
+            ParseOptions::default(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let merge = MergeAccumulator::new(MergeMode::Patch)
+        .push(MergeInput::Value(left.root().unwrap()))
+        .unwrap()
+        .push(MergeInput::Value(patch.root().unwrap()))
+        .unwrap();
+    assert_eq!(
+        merge.finish().unwrap().unwrap(),
+        crate::parse_binary(br#"{"b":{"z":4}}"#, ParseOptions::default()).unwrap()
+    );
+    let scalar =
+        BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
+    let merge = MergeAccumulator::new(MergeMode::Patch)
+        .push(MergeInput::SqlNull)
+        .unwrap()
+        .push(MergeInput::Value(patch.root().unwrap()))
+        .unwrap()
+        .push(MergeInput::Value(scalar.root().unwrap()))
+        .unwrap();
+    assert_eq!(merge.finish().unwrap().unwrap(), scalar.as_bytes());
+}
+
+#[test]
+fn native_merge_oracle_null_patch_and_extended_scalar_tags() {
+    use crate::mutation::merge::{MergeAccumulator, MergeError, MergeInput, MergeMode};
+    let target =
+        BinaryDocument::new(crate::parse_binary(b"{}", ParseOptions::default()).unwrap()).unwrap();
+    let merger = MergeAccumulator::new(MergeMode::OraclePatch)
+        .push(MergeInput::SqlNull)
+        .unwrap();
+    assert!(!merger.needs_input());
+    assert!(merger.finish().unwrap().is_none());
+    let merger = MergeAccumulator::new(MergeMode::OraclePatch)
+        .push(MergeInput::Value(target.root().unwrap()))
+        .unwrap();
+    assert!(matches!(
+        merger.push(MergeInput::SqlNull),
+        Err(MergeError::InvalidPatch)
+    ));
+    for tag in [20, 21, 22, 23, 28, 29] {
+        let scalar = BinaryDocument::new(vec![tag, 3, b'a', 0, b'b']).unwrap();
+        let expected = scalar.root().unwrap().json_type().unwrap();
+        let merger = MergeAccumulator::new(MergeMode::Preserve)
+            .push(MergeInput::Value(scalar.root().unwrap()))
+            .unwrap()
+            .push(MergeInput::Value(scalar.root().unwrap()))
+            .unwrap();
+        let binary = merger.finish().unwrap().unwrap();
+        let result = BinaryDocument::new(binary).unwrap();
+        for index in 0..2 {
+            let child = result.root().unwrap().value(index).unwrap();
+            assert_eq!(child.json_type().unwrap(), expected);
+            assert_eq!(child.string_bytes().unwrap(), b"a\0b");
+        }
+    }
+}
+
+#[test]
+fn native_merge_rejects_cyclic_binary_input() {
+    use crate::mutation::merge::{MergeAccumulator, MergeInput, MergeMode};
+    let mut bytes = (30_u64 | (14_u64 << 22)).to_le_bytes().to_vec();
+    bytes.extend_from_slice(&[7, 0x40, 1, 6, 0, 7]);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert!(MergeAccumulator::new(MergeMode::Preserve)
+        .push(MergeInput::Value(document.root().unwrap()))
+        .is_err());
+}
+
+
+#[test]
+fn stored_value_reads_metadata_keys_and_forwarded_values() {
+    use crate::mutation::editor::{Editor, StoredKind, StoredValue};
+    let original = crate::parse_binary(br#"{"a":[1,true],"bb":"short"}"#, Default::default()).unwrap();
+    let replacement = BinaryDocument::new(crate::parse_binary(b"\"a larger forwarded string\"", Default::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(original.as_slice()).unwrap();
+    editor.replace(&[], 1, replacement.root().unwrap()).unwrap();
+    let update = editor.finish();
+    let binary = publish_native_update(original, &update);
+    let root = StoredValue::open(binary.as_slice(), 8, 6, 0).unwrap();
+    assert_eq!(root.depth().unwrap(), 3);
+    assert_eq!(root.find_key(b"bb").unwrap(), Some(1));
+    assert_eq!(root.find_key(b"missing").unwrap(), None);
+    let key = root.key_range(1).unwrap();
+    assert_eq!(&binary[key.start as usize..key.end as usize], b"bb");
+    let StoredKind::Container(container) = root.metadata().unwrap().kind else { panic!("container"); };
+    assert_eq!(container.count, 2);
+    let child = root.child_position(1).unwrap();
+    let value = StoredValue::open(binary.as_slice(), child.offset, child.raw_type, child.entry_type).unwrap();
+    let StoredKind::Text(bytes) = value.metadata().unwrap().kind else { panic!("text"); };
+    assert_eq!(&binary[bytes.start as usize..bytes.end as usize], b"a larger forwarded string");
+    for tag in [20,21,22,23,28,29] {
+        let bytes = [tag, 3, b'a', 0, b'z'];
+        let value = StoredValue::open(bytes.as_slice(), 0, tag, 0).unwrap();
+        let StoredKind::Text(range) = value.metadata().unwrap().kind else { panic!("extended string"); };
+        assert_eq!(&bytes[range.start as usize..range.end as usize], b"a\0z");
+        assert_eq!(value.pack_payload().unwrap(), bytes);
+        let document = BinaryDocument::new(bytes.as_slice()).unwrap();
+        let mut no_scalar = |_: crate::BinaryValue<'_>, _: bool| -> Result<Vec<u8>, ()> { panic!("string formatting is native"); };
+        let printed = crate::format::format(document.root().unwrap(), Default::default(), &mut no_scalar).unwrap();
+        assert_eq!(printed, br#""a\u0000z""#);
+
+    }
+}
+
+#[test]
+fn streaming_writer_preserves_geometry_layout_and_rejects_incomplete_output() {
+    use crate::writer::{BinaryWriter, WriteError};
+    let mut writer = BinaryWriter::default();
+    let object = writer.begin(true, 2, 3).unwrap();
+    writer.key(b"type").unwrap();
+    writer.key(b"coordinates").unwrap();
+    writer.string(b"Point").unwrap();
+    let coordinates = writer.begin(false, 2, 0).unwrap();
+    writer.double(1.0).unwrap(); writer.double(2.0).unwrap();
+    writer.end(coordinates).unwrap(); writer.end(object).unwrap();
+    let bytes = writer.finish(false).unwrap();
+    let expected = [
+        30,0,192,28,0,0,0,0,6,115,2,107,0,0,0,0,0,0,0,
+        61,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,
+        65,0,0,0,0,0,0,0,11,0,0,0,0,0,0,0,
+        76,0,0,0,0,0,0,0,5,83,0,0,0,0,0,0,0,7,
+        b't',b'y',b'p',b'e',b'c',b'o',b'o',b'r',b'd',b'i',b'n',b'a',b't',b'e',b's',
+        5,5,b'P',b'o',b'i',b'n',b't',7,64,2,24,8,4,16,4,
+        0,0,0,0,0,0,240,63,0,0,0,0,0,0,0,64,
+    ];
+    assert_eq!(bytes, expected);
+    assert_eq!(bytes.len(), 115);
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(document.root().unwrap().member(b"type").unwrap().unwrap().string_bytes().unwrap(), b"Point");
+    let mut incomplete = BinaryWriter::default();
+    incomplete.begin(false, 1, 0).unwrap();
+    assert_eq!(incomplete.finish(false), Err(WriteError::State));
+    let mut failed = BinaryWriter::default();
+    let root = failed.begin(false, 1, 0).unwrap();
+    failed.string(&[b'x';300]).unwrap();
+    assert_eq!(failed.end(root), Err(WriteError::Width));
+    assert_eq!(failed.double(1.0), Err(WriteError::State));
+    assert_eq!(failed.finish(false), Err(WriteError::State));
+    let mut fields = BinaryWriter::default();
+    fields.begin(true, 1, 0).unwrap();
+    assert_eq!(fields.double(1.0), Err(WriteError::State));
+    assert_eq!(fields.finish(false), Err(WriteError::State));
+}
+
+
+#[test]
+fn native_construction_extends_owned_snapshots_and_rejects_wrong_kind_atomically() {
+    use crate::construction::{BuildError, ContainerBuilder, Scalar};
+    let mut object = ContainerBuilder::object();
+    object.insert(b"b", &Scalar::Signed(0).encode().unwrap()).unwrap();
+    let source = crate::parse_binary(br#"{"a":1,"b":2}"#, ParseOptions::default()).unwrap();
+    object.extend(&source).unwrap();
+    drop(source);
+    let bad = crate::parse_binary(b"[]", ParseOptions::default()).unwrap();
+    assert!(matches!(object.extend(&bad), Err(BuildError::InvalidKind)));
+    let result = object.finish(DuplicatePolicy::Overwrite, true, false, None).unwrap();
+    assert_eq!((result.input_count, result.output_count), (3, 2));
+    assert_eq!(result.binary, crate::parse_binary(br#"{"a":1,"b":2}"#, ParseOptions::default()).unwrap());
+    let mut array = ContainerBuilder::array();
+    array.extend(&crate::parse_binary(br#"[[1],{"a":2}]"#, ParseOptions::default()).unwrap()).unwrap();
+    array.append(&Scalar::String(b"last").encode().unwrap()).unwrap();
+    let result = array.finish(DuplicatePolicy::Preserve, false, false, None).unwrap();
+    assert_eq!(result.binary, crate::parse_binary(br#"[[1],{"a":2},"last"]"#, ParseOptions::default()).unwrap());
+}
+
+
+#[test]
+fn native_construction_renames_keys_atomically() {
+    use crate::construction::{BuildError, ContainerBuilder};
+    let mut builder = ContainerBuilder::object();
+    builder.extend(&crate::parse_binary(br#"{"dimensions":3,"other":true}"#, ParseOptions::default()).unwrap()).unwrap();
+    builder.rename_key(b"dimensions", b"dimension").unwrap();
+    let expected = crate::parse_binary(br#"{"dimension":3,"other":true}"#, ParseOptions::default()).unwrap();
+    assert_eq!(builder.finish(DuplicatePolicy::Overwrite, true, false, None).unwrap().binary, expected);
+    assert!(matches!(builder.rename_key(b"dimension", b"other"), Err(BuildError::DuplicateKey)));
+    assert!(matches!(builder.rename_key(b"missing", b"other"), Err(BuildError::MissingKey)));
+    assert_eq!(builder.finish(DuplicatePolicy::Overwrite, true, false, None).unwrap().binary, expected);
+}
+
+
+#[test]
+fn native_aggregate_preserves_signed_width_thresholds() {
+    use crate::construction::{ContainerBuilder, Scalar};
+    for (count, expected) in [(50, 205), (127, 513), (128, 518), (255, 1026), (256, 1030),
+                              (4095, 16386), (4096, 24584)] {
+        let mut builder = ContainerBuilder::array();
+        for _ in 0..count { builder.append(&Scalar::Null.encode().unwrap()).unwrap(); }
+        let output = builder.finish(DuplicatePolicy::Preserve, false, true, None).unwrap();
+        assert_eq!(output.binary.len(), expected, "null array count {}", count);
+        assert_eq!(BinaryDocument::new(output.binary).unwrap().root().unwrap().len().unwrap(), count);
+    }
+    let mut builder = ContainerBuilder::array();
+    for _ in 0..10 { builder.append(&Scalar::Signed(-1).encode().unwrap()).unwrap(); }
+    assert_eq!(builder.finish(DuplicatePolicy::Preserve, false, true, None).unwrap().binary.len(), 135);
+    let mut builder = ContainerBuilder::object();
+    for index in 0..10 { builder.insert(index.to_string().as_bytes(), &Scalar::Float(1e-200).encode().unwrap()).unwrap(); }
+    assert_eq!(builder.finish(DuplicatePolicy::Overwrite, true, true, None).unwrap().binary.len(), 165);
+}
+
+#[test]
+fn containment_rejects_binary_cycles() {
+    let cyclic = BinaryDocument::new([7, 0, 1, 6, 0, 7]).unwrap();
+    let candidate = BinaryDocument::new(parse_binary(b"1", Default::default()).unwrap()).unwrap();
+    assert!(matches!(
+        crate::compare::contains(cyclic.root().unwrap(), candidate.root().unwrap()),
+        Err(crate::CompareError::Binary(error)) if error.kind == BinaryErrorKind::InvalidDepth
+    ));
+}
+
+#[test]
+fn containment_handles_deep_binary_values_without_recursive_descent() {
+    for object in [false, true] {
+        let mut writer = crate::writer::BinaryWriter::default();
+        let mut containers = Vec::new();
+        for _ in 0..12_000 {
+            containers.push(writer.begin(object, 1, 2).unwrap());
+            if object { writer.key(b"a").unwrap(); }
+        }
+        writer.string(b"needle").unwrap();
+        for container in containers.into_iter().rev() { writer.end(container).unwrap(); }
+        let document = BinaryDocument::new(writer.finish(false).unwrap()).unwrap();
+        let candidate = BinaryDocument::new(parse_binary(br#""needle""#, Default::default()).unwrap()).unwrap();
+        assert!(crate::compare::contains(
+            document.root().unwrap(),
+            if object { document.root().unwrap() } else { candidate.root().unwrap() },
+        ).unwrap());
+    }
+}
+
+#[test]
+fn containment_preserves_nested_search_and_empty_object_semantics() {
+    let query = |text: &str| Query::from_text(text.as_bytes(), Default::default()).unwrap();
+    assert!(query("[[2],1]").contains(&query("1"), None).unwrap().unwrap());
+    assert!(query("[[2],1]").contains(&query("[1,2]"), None).unwrap().unwrap());
+    assert!(query(r#"[{"a":2},1]"#).contains(&query("[1]"), None).unwrap().unwrap());
+    assert!(query("[1,[2]]").contains(&query("1"), None).unwrap().unwrap());
+    assert!(query(r#"{"a":1,"b":{}}"#)
+        .contains(&query(r#"{"a":1,"b":{"x":2}}"#), None).unwrap().unwrap());
+    assert!(!query(r#"{"b":{}}"#)
+        .contains(&query(r#"{"b":{"x":2}}"#), None).unwrap().unwrap());
+}
+
+#[test]
+fn containment_allows_reused_subtrees_and_propagates_scalar_errors() {
+    let target = BinaryDocument::new([7, 0, 2, 14, 8, 7, 8, 7, 7, 0, 1, 6, 1, 0x82]).unwrap();
+    let candidate = BinaryDocument::new(parse_binary(b"[1,1]", Default::default()).unwrap()).unwrap();
+    assert!(crate::compare::contains(target.root().unwrap(), candidate.root().unwrap()).unwrap());
+
+    let dates = BinaryDocument::new([7, 0, 1, 10, 6, 9, 0, 0, 0, 0]).unwrap();
+    let date = dates.root().unwrap().value(0).unwrap();
+    let mut unavailable = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<std::cmp::Ordering, i32> { Err(17) };
+    assert!(matches!(
+        crate::compare::contains_with(dates.root().unwrap(), date, &mut unavailable),
+        Err(crate::compare::OrderError::Scalar(17))
+    ));
+}
+
+#[test]
+fn aggregate_scalar_errors_preserve_prior_values() {
+    use crate::construction::{BuildError, ContainerBuilder, Scalar};
+    let mut builder = ContainerBuilder::array();
+    builder.append_aggregate(&[], &Scalar::Signed(1).encode().unwrap()).unwrap();
+    let extended = Scalar::Database { kind: 33, payload: &0i64.to_le_bytes() }.encode().unwrap();
+    assert!(matches!(builder.append_aggregate(&[], &extended), Err(BuildError::UnsupportedType)));
+    let output = builder.finish(DuplicatePolicy::Preserve, false, true, None).unwrap();
+    assert_eq!(BinaryDocument::new(output.binary).unwrap().root().unwrap().len().unwrap(), 1);
+    let mut nested = ContainerBuilder::array();
+    nested.append(&extended).unwrap();
+    let inner = nested.finish(DuplicatePolicy::Preserve, false, false, None).unwrap();
+    builder.append_aggregate(&[], &inner.binary).unwrap();
+}
+
+
+#[test]
+fn stored_documents_own_framing_and_preserve_scalar_and_container_bytes() {
+    use crate::mutation::editor::{Editor, StoredValue};
+    for text in [b"null".as_slice(), b"-1024", b"18446744073709551615", b"true", b"2.5", br#""a\u0000z""#,
+                 br#"{"a":[1,2],"b":"text"}"#] {
+        let mut input = crate::parse_binary(text, Default::default()).unwrap();
+        let position = StoredValue::encoded_position(input.as_slice(), 0).unwrap();
+        let value = StoredValue::open(input.as_slice(), position.offset, position.raw_type, position.entry_type).unwrap();
+        assert_eq!(value.to_document().unwrap(), input);
+        assert_eq!(value.free_space().unwrap(), 0);
+        assert_eq!(value.metadata().unwrap().value_type, BinaryDocument::new(input.as_slice()).unwrap().root().unwrap().json_type().unwrap());
+        if input[0] == 30 {
+            input[1] |= 1;
+            let value = StoredValue::open(input.as_slice(), position.offset, position.raw_type, position.entry_type).unwrap();
+            assert_eq!(value.to_document().unwrap(), input);
+            assert!(value.document_info().lexicographical);
+        }
+    }
+    for tag in [20,21,22,23,28,29] {
+        let input = [tag,3,b'a',0,b'z'];
+        let position = StoredValue::encoded_position(input.as_slice(), 0).unwrap();
+        let value = StoredValue::open(input.as_slice(), position.offset, position.raw_type, position.entry_type).unwrap();
+        assert_eq!(value.to_document().unwrap(), input);
+    }
+    let original = crate::parse_binary(br#"{"a":"short","b":[1,2]}"#, Default::default()).unwrap();
+    let replacement = BinaryDocument::new(crate::parse_binary(br#""a much longer forwarded value""#, Default::default()).unwrap()).unwrap();
+    let mut editor = Editor::open(original.as_slice()).unwrap();
+    editor.replace(&[], 0, replacement.root().unwrap()).unwrap();
+    let update = editor.finish();
+    let fragmented = publish_native_update(original, &update);
+    let root = StoredValue::open(fragmented.as_slice(), 8, 6, 0).unwrap();
+    let position = root.child_position(1).unwrap();
+    let child = StoredValue::open(fragmented.as_slice(), position.offset, position.raw_type, position.entry_type).unwrap();
+    let array = child.to_document().unwrap();
+    let packed = root.to_document().unwrap();
+    assert!(root.free_space().unwrap() > 0);
+    assert!(child.free_space().is_err());
+    assert_eq!(u64::from_le_bytes(packed[..8].try_into().unwrap()) >> 22, packed.len() as u64);
+    assert!(crate::compare::equal(BinaryDocument::new(packed).unwrap().root().unwrap(), BinaryDocument::new(fragmented).unwrap().root().unwrap()).unwrap());
+    assert_eq!(BinaryDocument::new(array).unwrap().root().unwrap().len().unwrap(), 2);
+}
+
+
+#[test]
+fn native_merge_deep_binary_ownership_and_encoding_do_not_recurse() {
+    use crate::mutation::merge::{MergeAccumulator, MergeInput, MergeMode};
+    let mut writer = crate::writer::BinaryWriter::default();
+    let mut containers = Vec::new();
+    for _ in 0..3000 { containers.push(writer.begin(false, 1, 3).unwrap()); }
+    writer.double(1.0).unwrap();
+    for id in containers.into_iter().rev() { writer.end(id).unwrap(); }
+    let input = BinaryDocument::new(writer.finish(false).unwrap()).unwrap();
+    let merger = MergeAccumulator::new(MergeMode::Preserve)
+        .push(MergeInput::Value(input.root().unwrap())).unwrap();
+    let output = BinaryDocument::new(merger.finish().unwrap().unwrap()).unwrap();
+    assert_eq!(output.depth().unwrap(), 3001);
+    drop(MergeAccumulator::new(MergeMode::Preserve)
+        .push(MergeInput::Value(input.root().unwrap())).unwrap());
+}
+
+#[test]
+fn constructed_encoding_preserves_legacy_merge_and_update_size_boundaries() {
+    use crate::mutation::merge::{MergeAccumulator, MergeInput, MergeMode};
+    let empty = BinaryDocument::new(crate::parse_binary(b"{}", Default::default()).unwrap()).unwrap();
+    for (count, expected) in [(30, 273), (40, 363)] {
+        let text = format!("{{{}}}", (0..count).map(|i| format!("\"{i}\":{i}")).collect::<Vec<_>>().join(","));
+        let input = BinaryDocument::new(crate::parse_binary(text.as_bytes(), Default::default()).unwrap()).unwrap();
+        let encoded = crate::binary::serialize_constructed_value(input.root().unwrap()).unwrap();
+        assert_eq!(encoded.len(), expected);
+        assert_eq!(encoded, input.as_bytes());
+        for mode in [MergeMode::Preserve, MergeMode::Patch] {
+            let output = MergeAccumulator::new(mode)
+                .push(MergeInput::Value(input.root().unwrap())).unwrap()
+                .push(MergeInput::Value(empty.root().unwrap())).unwrap()
+                .finish().unwrap().unwrap();
+            assert_eq!(output.len(), expected);
+            assert_eq!(output, encoded);
+        }
+    }
+    let text = format!("{{{},\"new\":1}}", (0..30).map(|i| format!("\"{i}\":{i}")).collect::<Vec<_>>().join(","));
+    let input = BinaryDocument::new(crate::parse_binary(text.as_bytes(), Default::default()).unwrap()).unwrap();
+    assert_eq!(crate::binary::serialize_constructed_value(input.root().unwrap()).unwrap().len(), 283);
+    let text = format!("[{}]", vec!["null"; 100].join(","));
+    let input = BinaryDocument::new(crate::parse_binary(text.as_bytes(), Default::default()).unwrap()).unwrap();
+    let array = BinaryDocument::new(crate::parse_binary(b"[]", Default::default()).unwrap()).unwrap();
+    let output = MergeAccumulator::new(MergeMode::Preserve)
+        .push(MergeInput::Value(input.root().unwrap())).unwrap()
+        .push(MergeInput::Value(array.root().unwrap())).unwrap()
+        .finish().unwrap().unwrap();
+    assert_eq!(output.len(), 313);
+}
+
+#[test]
+fn constructed_sources_encode_deep_values_and_reject_cycles_without_recursion() {
+    let mut writer = crate::writer::BinaryWriter::default();
+    let mut containers = Vec::new();
+    for _ in 0..10000 { containers.push(writer.begin(false, 1, 3).unwrap()); }
+    writer.double(1.0).unwrap();
+    for id in containers.into_iter().rev() { writer.end(id).unwrap(); }
+    let input = BinaryDocument::new(writer.finish(false).unwrap()).unwrap();
+    let output = BinaryDocument::new(crate::binary::serialize_constructed_value(input.root().unwrap()).unwrap()).unwrap();
+    assert_eq!(output.depth().unwrap(), 10001);
+    let mut array = crate::construction::ContainerBuilder::array();
+    array.append(input.as_bytes()).unwrap();
+    let output = array.finish(DuplicatePolicy::Overwrite, true, false, None).unwrap();
+    assert_eq!(BinaryDocument::new(output.binary).unwrap().depth().unwrap(), 10002);
+    let cycle = BinaryDocument::new(vec![7, 0, 1, 6, 0, 7]).unwrap();
+    assert!(matches!(crate::binary::serialize_constructed_value(cycle.root().unwrap()),
+        Err(crate::BinaryError { kind: BinaryErrorKind::InvalidDepth, .. })));
+}
+
+#[test]
+fn native_merge_deep_objects_patch_preserve_and_failure_drop_are_bounded() {
+    use crate::mutation::merge::{MergeAccumulator, MergeInput, MergeMode, MergeError};
+    let mut writer = crate::writer::BinaryWriter::default();
+    let mut containers = Vec::new();
+    for _ in 0..3000 {
+        containers.push(writer.begin(true, 1, 3).unwrap());
+        writer.key(b"a").unwrap();
+    }
+    writer.double(1.0).unwrap();
+    for id in containers.into_iter().rev() { writer.end(id).unwrap(); }
+    let input = BinaryDocument::new(writer.finish(false).unwrap()).unwrap();
+    for (mode, depth) in [(MergeMode::Preserve, 3002), (MergeMode::Patch, 3001)] {
+        let output = MergeAccumulator::new(mode)
+            .push(MergeInput::Value(input.root().unwrap())).unwrap()
+            .push(MergeInput::Value(input.root().unwrap())).unwrap()
+            .finish().unwrap().unwrap();
+        assert_eq!(BinaryDocument::new(output).unwrap().depth().unwrap(), depth);
+    }
+    let merger = MergeAccumulator::new(MergeMode::OraclePatch)
+        .push(MergeInput::Value(input.root().unwrap())).unwrap();
+    assert!(matches!(merger.push(MergeInput::SqlNull), Err(MergeError::InvalidPatch)));
+}
+
+#[test]
+fn binary_construction_and_copy_preserve_widened_signed_inline_values() {
+    for length in [300, 65536] {
+        for number in [-1i64, -128, -129, -32768, -32769, i32::MIN as i64, i32::MIN as i64 - 1] {
+            let text = format!("[\"{}\",{number}]", "x".repeat(length));
+            let input = BinaryDocument::new(crate::parse_binary(text.as_bytes(), Default::default()).unwrap()).unwrap();
+            assert_eq!(input.root().unwrap().value(1).unwrap().number().unwrap(), Number::I64(number));
+            for encoded in [crate::binary::serialize_value(input.root().unwrap()).unwrap(),
+                            crate::binary::serialize_constructed_value(input.root().unwrap()).unwrap()] {
+                let result = BinaryDocument::new(encoded).unwrap();
+                assert_eq!(result.root().unwrap().value(1).unwrap().number().unwrap(), Number::I64(number));
+            }
+        }
+    }
+}
+
+
+#[test]
+fn native_hash_preserves_seed_flags_key_and_child_mix_sequence() {
+    struct Trace(Vec<(u64, Vec<u8>)>);
+    impl crate::hash::HashCapability for Trace {
+        type Error = i32;
+        fn append_bytes(&mut self, seed: u64, bytes: &[u8]) -> u64 {
+            self.0.push((seed, bytes.to_vec()));
+            self.0.len() as u64
+        }
+        fn hash_database_scalar(&mut self, _: u64, _: crate::BinaryValue<'_>) -> Result<u64, i32> { Err(17) }
+    }
+    let document = BinaryDocument::new(parse_binary(br#"{"a":[true,null],"bb":false}"#, Default::default()).unwrap()).unwrap();
+    let mut trace = Trace(Vec::new());
+    assert_eq!(crate::hash::hash(document.root().unwrap(), 7, &mut trace).unwrap(), 11);
+    assert_eq!(trace.0, vec![
+        (7, vec![0x31]), (1, b"a".to_vec()), (2, vec![0x30]), (3, vec![0x33]),
+        (3, 4_u64.to_ne_bytes().to_vec()), (5, vec![0x32]), (5, 6_u64.to_ne_bytes().to_vec()),
+        (2, 7_u64.to_ne_bytes().to_vec()), (8, b"bb".to_vec()), (9, vec![0x34]),
+        (9, 10_u64.to_ne_bytes().to_vec()),
+    ]);
+    let number = BinaryDocument::new(parse_binary(b"[1]", Default::default()).unwrap()).unwrap();
+    let mut trace = Trace(Vec::new());
+    assert!(matches!(crate::hash::hash(number.root().unwrap(), 9, &mut trace), Err(crate::hash::HashError::Scalar(17))));
+    assert_eq!(trace.0, vec![(9, vec![0x30])]);
+}
+
+#[test]
+fn native_hash_rejects_cycles_and_handles_deep_documents_iteratively() {
+    struct Counter(u64);
+    impl crate::hash::HashCapability for Counter {
+        type Error = ();
+        fn append_bytes(&mut self, _: u64, _: &[u8]) -> u64 { self.0 += 1; self.0 }
+        fn hash_database_scalar(&mut self, _: u64, _: crate::BinaryValue<'_>) -> Result<u64, ()> { unreachable!() }
+    }
+    let cyclic = BinaryDocument::new([7, 0, 1, 6, 0, 7]).unwrap();
+    assert!(matches!(crate::hash::hash(cyclic.root().unwrap(), 0, &mut Counter(0)),
+        Err(crate::hash::HashError::Binary(error)) if error.kind == BinaryErrorKind::InvalidDepth));
+    for object in [false, true] {
+        let mut writer = crate::writer::BinaryWriter::default();
+        let mut containers = Vec::new();
+        for _ in 0..12_000 {
+            containers.push(writer.begin(object, 1, 2).unwrap());
+            if object { writer.key(b"a").unwrap(); }
+        }
+        writer.string(b"leaf").unwrap();
+        for container in containers.into_iter().rev() { writer.end(container).unwrap(); }
+        let document = BinaryDocument::new(writer.finish(false).unwrap()).unwrap();
+        assert_eq!(crate::hash::hash(document.root().unwrap(), 99, &mut Counter(0)).unwrap(),
+            if object { 36_001 } else { 24_001 });
+    }
+}
+
+#[test]
+fn native_hash_keeps_scalar_capability_and_string_bytes_separate() {
+    struct Capability { strings: Vec<Vec<u8>>, scalars: Vec<crate::JsonType> }
+    impl crate::hash::HashCapability for Capability {
+        type Error = ();
+        fn append_bytes(&mut self, _: u64, bytes: &[u8]) -> u64 { self.strings.push(bytes.to_vec()); 1 }
+        fn hash_database_scalar(&mut self, seed: u64, value: crate::BinaryValue<'_>) -> Result<u64, ()> {
+            self.scalars.push(value.json_type().unwrap()); Ok(seed + 10)
+        }
+    }
+    for kind in [5, 20, 21, 22, 23, 28, 29] {
+        let bytes = [kind, 3, b'a', 0, b'b'];
+        let document = BinaryDocument::new(bytes).unwrap();
+        let mut capability = Capability { strings: Vec::new(), scalars: Vec::new() };
+        assert_eq!(crate::hash::hash(document.root().unwrap(), 99, &mut capability).unwrap(), 1);
+        assert_eq!(capability.strings, vec![b"a\0b".to_vec()]);
+        assert!(capability.scalars.is_empty());
+    }
+    for bytes in [vec![2, 1], vec![9, 0, 0, 0, 0], vec![13, 27, 0, 1, 0, 0, 0, 0, 0, 0, 0, b'x']] {
+        let document = BinaryDocument::new(bytes).unwrap();
+        let mut capability = Capability { strings: Vec::new(), scalars: Vec::new() };
+        assert_eq!(crate::hash::hash(document.root().unwrap(), 99, &mut capability).unwrap(), 109);
+        assert_eq!(capability.scalars.len(), 1);
+        assert!(capability.strings.is_empty());
+    }
+}
+
+
+#[test]
+fn search_rejects_cyclic_binary_and_handles_deep_values_iteratively() {
+    let query = Query::from_binary(vec![7, 0, 1, 6, 0, 7]).unwrap();
+    for first_only in [false, true] {
+        let error = query.search(&[], SearchOptions { pattern: "%", escape: '\\', first_only }).unwrap_err();
+        assert_eq!(error.kind, BinaryErrorKind::InvalidDepth);
+    }
+    for object in [false, true] {
+        let mut writer = crate::writer::BinaryWriter::default();
+        let mut containers = Vec::new();
+        for _ in 0..12_000 {
+            containers.push(writer.begin(object, 1, 2).unwrap());
+            if object { writer.key(b"a").unwrap(); }
+        }
+        writer.string(b"leaf").unwrap();
+        for container in containers.into_iter().rev() { writer.end(container).unwrap(); }
+        let query = Query::from_binary(writer.finish(false).unwrap()).unwrap();
+        let expected = "$".to_owned() + &if object { ".a".repeat(12_000) } else { "[0]".repeat(12_000) };
+        assert_eq!(search_paths(&query, &[], "leaf", '\\'), vec![expected]);
+        assert!(query.search(&[], SearchOptions { pattern: "missing", escape: '\\', first_only: false }).unwrap().is_none());
+    }
+}
+
+#[test]
+fn search_revisits_shared_values_at_each_distinct_path() {
+    let query = Query::from_binary(vec![7, 0x40, 2, 17, 8, 7, 8, 7, 7, 0x40, 1, 9, 6, 5, 5, 1, b'x']).unwrap();
+    assert_eq!(search_paths(&query, &[], "x", '\\'), ["$[0][0]", "$[1][0]"]);
+    let result = query.search(&[], SearchOptions { pattern: "x", escape: '\\', first_only: true }).unwrap().unwrap();
+    assert_eq!(BinaryDocument::new(result).unwrap().root().unwrap().string_bytes().unwrap(), b"$[0][0]");
+}
+
+
+#[test]
+fn recursive_search_scopes_preserve_all_ancestor_locations() {
+    let query = Query::from_text(br#"{"a":"leaf","arr":[{"a":"leaf"},{"b":{"a":"leaf"}}],"nested":{"a":"leaf"}}"#, Default::default()).unwrap();
+    let path = Path::parse_mysql(b"$**.a").unwrap();
+    assert_eq!(search_paths(&query, &[path], "leaf", '\\'),
+        ["$.a", "$.arr[0].a", "$.arr[1].b.a", "$.nested.a"]);
+    let cyclic = Query::from_binary(vec![7, 0, 1, 6, 0, 7]).unwrap();
+    let path = Path::parse_mysql(b"$**.missing").unwrap();
+    assert_eq!(cyclic.query(&path, Default::default()).unwrap_err().kind, BinaryErrorKind::InvalidDepth);
+    assert_eq!(cyclic.search(&[path], SearchOptions { pattern: "%", escape: '\\', first_only: false }).unwrap_err().kind,
+        BinaryErrorKind::InvalidDepth);
+    let shared = Query::from_binary(vec![7, 0x40, 2, 17, 8, 7, 8, 7, 7, 0x40, 1, 9, 6, 5, 5, 1, b'x']).unwrap();
+    assert_eq!(search_paths(&shared, &[Path::parse_mysql(b"$**[0]").unwrap()], "x", '\\'),
+        ["$[0][0]", "$[1][0]"]);
+}
+
+#[test]
+fn binary_copy_and_construction_keep_object_lookup_order_consistent() {
+    use crate::mutation::editor::StoredValue;
+    fn document(lexicographical: bool) -> Vec<u8> {
+        let mut writer = crate::writer::BinaryWriter::default();
+        let object = writer.begin(true, 2, 0).unwrap();
+        for key in if lexicographical { [b"aa".as_slice(), b"b"] } else { [b"b".as_slice(), b"aa"] } {
+            writer.key(key).unwrap();
+        }
+        writer.string(b"first").unwrap();
+        writer.string(b"second").unwrap();
+        writer.end(object).unwrap();
+        writer.finish(lexicographical).unwrap()
+    }
+    fn check(bytes: &[u8], child: bool, expected: u64) {
+        let root = StoredValue::encoded_position(bytes, 0).unwrap();
+        let root = StoredValue::open(bytes, root.offset, root.raw_type, root.entry_type).unwrap();
+        let value = if child { let p = root.child_position(0).unwrap(); StoredValue::open(bytes, p.offset, p.raw_type, p.entry_type).unwrap() } else { root };
+        assert_eq!(value.find_key(b"b").unwrap(), Some(expected));
+        assert_eq!(value.find_key(b"aa").unwrap(), Some(1 - expected));
+    }
+    let input = BinaryDocument::new(document(true)).unwrap();
+    check(input.as_bytes(), false, 1);
+    for output in [binary::serialize_value(input.root().unwrap()).unwrap(),
+                   binary::serialize_constructed_value(input.root().unwrap()).unwrap()] {
+        check(&output, false, 1);
+        assert_ne!(output[1] & 1, 0);
+    }
+    let other = BinaryDocument::new(document(false)).unwrap();
+    let array = binary::serialize_array(&[input.root().unwrap(), other.root().unwrap()]).unwrap();
+    check(&array, true, 0);
+    let object = binary::serialize_object(&[(b"value", input.root().unwrap())]).unwrap();
+    check(&object, true, 0);
+    for aggregate in [false, true] {
+        let mut builder = crate::construction::ContainerBuilder::array();
+        builder.append(input.as_bytes()).unwrap();
+        builder.append(other.as_bytes()).unwrap();
+        let output = builder.finish(DuplicatePolicy::Preserve, false, aggregate, None).unwrap();
+        check(&output.binary, true, 0);
+    }
+    let outer = binary::serialize_array(&[input.root().unwrap()]).unwrap();
+    let mut builder = crate::construction::ContainerBuilder::array();
+    builder.extend(&outer).unwrap();
+    check(&builder.finish(DuplicatePolicy::Preserve, false, false, None).unwrap().binary, true, 0);
+}
+
+#[test]
+fn owned_sql_mutations_construct_from_the_complete_overlay() {
+    use crate::mutation::editor::{Session, SqlOperation};
+    let mut documents = vec!["1".to_owned(), "[1,2]".into(), "{\"a\":[1,2],\"x\":{\"y\":3}}".into()];
+    documents.push(format!("{{\"a\":\"{}\",\"x\":-1}}", "x".repeat(300)));
+    documents.push(format!("{{{}}}", (0..30).map(|i| format!("\"{i}\":{i}")).collect::<Vec<_>>().join(",")));
+    let values = ["-1".to_owned(), format!("\"{}\"", "z".repeat(2000))];
+    for document in documents {
+        let source = parse_binary(document.as_bytes(), Default::default()).unwrap();
+        for operation in [SqlOperation::Set, SqlOperation::Replace, SqlOperation::Insert,
+                          SqlOperation::Remove, SqlOperation::ArrayAppend, SqlOperation::ArrayInsert] {
+            for path in ["$", "$.a", "$.new", "$[1]", "$.a[0]", "$.missing[0]"] {
+                for value in &values {
+                    let value = BinaryDocument::new(parse_binary(value.as_bytes(), Default::default()).unwrap()).unwrap();
+                    let mut session = Session::open_for_rebuild(source.as_slice()).unwrap();
+                    let prepared = match session.prepare(source.as_slice(), &Path::parse_mysql(path.as_bytes()).unwrap(), operation) {
+                        Ok(prepared) => prepared,
+                        Err(crate::mutation::editor::EditError::VacuousPath
+                            | crate::mutation::editor::EditError::InvalidPath) => continue,
+                        Err(error) => panic!("{document} {path} {operation:?}: {error:?}"),
+                    };
+                    let value = prepared.needs_value().then(|| value.root().unwrap());
+                    session.apply(source.as_slice(), prepared, value).unwrap();
+                    let packed = BinaryDocument::new(session.binary(source.as_slice()).unwrap()).unwrap();
+                    let expected = crate::binary::serialize_constructed_value(packed.root().unwrap()).unwrap();
+                    assert_eq!(session.constructed_binary(source.as_slice()).unwrap(), expected,
+                               "{document} {path} {operation:?}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn merge_owned_documents_match_binary_arguments_and_survive_deep_drop() {
+    use crate::mutation::merge::{MergeAccumulator, MergeArgument, MergeInput, MergeMode};
+    let documents = [
+        "null", "true", "-1", "18446744073709551615", "-0.0", "1e-200", "\"雪😀\"",
+        "[1,{\"a\":null}]", "{\"x\":[1,2],\"nested\":{\"a\":3}}",
+        "{\"x\":null,\"nested\":{\"b\":4}}",
+    ];
+    for mode in [MergeMode::Patch, MergeMode::Preserve, MergeMode::OraclePatch] {
+        for left in documents {
+            for right in documents {
+                let mut owned = MergeAccumulator::new(mode);
+                let mut binary = MergeAccumulator::new(mode);
+                for text in [left, right] {
+                    owned = owned.push_prepared(MergeArgument::from_document(crate::parse(text.as_bytes(), Default::default()).unwrap()).unwrap()).unwrap();
+                    let bytes = BinaryDocument::new(crate::parse_binary(text.as_bytes(), Default::default()).unwrap()).unwrap();
+                    binary = binary.push(MergeInput::Value(bytes.root().unwrap())).unwrap();
+                }
+                assert_eq!(owned.finish().unwrap(), binary.finish().unwrap(), "{left} / {right}");
+            }
+        }
+    }
+    let mut document = Document::String("leaf".into());
+    for _ in 0..12_000 { document = Document::Array(vec![document]); }
+    let argument = MergeArgument::from_document(document).unwrap();
+    let bytes = MergeAccumulator::new(MergeMode::Patch).push_prepared(argument).unwrap().finish().unwrap().unwrap();
+    assert_eq!(BinaryDocument::new(bytes).unwrap().depth().unwrap(), 12_001);
+}
+
+#[test]
+fn merge_binary_strings_keep_invalid_utf8_bytes_and_duplicate_last_values() {
+    use crate::mutation::merge::{MergeAccumulator, MergeArgument, MergeInput, MergeMode};
+    let scalar = BinaryDocument::new(vec![5, 1, 255]).unwrap();
+    let merger = MergeAccumulator::new(MergeMode::Patch).push(MergeInput::Value(scalar.root().unwrap())).unwrap();
+    assert_eq!(merger.finish().unwrap().unwrap(), scalar.as_bytes());
+    let document = Document::Object(vec![("key".into(), Document::String("discard".into())),
+        ("key".into(), Document::Array(vec![Document::Bool(false)]))]);
+    let merger = MergeAccumulator::new(MergeMode::Preserve).push_prepared(MergeArgument::from_document(document).unwrap()).unwrap();
+    assert_eq!(merger.finish().unwrap().unwrap(), crate::parse_binary(br#"{"key":[false]}"#, Default::default()).unwrap());
 }

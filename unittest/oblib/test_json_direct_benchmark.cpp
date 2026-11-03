@@ -29,22 +29,6 @@ namespace oceanbase
 namespace common
 {
 
-static int old_binary(const std::string &text, uint32_t flags, std::string &bytes)
-{
-  ObArenaAllocator allocator;
-  ObJsonNode *node = nullptr;
-  int ret = ObJsonParser::get_tree(&allocator, text.data(), text.size(), node, flags);
-  ObString binary;
-  if (OB_SUCCESS == ret) {
-    ObJsonBinSerializer serializer(&allocator);
-    ret = serializer.serialize(node, binary);
-  }
-  if (OB_SUCCESS == ret) {
-    bytes.assign(binary.ptr(), binary.length());
-  }
-  return ret;
-}
-
 static int direct_binary(const std::string &text, uint32_t flags, std::string &bytes)
 {
   ObArenaAllocator allocator;
@@ -122,22 +106,95 @@ static int differential()
   for (uint32_t flags : {0U, 4U, 8U, 16U}) {
     cases.push_back({"large_duplicate", large_duplicate, flags});
   }
+  // Captured from the retired C++ tree serializer before deletion. The capture
+  // also compared every byte with the native direct parser (68 cases, zero differences).
+  struct Golden { int status; size_t length; uint64_t hash; };
+  const Golden goldens[] = {
+    {0, 2, UINT64_C(0x08328807b4eb6fed)}, // 0
+    {0, 2, UINT64_C(0x084db707b5028782)}, // 1
+    {0, 2, UINT64_C(0x084db807b5028935)}, // 2
+    {0, 12, UINT64_C(0x0618bdd70a573c95)}, // 3
+    {0, 12, UINT64_C(0x116091cc40222a84)}, // 4
+    {0, 58, UINT64_C(0x8ec78c7abb63cec7)}, // 5
+    {0, 119, UINT64_C(0xd073ed1caee7e960)}, // 6
+    {0, 19, UINT64_C(0xa505bee6e447e29b)}, // 7
+    {0, 2, UINT64_C(0x08218a07b4dd0020)}, // 8
+    {0, 6, UINT64_C(0xfa3efd2f98ebc51a)}, // 9
+    {0, 6, UINT64_C(0xb62437c5ca6c8c46)}, // 10
+    {0, 10, UINT64_C(0x74f0af7d46949e0f)}, // 11
+    {0, 11, UINT64_C(0xe50d54fe7444f97a)}, // 12
+    {0, 11, UINT64_C(0x4b4b3fdeeffa264a)}, // 13
+    {0, 9, UINT64_C(0x9a444dc3d3c3ad76)}, // 14
+    {0, 2, UINT64_C(0x08395407b4f1363f)}, // 15
+    {0, 9, UINT64_C(0x985bacc3d2252af3)}, // 16
+    {0, 9, UINT64_C(0x1fa894435e5641fb)}, // 17
+    {0, 9, UINT64_C(0x796065bac7350752)}, // 18
+    {0, 64, UINT64_C(0x5ed35d1c6c312f36)}, // 19
+    {0, 36, UINT64_C(0xcff01d1e7460deea)}, // 20
+    {0, 49, UINT64_C(0x4bcc2b3597b00260)}, // 21
+    {0, 35, UINT64_C(0xa2372a75b751a4fd)}, // 22
+    {-5453, 0, UINT64_C(0xcbf29ce484222325)}, // 23
+    {0, 724, UINT64_C(0x3317a83016fd7347)}, // 24
+    {0, 732, UINT64_C(0x5e90d7506b04d1db)}, // 25
+    {0, 37, UINT64_C(0x82ed31060b6039ca)}, // 26
+    {-6284, 0, UINT64_C(0xcbf29ce484222325)}, // 27
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 28
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 29
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 30
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 31
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 32
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 33
+    {-5411, 0, UINT64_C(0xcbf29ce484222325)}, // 34
+    {0, 14, UINT64_C(0xf0f7206f9692423c)}, // 35
+    {0, 20, UINT64_C(0x5873fa23177cffa8)}, // 36
+    {0, 32, UINT64_C(0x9ebc98ae0a47c65b)}, // 37
+    {0, 92, UINT64_C(0x2813f6b4582de194)}, // 38
+    {0, 313, UINT64_C(0x7e9de440e132d9d5)}, // 39
+    {0, 1203, UINT64_C(0x6c916bf4465796ca)}, // 40
+    {0, 778, UINT64_C(0xf5ee7ae3812a1136)}, // 41
+    {0, 3218, UINT64_C(0xd1a649e07498f025)}, // 42
+    {0, 782, UINT64_C(0xb3e8039d37bb84f6)}, // 43
+    {0, 3232, UINT64_C(0x955d918b47a9ba15)}, // 44
+    {0, 914, UINT64_C(0x90a85791ce8a5947)}, // 45
+    {0, 3804, UINT64_C(0x0e76220a52a2d1eb)}, // 46
+    {0, 15014, UINT64_C(0x5254e0ca2163b82b)}, // 47
+    {0, 98906, UINT64_C(0x82dd8617631a2057)}, // 48
+    {0, 3, UINT64_C(0xae00de185389c2e0)}, // 49
+    {0, 17, UINT64_C(0x678941352c7e6967)}, // 50
+    {0, 129, UINT64_C(0xfc47dda4972d8eec)}, // 51
+    {0, 143, UINT64_C(0x6e7075c3af619bea)}, // 52
+    {0, 131, UINT64_C(0x6eb6b289400aa713)}, // 53
+    {0, 144, UINT64_C(0xe9c65eb65d8895be)}, // 54
+    {0, 258, UINT64_C(0xde57ed26bef3d05f)}, // 55
+    {0, 275, UINT64_C(0x8d603f79dc6a7233)}, // 56
+    {0, 259, UINT64_C(0x1e5d874591e61546)}, // 57
+    {0, 276, UINT64_C(0x653a457b145825ea)}, // 58
+    {0, 16386, UINT64_C(0xbe327ec26914ab21)}, // 59
+    {0, 16403, UINT64_C(0x1a7ba7d7b2f61991)}, // 60
+    {0, 16388, UINT64_C(0x9bcd7de2dbbc67d3)}, // 61
+    {0, 16404, UINT64_C(0x3a201568b8b544ca)}, // 62
+    {0, 350018, UINT64_C(0x08f055a96b74abd8)}, // 63
+    {0, 182, UINT64_C(0x7db531723b09b205)}, // 64
+    {-5453, 0, UINT64_C(0xcbf29ce484222325)}, // 65
+    {0, 182, UINT64_C(0x14520a450acc8d61)}, // 66
+    {0, 190, UINT64_C(0x831678d51863a951)}, // 67
+  };
+  if (cases.size() != sizeof(goldens) / sizeof(goldens[0])) { return 1; }
   int failures = 0;
-  for (const Case &item : cases) {
-    std::string old_bytes;
-    std::string direct_bytes;
-    int old_ret = old_binary(item.text, item.flags, old_bytes);
-    int direct_ret = direct_binary(item.text, item.flags, direct_bytes);
-    if (old_ret != direct_ret || old_bytes != direct_bytes) {
+  for (size_t index = 0; index < cases.size(); ++index) {
+    const Case &item = cases[index];
+    std::string bytes;
+    const int ret = direct_binary(item.text, item.flags, bytes);
+    uint64_t hash = UINT64_C(14695981039346656037);
+    for (unsigned char byte : bytes) {
+      hash ^= byte;
+      hash *= UINT64_C(1099511628211);
+    }
+    const Golden &golden = goldens[index];
+    if (ret != golden.status || bytes.size() != golden.length || hash != golden.hash) {
       ++failures;
-      std::printf("FAIL %s old_ret=%d direct_ret=%d old_size=%zu direct_size=%zu\n",
-                  item.name, old_ret, direct_ret, old_bytes.size(), direct_bytes.size());
-      size_t common = std::min(old_bytes.size(), direct_bytes.size());
-      size_t offset = 0;
-      while (offset < common && old_bytes[offset] == direct_bytes[offset]) {
-        ++offset;
-      }
-      std::printf("first_difference=%zu\n", offset);
+      std::printf("FAIL %s index=%zu ret=%d size=%zu hash=%016lx\n",
+          item.name, index, ret, bytes.size(), static_cast<unsigned long>(hash));
     }
   }
   std::printf("differential cases=%zu failures=%d\n", cases.size(), failures);
@@ -194,14 +251,7 @@ static int benchmark(const std::string &mode, const std::string &shape, size_t t
     ObString binary;
     auto start = std::chrono::steady_clock::now();
     int ret = OB_SUCCESS;
-    if (mode == "old") {
-      ObJsonNode *node = nullptr;
-      ret = ObJsonParser::get_tree(&allocator, text.data(), text.size(), node);
-      if (OB_SUCCESS == ret) {
-        ObJsonBinSerializer serializer(&allocator);
-        ret = serializer.serialize(node, binary);
-      }
-    } else if (mode == "validate") {
+    if (mode == "validate") {
       ret = ObJsonParser::check_json_syntax(ObString(text.size(), text.data()), &allocator);
     } else {
       ret = ObJsonParser::get_binary(&allocator, text.data(), text.size(), binary);
@@ -235,6 +285,6 @@ int main(int argc, char **argv)
     return oceanbase::common::benchmark(argv[2], argv[3], std::strtoull(argv[4], nullptr, 10),
                                        std::atoi(argv[5]));
   }
-  std::fprintf(stderr, "usage: %s [differential] | benchmark old|direct|validate SHAPE BYTES ITERATIONS\n", argv[0]);
+  std::fprintf(stderr, "usage: %s [differential] | benchmark direct|validate SHAPE BYTES ITERATIONS\n", argv[0]);
   return 2;
 }
