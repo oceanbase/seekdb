@@ -625,6 +625,10 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+  static int generate_column_name_with_escape_character(
+      common::ObIAllocator &allocator,
+      const common::ObString &src,
+      common::ObString &dst);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
@@ -783,3 +787,4 @@ public:
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_SHARE_OB_DDL_COMMON_H
+
