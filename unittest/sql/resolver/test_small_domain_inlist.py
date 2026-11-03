@@ -57,6 +57,25 @@ class SmallDomainInlistTest(unittest.TestCase):
         self.assertNotIn("VALUES TABLE ACCESS", plan)
         self.assertNotIn("SUBPLAN FILTER", plan)
 
+    def test_larger_domains_keep_the_existing_materialization(self):
+        values = ",".join(["1", "2", "3"] * 2048)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM t WHERE category IN (" + values + ")"),
+                         self.sql("SELECT COUNT(*) FROM t WHERE category IN (1,2,3)"))
+        plan = self.sql("EXPLAIN SELECT id FROM t WHERE category IN (" + values +
+                        ") ORDER BY l2_distance(embedding,'[1,0,0]') APPROXIMATE LIMIT 10")
+        self.assertIn("VALUES TABLE ACCESS", plan)
+
+    def test_unsigned_integer_boundaries(self):
+        self.sql("CREATE TABLE unsigned_values (v BIGINT UNSIGNED)")
+        self.sql("INSERT INTO unsigned_values VALUES (0),(9223372036854775808),"
+                 "(18446744073709551615),(NULL)")
+        for compact in ["0,9223372036854775808", "18446744073709551615,NULL"]:
+            repeated = ",".join([compact] * 1024)
+            for operator in ["IN", "NOT IN"]:
+                prefix = "SELECT COUNT(*) FROM unsigned_values WHERE v " + operator + " ("
+                self.assertEqual(self.sql(prefix + compact + ")"),
+                                 self.sql(prefix + repeated + ")"))
+
     def test_null_and_not_in_semantics(self):
         for compact in ["1,2,NULL", "NULL", "1,2,3"]:
             repeated = ",".join([compact] * 1024)

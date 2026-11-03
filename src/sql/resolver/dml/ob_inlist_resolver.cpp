@@ -34,6 +34,8 @@ namespace
 // chooses a plan shape: every original value/parameter remains in the predicate.
 // In particular, no equality constraint is assumed for later plan-cache reuse.
 constexpr int64_t SMALL_INTEGER_DOMAIN_LIMIT = 16;
+// Bound extra raw-expression/code-generation storage for the scalar form.
+constexpr int64_t MAX_INLINE_INTEGER_VALUES = 4096;
 
 bool has_small_integer_domain(const ParseNode &list,
                               const bool is_question_mark,
@@ -414,6 +416,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       is_question_mark = rewrite_info.is_question_mark_;
       if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt
           && !has_threshold_hint && threshold > SMALL_INTEGER_DOMAIN_LIMIT
+          && in_list.num_child_ <= MAX_INLINE_INTEGER_VALUES
           && has_small_integer_domain(in_list, is_question_mark, param_store)) {
         is_enable = false;
       }
