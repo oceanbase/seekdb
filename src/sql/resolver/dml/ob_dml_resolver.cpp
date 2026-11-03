@@ -5344,8 +5344,48 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        // An inner-product HNSW index scans negative_inner_product ascending.
+        // ORDER BY inner_product(...) DESC APPROXIMATE is the same ranking, but
+        // this resolver dropped APPROXIMATE for every inner_product sort and
+        // forced an exact scan. Rewrite only the sort key so a SELECT item that
+        // shares the original expression still projects a positive score.
+        OrderItem &order_item = stmt->get_order_item(0);
+        const bool descending_ip =
+            tmp_expr->get_expr_type() == T_FUN_SYS_INNER_PRODUCT
+            && (NULLS_FIRST_DESC == order_item.order_type_
+                || NULLS_LAST_DESC == order_item.order_type_);
+        if (!descending_ip && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
+          stmt->set_has_vec_approx(true);
+        } else if (descending_ip) {
+          ObSysFunRawExpr *negative_ip_expr = NULL;
+          if (OB_ISNULL(params_.expr_factory_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(
+                         T_FUN_SYS_NEGATIVE_INNER_PRODUCT, negative_ip_expr))) {
+          } else if (OB_ISNULL(negative_ip_expr)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            negative_ip_expr->set_func_name(
+                ObString::make_string(N_VECTOR_NEGATIVE_INNER_PRODUCT));
+            for (int64_t param_idx = 0;
+                 OB_SUCC(ret) && param_idx < tmp_expr->get_param_count();
+                 ++param_idx) {
+              if (OB_FAIL(negative_ip_expr->add_param_expr(
+                      tmp_expr->get_param_expr(param_idx)))) {
+              }
+            }
+            if (OB_FAIL(ret)) {
+            } else if (OB_FAIL(negative_ip_expr->formalize(session_info_))) {
+            } else {
+              order_item.expr_ = negative_ip_expr;
+              order_item.order_type_ = (NULLS_FIRST_DESC == order_item.order_type_)
+                                           ? NULLS_FIRST_ASC
+                                           : NULLS_LAST_ASC;
+              stmt->set_has_vec_approx(true);
+            }
+          }
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
