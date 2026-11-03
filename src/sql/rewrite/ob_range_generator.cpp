@@ -30,6 +30,7 @@
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -1614,15 +1615,12 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
 {
   int ret = OB_SUCCESS;
   common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObS2Cellids cells;
-  ObS2Cellids cells_with_ancestors;
-  ObSpatialMBR mbr_filter(op_type);
-  ObGeoType geo_type = ObGeoType::GEOMETRY;
+  ObSpatialCovering covering;
   const ObSrsItem *srs_item = NULL;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsBoundsItem *srs_bound = NULL;
-  ObS2Adapter *s2object = NULL;
   ObString buffer_geo;
+  double radius = 0.0;
   common::ObISrsProvider *srs_provider = exec_ctx_.get_srs_provider();
 
   if (OB_ISNULL(srs_provider)) {
@@ -1638,11 +1636,7 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
     } else if (input_srid != 0 && srs_item->is_geographical_srs()) {
       double sphere_radius = (srs_item->semi_major_axis() * 2 + srs_item->semi_minor_axis()) /  3;
       const double SPHERIOD_ERR_FRACTION = 0.005;
-      double radius = ((1.0 + SPHERIOD_ERR_FRACTION) * distance) / sphere_radius;
-      s2object = OB_NEWx(ObS2Adapter, (&tmp_alloc), (&tmp_alloc), true, radius);
-      if (OB_ISNULL(s2object)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
+      radius = std::min(M_PI, (distance / sphere_radius) * (1.0 + SPHERIOD_ERR_FRACTION));
     } else {
       if (OB_FAIL(ObGeoTypeUtil::get_buffered_geo(&tmp_alloc, wkb_str, distance, srs_item, buffer_geo))) {
         if (ret == OB_INVALID_ARGUMENT) {
@@ -1654,66 +1648,53 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
     }
   }
 
-  if (s2object == NULL && OB_SUCC(ret)) {
-    s2object = OB_NEWx(ObS2Adapter, (&tmp_alloc), (&tmp_alloc), (input_srid != 0 ? srs_item->is_geographical_srs() : false), true);
-    if (OB_ISNULL(s2object)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+  if (OB_SUCC(ret)) {
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SpatialCovering"));
+    if (OB_FAIL(build_spatial_covering(buffer_geo.empty() ? wkb_str : buffer_geo,
+                                       input_srid != 0 ? srs_item->is_geographical_srs() : false,
+                                       srs_bound,
+                                       ObSpatialCoveringKind::QUERY,
+                                       radius,
+                                       covering))) {
     }
   }
-
   if (OB_SUCC(ret)) {
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
-    // build s2 object from wkb
-    if (OB_FAIL(ObGeoTypeUtil::get_type_from_wkb((buffer_geo.empty() ? wkb_str : buffer_geo), geo_type))) {
-    } else if (OB_FAIL(s2object->init((buffer_geo.empty() ? wkb_str : buffer_geo), srs_bound))) {
-    } else if (OB_FAIL(s2object->get_cellids_and_unrepeated_ancestors(cells, cells_with_ancestors))) {
-    } else if (OB_FAIL(s2object->get_mbr(mbr_filter))) {
-    } else if (OB_FAIL(mbr_filters_.push_back(mbr_filter))) {
-    } else if (mbr_filter.is_empty()) {
-      if (cells.size() == 0) {
+    covering.mbr_.mbr_type_ = op_type;
+    if (OB_FAIL(mbr_filters_.push_back(covering.mbr_))) {
+    } else if (covering.mbr_.is_empty()) {
+      if (covering.cells_.size() == 0) {
         LOG_INFO("it's might be empty geometry collection", K(wkb_str));
         geo_param->always_true_ = true;
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
       }
     } else {
-      int64_t range_count = cells_with_ancestors.size();
-      range_count += cells.size();
+      int64_t range_count = covering.ancestors_.size() + covering.cells_.size();
       if (OB_FAIL(geo_param->start_keys_.init(range_count))) {
       } else if (OB_FAIL(geo_param->end_keys_.init(range_count))) {
       }
-      // build keypart from cells_with_ancestors
-      for (uint64_t i = 0; OB_SUCC(ret) && i < cells_with_ancestors.size(); i++) {
-        if (OB_FAIL(geo_param->start_keys_.push_back(cells_with_ancestors[i]))) {
-        } else if (OB_FAIL(geo_param->end_keys_.push_back(cells_with_ancestors[i]))) {
+      // Exact ancestor keys find index cells at coarser levels.
+      for (uint64_t i = 0; OB_SUCC(ret) && i < covering.ancestors_.size(); i++) {
+        if (OB_FAIL(geo_param->start_keys_.push_back(covering.ancestors_[i]))) {
+        } else if (OB_FAIL(geo_param->end_keys_.push_back(covering.ancestors_[i]))) {
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (((geo_type != ObGeoType::POINT && geo_type != ObGeoType::POINTZ) || !std::isnan(distance))) {
-        // build keypart to index child_of_cellid
-        for (uint64_t i = 0; OB_SUCC(ret) && i < cells.size(); i++) {
-          uint64_t cellid = cells.at(i);
-          uint64_t start_id = 0;
-          uint64_t end_id = 0;
-          ObS2Adapter::get_child_of_cellid(cellid, start_id, end_id);
-          if (OB_FAIL(geo_param->start_keys_.push_back(start_id))) {
-          } else if (OB_FAIL(geo_param->end_keys_.push_back(end_id))) {
+      } else if (covering.ranges_.size() > 0) {
+        for (uint64_t i = 0; OB_SUCC(ret) && i < covering.ranges_.size(); i++) {
+          if (OB_FAIL(geo_param->start_keys_.push_back(covering.ranges_[i].start_))) {
+          } else if (OB_FAIL(geo_param->end_keys_.push_back(covering.ranges_[i].end_))) {
           }
         }
       } else {
-        for (uint64_t i = 0; OB_SUCC(ret) && i < cells.size(); i++) {
-          if (OB_FAIL(geo_param->start_keys_.push_back(cells[i]))) {
-          } else if (OB_FAIL(geo_param->end_keys_.push_back(cells[i]))) {
+        for (uint64_t i = 0; OB_SUCC(ret) && i < covering.cells_.size(); i++) {
+          if (OB_FAIL(geo_param->start_keys_.push_back(covering.cells_[i]))) {
+          } else if (OB_FAIL(geo_param->end_keys_.push_back(covering.cells_[i]))) {
           }
         }
       }
     }
   }
-
-  if (OB_NOT_NULL(s2object)) {
-    s2object->~ObS2Adapter();
-  }
-
   return ret;
 }
 
@@ -1723,14 +1704,10 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
                                                   ObTmpGeoParam *geo_param)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObS2Cellids cells;
-  ObSpatialMBR mbr_filter(op_type);
+  ObSpatialCovering covering;
   const ObSrsItem *srs_item = NULL;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsBoundsItem *srs_bound = NULL;
-  ObS2Adapter *s2object = NULL;
-  ObString buffer_geo;
   common::ObISrsProvider *srs_provider = exec_ctx_.get_srs_provider();
 
   if (OB_ISNULL(srs_provider)) {
@@ -1741,79 +1718,42 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
   } else if (((input_srid == 0) || !(srs_item->is_geographical_srs())) &&
              OB_FAIL(srs_provider->get_srs_bounds(input_srid, srs_item, srs_bound))) {
   }
-  if (s2object == NULL && OB_SUCC(ret)) {
-    s2object = OB_NEWx(ObS2Adapter, (&tmp_alloc), (&tmp_alloc), (input_srid != 0 ? srs_item->is_geographical_srs() : false));
-    if (OB_ISNULL(s2object)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+  if (OB_SUCC(ret)) {
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SpatialCovering"));
+    if (OB_FAIL(build_spatial_covering(wkb_str,
+                                       input_srid != 0 ? srs_item->is_geographical_srs() : false,
+                                       srs_bound,
+                                       ObSpatialCoveringKind::COVERED_BY,
+                                       0.0,
+                                       covering))) {
     }
   }
-
   if (OB_SUCC(ret)) {
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
-    // build s2 object from wkb
-    if (OB_FAIL(s2object->init((buffer_geo.empty() ? wkb_str : buffer_geo), srs_bound))) {
-    } else if (OB_FAIL(s2object->get_inner_cover_cellids(cells))) {
-    } else if (OB_FAIL(s2object->get_mbr(mbr_filter))) {
-    } else if (OB_FAIL(mbr_filters_.push_back(mbr_filter))) {
-    } else if (mbr_filter.is_empty()) {
-      if (cells.size() == 0) {
+    covering.mbr_.mbr_type_ = op_type;
+    if (OB_FAIL(mbr_filters_.push_back(covering.mbr_))) {
+    } else if (covering.mbr_.is_empty()) {
+      if (covering.cells_.size() == 0) {
         LOG_INFO("it's might be empty geometry collection", K(wkb_str));
         geo_param->always_true_ = true;
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
       }
     } else {
-      hash::ObHashSet<uint64_t> cellid_set;
-      if (OB_FAIL(cellid_set.create(128, "CoveredByKeyPart", "HashNode"))) {
-      } else if (!cellid_set.created()) {
-        ret = OB_NOT_INIT;
+      const int64_t range_count = covering.cells_.size() + covering.ancestors_.size();
+      if (OB_FAIL(geo_param->start_keys_.init(range_count))) {
+      } else if (OB_FAIL(geo_param->end_keys_.init(range_count))) {
       }
-      for (uint64_t i = 0; OB_SUCC(ret) && i < cells.size(); i++) {
-        int hash_ret = cellid_set.exist_refactored(cells[i]);
-        ObS2Cellids ancestors;
-        if (OB_HASH_NOT_EXIST == hash_ret) {
-          if (OB_FAIL(cellid_set.set_refactored(cells[i]))) {
-          }
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(s2object->get_ancestors(cells[i], ancestors))) {
-          }
-          // if cur cellid is exists in set, then it's ancestors also exist in set
-          int hash_ret = OB_HASH_NOT_EXIST;
-          for (uint64_t i = 0; OB_SUCC(ret) && i < ancestors.size(); i++) {
-            hash_ret = cellid_set.exist_refactored(ancestors[i]);
-            if (hash_ret == OB_HASH_NOT_EXIST) {
-              if (OB_FAIL(cellid_set.set_refactored(ancestors[i]))) {
-              }
-            } else if (OB_HASH_EXIST != hash_ret) {
-              ret = hash_ret;
-            }
-          }
-        } else if (OB_HASH_EXIST != hash_ret) {
-          ret = hash_ret;
+      for (uint64_t i = 0; OB_SUCC(ret) && i < covering.cells_.size(); i++) {
+        if (OB_FAIL(geo_param->start_keys_.push_back(covering.cells_[i]))) {
+        } else if (OB_FAIL(geo_param->end_keys_.push_back(covering.cells_[i]))) {
         }
       }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(geo_param->start_keys_.init(cellid_set.size()))) {
-        } else if (OB_FAIL(geo_param->end_keys_.init(cellid_set.size()))) {
-        } else {
-          for (hash::ObHashSet<uint64_t>::const_iterator itr = cellid_set.begin(); OB_SUCC(ret) && itr != cellid_set.end();
-               ++itr) {
-            if (OB_FAIL(geo_param->start_keys_.push_back(itr->first))) {
-            } else if (OB_FAIL(geo_param->end_keys_.push_back(itr->first))) {
-            }
-          }
-        }
-      }
-      // clear hashset
-      if (cellid_set.created()) {
-        int tmp_ret = cellid_set.destroy();
-        if (OB_SUCC(ret) && OB_FAIL(tmp_ret)) {
+      for (uint64_t i = 0; OB_SUCC(ret) && i < covering.ancestors_.size(); i++) {
+        if (OB_FAIL(geo_param->start_keys_.push_back(covering.ancestors_[i]))) {
+        } else if (OB_FAIL(geo_param->end_keys_.push_back(covering.ancestors_[i]))) {
         }
       }
     }
-  }
-  if (OB_NOT_NULL(s2object)) {
-    s2object->~ObS2Adapter();
   }
   return ret;
 }

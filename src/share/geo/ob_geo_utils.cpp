@@ -1708,27 +1708,29 @@ int ObGeoTypeUtil::geo_close_ring(ObGeometry &geo, ObIAllocator &allocator)
 int ObGeoTypeUtil::get_cellid_mbr_from_geom(const ObString &wkb_str,
                                             const ObSrsItem *srs_item,
                                             const ObSrsBoundsItem *srs_bound,
-                                            ObS2Cellids &cellids,
+                                            ObSpatialCellIds &cellids,
                                             ObString &mbr_val)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(lib::ObLabel("GisIndexRebuild"));
-  ObS2Adapter s2object(&tmp_allocator, srs_item == NULL ? false : srs_item->is_geographical_srs());
-  ObSpatialMBR spa_mbr;
+  ObSpatialCovering covering;
   char *mbr = mbr_val.ptr();
   int64_t mbr_len = 0;
-  if (OB_FAIL(s2object.init(wkb_str, srs_bound))) {
-  } else if (OB_FAIL(s2object.get_cellids(cellids, false))) {
-  } else if (OB_FAIL(s2object.get_mbr(spa_mbr))) {
-  } else if (spa_mbr.is_empty()) {
-    if (cellids.size() == 0) {
+  if (OB_FAIL(build_spatial_covering(wkb_str,
+                                     OB_NOT_NULL(srs_item) && srs_item->is_geographical_srs(),
+                                     srs_bound,
+                                     ObSpatialCoveringKind::INDEX,
+                                     0.0,
+                                     covering))) {
+  } else if (covering.mbr_.is_empty()) {
+    if (covering.cells_.size() == 0) {
     } else {
       ret = OB_ERR_GIS_INVALID_DATA;
     }
   } else if (OB_ISNULL(mbr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc memory for spatial index row mbr", K(ret), K(mbr));
-  } else if (OB_FAIL(spa_mbr.to_char(mbr, mbr_len))) {
+  } else if (OB_FAIL(covering.mbr_.to_char(mbr, mbr_len))) {
+  } else if (OB_FAIL(cellids.assign(covering.cells_))) {
   } else {
     mbr_val.assign_ptr(mbr, mbr_len);
   }

@@ -53,8 +53,6 @@ def observer_third_party_link_files(platform):
     if android:
         files += ["lib/libspdlog.a"]
     files += ["lib/libcurl.a", "lib/libssl.a", "lib/libcrypto.a"]
-    # The native macOS SDK retains S2 in lib64.
-    files += [("lib" if android else "lib64") + "/libs2.a"]
     files += [lib64 + "/" + name for name in _ABSL_ARCHIVE_NAMES]
     labels += [repository + "//:" + file for file in files]
     labels += [":_roaring_core_link"]

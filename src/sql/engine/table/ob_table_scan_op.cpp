@@ -3507,7 +3507,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
           const ObSrsBoundsItem *srs_bound = NULL;
           common::ObISrsProvider *srs_provider = get_exec_ctx().get_srs_provider();
           
-          ObS2Cellids cellids;
+          ObSpatialCellIds cellids;
           ObString mbr_val(0, static_cast<char *>(domain_index_.mbr_buffer_));
 
           ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);

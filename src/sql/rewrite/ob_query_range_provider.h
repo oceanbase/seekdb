@@ -20,7 +20,7 @@
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_mbr.h"
 namespace oceanbase
 {
 namespace common

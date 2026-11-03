@@ -26,7 +26,6 @@ SDK_HEADERS = {
     "openssl_headers": _headers("openssl"),
     "rapidjson_headers": _headers("rapidjson"),
     "roaring_headers": _headers("roaring"),
-    "s2_headers": _headers("s2"),
     "vsag_headers": _headers("vsag"),
     "zlib_headers": {"hdrs": ["include/zconf.h", "include/zlib.h"], "includes": ["include"]},
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
@@ -94,7 +93,6 @@ _WINDOWS_HEADER_LIBRARIES = {
     "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
-    "s2_headers": [":s2"],
     "vsag_headers": [":vsag"],
     "zlib_headers": [":zlib"],
     "windows_headers": [":pthreads", ":compiler_runtime"],
@@ -113,7 +111,6 @@ def _windows_libraries():
     # Archives within one upstream package stay private to its library target.
     archives = {
         "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
-        "s2": (["lib/s2.lib"], [":absl", ":libssl"]),
         "vsag": (["vsag/" + name + ".lib" for name in [
             "cpuinfo", "simd", "vsag_static", "diskann", "openblas",
             "antlr4-runtime-static", "antlr4-autogen", "fmt",
@@ -154,7 +151,6 @@ def sdk_targets(windows = False):
 _SOURCE_HEADERS = {
     "absl_headers": ("abseil", "abseil"),
     "roaring_headers": ("roaring", "roaring"),
-    "s2_headers": ("s2_ios", "s2_wasm"),
     "vsag_headers": ("vsag_ios", "vsag_wasm"),
 }
 

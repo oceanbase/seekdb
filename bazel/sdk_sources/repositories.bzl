@@ -35,7 +35,7 @@ _source = repository_rule(
 def _sdk_sources_impl(ctx):
     manifest = json.decode(ctx.read(Label("//bazel/sdk_sources:dependencies.json")))
     for name in manifest["sources"]:
-        profiles = ["ios", "wasm"] if name in ["s2", "vsag"] else [""]
+        profiles = ["ios", "wasm"] if name == "vsag" else [""]
         for profile in profiles:
             _source(
                 name = "sdk_" + name + ("_" + profile if profile else ""),

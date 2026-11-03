@@ -65,7 +65,7 @@ def _third_party_headers_repository_impl(repository_ctx):
         libraries = prefix + "/lib"
         libraries64 = libraries
     source_headers = [
-        "absl", "s2", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
+        "absl", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
         "lapacke_config.h", "lapacke_mangling.h", "lapacke_utils.h", "cblas.h",
     ]

@@ -218,8 +218,6 @@ sdk_sources = use_extension("//bazel/sdk_sources:repositories.bzl", "sdk_sources
 use_repo(
     sdk_sources,
     "sdk_abseil",
-    "sdk_s2_ios",
-    "sdk_s2_wasm",
     "sdk_roaring",
     "sdk_vsag_ios",
     "sdk_vsag_wasm",
