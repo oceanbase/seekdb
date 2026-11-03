@@ -6,4 +6,4 @@ publish = false
 
 [dependencies]
 cxx = "1"
-fast-float = "0.2"
+fast-float2 = "0.2.4"

@@ -94,7 +94,7 @@ pub fn parse_f64(input: &[u8]) -> Result<f64> {
     if input.is_empty() || input[0] == b'+' {
         return Err(invalid());
     }
-    let (value, consumed) = fast_float::parse_partial(input).map_err(|_| invalid())?;
+    let (value, consumed) = fast_float2::parse_partial(input).map_err(|_| invalid())?;
     let consumed = float_consumed(input, value, consumed)?;
     Ok(Parsed { value, consumed })
 }
@@ -103,7 +103,7 @@ pub fn parse_f32(input: &[u8]) -> Result<f32> {
     if input.is_empty() || input[0] == b'+' {
         return Err(invalid());
     }
-    let (value, consumed) = fast_float::parse_partial(input).map_err(|_| invalid())?;
+    let (value, consumed) = fast_float2::parse_partial(input).map_err(|_| invalid())?;
     let consumed = float_consumed(input, f64::from(value), consumed)?;
     Ok(Parsed { value, consumed })
 }
