@@ -30,13 +30,28 @@ namespace sql
 class GraphFeedbackRuntime;
 class GraphShortestRowAdmission;
 
+// The reverse scan exists only for eligible bound-pair shortest plans. Keep
+// its access and edge-scan descriptions together so ordinary graph plans do
+// not send an invalid, default-initialized descriptor across a PX DFO.
+struct GraphReverseAccessDesc
+{
+  OB_UNIS_VERSION(1);
+public:
+  explicit GraphReverseAccessDesc(common::ObIAllocator &allocator)
+      : edge_scan_desc_(allocator)
+  {}
+
+  GraphExpandAccessDesc access_desc_{};
+  GraphExpandScanDesc edge_scan_desc_;
+};
+
 // The graph operator has its own semantic spec while temporarily sharing the
 // recursive row-pump mechanics used by recursive CTE.  A later increment can
 // replace RecursivePumpOp with GraphExpand/frontier execution without changing
 // the recursive CTE operator hierarchy.
 class GraphFeedbackLoopSpec final : public RecursivePumpSpec
 {
-  OB_UNIS_VERSION_V(3);
+  OB_UNIS_VERSION_V(4);
 public:
   explicit GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                  const ObPhyOperatorType type);
@@ -49,6 +64,11 @@ public:
   void set_expand_access(const GraphExpandAccessDesc &expand_access_desc)
   {
     expand_access_desc_ = expand_access_desc;
+  }
+  void set_reverse_expand_access(
+      const GraphExpandAccessDesc &reverse_expand_access_desc)
+  {
+    reverse_access_desc_.access_desc_ = reverse_expand_access_desc;
   }
   void set_native_step_supported(bool supported)
   {
@@ -72,6 +92,8 @@ public:
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const
   { return expand_access_desc_; }
+  const GraphExpandAccessDesc &get_reverse_expand_access_desc() const
+  { return reverse_access_desc_.access_desc_; }
   const GraphFeedbackRowDesc &get_output_row_desc() const
   { return output_row_desc_; }
   int64_t get_lower_bound() const { return path_desc_.lower_bound_; }
@@ -82,6 +104,10 @@ public:
   { return source_scan_desc_; }
   const GraphExpandScanDesc &get_edge_scan_desc() const
   { return edge_scan_desc_; }
+  GraphExpandScanDesc &get_reverse_edge_scan_desc()
+  { return reverse_access_desc_.edge_scan_desc_; }
+  const GraphExpandScanDesc &get_reverse_edge_scan_desc() const
+  { return reverse_access_desc_.edge_scan_desc_; }
   const GraphExpandScanDesc &get_target_scan_desc() const
   { return target_scan_desc_; }
   ExprFixedArray &get_seed_key_exprs() { return seed_key_exprs_; }
@@ -108,6 +134,7 @@ public:
 private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
+  GraphReverseAccessDesc reverse_access_desc_;
   GraphFeedbackRowDesc output_row_desc_{};
   bool native_step_supported_{false};
   bool prune_duplicate_states_{false};

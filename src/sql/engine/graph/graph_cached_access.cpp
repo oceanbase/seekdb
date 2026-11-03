@@ -67,9 +67,9 @@ void GraphCachedAccess::clear()
   cache_.clear();
 }
 
-int64_t GraphCachedAccess::used_memory() const
+int64_t GraphCachedAccess::retained_wrapper_memory() const
 {
-  const int64_t parts[] = {child_.used_memory(), cache_.used_memory(),
+  const int64_t parts[] = {cache_.used_memory(),
       hits_.get_data_size(), misses_.get_data_size(), cursor_allocator_.total()};
   int64_t bytes = 0;
   for (int64_t part : parts) {
@@ -77,6 +77,15 @@ int64_t GraphCachedAccess::used_memory() const
     bytes += part;
   }
   return bytes;
+}
+
+int64_t GraphCachedAccess::used_memory() const
+{
+  const int64_t child_memory = child_.used_memory();
+  const int64_t wrapper_memory = retained_wrapper_memory();
+  return child_memory < 0 || wrapper_memory < 0
+      || child_memory > INT64_MAX - wrapper_memory
+      ? INT64_MAX : child_memory + wrapper_memory;
 }
 
 int GraphCachedAccess::begin(const ObIArray<GraphElementIdentity> &sources)
@@ -163,6 +172,39 @@ int GraphCachedAccess::scan_edges(const ObIArray<GraphElementIdentity> &sources,
     }
   }
   if (OB_FAIL(ret)) { clear(); edges.reuse(); end = false; }
+  return ret;
+}
+
+int GraphCachedAccess::probe_adjacency_rows(
+    const ObIArray<GraphElementIdentity> &sources,
+    GraphPathDirection direction, int64_t raw_row_limit,
+    int64_t &scanned_rows, bool &complete, int64_t &peak_memory)
+{
+  int ret = OB_SUCCESS;
+  scanned_rows = 0;
+  complete = false;
+  peak_memory = 0;
+  // A cost probe is deliberately independent of adjacency reuse: cached rows
+  // do not describe the physical DAS work of the next indexed level. Abort
+  // any request-local playback/recording before delegating to the child.
+  release();
+  const int64_t wrapper_memory = retained_wrapper_memory();
+  if (OB_FAIL(check_status())) {
+  } else {
+    ret = child_.probe_adjacency_rows(
+        sources, direction, raw_row_limit,
+        scanned_rows, complete, peak_memory);
+  }
+  // Enforce the probe contract even if a child failure left a live cursor.
+  child_.release();
+  if (OB_SUCC(ret)) {
+    // probe_level() replaces this adapter's resident bytes with peak_memory.
+    // Completed cache entries remain live while the child probes, so include
+    // them and the wrapper's retained buffers in the replacement value.
+    peak_memory = peak_memory < 0 || wrapper_memory < 0
+        || peak_memory > INT64_MAX - wrapper_memory
+        ? INT64_MAX : peak_memory + wrapper_memory;
+  }
   return ret;
 }
 

@@ -50,6 +50,12 @@ public:
                  int64_t limit,
                  common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end);
+  // Cost-only indexed scan. No edge is published or retained, and the DAS
+  // cursor is closed before returning even when the row budget is reached.
+  int probe_adjacency_rows(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      GraphPathDirection direction, int64_t raw_row_limit,
+      int64_t &scanned_rows, bool &complete, int64_t &peak_memory);
 private:
   // Binds the three typed identities carried by one physical edge row. The
   // output ctdef is the base-table lookup when an adjacency index needs index
@@ -97,7 +103,14 @@ private:
       int64_t limit,
       common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges,
-      bool &end);
+      bool &end, int64_t raw_row_limit, bool count_only,
+      int64_t *peak_memory);
+  int scan_edges_impl(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      GraphPathDirection direction, const GraphElementIdentity *after_edge,
+      int64_t limit, common::ObIArray<GraphExpandEdge> &edges,
+      int64_t &scanned_edges, bool &end,
+      int64_t raw_row_limit, bool count_only, int64_t *peak_memory);
   int reset_edge_scan(int ret, bool retain_allocator_page);
   int build_edge_source_index(
       const common::ObIArray<GraphElementIdentity> &sources);
@@ -114,6 +127,7 @@ private:
   // two edge pages, so it owns a separate deep copy of the last edge rowkey.
   common::ObArenaAllocator edge_cursor_allocator_;
   GraphIdentityIndex edge_source_index_;
+  common::ObArray<GraphExpandEdge> probe_edges_;
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc access_desc_{};
   EdgeScanBinding edge_binding_{};

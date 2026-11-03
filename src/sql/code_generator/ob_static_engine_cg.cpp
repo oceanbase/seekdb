@@ -1214,6 +1214,7 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   } else {
     spec.set_graph_path(op.get_path_desc());
     spec.set_expand_access(op.get_expand_access_desc());
+    spec.set_reverse_expand_access(op.get_reverse_expand_access_desc());
     spec.set_native_step_supported(op.is_native_step_supported());
     spec.set_prune_duplicate_states(prune_duplicate_states);
     if (goal_value_expr != nullptr) {
@@ -1269,6 +1270,54 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   if (OB_SUCC(ret)
       && OB_FAIL(spec.remove_native_edge_identity_filters(identity_rt_exprs))) {
     LOG_WARN("failed to remove native graph identity filters", K(ret));
+  }
+  if (OB_SUCC(ret)
+      && op.get_reverse_expand_access_desc().uses_adjacency_index()) {
+    const ObLogTableScan *edge_scan = op.get_step_edge_scan();
+    GraphExpandScanDesc &reverse_scan = spec.get_reverse_edge_scan_desc();
+    ObArray<ObRawExpr *> reverse_filters;
+    if (OB_ISNULL(edge_scan)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(reverse_scan.init_for_owned_ctdef(
+                   spec.get_edge_scan_desc()))) {
+      LOG_WARN("failed to initialize reverse graph scan snapshot", K(ret));
+    } else if (OB_FAIL(tsc_cg_service_.generate_graph_reverse_edge_ctdef(
+                   *edge_scan,
+                   op.get_reverse_expand_access_desc().edge_access_table_id_,
+                   op.get_reverse_rowkey_exprs(),
+                   spec.get_edge_scan_desc().get_tsc_ctdef(),
+                   reverse_scan.get_owned_tsc_ctdef()))) {
+      LOG_WARN("failed to generate reverse graph adjacency index ctdef", K(ret),
+               K(op.get_reverse_expand_access_desc()));
+    }
+    // The forward physical scan may have pushed predicates into its DAS
+    // ctdef. Re-evaluate every real edge predicate after reverse index-back,
+    // excluding only the generated frontier equality enforced by the range.
+    for (int64_t i = 0; OB_SUCC(ret) && i < edge_scan->get_filter_exprs().count(); ++i) {
+      ObRawExpr *filter = edge_scan->get_filter_exprs().at(i);
+      if (OB_ISNULL(filter)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!has_exist_in_array(identity_filters, filter)
+                 && OB_FAIL(reverse_filters.push_back(filter))) {
+      }
+    }
+    ObArray<ObRawExpr *> reverse_filter_raw_exprs;
+    if (OB_SUCC(ret) && !reverse_filters.empty()
+        && OB_FAIL(reverse_scan.filters_.reserve(reverse_filters.count()))) {
+      LOG_WARN("failed to reserve reverse graph edge filters", K(ret));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < reverse_filters.count(); ++i) {
+      ObExpr *filter = nullptr;
+      // The recursive child has already compiled these predicates. They are
+      // borrowed by reverse DAS, not calculated by the feedback-loop op.
+      if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+              *reverse_filters.at(i), reverse_filter_raw_exprs, filter))) {
+        LOG_WARN("failed to compile reverse graph edge filter", K(ret), K(i));
+      } else if (OB_ISNULL(filter)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(reverse_scan.filters_.push_back(filter))) {
+      }
+    }
   }
   // These expressions are also owned by the recursive child. Do not register
   // them as feedback-loop calc expressions: native DAS evaluates just their

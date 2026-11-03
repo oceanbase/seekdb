@@ -20,6 +20,8 @@
 #include "sql/engine/graph/graph_binding_store.h"
 #include "sql/engine/graph/graph_expand_das_access.h"
 #include "sql/engine/graph/graph_cached_access.h"
+#include "sql/engine/graph/graph_bidirectional_shortest.h"
+#include "sql/engine/graph/graph_feedback_output.h"
 #include "sql/engine/graph/graph_shortest_row_admission.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/ob_sql_mem_mgr_processor.h"
@@ -27,8 +29,6 @@
 #include "share/ob_errno.h"
 #include "share/ob_debug_sync.h"
 #include "sql/engine/table/ob_table_scan_op.h"
-#include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "share/ob_json_access_utils.h"
 
 #include <algorithm>
 #include <utility>
@@ -38,6 +38,50 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+OB_DEF_SERIALIZE(GraphReverseAccessDesc)
+{
+  int ret = OB_SUCCESS;
+  const bool present = access_desc_.is_valid();
+  if (OB_UNLIKELY(present != edge_scan_desc_.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("incomplete reverse graph access description", K(ret), K(present));
+  } else {
+    OB_UNIS_ENCODE(present);
+    if (OB_SUCC(ret) && present) {
+      OB_UNIS_ENCODE(access_desc_);
+      OB_UNIS_ENCODE(edge_scan_desc_);
+    }
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(GraphReverseAccessDesc)
+{
+  int ret = OB_SUCCESS;
+  bool present = false;
+  OB_UNIS_DECODE(present);
+  if (OB_SUCC(ret) && present) {
+    OB_UNIS_DECODE(access_desc_);
+    OB_UNIS_DECODE(edge_scan_desc_);
+    if (OB_SUCC(ret) && (!access_desc_.is_valid() || !edge_scan_desc_.is_valid())) {
+      ret = OB_DESERIALIZE_ERROR;
+    }
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(GraphReverseAccessDesc)
+{
+  int64_t len = 0;
+  const bool present = access_desc_.is_valid();
+  OB_UNIS_ADD_LEN(present);
+  if (present) {
+    OB_UNIS_ADD_LEN(access_desc_);
+    OB_UNIS_ADD_LEN(edge_scan_desc_);
+  }
+  return len;
+}
 
 
 namespace
@@ -70,11 +114,15 @@ public:
                 memory_limit),
         frontier_(binding_store_.get_work_area_allocator(), expand_,
                   GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE, memory_limit),
-        payload_allocator_(binding_store_.get_work_area_allocator()),
+        reverse_access_(exec_ctx, eval_ctx,
+                        binding_store_.get_work_area_allocator()),
+        shortest_search_(binding_store_.get_work_area_allocator(),
+                         cached_access_, reverse_access_, memory_limit),
+        row_materializer_(eval_ctx,
+                          binding_store_.get_work_area_allocator()),
         goal_allocator_(binding_store_.get_work_area_allocator()),
-        output_batch_allocator_(binding_store_.get_work_area_allocator()),
-        output_batch_rows_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-            ModulePageAllocator(binding_store_.get_work_area_allocator(), "GraphOutBatch")),
+        output_batch_(eval_ctx,
+                      binding_store_.get_work_area_allocator()),
         memory_limit_(memory_limit)
   {}
   ~GraphFeedbackRuntime() = default;
@@ -99,6 +147,10 @@ public:
           || row.payload_expr_count_ != 0 || row.trail_key_expr_count_ != 0);
       const bool ordinary_select = plan_ctx != nullptr && plan_ctx->get_phy_plan() != nullptr
           && plan_ctx->get_phy_plan()->is_plain_select();
+      bidirectional_snapshot_eligible_ = ordinary_select
+          && spec.get_source_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_ == TableItem::NOT_USING
+          && spec.get_edge_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_ == TableItem::NOT_USING
+          && spec.get_target_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_ == TableItem::NOT_USING;
       expand_.set_sources_verified(ordinary_select
           && spec.get_path_desc().source_element_id_ == spec.get_path_desc().target_element_id_
           && spec.get_source_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_ == TableItem::NOT_USING
@@ -174,6 +226,8 @@ public:
     }
     if (OB_SUCC(ret) && OB_FAIL(init_shortest_goal(spec))) {
       LOG_WARN("failed to initialize graph shortest goal", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(init_shortest_search(spec))) {
+      LOG_WARN("failed to initialize graph bidirectional shortest search", K(ret));
     }
     if (OB_SUCCESS != ret) {
       ret = normalize_work_area_error(ret);
@@ -205,10 +259,16 @@ public:
     if (frontier_.is_expanding()) {
       add_hop_stats(frontier_.get_pending_hop_stats(), stats);
     }
+    if (shortest_search_enabled_ || shortest_search_finished_) {
+      add_hop_stats(shortest_search_.get_stats(), stats);
+    }
     return stats;
   }
   int64_t get_expanded_hop_count() const
-  { return expanded_hop_count_ + (frontier_.is_expanding() ? 1 : 0); }
+  {
+    return expanded_hop_count_ + (frontier_.is_expanding() ? 1 : 0)
+        + shortest_search_.get_expanded_hop_count();
+  }
 
   int get_output_state(const GraphFeedbackLoopSpec &spec,
                        int64_t index,
@@ -311,18 +371,26 @@ public:
     const ObIArray<GraphPathState> *path = nullptr;
     if (!seeds_loaded_ && OB_FAIL(load_seeds(anchor, spec))) {
       LOG_WARN("failed to load native graph feedback seeds", K(ret));
+    } else if (shortest_search_enabled_) {
+      ret = get_next_shortest_output_row(anchor, spec);
     } else if (OB_FAIL(get_next_output_path(
                    spec, anchor.get_spec().output_, path))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("failed to get native graph feedback path", K(ret));
       }
-    } else if (OB_FAIL(materialize_basic_output_row(spec, *path))) {
-      LOG_WARN("failed to materialize basic graph feedback output", K(ret));
-    } else if (goal_found_) {
-      // The next fetch (or close) releases the frontier. Releasing here could
-      // invalidate variable-length key data still read by the parent operator.
-      goal_finished_ = true;
-      goal_found_ = false;
+    } else {
+      ret = row_materializer_.materialize_path(spec, *path);
+      cumulative_stats_.peak_path_memory_ = std::max(
+          cumulative_stats_.peak_path_memory_, binding_store_.used_memory());
+      if (OB_SUCCESS != ret) {
+        ret = normalize_work_area_error(ret);
+        LOG_WARN("failed to materialize basic graph feedback output", K(ret));
+      } else if (goal_found_) {
+        // The next fetch (or close) releases the frontier. Releasing here could
+        // invalidate variable-length key data still read by the parent operator.
+        goal_finished_ = true;
+        goal_found_ = false;
+      }
     }
     if (OB_SUCCESS != ret && OB_ITER_END != ret) {
       reset();
@@ -377,18 +445,12 @@ public:
   { return frontier_.is_expanding() && next_output_index_ == 1; }
   void begin_output_batch()
   {
-    output_batch_rows_.reuse();
-    output_batch_allocator_.reuse();
+    output_batch_.begin();
   }
 
   int save_output_row(const GraphFeedbackLoopSpec &spec)
   {
-    int ret = OB_SUCCESS;
-    ObChunkDatumStore::StoredRow *row = nullptr;
-    if (OB_FAIL(ObChunkDatumStore::StoredRow::build(
-            row, spec.output_union_exprs_, eval_ctx_, output_batch_allocator_))) {
-    } else if (OB_FAIL(output_batch_rows_.push_back(row))) {
-    }
+    int ret = output_batch_.stage(spec.output_union_exprs_);
     cumulative_stats_.peak_path_memory_ = std::max(
         cumulative_stats_.peak_path_memory_, binding_store_.used_memory());
     return normalize_work_area_error(ret);
@@ -396,27 +458,17 @@ public:
 
   int restore_output_batch(const GraphFeedbackLoopSpec &spec)
   {
-    int ret = OB_SUCCESS;
-    ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
-    guard.set_batch_size(output_batch_rows_.count());
-    for (int64_t i = 0; OB_SUCC(ret) && i < output_batch_rows_.count(); ++i) {
-      guard.set_batch_idx(i);
-      ret = output_batch_rows_.at(i)->to_expr(spec.output_union_exprs_, eval_ctx_);
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < spec.output_union_exprs_.count(); ++i) {
-      ObExpr *expr = spec.output_union_exprs_.at(i);
-      expr->set_evaluated_projected(eval_ctx_);
-      expr->get_eval_info(eval_ctx_).notnull_ = false;
-      expr->get_eval_info(eval_ctx_).point_to_frame_ = false;
-    }
-    return ret;
+    return output_batch_.publish(spec.output_union_exprs_);
   }
   bool has_live_edge_scan_resources() const
   { return access_.has_live_edge_scan_resources(); }
   bool resources_released() const
   {
     return access_.edge_scan_resources_released()
-        && access_.used_memory() == 0 && binding_store_.count() == 0
+        && reverse_access_.edge_scan_resources_released()
+        && shortest_search_.resources_released()
+        && access_.used_memory() == 0 && reverse_access_.used_memory() == 0
+        && binding_store_.count() == 0
         && !frontier_.is_expanding() && frontier_.output_empty();
   }
 
@@ -426,11 +478,17 @@ public:
       add_hop_stats(frontier_.get_pending_hop_stats(), cumulative_stats_);
       expanded_hop_count_ = saturated_stat_add(expanded_hop_count_, 1);
     }
-    payload_allocator_.reset();
+    if (shortest_search_enabled_ || shortest_search_finished_) {
+      add_hop_stats(shortest_search_.get_stats(), cumulative_stats_);
+      expanded_hop_count_ = saturated_stat_add(
+          expanded_hop_count_, shortest_search_.get_expanded_hop_count());
+    }
+    row_materializer_.reset();
     goal_identity_.reset();
     goal_allocator_.reset();
-    output_batch_rows_.reset();
-    output_batch_allocator_.reset();
+    output_batch_.reset();
+    shortest_search_.release();
+    reverse_access_.release();
     frontier_.reset();
     if (!keep_adjacency) { cached_access_.clear(); }
     rescan_seen_ = keep_adjacency;
@@ -440,11 +498,85 @@ public:
     goal_enabled_ = false;
     goal_found_ = false;
     goal_finished_ = false;
+    shortest_search_enabled_ = false;
+    shortest_search_finished_ = false;
     // Operator monitor counters are cumulative across rescans, just like its
     // output-row and rescan counters, so retain cumulative_stats_ here.
   }
 
 private:
+  // The ordinary feedback loop still handles multiple seeds, cycles from a
+  // seed to itself, and result shapes requiring a path witness. A bound,
+  // distinct endpoint pair with endpoint-only output can use two frontiers.
+  int init_shortest_search(const GraphFeedbackLoopSpec &spec)
+  {
+    int ret = OB_SUCCESS;
+    shortest_search_enabled_ = false;
+    GraphPathState root;
+    if (!bidirectional_snapshot_eligible_ || !goal_enabled_
+        || !spec.get_reverse_expand_access_desc().uses_adjacency_index()
+        || !spec.get_reverse_edge_scan_desc().is_valid()
+        || binding_store_.count() != 1
+        || spec.get_lower_bound() > 1 || spec.get_upper_bound() <= 0
+        || spec.get_path_desc().source_element_id_
+               != spec.get_path_desc().target_element_id_
+        || spec.get_path_desc().row_shape_ != GraphPathRowShape::PER_MATCH
+        || spec.get_path_desc().need_path_
+        || spec.get_output_row_desc().payload_expr_count_ != 0
+        || spec.get_output_row_desc().trail_key_expr_count_ != 0) {
+    } else if (OB_FAIL(frontier_.get_frontier_state(0, root))) {
+      LOG_WARN("failed to get shortest search root", K(ret));
+    } else if (root.current_identity_ == goal_identity_) {
+      // Positive-length cycles need the existing lower-bound-aware search.
+    } else {
+      GraphPathDesc reverse_path = spec.get_path_desc();
+      std::swap(reverse_path.source_element_id_, reverse_path.target_element_id_);
+      reverse_path.direction_ = reverse_path.direction_ == GraphPathDirection::OUT
+          ? GraphPathDirection::IN : GraphPathDirection::OUT;
+      if (OB_FAIL(reverse_access_.init(
+                     reverse_path, spec.get_reverse_expand_access_desc(),
+                     spec.get_target_scan_desc(), spec.get_reverse_edge_scan_desc(),
+                     spec.get_source_scan_desc()))) {
+        LOG_WARN("failed to bind reverse graph access", K(ret));
+      } else {
+        shortest_search_enabled_ = true;
+      }
+    }
+    return ret;
+  }
+
+  int get_next_shortest_output_row(ObOperator &anchor,
+                                   const GraphFeedbackLoopSpec &spec)
+  {
+    int ret = OB_SUCCESS;
+    GraphPathState root;
+    int64_t distance = 0;
+    bool found = false;
+    if (shortest_search_finished_) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(frontier_.get_frontier_state(0, root))) {
+      LOG_WARN("failed to get shortest search root", K(ret));
+    } else if (OB_FAIL(shortest_search_.search(
+                   root.current_identity_, goal_identity_, spec.get_direction(),
+                   spec.get_upper_bound(), distance, found))) {
+      ret = normalize_work_area_error(ret);
+      LOG_WARN("failed to search bound graph endpoints", K(ret));
+    } else {
+      shortest_search_finished_ = true;
+      if (!found) {
+        ret = OB_ITER_END;
+      } else if (OB_FAIL(binding_store_.restore_binding(
+                     root.binding_id_, anchor.get_spec().output_, eval_ctx_))) {
+        LOG_WARN("failed to restore bound graph shortest seed", K(ret),
+                 K(root.binding_id_));
+      } else {
+        ret = row_materializer_.materialize_shortest_distance(
+            spec, root.current_identity_, goal_identity_, distance);
+      }
+    }
+    return ret;
+  }
+
   int init_shortest_goal(const GraphFeedbackLoopSpec &spec)
   {
     int ret = OB_SUCCESS;
@@ -479,149 +611,6 @@ private:
       }
     }
     return ret;
-  }
-
-  int write_output_value(ObExpr *expr, const ObObj &value)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_ISNULL(expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("graph feedback output expression is null", K(ret));
-    } else {
-      ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
-      if (OB_FAIL(datum.from_obj(value, expr->obj_datum_map_))) {
-        LOG_WARN("failed to write graph feedback output value", K(ret),
-                 K(value), KPC(expr));
-      } else {
-        expr->set_evaluated_projected(eval_ctx_);
-        ObEvalInfo &info = expr->get_eval_info(eval_ctx_);
-        info.notnull_ = !datum.is_null();
-        info.point_to_frame_ = false;
-      }
-    }
-    return ret;
-  }
-
-  int write_output_key(const ExprFixedArray &output_exprs,
-                       int64_t begin,
-                       int64_t count,
-                       const GraphElementIdentity &identity)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_UNLIKELY(begin < 0 || count <= 0
-                    || begin > output_exprs.count() - count
-                    || identity.rowkey_.get_obj_cnt() != count)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("graph feedback output key shape is inconsistent", K(ret),
-               K(begin), K(count), "output_count", output_exprs.count(),
-               K(identity));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      if (OB_FAIL(write_output_value(
-              output_exprs.at(begin + i), identity.rowkey_.get_obj_ptr()[i]))) {
-        LOG_WARN("failed to write graph feedback output key", K(ret), K(i),
-                 K(begin), K(identity));
-      }
-    }
-    return ret;
-  }
-
-  // Materializes fixed fields and ordered payload arrays from path-local state.
-  // Shared adjacency reads never merge the histories of different paths.
-  int materialize_basic_output_row(
-      const GraphFeedbackLoopSpec &spec,
-      const ObIArray<GraphPathState> &path)
-  {
-    int ret = OB_SUCCESS;
-    ObObj hop_value;
-    const GraphFeedbackRowDesc &desc = spec.get_output_row_desc();
-    const ExprFixedArray &output_exprs = spec.output_union_exprs_;
-    if (OB_UNLIKELY(path.empty()
-                    || desc.output_expr_count_ != output_exprs.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid graph feedback output row", K(ret),
-               "path_count", path.count(), K(desc),
-               "output_count", output_exprs.count());
-    } else if (OB_UNLIKELY(!spec.can_use_basic_native_runtime())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("graph feedback output row is outside basic native capability",
-               K(ret), K(spec.get_path_desc()),
-               K(spec.get_expand_access_desc()), K(desc));
-    } else {
-      const GraphPathState &root = path.at(0);
-      const GraphPathState &leaf = path.at(path.count() - 1);
-      hop_value.set_int(leaf.hop_);
-      if (OB_FAIL(write_output_value(
-              output_exprs.at(desc.depth_expr_index_), hop_value))) {
-      } else if (OB_FAIL(write_output_key(
-                     output_exprs, desc.source_key_expr_begin_,
-                     desc.source_key_expr_count_, root.current_identity_))) {
-      } else if (OB_FAIL(write_output_key(
-                     output_exprs, desc.current_key_expr_begin_,
-                     desc.current_key_expr_count_, leaf.current_identity_))) {
-      } else {
-        const int64_t key_count = spec.get_expand_access_desc().edge_key_count_;
-        for (int64_t slot = 0; OB_SUCC(ret)
-             && slot * key_count < desc.trail_key_expr_count_; ++slot) {
-          const int64_t begin = desc.trail_key_expr_begin_ + slot * key_count;
-          if (slot + 1 < path.count()) {
-            ret = write_output_key(output_exprs, begin, key_count,
-                                   path.at(slot + 1).incoming_edge_identity_);
-          } else {
-            ObObj unused;
-            unused.set_null();
-            for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
-              ret = write_output_value(output_exprs.at(begin + key), unused);
-            }
-          }
-        }
-        if (OB_SUCC(ret)) {
-          ret = materialize_path_payloads(spec, path);
-        }
-      }
-    }
-    return ret;
-  }
-
-  int materialize_path_payloads(const GraphFeedbackLoopSpec &spec,
-                                const ObIArray<GraphPathState> &path)
-  {
-    int ret = OB_SUCCESS;
-    payload_allocator_.reuse();
-    const GraphFeedbackRowDesc &desc = spec.get_output_row_desc();
-    for (int64_t column = 0; OB_SUCC(ret) && column < desc.payload_expr_count_; ++column) {
-      ObJsonArray array(&payload_allocator_);
-      // The root has no incoming edge. Walking root-to-leaf preserves order
-      // and repeated edges; SQL's existing zero-hop wrapper handles [] output.
-      for (int64_t hop = 1; OB_SUCC(ret) && hop < path.count(); ++hop) {
-        const ObNewRow &row = path.at(hop).incoming_edge_payload_.values_;
-        ObIJsonBase *value = nullptr;
-        if (OB_UNLIKELY(row.count_ != desc.payload_expr_count_ || row.cells_ == nullptr)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-                       &payload_allocator_, row.cells_[column].get_string(),
-                       ObJsonInType::JSON_BIN, ObJsonInType::JSON_TREE, value))) {
-        } else if (OB_FAIL(array.array_append(value))) {
-        }
-      }
-      ObString binary;
-      ObExpr *output = spec.output_union_exprs_.at(desc.payload_expr_begin_ + column);
-      if (OB_SUCC(ret)) {
-        if (OB_ISNULL(output)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (ObJsonExprHelper::is_json_depth_exceed_limit(array.depth())) {
-          ret = OB_ERR_JSON_OUT_OF_DEPTH;
-        } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(&array, binary, &payload_allocator_))) {
-        } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(
-                       *output, eval_ctx_, output->locate_datum_for_write(eval_ctx_), binary))) {
-        } else {
-          output->set_evaluated_projected(eval_ctx_);
-        }
-      }
-    }
-    cumulative_stats_.peak_path_memory_ = std::max(
-        cumulative_stats_.peak_path_memory_, binding_store_.used_memory());
-    return normalize_work_area_error(ret);
   }
 
   int restore_output_binding(
@@ -732,14 +721,13 @@ private:
   GraphCachedAccess cached_access_;
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
-  common::ObArenaAllocator payload_allocator_;
+  GraphExpandDasAccess reverse_access_;
+  GraphBidirectionalShortest shortest_search_;
+  GraphFeedbackRowMaterializer row_materializer_;
   // Unlike per-row JSON payloads, the bound goal must survive every output
   // row until the search finishes or this runtime is reset.
   common::ObArenaAllocator goal_allocator_;
-  // DAS and scalar expression evaluation may overwrite output frames. Stage
-  // deep-copied rows, then publish the whole batch only after all access ends.
-  common::ObArenaAllocator output_batch_allocator_;
-  common::ObArray<ObChunkDatumStore::StoredRow *> output_batch_rows_;
+  GraphFeedbackOutputBatch output_batch_;
   int64_t memory_limit_{0};
   int64_t next_output_index_{0};
   GraphExpandStats cumulative_stats_{};
@@ -751,6 +739,9 @@ private:
   bool goal_enabled_{false};
   bool goal_found_{false};
   bool goal_finished_{false};
+  bool shortest_search_enabled_{false};
+  bool shortest_search_finished_{false};
+  bool bidirectional_snapshot_eligible_{false};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
 };
@@ -777,6 +768,7 @@ const ObTableScanSpec *find_table_scan_spec(const ObOpSpec *root,
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
     : RecursivePumpSpec(allocator, type),
+      reverse_access_desc_(allocator),
       seed_key_exprs_(allocator),
       shortest_goal_value_exprs_(allocator),
       adjacency_parameters_(allocator),
@@ -1197,6 +1189,7 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.shortest_single_segment_,
                     path_desc_.shortest_goal_key_filter_,
                     expand_access_desc_,
+                    reverse_access_desc_,
                     output_row_desc_,
                     native_step_supported_,
                     prune_duplicate_states_,

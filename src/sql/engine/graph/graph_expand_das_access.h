@@ -50,6 +50,12 @@ public:
                  const GraphElementIdentity *after_edge, int64_t limit,
                  common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
+  int probe_adjacency_rows(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      GraphPathDirection direction, int64_t raw_row_limit,
+      int64_t &scanned_rows, bool &complete, int64_t &peak_memory) override;
+  bool supports_adjacency_probe() const override
+  { return edge_cursor_.can_partition_sources(); }
   bool is_initialized() const { return initialized_; }
   bool has_live_edge_scan_resources() const
   { return edge_cursor_.has_live_edge_scan_resources(); }

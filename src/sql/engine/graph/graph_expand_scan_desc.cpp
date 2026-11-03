@@ -57,6 +57,27 @@ int GraphExpandScanDesc::init(const ObTableScanSpec &scan_spec)
   return ret;
 }
 
+int GraphExpandScanDesc::init_for_owned_ctdef(
+    const GraphExpandScanDesc &source)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!source.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(startup_filters_.assign(source.startup_filters_))) {
+    LOG_WARN("failed to copy reverse graph scan startup filters", K(ret));
+  } else {
+    scan_op_id_ = source.scan_op_id_;
+    table_ref_id_ = source.table_ref_id_;
+    ref_table_id_ = source.ref_table_id_;
+    frozen_version_ = source.frozen_version_;
+    rows_ = source.rows_;
+    width_ = source.width_;
+    need_check_output_datum_ = source.need_check_output_datum_;
+    codegen_ctdef_ = nullptr;
+  }
+  return ret;
+}
+
 bool GraphExpandScanDesc::is_valid() const
 {
   const ObTableScanCtDef &ctdef = get_tsc_ctdef();

@@ -19,6 +19,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
+#include "share/ob_errno.h"
 #include "sql/engine/graph/graph_path_spec.h"
 #include "sql/engine/graph/graph_expand_input_bindings.h"
 #include "sql/engine/graph/graph_expand_edge_page.h"
@@ -80,6 +81,22 @@ public:
       common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges,
       bool &end) = 0;
+
+  // Optional, read-only cost probe for indexed adjacency. It reads at most
+  // raw_row_limit physical DAS rows, including rows rejected by graph filters.
+  // complete is true only when the entire source set reached end of scan.
+  // Implementations must close the scan before returning on every path.
+  virtual bool supports_adjacency_probe() const { return false; }
+  virtual int probe_adjacency_rows(
+      const common::ObIArray<GraphElementIdentity> &,
+      GraphPathDirection, int64_t,
+      int64_t &scanned_rows, bool &complete, int64_t &peak_memory)
+  {
+    scanned_rows = 0;
+    complete = false;
+    peak_memory = 0;
+    return OB_NOT_SUPPORTED;
+  }
 };
 
 // Stateful single-hop attach controller. It shares adjacency reads for equal

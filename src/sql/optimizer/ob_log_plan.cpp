@@ -20,6 +20,7 @@
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_table_scan.h"
+#include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_group_by.h"
@@ -9969,6 +9970,26 @@ int ObLogPlan::collect_access_related_info(ObLogicalOperator &op)
       } else if (nullptr != tsc_op.get_global_index_back_table_partition_info() && OB_FAIL(rel_info.table_part_infos_.push_back(tsc_op.get_global_index_back_table_partition_info()))) {
       }
       if (OB_SUCC(ret) && OB_FAIL(optimizer_context_.get_access_relations().push_back(rel_info))) {
+      }
+    }
+  } else if (log_op_def::LOG_GRAPH_FEEDBACK_LOOP == op.get_type()) {
+    GraphFeedbackLoopLogOp &graph_op =
+        static_cast<GraphFeedbackLoopLogOp &>(op);
+    const GraphExpandAccessDesc &reverse =
+        graph_op.get_reverse_expand_access_desc();
+    if (reverse.uses_adjacency_index()) {
+      const ObLogTableScan *edge_scan = graph_op.get_step_edge_scan();
+      RelatedTableAccessInfo *relation = edge_scan == nullptr ? nullptr
+          : optimizer_context_.get_access_relation_by_id(
+                edge_scan->get_table_id(), edge_scan->get_real_ref_table_id());
+      if (OB_ISNULL(relation)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("reverse graph edge access relation is missing", K(ret),
+                 KPC(edge_scan), K(reverse));
+      } else if (OB_FAIL(add_var_to_array_no_dup(
+                     relation->related_ids_, reverse.edge_access_table_id_))) {
+      } else if (OB_FAIL(add_var_to_array_no_dup(
+                     relation->related_ids_, reverse.edge_table_id_))) {
       }
     }
   } else if (op.is_dml_operator()) {

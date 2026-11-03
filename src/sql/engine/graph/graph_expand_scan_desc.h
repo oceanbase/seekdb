@@ -36,6 +36,9 @@ public:
   ~GraphExpandScanDesc() = default;
 
   int init(const ObTableScanSpec &scan_spec);
+  // Preserve scan identity and snapshot metadata, but own an independently
+  // generated ctdef for the reverse adjacency index.
+  int init_for_owned_ctdef(const GraphExpandScanDesc &source);
   bool is_valid() const;
   const ObTableScanCtDef &get_tsc_ctdef() const
   {
@@ -43,6 +46,7 @@ public:
   }
   uint64_t get_table_ref_id() const { return table_ref_id_; }
   uint64_t get_id() const { return scan_op_id_; }
+  ObTableScanCtDef &get_owned_tsc_ctdef() { return owned_ctdef_; }
 
   // scan_op_id_ is retained for DAS diagnostics and runtime statistics only;
   // it is not used to locate an operator at execution time.

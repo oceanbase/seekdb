@@ -162,7 +162,9 @@ SQL_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/sql/engine/graph/graph_binding_store.cpp",
+            "src/sql/engine/graph/graph_bidirectional_shortest.cpp",
             "src/sql/engine/graph/graph_feedback_loop_op.cpp",
+            "src/sql/engine/graph/graph_feedback_output.cpp",
             "src/sql/engine/graph/graph_feedback_frontier.cpp",
             "src/sql/engine/graph/graph_feedback_row_desc.cpp",
             "src/sql/engine/graph/graph_frontier_input_batcher.cpp",

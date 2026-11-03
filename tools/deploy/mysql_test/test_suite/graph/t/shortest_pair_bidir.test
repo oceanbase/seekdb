@@ -1,0 +1,186 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--source mysql_test/include/create_plan_table.inc
+--enable_query_log
+
+# A bounded pair query must preserve the same distance with a full edge scan,
+# one directional adjacency index, and indexes for both traversal directions.
+--echo shortest_pair_without_adjacency_index
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='shortest_pair_no_index'
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--enable_result_log
+SELECT COUNT(*)=1 AS reverse_unavailable FROM plan_table WHERE statement_id='shortest_pair_no_index' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%reverse_access=none%';
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=5) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=3)<-[e IS knows]-{1,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=99) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT COUNT(*) AS shortest_witnesses FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2) COLUMNS(COUNT(e.id) AS hops)) g;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2022]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{0,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+
+# since is intentionally absent from the index. If this index is selected,
+# the edge predicate needs an index-back read; results must match either way.
+CREATE INDEX shortest_pair_out ON graph_knows(src,dst);
+--echo shortest_pair_with_forward_index_only
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='shortest_pair_forward_only'
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--enable_result_log
+SELECT COUNT(*)=1 AS reverse_still_unavailable FROM plan_table WHERE statement_id='shortest_pair_forward_only' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%reverse_access=none%';
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=3)<-[e IS knows]-{1,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+
+--echo prepared_reverse_index_ddl
+PREPARE shortest_pair_index_ddl FROM 'SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=?) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0';
+SET @target=3;
+EXECUTE shortest_pair_index_ddl USING @target;
+CREATE INDEX shortest_pair_in ON graph_knows(dst,src);
+EXECUTE shortest_pair_index_ddl USING @target;
+--echo shortest_pair_with_two_direction_indexes
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='shortest_pair_bidir'
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--enable_result_log
+SELECT COUNT(*)=1 AS bound_goal_plan FROM plan_table WHERE statement_id='shortest_pair_bidir' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%goal=bound_key%';
+SELECT COUNT(*)=1 AS reverse_index_plan FROM plan_table WHERE statement_id='shortest_pair_bidir' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%reverse_access=index%';
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=5) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=3)<-[e IS knows]-{1,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=99) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT COUNT(*) AS shortest_witnesses FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2) COLUMNS(COUNT(e.id) AS hops)) g;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2022]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{0,6}(b IS person WHERE b.id=1) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{0,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{0}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+
+# An unfiltered direct edge must not shorten the filtered answer.
+INSERT INTO graph_knows VALUES(18,1,3,2020);
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,6}(b IS person WHERE b.id=3) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+DELETE FROM graph_knows WHERE id=18;
+
+DROP INDEX shortest_pair_in ON graph_knows;
+EXECUTE shortest_pair_index_ddl USING @target;
+CREATE INDEX shortest_pair_in ON graph_knows(dst,src);
+EXECUTE shortest_pair_index_ddl USING @target;
+DEALLOCATE PREPARE shortest_pair_index_ddl;
+
+--echo prepared_target_rescans
+PREPARE shortest_pair_cached FROM 'SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=?) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0';
+SET @target=2;
+EXECUTE shortest_pair_cached USING @target;
+SET @target=3;
+EXECUTE shortest_pair_cached USING @target;
+SET @target=5;
+EXECUTE shortest_pair_cached USING @target;
+DEALLOCATE PREPARE shortest_pair_cached;
+
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+
+# The source has seven outgoing neighbors, but the goal has only one incoming
+# chain. A bound-pair search should be able to advance from the goal side.
+--disable_query_log
+CREATE TABLE shortest_fanout_v(id BIGINT PRIMARY KEY);
+CREATE TABLE shortest_fanout_e(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT);
+INSERT INTO shortest_fanout_v VALUES
+ (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),
+ (20),(21),(22),(23),(24),(25),(26);
+INSERT INTO shortest_fanout_e VALUES
+ (101,1,2),(102,1,3),(103,1,4),(104,1,5),(105,1,6),(106,1,7),(107,1,8),
+ (108,2,9),(109,9,10),
+ (201,20,21),(202,21,22),(203,22,23),(204,23,24),(205,24,25),(206,25,26);
+CREATE PROPERTY GRAPH shortest_fanout
+ VERTEX TABLES(shortest_fanout_v KEY(id) LABEL node PROPERTIES(id))
+ EDGE TABLES(shortest_fanout_e KEY(id) SOURCE KEY(src) REFERENCES shortest_fanout_v(id)
+ DESTINATION KEY(dst) REFERENCES shortest_fanout_v(id) LABEL link PROPERTIES(id));
+CREATE INDEX shortest_fanout_out ON shortest_fanout_e(src,dst);
+CREATE INDEX shortest_fanout_in ON shortest_fanout_e(dst,src);
+--enable_query_log
+--echo high_fanout_source_low_degree_goal
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='shortest_fanout'
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,6}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--enable_result_log
+SELECT COUNT(*)=1 AS reverse_index_plan FROM plan_table WHERE statement_id='shortest_fanout' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%reverse_access=index%';
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,6}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,3}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,6}(b IS node WHERE b.id=11) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--echo exact_six_hop_bound
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=20)-[e IS link]->{1,6}(b IS node WHERE b.id=26) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=20)-[e IS link]->{1,5}(b IS node WHERE b.id=26) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=26)<-[e IS link]-{1,6}(b IS node WHERE b.id=20) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+# The goal now has 300 unrelated incoming edges. Reverse probing must not
+# materialize that entire level before the short source-side route is found.
+--disable_query_log
+CREATE TABLE shortest_skew_digit(d INT PRIMARY KEY);
+INSERT INTO shortest_skew_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO shortest_fanout_v SELECT 1000+a.d*100+b.d*10+c.d
+ FROM shortest_skew_digit a,shortest_skew_digit b,shortest_skew_digit c WHERE a.d<3;
+INSERT INTO shortest_fanout_e SELECT 11000+a.d*100+b.d*10+c.d,
+ 1000+a.d*100+b.d*10+c.d,10
+ FROM shortest_skew_digit a,shortest_skew_digit b,shortest_skew_digit c WHERE a.d<3;
+--enable_query_log
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_fanout MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{1,3}(b IS node WHERE b.id=10) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+DROP PROPERTY GRAPH shortest_fanout;
+DROP TABLE shortest_fanout_e,shortest_fanout_v,shortest_skew_digit;
+
+# The forward access is wrapped by GraphCachedAccess. With no probe delegation,
+# equal-width frontiers choose the goal side and materialize 3001 large keys,
+# exceeding this work-area budget. A delegated count-only probe chooses the
+# two-edge source path without retaining the unrelated goal-side identities.
+--disable_query_log
+CREATE TABLE shortest_probe_digit(d INT PRIMARY KEY);
+INSERT INTO shortest_probe_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE shortest_probe_v(k VARBINARY(2048) PRIMARY KEY);
+CREATE TABLE shortest_probe_e(id BIGINT PRIMARY KEY,src VARBINARY(2048),dst VARBINARY(2048));
+INSERT INTO shortest_probe_v VALUES('seed'),('middle'),('goal');
+INSERT INTO shortest_probe_e VALUES(1,'seed','middle'),(2,'middle','goal');
+INSERT INTO shortest_probe_v
+ SELECT CONCAT('dead',LPAD(a.d*1000+b.d*100+c.d*10+d.d,4,'0'),REPEAT('x',1990))
+ FROM shortest_probe_digit a,shortest_probe_digit b,
+      shortest_probe_digit c,shortest_probe_digit d WHERE a.d<3;
+INSERT INTO shortest_probe_e
+ SELECT 10000+a.d*1000+b.d*100+c.d*10+d.d,
+ CONCAT('dead',LPAD(a.d*1000+b.d*100+c.d*10+d.d,4,'0'),REPEAT('x',1990)),'goal'
+ FROM shortest_probe_digit a,shortest_probe_digit b,
+      shortest_probe_digit c,shortest_probe_digit d WHERE a.d<3;
+CREATE PROPERTY GRAPH shortest_probe
+ VERTEX TABLES(shortest_probe_v KEY(k) LABEL node PROPERTIES(k))
+ EDGE TABLES(shortest_probe_e KEY(id) SOURCE KEY(src) REFERENCES shortest_probe_v(k)
+ DESTINATION KEY(dst) REFERENCES shortest_probe_v(k) LABEL link PROPERTIES(id));
+CREATE INDEX shortest_probe_out ON shortest_probe_e(src,dst);
+CREATE INDEX shortest_probe_in ON shortest_probe_e(dst,src);
+CREATE TABLE shortest_probe_seed(binding_id INT PRIMARY KEY,
+ source_key VARBINARY(2048),goal_key VARBINARY(2048));
+INSERT INTO shortest_probe_seed VALUES
+ (1,'seed','goal'),(2,'seed','goal'),(3,'seed','goal');
+let $saved_hash_area_size=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+ALTER SYSTEM SET _hash_area_size='4M';
+sleep 6;
+--enable_query_log
+--echo cached_forward_delegates_bounded_adjacency_probe
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_probe MATCH ANY SHORTEST
+ (a IS node WHERE a.k='seed')-[e IS link]->{1,3}(b IS node WHERE b.k='goal')
+ COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+--echo retained_cache_and_probe_memory_share_one_work_area
+SELECT s.binding_id,g.distance FROM shortest_probe_seed s,LATERAL (
+ SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_probe MATCH ANY SHORTEST
+  (a IS node WHERE a.k=s.source_key)-[e IS link]->{1,3}
+  (b IS node WHERE b.k=s.goal_key) COLUMNS(COUNT(e.id) AS hops)) p
+ HAVING COUNT(*)>0) g ORDER BY s.binding_id;
+--disable_query_log
+eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
+sleep 6;
+DROP PROPERTY GRAPH shortest_probe;
+DROP TABLE shortest_probe_e,shortest_probe_v,shortest_probe_digit,shortest_probe_seed;
+--enable_query_log
+DROP TABLE plan_table;
