@@ -688,16 +688,27 @@ static OB_INLINE int common_uint_int(const ObExpr &expr,
                                      const ObObjType &out_type,
                                      uint64_t in_val,
                                      ObEvalCtx &ctx,
-                                     int64_t &out_val)
+                                     int64_t &out_val,
+                                     int &warning)
 {
   int ret = OB_SUCCESS;
-  int warning = OB_SUCCESS;
+  warning = OB_SUCCESS;
   out_val = static_cast<int64_t>(in_val);
   UNUSED(ctx);
   if (CM_NEED_RANGE_CHECK(expr.extra_) &&
       CAST_FAIL(int_upper_check(out_type, in_val, out_val))) {
   }
   return ret;
+}
+
+static OB_INLINE int common_uint_int(const ObExpr &expr,
+                                     const ObObjType &out_type,
+                                     uint64_t in_val,
+                                     ObEvalCtx &ctx,
+                                     int64_t &out_val)
+{
+  int warning = OB_SUCCESS;
+  return common_uint_int(expr, out_type, in_val, ctx, out_val, warning);
 }
 
 int ObDataTypeCastUtil::common_uint_int_wrap(
@@ -2527,6 +2538,23 @@ int cast_eval_arg_batch(const ObExpr &expr,
   return ret;
 }
 
+static OB_INLINE void log_integer_range_warning(const ObExpr &expr,
+                                                ObEvalCtx &ctx,
+                                                const int warning)
+{
+  if (OB_UNLIKELY(OB_DATA_OUT_OF_RANGE == warning)
+      && CM_IS_COLUMN_CONVERT(expr.extra_) && CM_IS_WARN_ON_FAIL(expr.extra_)) {
+    const ObUserLoggingCtx *logging_ctx = ctx.exec_ctx_.get_user_logging_ctx();
+    if (OB_NOT_NULL(logging_ctx) && !logging_ctx->skip_logging()) {
+      // The cast has clipped the value, so column accuracy checking can no
+      // longer recover this diagnostic. The DML owner supplies column and row.
+      const ObString *column_name = logging_ctx->get_column_name();
+      LOG_USER_WARN(OB_DATA_OUT_OF_RANGE, column_name->length(), column_name->ptr(),
+                    logging_ctx->get_row_num());
+    }
+  }
+}
+
 CAST_FUNC_NAME(int, int)
 {
   EVAL_ARG()
@@ -2536,6 +2564,7 @@ CAST_FUNC_NAME(int, int)
     if (in_type > out_type && CAST_FAIL(int_range_check(out_type, val_int, val_int))) {
     } else {
       res_datum.set_int(val_int);
+      log_integer_range_warning(expr, ctx, warning);
     }
   }
   return ret;
@@ -2554,6 +2583,7 @@ CAST_FUNC_NAME(int, uint)
           CAST_FAIL(uint_range_check(out_type, in_val, out_val))) {
       } else {
         res_datum.set_uint(out_val);
+        log_integer_range_warning(expr, ctx, warning);
       }
     }
   }
@@ -2786,9 +2816,11 @@ CAST_FUNC_NAME(uint, int)
   {
      uint64_t in_val = child_res->get_uint();
      int64_t out_val = 0;
-     if (OB_FAIL(common_uint_int(expr, expr.datum_meta_.type_, in_val, ctx, out_val))) {
+     int warning = OB_SUCCESS;
+     if (OB_FAIL(common_uint_int(expr, expr.datum_meta_.type_, in_val, ctx, out_val, warning))) {
      } else {
        res_datum.set_int(out_val);
+       log_integer_range_warning(expr, ctx, warning);
      }
   }
   return ret;
@@ -2804,6 +2836,7 @@ CAST_FUNC_NAME(uint, uint)
         CAST_FAIL(uint_upper_check(out_type, in_val))) {
     } else {
       res_datum.set_uint(in_val);
+      log_integer_range_warning(expr, ctx, warning);
     }
   }
   return ret;
