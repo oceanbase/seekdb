@@ -235,7 +235,6 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::advance_mds_sstable_iter()
       }
     } // while
     if (FAILEDx(get_key_from_dump_kv(mds_sstable_val_, mds_sstable_key_))) {
-      MDS_LOG(WARN, "fail to get key", K(ret), K_(mds_sstable_val));
     } else {
     }
     ret = (OB_ITER_END == ret ? OB_SUCCESS : ret);

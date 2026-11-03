@@ -27,7 +27,7 @@ const int64_t ObPwjComparer::DEFAULT_ID_ID_BUCKET_NUMBER = 1000;
 int PwjTable::init(const ObShardingInfo &sharding)
 {
   int ret = OB_SUCCESS;
-  phy_table_loc_info_ = sharding.get_phy_table_location_info();
+  table_access_targets_ = sharding.get_access_targets();
   part_level_ = sharding.get_part_level();
   part_type_ = sharding.get_part_func_type();
   subpart_type_ = sharding.get_sub_part_func_type();
@@ -42,7 +42,7 @@ int PwjTable::init(const ObShardingInfo &sharding)
   return ret;
 }
 
-int PwjTable::init(const ObTableSchema &table_schema, const ObCandiTableLoc &phy_tbl_info)
+int PwjTable::init(const ObTableSchema &table_schema, const TableAccessTargets &phy_tbl_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPwjComparer::extract_all_partition_indexes(phy_tbl_info,
@@ -53,7 +53,7 @@ int PwjTable::init(const ObTableSchema &table_schema, const ObCandiTableLoc &phy
                                                            is_partition_single_,
                                                            is_subpartition_single_))) {
   } else {
-    phy_table_loc_info_ = &phy_tbl_info;
+    table_access_targets_ = &phy_tbl_info;
     part_level_ = table_schema.get_part_level();
     part_type_ = table_schema.get_part_option().get_part_func_type();
     partition_array_ = table_schema.get_part_array();
@@ -74,7 +74,7 @@ int PwjTable::init(const ObTableSchema &table_schema, const ObCandiTableLoc &phy
 int PwjTable::assign(const PwjTable &other)
 {
   int ret = OB_SUCCESS;
-  phy_table_loc_info_ = other.phy_table_loc_info_;
+  table_access_targets_ = other.table_access_targets_;
   part_level_ = other.part_level_;
   part_type_ = other.part_type_;
   subpart_type_ = other.subpart_type_;
@@ -102,7 +102,7 @@ int ObPwjComparer::add_table(PwjTable &table, bool &is_match_pwj)
   return ret;
 }
 
-int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_table_location_info,
+int ObPwjComparer::extract_all_partition_indexes(const TableAccessTargets &table_access_targets,
                                                   const ObTableSchema &table_schema,
                                                   ObIArray<uint64_t> &all_tablet_ids,
                                                   ObIArray<int64_t> &all_partition_indexes,
@@ -111,8 +111,8 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
                                                   bool &is_subpartition_single)
 {
   int ret = OB_SUCCESS;
-  const ObCandiTabletLocIArray &phy_partitions =
-      phy_table_location_info.get_phy_part_loc_info_list();
+  const TabletAccessTargetIArray &phy_partitions =
+      table_access_targets.get_tablets();
   ObPartitionLevel part_level = table_schema.get_part_level();
   is_partition_single = false;
   is_subpartition_single = false;
@@ -121,7 +121,7 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
   } else if (share::schema::PARTITION_LEVEL_ONE == part_level) {
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_partitions.count(); ++i) {
       // For the first-level partition table part_id(first-level logical partition id) = partition_id(physical partition id)
-      ObTabletID tablet_id = phy_partitions.at(i).get_partition_location().get_tablet_id();
+      ObTabletID tablet_id = phy_partitions.at(i).get_tablet_id();
       int64_t part_index = -1;
       int64_t subpart_index = -1;
       if (OB_FAIL(table_schema.get_part_idx_by_tablet(tablet_id, part_index, subpart_index))) {
@@ -131,8 +131,8 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
     }
   } else if (share::schema::PARTITION_LEVEL_TWO == part_level) {
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_partitions.count(); ++i) {
-      int64_t partition_id = phy_partitions.at(i).get_partition_location().get_partition_id();
-      ObTabletID tablet_id = phy_partitions.at(i).get_partition_location().get_tablet_id();
+      int64_t partition_id = phy_partitions.at(i).get_partition_id();
+      ObTabletID tablet_id = phy_partitions.at(i).get_tablet_id();
       int64_t part_index = -1;
       int64_t subpart_index = -1;
       if (OB_FAIL(table_schema.get_part_idx_by_tablet(tablet_id, part_index, subpart_index))) {
@@ -179,7 +179,6 @@ int ObPwjComparer::is_partition_equal(const ObPartition *l_partition,
   is_equal = false;
   if (OB_ISNULL(l_partition) || OB_ISNULL(r_partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(l_partition), K(r_partition), K(ret));
   } else if (is_range_partition) {
     if (OB_FAIL(is_row_equal(l_partition->get_high_bound_val(),
                              r_partition->get_high_bound_val(),
@@ -199,7 +198,6 @@ int ObPwjComparer::is_subpartition_equal(const ObSubPartition *l_subpartition,
   is_equal = false;
   if (OB_ISNULL(l_subpartition) || OB_ISNULL(r_subpartition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(l_subpartition), K(r_subpartition), K(ret));
   } else if (is_range_partition) {
     if (OB_FAIL(is_row_equal(l_subpartition->get_high_bound_val(),
                              r_subpartition->get_high_bound_val(),
@@ -218,8 +216,6 @@ int ObPwjComparer::is_row_equal(const ObRowkey &first_row,
   is_equal = false;
   if (OB_ISNULL(first_row.get_obj_ptr()) || OB_ISNULL(second_row.get_obj_ptr())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(first_row.get_obj_ptr()),
-        K(second_row.get_obj_ptr()), K(ret));
   } else if (first_row.get_obj_cnt() != second_row.get_obj_cnt()) {
     is_equal = false;
   } else {
@@ -242,7 +238,6 @@ int ObPwjComparer::is_list_partition_equal(const ObBasePartition *first_part,
   is_equal = false;
   if (OB_ISNULL(first_part) || OB_ISNULL(second_part)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null part expr", K(first_part), K(second_part), K(ret));
   } else if (first_part->get_list_row_values().count() != second_part->get_list_row_values().count()) {
     is_equal = false;
   } else {
@@ -271,7 +266,6 @@ int ObPwjComparer::is_row_equal(const common::ObNewRow &first_row,
   is_equal = false;
   if (OB_ISNULL(first_row.cells_) || OB_ISNULL(second_row.cells_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null cells", K(first_row.cells_), K(second_row.cells_), K(ret));
   } else if (first_row.count_ != second_row.count_) {
     is_equal = false;
   } else {
@@ -333,7 +327,7 @@ int ObStrictPwjComparer::add_table(PwjTable &table, bool &is_match_pwj)
 {
   int ret = OB_SUCCESS;
   is_match_pwj = true;
-  if (OB_ISNULL(table.phy_table_loc_info_)) {
+  if (OB_ISNULL(table.table_access_targets_)) {
     // sharding to check partition wise join maybe reset
     is_match_pwj = false;
   } else if (OB_FAIL(pwj_tables_.push_back(table))) {
@@ -342,7 +336,6 @@ int ObStrictPwjComparer::add_table(PwjTable &table, bool &is_match_pwj)
     // init first partition id group
     if (OB_ISNULL(part_array = tablet_id_group_.alloc_place_holder())){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to alloc place holder", K(ret));
     } else if (OB_FAIL(part_array->assign(table.ordered_tablet_ids_))) {
     }
   } else if (OB_FAIL(check_logical_equal_and_calc_match_map(pwj_tables_.at(0),
@@ -363,33 +356,29 @@ int ObStrictPwjComparer::match_partitioned_tablets(const PwjTable &l_table,
 {
   int ret = OB_SUCCESS;
   is_match = true;
-  const ObCandiTabletLocIArray &left_locations =
-      l_table.phy_table_loc_info_->get_phy_part_loc_info_list();
-  const ObCandiTabletLocIArray &right_locations =
-      r_table.phy_table_loc_info_->get_phy_part_loc_info_list();
+  const TabletAccessTargetIArray &left_accesses =
+      l_table.table_access_targets_->get_tablets();
+  const TabletAccessTargetIArray &right_accesses =
+      r_table.table_access_targets_->get_tablets();
   TabletIdArray *r_array = NULL;
-  if (l_table.ordered_tablet_ids_.count() != left_locations.count()
-      || r_table.ordered_tablet_ids_.count() != right_locations.count()) {
+  if (l_table.ordered_tablet_ids_.count() != left_accesses.count()
+      || r_table.ordered_tablet_ids_.count() != right_accesses.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected partition count", K(ret),
-             K(l_table.ordered_tablet_ids_.count()), K(left_locations.count()),
-             K(r_table.ordered_tablet_ids_.count()), K(right_locations.count()));
-  } else if (left_locations.count() != right_locations.count()) {
+  } else if (left_accesses.count() != right_accesses.count()) {
     is_match = false;
   } else if (OB_ISNULL(r_array = tablet_id_group_.alloc_place_holder())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to alloc place holder", K(ret));
-  } else if (OB_FAIL(r_array->prepare_allocate(left_locations.count()))) {
+  } else if (OB_FAIL(r_array->prepare_allocate(left_accesses.count()))) {
   } else {
-    const int64_t N = left_locations.count();
+    const int64_t N = left_accesses.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
       const uint64_t l_tablet_id = l_table.ordered_tablet_ids_.at(i);
       uint64_t r_tablet_id = 0;
       if (OB_FAIL(phy_part_map_.get_refactored(l_tablet_id, r_tablet_id))) {
       } else {
         bool found = false;
-        for (int64_t j = 0; !found && j < right_locations.count(); ++j) {
-          found = right_locations.at(j).get_partition_location().get_tablet_id().id()
+        for (int64_t j = 0; !found && j < right_accesses.count(); ++j) {
+          found = right_accesses.at(j).get_tablet_id().id()
                   == r_tablet_id;
         }
         if (!found) {
@@ -570,7 +559,6 @@ int ObStrictPwjComparer::is_sub_partition_logically_equal(const PwjTable &l_tabl
       if (OB_ISNULL(l_part = l_table.partition_array_[part_index_map_.at(i).first]) ||
           OB_ISNULL(r_part = r_table.partition_array_[part_index_map_.at(i).second])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(get_subpartition_indexes_by_part_index(l_table, l_part_index,
                                                                 l_used_partition_indexes))) {
       } else if (OB_FAIL(get_subpartition_indexes_by_part_index(r_table, r_part_index,
@@ -663,8 +651,6 @@ int ObStrictPwjComparer::check_hash_partition_equal(const PwjTable &l_table,
             OB_ISNULL(l_table.partition_array_[l_indexes.at(i)]) ||
             OB_ISNULL(r_table.partition_array_[r_indexes.at(i)])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(l_table.partition_array_),
-                                          K(r_table.partition_array_));
         } else {
           part_tablet_id_pair.first = l_table.partition_array_[l_indexes.at(i)]->get_tablet_id().id();
           part_tablet_id_pair.second = r_table.partition_array_[r_indexes.at(i)]->get_tablet_id().id();
@@ -699,7 +685,6 @@ int ObStrictPwjComparer::check_hash_subpartition_equal(ObSubPartition **l_subpar
           OB_ISNULL(l_subpartition_array[l_indexes.at(i)]) ||
           OB_ISNULL(r_subpartition_array[r_indexes.at(i)])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(l_subpartition_array), K(r_subpartition_array));
       } else {
         subpart_tablet_id_pair.first = l_subpartition_array[l_indexes.at(i)]->get_tablet_id().id();
         subpart_tablet_id_pair.second = r_subpartition_array[r_indexes.at(i)]->get_tablet_id().id();
@@ -727,7 +712,6 @@ int ObStrictPwjComparer::check_range_partition_equal(ObPartition **l_partition_a
   const ObPartition *r_partition = NULL;
   if (OB_ISNULL(l_partition_array) || OB_ISNULL(r_partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(l_partition_array), K(r_partition_array));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_indexes.count(); ++i) {
     std::pair<uint64_t, uint64_t> part_tablet_id_pair;
@@ -735,7 +719,6 @@ int ObStrictPwjComparer::check_range_partition_equal(ObPartition **l_partition_a
     if (OB_ISNULL(l_partition = l_partition_array[l_indexes.at(i)]) ||
         OB_ISNULL(r_partition = r_partition_array[r_indexes.at(i)])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(l_partition), K(r_partition), K(i));
     } else if (OB_FAIL(is_partition_equal(l_partition, r_partition, true, is_equal))) {
     } else if (is_equal) {
       part_index_pair.first = l_indexes.at(i);
@@ -763,14 +746,12 @@ int ObStrictPwjComparer::check_range_subpartition_equal(ObSubPartition **l_subpa
   const ObSubPartition *r_partition = NULL;
   if (OB_ISNULL(l_subpartition_array) || OB_ISNULL(r_subpartition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(l_subpartition_array), K(r_subpartition_array));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_indexes.count(); ++i) {
     std::pair<uint64_t, uint64_t> subpart_tablet_id_pair;
     if (OB_ISNULL(l_partition = l_subpartition_array[l_indexes.at(i)]) ||
         OB_ISNULL(r_partition = r_subpartition_array[r_indexes.at(i)])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(is_subpartition_equal(l_partition, r_partition, true, is_equal))) {
     } else if (is_equal) {
       subpart_tablet_id_pair.first = l_partition->get_tablet_id().id();
@@ -797,7 +778,6 @@ int ObStrictPwjComparer::check_list_partition_equal(ObPartition **l_partition_ar
   ObSqlBitSet<> matched_partitions;
   if (OB_ISNULL(l_partition_array) || OB_ISNULL(r_partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(l_partition_array), K(r_partition_array));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_indexes.count(); ++i) {
     bool find = false;
@@ -806,14 +786,12 @@ int ObStrictPwjComparer::check_list_partition_equal(ObPartition **l_partition_ar
     std::pair<int64_t, int64_t> part_index_pair;
     if (OB_ISNULL(l_partition = l_partition_array[l_indexes.at(i)])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && !find && j < r_indexes.count(); ++j) {
       if (matched_partitions.has_member(j)) {
         // do nothing
       } else if (OB_ISNULL(r_partition = r_partition_array[r_indexes.at(j)])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(is_partition_equal(l_partition, r_partition, false, is_part_equal))) {
       } else if (is_part_equal) {
         find = true;
@@ -850,7 +828,6 @@ int ObStrictPwjComparer::check_list_subpartition_equal(ObSubPartition **l_subpar
   ObSqlBitSet<> matched_partitions;
   if (OB_ISNULL(l_subpartition_array) || OB_ISNULL(l_subpartition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(l_subpartition_array), K(r_subpartition_array));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_indexes.count(); ++i) {
     bool find = false;
@@ -858,14 +835,12 @@ int ObStrictPwjComparer::check_list_subpartition_equal(ObSubPartition **l_subpar
     std::pair<uint64_t, uint64_t> subpart_tablet_id_pair;
     if (OB_ISNULL(l_partition = l_subpartition_array[l_indexes.at(i)])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && !find && j < r_indexes.count(); ++j) {
       if (matched_partitions.has_member(j)) {
         // do nothing
       } else if (OB_ISNULL(r_partition = r_subpartition_array[r_indexes.at(j)])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(is_subpartition_equal(l_partition, r_partition, false, is_subpart_equal))) {
       } else if (is_subpart_equal) {
         find = true;
@@ -893,7 +868,6 @@ int ObStrictPwjComparer::get_part_tablet_id_by_part_index(const PwjTable &table,
   if (OB_ISNULL(table.partition_array_) ||
       OB_ISNULL(table.partition_array_[part_index])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table.partition_array_), K(part_index));
   } else {
     tablet_id = table.partition_array_[part_index]->get_tablet_id().id();
   }
@@ -908,7 +882,6 @@ int ObStrictPwjComparer::get_sub_part_tablet_id(const PwjTable &table,
   ObPartition *part = NULL;
   if (OB_ISNULL(table.partition_array_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table.partition_array_));
   } else {
     bool find = false;
     for (int64_t i = 0; OB_SUCC(ret) && !find && i < table.all_partition_indexes_.count(); ++i) {
@@ -918,7 +891,6 @@ int ObStrictPwjComparer::get_sub_part_tablet_id(const PwjTable &table,
             OB_ISNULL(part->get_subpart_array()) ||
             OB_ISNULL(part->get_subpart_array()[subpart_index])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else {
           sub_part_tablet_id = part->get_subpart_array()[subpart_index]->get_tablet_id().id();
           find = true;
@@ -927,8 +899,6 @@ int ObStrictPwjComparer::get_sub_part_tablet_id(const PwjTable &table,
     }
     if (OB_SUCC(ret) && !find) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to find part_index in all_partition_indexes", K(ret),
-                  K(part_index), K(table.all_partition_indexes_));
     }
   }
   return ret;

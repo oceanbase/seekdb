@@ -38,7 +38,6 @@ int ObTabletBindingReplayExecutor::init(
     LOG_WARN("tablet binding replay executor init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", KR(ret), K(scn));
   } else {
     user_ctx_ = &user_ctx;
     user_data_ = &user_data;

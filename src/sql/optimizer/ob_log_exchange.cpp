@@ -112,12 +112,10 @@ int ObLogExchange::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   } else if (OB_FAIL(replace_exprs_action(replacer, repartition_func_exprs_))) {
   } else if (calc_part_id_expr_ != NULL
              && OB_FAIL(replace_expr_action(replacer, calc_part_id_expr_))) {
-    LOG_WARN("failed to replace calc part id expr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < hash_dist_exprs_.count(); i++) {
       if (OB_ISNULL(hash_dist_exprs_.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(replace_expr_action(replacer, hash_dist_exprs_.at(i).expr_))) {
       } else { /*do nothing*/ }
     }
@@ -167,7 +165,6 @@ int ObLogExchange::get_plan_special_expr_info(PlanText &plan_text,
   BEGIN_BUF_PRINT;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (is_producer()) {
     if (is_repart_exchange()) {
       ObSEArray<ObRawExpr *, 16> exprs;
@@ -328,7 +325,6 @@ int ObLogExchange::compute_op_ordering()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
   } else if (is_producer()) {
     // for FULL_INPUT_SAMPLE, we cache all rows in transmit and send in random range
@@ -340,7 +336,6 @@ int ObLogExchange::compute_op_ordering()
     if (is_merge_sort_) {
       if (OB_UNLIKELY(sort_keys_.empty())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("empty sort keys", K(ret));
       } else if (OB_FAIL(set_op_ordering(sort_keys_))) {
       } else {
         is_local_order_ = false;
@@ -363,7 +358,6 @@ int ObLogExchange::compute_op_parallel_info()
   ObLogicalOperator* child = NULL;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(get_plan()), K(child));
   } else if (is_producer()) {
     if (OB_FAIL(ObLogicalOperator::compute_op_parallel_info())) {
     } else { /*do nothing*/ }
@@ -392,7 +386,6 @@ int ObLogExchange::est_cost()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(inner_est_cost(get_parallel(), child->get_card(), op_cost_))) {
   } else {
     set_cost(op_cost_ + child->get_cost());
@@ -407,7 +400,6 @@ int ObLogExchange::do_re_est_cost(EstimateCostInfo &param, double &card, double 
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else {
     double child_card = child->get_card();
     double child_cost = child->get_cost();
@@ -434,10 +426,8 @@ int ObLogExchange::inner_est_cost(int64_t parallel, double child_card, double &o
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_UNLIKELY(1 > parallel)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(parallel), K(ret));
   } else if (is_producer()) {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     ObExchOutCostInfo est_cost_info(child_card,
@@ -469,7 +459,6 @@ int ObLogExchange::compute_sharding_info()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (is_producer()) {
     ObLogicalOperator *child = NULL;
     if (OB_FAIL(ObLogicalOperator::compute_sharding_info())) {
@@ -494,10 +483,9 @@ int ObLogExchange::compute_plan_type()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     exchange_allocated_ = true;
-    location_type_ = child->get_location_type();
+    access_shape_ = child->get_access_shape();
     phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED;
   }
   return ret;
@@ -525,7 +513,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
     } else if ((dist_method_ == ObPQDistributeMethod::RANGE ||
                 dist_method_ == ObPQDistributeMethod::PARTITION_RANGE) &&
                 OB_FAIL(sort_keys_.assign(exch_info.sort_keys_))) {
-      LOG_WARN("failed to assign sort keys", K(ret));
     } else {
       need_null_aware_shuffle_ = exch_info.need_null_aware_shuffle_;
       calc_part_id_expr_ = exch_info.calc_part_id_expr_;
@@ -542,7 +529,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
          || (dist_method_ != ObPQDistributeMethod::RANGE
              && dist_method_ != ObPQDistributeMethod::PARTITION_RANGE))
         && OB_FAIL(sort_keys_.assign(exch_info.sort_keys_))) {
-      LOG_WARN("failed to assign sort keys", K(ret));
     } else if (OB_FAIL(weak_sharding_.assign(exch_info.weak_sharding_))) {
     } else {
       if (exch_info.is_wf_hybrid_) {
@@ -566,18 +552,13 @@ int ObLogExchange::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   if (OB_FAIL(append(all_exprs, repartition_keys_))) {
   } else if (OB_FAIL(append_array_no_dup(all_exprs, repartition_sub_keys_))) {
   } else if (NULL != calc_part_id_expr_ && OB_FAIL(all_exprs.push_back(calc_part_id_expr_))) {
-    LOG_WARN("failed to push back exprs", K(ret));
   } else if (NULL != partition_id_expr_ && OB_FAIL(all_exprs.push_back(partition_id_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != ddl_slice_id_expr_ && OB_FAIL(all_exprs.push_back(ddl_slice_id_expr_))) {
-    LOG_WARN("failed to push back exprs", K(ret));
   } else if (NULL != random_expr_ && OB_FAIL(all_exprs.push_back(random_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < hash_dist_exprs_.count(); i++) {
       if (OB_ISNULL(hash_dist_exprs_.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(add_var_to_array_no_dup(all_exprs, hash_dist_exprs_.at(i).expr_))) {
       } else { /*do nothing*/ }
     }
@@ -585,7 +566,6 @@ int ObLogExchange::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
       for (int64_t i = 0; OB_SUCC(ret) && i < sort_keys_.count(); i++) {
         if (OB_ISNULL(sort_keys_.at(i).expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(add_var_to_array_no_dup(all_exprs, sort_keys_.at(i).expr_))) {
         } else { /*do nothing*/ }
       }
@@ -609,10 +589,8 @@ int ObLogExchange::px_pipe_blocking_pre(ObPxPipeBlockingCtx &ctx)
     OpCtx *op_ctx = static_cast<OpCtx *>(traverse_ctx_);
     if (OB_ISNULL(op_ctx) || OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("traverse ctx is NULL or first child of exchange is NULL", K(ret));
     } else if (OB_ISNULL(child->get_traverse_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("traverse ctx is NULL", K(ret));
     } else {
       auto child_op_ctx = static_cast<OpCtx *>(child->get_traverse_ctx());
       op_ctx->dfo_depth_ += 1;
@@ -637,10 +615,8 @@ int ObLogExchange::px_pipe_blocking_post(ObPxPipeBlockingCtx &ctx)
     auto child = get_child(first_child);
     if (OB_ISNULL(op_ctx) || OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("traverse ctx is NULL or first child of exchange is NULL", K(ret));
     } else if (OB_ISNULL(child->get_traverse_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("traverse ctx is NULL", K(ret));
     } else {
       op_ctx->in_.set_exch(true);
       op_ctx->has_dfo_below_ = true;
@@ -650,7 +626,6 @@ int ObLogExchange::px_pipe_blocking_post(ObPxPipeBlockingCtx &ctx)
       ObLogExchange *exchange_in = static_cast<ObLogExchange*>(get_parent());
       if (OB_ISNULL(exchange_in)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: the parent of exchange out is not exchange in", K(ret));
       } else if (child_op_ctx->in_.is_exch() &&
           (op_ctx->dfo_depth_ > 0 || exchange_in->is_merge_sort())) {
         if (child->get_type() == log_op_def::LOG_DISTINCT
@@ -703,27 +678,26 @@ uint64_t ObLogExchange::hash(uint64_t seed) const
    return seed;
 }
 
-int ObLogExchange::gen_px_pruning_table_locations()
+int ObLogExchange::gen_px_pruning_access_plans()
 {
   int ret = OB_SUCCESS;
   int64_t count = 0;
   ObSEArray<const ObDMLStmt *, 2>stmts;
   ObSEArray<int64_t, 2>drop_expr_idxs;
-  ObArray<ObTableLocation> table_locations;
+  ObArray<TableAccessPlan> table_access_plans;
   int64_t cur_idx = 0;
   if (OB_ISNULL(get_child(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret));
   } else if (OB_FAIL(prepare_px_pruning_param(get_child(0), count, stmts, drop_expr_idxs))) {
   } else if (count <= 0) {
     /*do nothing*/
-  } else if (OB_FAIL(add_px_table_location(get_child(0), table_locations, drop_expr_idxs, stmts, cur_idx))) {
-  } else if (!table_locations.empty()) {
-    if (OB_FAIL(table_locations_.prepare_allocate(table_locations.count(),
+  } else if (OB_FAIL(add_px_access_plan(get_child(0), table_access_plans, drop_expr_idxs, stmts, cur_idx))) {
+  } else if (!table_access_plans.empty()) {
+    if (OB_FAIL(table_access_plans_.prepare_allocate(table_access_plans.count(),
         get_plan()->get_optimizer_context().get_allocator()))) {
     } else {
-      for (int i = 0; i < table_locations.count() && OB_SUCC(ret); ++i) {
-        OZ(table_locations_.at(i).assign(table_locations.at(i)));
+      for (int i = 0; i < table_access_plans.count() && OB_SUCC(ret); ++i) {
+        OZ(table_access_plans_.at(i).assign(table_access_plans.at(i)));
       }
     }
   }
@@ -743,7 +717,6 @@ int ObLogExchange::prepare_px_pruning_param(ObLogicalOperator *op,
   } else if (log_op_def::LOG_TABLE_SCAN == op->get_type()) {
     if (OB_ISNULL(op->get_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt is null", K(ret));
     } else if (OB_FAIL(stmts.push_back(op->get_stmt()))) {
     } else {
       count++;
@@ -769,8 +742,8 @@ int ObLogExchange::prepare_px_pruning_param(ObLogicalOperator *op,
   return ret;
 }
 
-int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
-    ObIArray<ObTableLocation> &table_locations,
+int ObLogExchange::add_px_access_plan(ObLogicalOperator *op,
+    ObIArray<TableAccessPlan> &table_access_plans,
     common::ObIArray<int64_t> &drop_expr_idxs,
     const common::ObIArray<const ObDMLStmt *> &stmts,
     int64_t &cur_idx)
@@ -784,10 +757,10 @@ int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
     ObLogTableScan *table_scan = static_cast<ObLogTableScan* >(op);
     ObSEArray<ObRawExpr *, 8>exprs;
     bool has_exec_param = false;
-    OZ(find_table_location_exprs(drop_expr_idxs, table_scan->get_range_conditions(), exprs, has_exec_param));
-    OZ(find_table_location_exprs(drop_expr_idxs, table_scan->get_filter_exprs(), exprs, has_exec_param));
+    OZ(find_partition_access_exprs(drop_expr_idxs, table_scan->get_range_conditions(), exprs, has_exec_param));
+    OZ(find_partition_access_exprs(drop_expr_idxs, table_scan->get_filter_exprs(), exprs, has_exec_param));
     if (OB_SUCC(ret) && !exprs.empty() && has_exec_param) {
-      SMART_VAR(ObTableLocation, table_location) {
+      SMART_VAR(TableAccessPlan, table_access_plan) {
         const ObDMLStmt *cur_stmt = NULL;
         const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(
             get_plan()->get_optimizer_context().get_session_info());
@@ -796,7 +769,7 @@ int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("stmts idx is unexpected", K(cur_idx), K(stmts.count()));
         } else if (FALSE_IT(cur_stmt = stmts.at(cur_idx))) {
-        } else if (OB_FAIL(table_location.init(
+        } else if (OB_FAIL(table_access_plan.init(
               *get_plan()->get_optimizer_context().get_sql_schema_guard(),
               *cur_stmt,
                get_plan()->get_optimizer_context().get_exec_ctx(),
@@ -806,10 +779,10 @@ int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
                NULL,
                dtc_params,
                false))) {
-        } else if (table_location.is_all_partition()) {
+        } else if (table_access_plan.is_all_partition()) {
           /*do nothing*/
-        } else if (FALSE_IT(table_location.set_has_dynamic_exec_param(true))) {
-        } else if (OB_FAIL(table_locations.push_back(table_location))) {
+        } else if (FALSE_IT(table_access_plan.set_has_dynamic_exec_param(true))) {
+        } else if (OB_FAIL(table_access_plans.push_back(table_access_plan))) {
         }
       }
     }
@@ -818,8 +791,8 @@ int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
     }
   } else {
     for (int i = 0; i < op->get_num_of_child() && OB_SUCC(ret); ++i) {
-      if (OB_FAIL(SMART_CALL(add_px_table_location(op->get_child(i),
-          table_locations, drop_expr_idxs, stmts, cur_idx)))) {
+      if (OB_FAIL(SMART_CALL(add_px_access_plan(op->get_child(i),
+          table_access_plans, drop_expr_idxs, stmts, cur_idx)))) {
       }
     }
   }
@@ -833,7 +806,6 @@ int ObLogExchange::find_need_drop_expr_idxs(ObLogicalOperator *op,
   bool left_has_exchange = false;
   if (OB_ISNULL(op->get_child(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null op", K(ret));
   } else if (OB_FAIL(op->get_child(0)->check_has_op_below(log_op_def::LOG_EXCHANGE, left_has_exchange))) {
   } else if (!left_has_exchange) {
     if (type == log_op_def::LOG_SUBPLAN_FILTER) {
@@ -872,7 +844,6 @@ int ObLogExchange::check_expr_is_need(const ObRawExpr *expr,
     for (int i = 0; i < params.count() && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(params.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("params.at(i) returns null", K(ret), K(i));
       } else {
         param_value = static_cast<ObConstRawExpr *>(params.at(i))->get_value().get_unknown();
         OZ(param_idxs.push_back(param_value));
@@ -892,7 +863,7 @@ int ObLogExchange::check_expr_is_need(const ObRawExpr *expr,
   return ret;
 }
 
-int ObLogExchange::find_table_location_exprs(const common::ObIArray<int64_t> &drop_exprs_idxs,
+int ObLogExchange::find_partition_access_exprs(const common::ObIArray<int64_t> &drop_exprs_idxs,
     const common::ObIArray<ObRawExpr *> &filters,
     common::ObIArray<ObRawExpr *> &exprs,
     bool &has_exec_param)
@@ -904,7 +875,6 @@ int ObLogExchange::find_table_location_exprs(const common::ObIArray<int64_t> &dr
     ObRawExpr *expr = filters.at(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (expr->has_flag(CNT_DYNAMIC_PARAM)) {
       if (OB_FAIL(check_expr_is_need(expr, drop_exprs_idxs, is_need))) {
       } else if (is_need) {
@@ -923,7 +893,6 @@ int ObLogExchange::allocate_startup_expr_post()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::allocate_startup_expr_post())) {
   }
   return ret;
@@ -934,7 +903,6 @@ int ObLogExchange::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     is_fixed = expr == calc_part_id_expr_ ||
                expr == partition_id_expr_ ||
@@ -944,7 +912,6 @@ int ObLogExchange::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
     for (int64_t i = 0; OB_SUCC(ret) && !is_fixed && i < hash_dist_exprs_.count(); i++) {
       if (OB_ISNULL(hash_dist_exprs_.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         is_fixed = expr == hash_dist_exprs_.at(i).expr_;
       }
@@ -960,7 +927,6 @@ int ObLogExchange::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG
     // do nothing.
   } else if (OB_ISNULL(px_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("px info is null", K(ret), K(get_op_id()));
   } else if (OB_FAIL(px_res_analyzer.recursive_walk_through_px_tree(*px_info_))) {
   } else if (OB_FAIL(px_res_analyzer.append_px(OPEN_PX_RESOURCE_ANALYZE_ARG, *px_info_))) {
   } else {
@@ -978,7 +944,6 @@ int ObLogExchange::close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_A
     // do nothing.
   } else if (OB_ISNULL(px_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("px info is null", K(ret));
   } else if (OB_FAIL(px_res_analyzer.remove_px(CLOSE_PX_RESOURCE_ANALYZE_ARG, *px_info_))) {
   } else {
     if (update_max) {

@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_META_STORE_OB_SERVER_RUNTIME_META_H_
 
 #include "share/resource/ob_server_runtime_config.h"
-#include "storage/ob_super_block_struct.h"
 
 namespace oceanbase
 {
@@ -30,8 +29,7 @@ struct ObServerRuntimeMeta final
 public:
   ObServerRuntimeMeta()
     : runtime_config_(),
-      super_block_(),
-      create_status_(storage::ObServerRuntimeCreateStatus::CREATING) {}
+      is_hidden_(false) {}
   ObServerRuntimeMeta(const ObServerRuntimeMeta &) = default;
   ObServerRuntimeMeta &operator=(const ObServerRuntimeMeta &) = default;
 
@@ -39,20 +37,17 @@ public:
 
   bool is_valid() const
   {
-    return runtime_config_.is_valid() && super_block_.is_valid();
+    return runtime_config_.is_valid();
   }
 
   int build(const share::ObServerRuntimeConfig &runtime_config,
-            const storage::ObServerRuntimeSuperBlock &super_block);
+            bool is_hidden);
 
-  TO_STRING_KV(K_(runtime_config), K_(super_block), K_(create_status));
-
-  OB_UNIS_VERSION_V(1);
+  TO_STRING_KV(K_(runtime_config), K_(is_hidden));
 
 public:
   share::ObServerRuntimeConfig runtime_config_;
-  storage::ObServerRuntimeSuperBlock super_block_;
-  storage::ObServerRuntimeCreateStatus create_status_;
+  bool is_hidden_;
 };
 
 }  // end namespace omt

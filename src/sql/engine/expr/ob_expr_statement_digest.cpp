@@ -47,23 +47,19 @@ int calc_digest_text_inner(const ObString &query,
   } else if (OB_ISNULL(parse_result.result_tree_)
             || OB_ISNULL(parse_result.result_tree_->children_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected parse result", K(ret));
   } else if (FALSE_IT(item_type = parse_result.result_tree_->children_[0]->type_)) {
   } else if (i > 0) {
     if (OB_UNLIKELY(T_EMPTY_QUERY != item_type)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid stmt type", K(item_type), K(ret));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
     }
   } else if (OB_UNLIKELY(T_EMPTY_QUERY == item_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid empty query", K(item_type), K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
   } else if (OB_FAIL(ObResolverUtils::resolve_stmt_type(parse_result, stmt_type))) {
   } else if (ObStmt::is_dml_stmt(stmt_type) && !ObStmt::is_show_stmt(stmt_type)) {
     if (OB_UNLIKELY(parse_result.result_tree_->children_[0]->value_ > 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("query contains questionmark", K(query), K(ret));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
     } else if (OB_FAIL(ObSqlParameterization::parameterize_syntax_tree(allocator,
                                                                 true,
@@ -160,7 +156,6 @@ int ObExprStatementDigest::eval_statement_digest(const ObExpr &expr, ObEvalCtx &
       OB_ISNULL(ctx.exec_ctx_.get_sql_ctx()) ||
       OB_ISNULL(schema_guard = ctx.exec_ctx_.get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();
@@ -221,7 +216,6 @@ int ObExprStatementDigestText::eval_statement_digest_text(const ObExpr &expr, Ob
       OB_ISNULL(ctx.exec_ctx_.get_sql_ctx()) ||
       OB_ISNULL(schema_guard = ctx.exec_ctx_.get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();

@@ -68,7 +68,6 @@ int ObExprErrno::get_value(const number::ObNumber &nmb, int64_t &value)
   int64_t tmp = 0;
   if (!nmb.is_valid_int64(tmp)) { //based on the behaviour of mysql.
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("out of range", K(ret), K(nmb));
   } else {
     value = tmp;
   }

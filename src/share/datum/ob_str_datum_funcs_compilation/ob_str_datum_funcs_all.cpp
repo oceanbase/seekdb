@@ -21,10 +21,12 @@ namespace common
 extern void __init_str_func0();
 extern void __init_str_func1();
 extern void __init_str_func2();
+extern void __init_str_func3();
 void __init_all_str_funcs() {
   __init_str_func0();
   __init_str_func1();
   __init_str_func2();
+  __init_str_func3();
 }
 } // end common
 } // end oceanbase

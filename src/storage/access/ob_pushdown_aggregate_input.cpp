@@ -118,7 +118,6 @@ int ObPushdownAggregateInput::get_input_column(
   int64_t projector_slot = -1;
   if (slot < 0 || slot >= input_count) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid aggregate input slot", K(ret), K(slot), K(group_count), K(aggregate_count));
   } else if (slot < group_count) {
     projector = group_projector;
     projector_slot = slot;
@@ -128,8 +127,6 @@ int ObPushdownAggregateInput::get_input_column(
   }
   if (OB_SUCC(ret) && OB_ISNULL(projector)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null canonical aggregate input projector", K(ret), K(slot), K(group_count),
-             K(aggregate_count));
   } else if (OB_SUCC(ret) && FALSE_IT(col_offset = projector->at(projector_slot))) {
   } else if (OB_SUCC(ret) && OB_COUNT_AGG_PD_COLUMN_ID == col_offset) {
     // COUNT(*) is cardinality-only and intentionally has no value column.
@@ -138,14 +135,11 @@ int ObPushdownAggregateInput::get_input_column(
                  || col_offset < 0 || col_offset >= col_params->count()
                  || col_offset >= iter_param_.read_info_->get_columns_index().count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid aggregate input projector", K(ret), K(slot), K(col_offset),
-             KP(iter_param_.read_info_), KP(col_params));
   } else if (OB_SUCC(ret)) {
     col_index = iter_param_.read_info_->get_columns_index().at(col_offset);
     col_param = col_params->at(col_offset);
     if (OB_ISNULL(col_param)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null aggregate column parameter", K(ret), K(slot), K(col_offset));
     }
   }
   return ret;
@@ -164,7 +158,6 @@ int ObPushdownAggregateInput::get_null_count(
   } else if (INPUT_ROW == kind_) {
     if (OB_ISNULL(row_) || col_offset < 0 || col_offset >= row_->get_column_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid row aggregate input", K(ret), K(col_offset), KP(row_));
     } else {
       const blocksstable::ObStorageDatum &datum = row_->storage_datums_[col_offset];
       if (!datum.is_nop()) {
@@ -192,8 +185,6 @@ int ObPushdownAggregateInput::get_null_count(
               valid_row_count))) {
       } else if (OB_UNLIKELY(valid_row_count < 0 || valid_row_count > selection_.count_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid non-null aggregate input count", K(ret), K(valid_row_count),
-                 K(selection_.count_));
       } else {
         null_count = selection_.count_ - valid_row_count;
       }
@@ -310,7 +301,6 @@ int ObPushdownAggregateInput::read_index_extreme(
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(normalize_value(col_param, datum))) {
-    LOG_WARN("failed to normalize aggregate index extreme", K(ret), K(col_index), K(read_min));
   }
   return ret;
 }
@@ -369,7 +359,6 @@ int ObPushdownAggregateInput::try_reduce(
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(get_null_count(col_offset, col_index, *col_param, null_count))) {
         if (OB_NOT_SUPPORTED != ret) {
-          LOG_WARN("failed to get aggregate null count", K(ret), K(slot), K(col_offset));
         }
       }
       if (OB_SUCC(ret)) {
@@ -435,7 +424,6 @@ int ObPushdownAggregateInput::normalize_value(
     const common::ObObj &default_value = col_param.get_orig_default_value();
     if (default_value.is_nop_value()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("decoded NOP aggregate value has no schema default", K(ret), K(col_param));
     } else if (OB_FAIL(storage_datum.from_obj_enhance(default_value))) {
     }
   } else {
@@ -446,9 +434,7 @@ int ObPushdownAggregateInput::normalize_value(
       && col_param.get_meta_type().is_fixed_len_char_type()
       && OB_FAIL(storage::pad_column(
           col_param.get_meta_type(), col_param.get_accuracy(), value_allocator_, storage_datum))) {
-    LOG_WARN("failed to pad aggregate value", K(ret), K(col_param));
   } else if (OB_SUCC(ret) && OB_FAIL(datum.deep_copy(storage_datum, value_allocator_))) {
-    LOG_WARN("failed to own normalized aggregate value", K(ret));
   }
   return ret;
 }
@@ -478,7 +464,6 @@ int ObPushdownAggregateInput::read_values(
       if (OB_SUCC(ret)) {
         ret = OB_ERR_UNEXPECTED;
       }
-      LOG_WARN("failed to own row aggregate value", K(ret), K(col_offset), KP(row_));
     } else if (OB_FAIL(normalize_value(*col_param, value_datums_[0]))) {
     }
   } else if (INPUT_READER == kind_) {

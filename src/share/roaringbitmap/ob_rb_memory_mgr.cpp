@@ -59,7 +59,7 @@ static void *roaring_malloc(size_t size) {
       size_t alloc_location = reinterpret_cast<size_t>(alloc_ptr);
       void *tid_ptr = reinterpret_cast<void *>(alloc_location + sizeof(ObRbMemMgr *) );
       size_t tid_location = reinterpret_cast<size_t>(tid_ptr);
-      void *size_ptr = reinterpret_cast<void *>(tid_location + sizeof(size_t));
+      void *size_ptr = reinterpret_cast<void *>(tid_location + sizeof(uint64_t));
       res_ptr = reinterpret_cast<void *>(alloc_location + sizeof(ObRbMemMgr *) + sizeof(uint64_t) + sizeof(size_t));
       MEMCPY(alloc_ptr, &mem_mgr, sizeof(ObRbMemMgr *));
       MEMCPY(tid_ptr, &tid_reserved, sizeof(uint64_t));
@@ -171,7 +171,6 @@ int ObRbMemMgr::init()
   lib::ObMemAttr mem_attr("RoaringBitmap");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObRbMemMgr init twice.", K(ret));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
     allocator_.set_nway(RB_ALLOC_CONCURRENCY);

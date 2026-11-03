@@ -490,7 +490,6 @@ public:
     if (OB_FAIL(expr_factory->create_raw_expr(expr_type, attr_expr))) {
     } else if (OB_ISNULL(attr_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("attr expr is null");
     } else if (OB_FAIL(attr_expr->add_flag(IS_ATTR_EXPR))) {
     } else if (attr_type == ArrayAttr::ATTR_LENGTH && FALSE_IT(attr_expr->set_data_type(ObUInt32Type))) {
     } else if ((attr_type == ArrayAttr::ATTR_NULL_BITMAP || attr_type == ArrayAttr::ATTR_OFFSETS ||attr_type == ArrayAttr::ATTR_DATA) &&

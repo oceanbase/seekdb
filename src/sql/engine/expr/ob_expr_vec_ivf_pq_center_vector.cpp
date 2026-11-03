@@ -48,7 +48,6 @@ int ObExprVecIVFPQCenterVector::calc_result_typeN(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
   } else {
@@ -76,10 +75,8 @@ int ObExprVecIVFPQCenterVector::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1) && OB_UNLIKELY(rt_expr.arg_cnt_ != 4)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else if (OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments, null args", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_pq_center_vector;
   }
@@ -141,7 +138,6 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected arg cnt", K(ret), K(expr.arg_cnt_));
   }
   return ret;
 }

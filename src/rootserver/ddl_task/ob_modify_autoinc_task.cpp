@@ -54,12 +54,9 @@ int ObUpdateAutoincSequenceTask::process()
   int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_UNLIKELY(column_id_ == OB_INVALID_ID || data_table_id_ == OB_INVALID_ID
              || orig_column_type_ >= ObMaxType || dest_table_id_ == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_table_id_), K(column_id_),
-                                 K(orig_column_type_), K(dest_table_id_));
   } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_AUTOINC_SEQUENCE_FAILED))) {
   } else {
     ObDDLService &ddl_service = local_management_service->get_ddl_service();
@@ -74,14 +71,11 @@ int ObUpdateAutoincSequenceTask::process()
     } else if (OB_FAIL(schema_guard.get_table_schema( dest_table_id_, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table schemas should not be null", K(ret), K(table_schema));
     } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), db_schema))) {
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, database schema must not be nullptr", K(ret));
     } else if (OB_ISNULL(column_schema = table_schema->get_column_schema(column_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get alter column schema", K(ret), K(column_id_), KPC(table_schema));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObTimeoutCtx timeout_ctx;
@@ -104,7 +98,6 @@ int ObUpdateAutoincSequenceTask::process()
         } else if (OB_FAIL(user_sql_proxy->read(res, sql.ptr(), &session_param))) {
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get result failed", K(ret));
         } else if (OB_FAIL(result->next())) {
         } else if (OB_FAIL(result->get_obj("MAX_VALUE", obj))) {
         } else {
@@ -135,7 +128,6 @@ ObAsyncTask *ObUpdateAutoincSequenceTask::deep_copy(char *buf, const int64_t buf
   ObUpdateAutoincSequenceTask *new_task = nullptr;
   if (OB_ISNULL(buf) || buf_size < get_deep_copy_size()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), "deep_copy_size", get_deep_copy_size(), K(buf_size));
   } else {
     new_task = new (buf) ObUpdateAutoincSequenceTask(data_table_id_,
                                                      dest_table_id_,
@@ -166,11 +158,9 @@ int ObModifyAutoincTask::init(const int64_t task_id,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObModifyAutoincTask has already been inited", K(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == table_id || !alter_table_arg.is_valid())
              || task_status < ObDDLTaskStatus::PREPARE || task_status > ObDDLTaskStatus::SUCCESS) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id), K(alter_table_arg), K(task_status));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, alter_table_arg, alter_table_arg_))) {
   } else if (OB_FAIL(set_ddl_stmt_str(alter_table_arg_.ddl_stmt_str_))) {
   } else {
@@ -202,10 +192,8 @@ int ObModifyAutoincTask::init(const ObDDLTaskRecord &task_record)
   int64_t pos = 0;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObModifyAutoincTask has already been inited", K(ret));
   } else if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_record));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
   } else if (OB_FAIL(set_ddl_stmt_str(task_record.ddl_stmt_str_))) {
   } else {
@@ -229,7 +217,6 @@ int ObModifyAutoincTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_FAIL(check_health())) {
   } else {
     switch(task_status_) {
@@ -255,7 +242,6 @@ int ObModifyAutoincTask::process()
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ObModifyAutoincTask status", K(ret), K(task_status_), K(*this));
         break;
       }
     }
@@ -274,10 +260,8 @@ int ObModifyAutoincTask::unlock_table()
   ObTableLockOwnerID owner_id;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                  task_id_))) {
@@ -299,10 +283,8 @@ int ObModifyAutoincTask::modify_autoinc()
   ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, MODIFY_AUTOINC_FAILED))) {
   } else if (OB_FAIL(check_update_autoinc_end(is_update_autoinc_end))) {
   } else if (!is_update_autoinc_end && update_autoinc_job_time_ == 0) {
@@ -317,7 +299,6 @@ int ObModifyAutoincTask::modify_autoinc()
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, orig_table_schema))) {
     } else if (OB_ISNULL(orig_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("cannot find orig table", K(ret), K(alter_table_arg_));
     } else {
       int64_t alter_column_id = 0;
 
@@ -327,7 +308,6 @@ int ObModifyAutoincTask::modify_autoinc()
       for(; OB_SUCC(ret) && iter != iter_end; iter++) {
         if (OB_ISNULL(alter_column_schema = static_cast<AlterColumnSchema *>(*iter))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("iter is NULL", K(ret));
         } else {
           const ObString &orig_column_name = alter_column_schema->get_origin_column_name();
           const ObColumnSchemaV2 *orig_column_schema = orig_table_schema->get_column_schema(orig_column_name);
@@ -374,10 +354,8 @@ int ObModifyAutoincTask::wait_trans_end()
   ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (snapshot_version_ > 0) {
     new_status = next_task_status;
   }
@@ -391,7 +369,6 @@ int ObModifyAutoincTask::wait_trans_end()
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, updated_table_schema))) {
     } else if (OB_ISNULL(updated_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("cannot find orig table", K(ret), K(alter_table_arg_));
     } else if (OB_FAIL(wait_trans_ctx_.init(task_id_,
                                             task_status_,
                                             object_id_,
@@ -404,7 +381,6 @@ int ObModifyAutoincTask::wait_trans_end()
     bool is_trans_end = false;
     if (OB_FAIL(wait_trans_ctx_.try_wait(is_trans_end, snapshot_version_))) {
       if (OB_EAGAIN != ret) {
-        LOG_WARN("fail to try wait transaction", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
@@ -427,7 +403,6 @@ int ObModifyAutoincTask::set_schema_available()
   int64_t rpc_timeout = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
   } else {
@@ -449,7 +424,6 @@ int ObModifyAutoincTask::rollback_schema()
   int64_t rpc_timeout = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObArenaAllocator allocator;
@@ -500,7 +474,6 @@ int ObModifyAutoincTask::cleanup_impl()
   ObString unused_str;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
   } else if (OB_FAIL(remove_task_record())) {
   }
@@ -533,16 +506,13 @@ int ObModifyAutoincTask::check_health()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
     need_retry_ = false;
   } else if (OB_FAIL(refresh_status())) {
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else {
     ObMultiVersionSchemaService &schema_service = *GCTX.schema_service_;
     ObSchemaGetterGuard schema_guard;
@@ -552,7 +522,6 @@ int ObModifyAutoincTask::check_health()
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_, is_source_table_exist))) {
     } else if (!is_source_table_exist) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("data table not exist", K(ret), K(is_source_table_exist));
     }
     if (OB_FAIL(ret) && !ObIDDLTask::in_ddl_retry_white_list(ret)) {
       const ObDDLTaskStatus old_status = static_cast<ObDDLTaskStatus>(task_status_);
@@ -573,7 +542,6 @@ int ObModifyAutoincTask::serialize_params_to_message(char *buf, const int64_t bu
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_len, pos))) {
   } else if (OB_FAIL(alter_table_arg_.serialize(buf, buf_len, pos))) {
   }
@@ -586,7 +554,6 @@ int ObModifyAutoincTask::deserialize_params_from_message(const char *buf, const 
   obcall::ObAlterTableArg tmp_arg;
   if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {
   } else if (OB_FAIL(tmp_arg.deserialize(buf, data_len, pos))) {
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, alter_table_arg_))) {

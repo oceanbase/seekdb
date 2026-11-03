@@ -42,7 +42,6 @@ int ObLogTempTableInsert::compute_sharding_info()
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(get_plan()), K(ret));
   } else if (child->is_match_all()) {
     //temp table insert is a data-shared operator, can not be match all 
     strong_sharding_ = get_plan()->get_optimizer_context().get_local_sharding();
@@ -61,7 +60,6 @@ int ObLogTempTableInsert::compute_op_ordering()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (child->is_single()) {
     if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
     } else { /*do nothing*/ }
@@ -94,10 +92,8 @@ int ObLogTempTableInsert::do_re_est_cost(EstimateCostInfo &param, double &card, 
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_UNLIKELY(param.need_parallel_ < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(param.need_parallel_), K(ret));
   } else if (OB_FAIL(child->re_est_cost(param, card, cost))) {
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();

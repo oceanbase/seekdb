@@ -15,7 +15,9 @@
  */
 
 
+#include "rust/config.h"
 #include "ob_trans_service.h"
+#include "lib/alloc/alloc_func.h"
 #include "ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_trans_functor.h"
@@ -117,7 +119,7 @@ int ObTransService::init(const ObAddr &self,
   if (OB_SUCC(ret)) {
 #ifdef ENABLE_DEBUG_LOG
     void *p = NULL;
-    if (!GCONF.enable_defensive_check()) {
+    if (!(config::_enable_defensive_check() > 0)) {
       // do nothing
     } else if (NULL == (p = ob_malloc(sizeof(ObDefensiveCheckMgr),
                                       lib::ObMemAttr("ObDefenCheckMgr")))) {

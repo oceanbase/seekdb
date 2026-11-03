@@ -60,7 +60,6 @@ int ObExprArrayAppendCommon::calc_result_type2(ObExprResType &type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (type1.is_null()) {
     is_null_res = true;
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -183,7 +182,6 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
         } else {

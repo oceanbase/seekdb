@@ -42,7 +42,6 @@ int add_dag_and_get_progress(
   physical_row_count = 0;
   if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(dag));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->add_dag(dag))) {
     // caution ret = OB_EAGAIN or OB_SIZE_OVERFLOW
     if (OB_EAGAIN == ret

@@ -15,6 +15,7 @@
  */
 
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_job_executor.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_server_runtime.h"
@@ -46,12 +47,26 @@ int ObDBMSSchedService::create_job(
       sql_client, job_id, job_info);
 }
 
+int ObDBMSSchedService::run_timer_driven_job(const common::ObString &job_name)
+{
+  int ret = OB_SUCCESS;
+  dbms_scheduler::ObDBMSSchedJobExecutor executor;
+  if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy or schema service is null", K(ret));
+  } else if (OB_FAIL(executor.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
+    LOG_WARN("failed to initialize timer-driven job executor", K(ret));
+  } else if (OB_FAIL(executor.run_timer_driven_dbms_sched_job(job_name))) {
+    LOG_WARN("failed to execute timer-driven scheduler job", K(ret), K(job_name));
+  }
+  return ret;
+}
+
 int ObDBMSSchedService::init()
 {
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", KR(ret));
   } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
   } else if (OB_FAIL(ObServerThreadHelper::create(
       "DBMSSched",
@@ -67,7 +82,6 @@ int ObDBMSSchedService::start()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.start())) {
   } else if (OB_FAIL(ObServerThreadHelper::start())) {
   } else {
@@ -81,7 +95,6 @@ void ObDBMSSchedService::do_work()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.scheduler())) {
   }
 }
@@ -91,7 +104,6 @@ void ObDBMSSchedService::stop()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.stop())) {
   } else {
     ObServerThreadHelper::stop();
@@ -104,7 +116,6 @@ void ObDBMSSchedService::wait()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else {
     ObServerThreadHelper::wait();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success");

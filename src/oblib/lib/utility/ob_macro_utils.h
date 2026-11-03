@@ -24,7 +24,6 @@
 #define OB_WEAK_SYMBOL
 #else
 #define OB_WEAK_SYMBOL __attribute__((weak))
-#endif
 
 #define SELECT150_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9,           \
                    _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, \
@@ -505,11 +504,16 @@
 // container iterate macro, support container with count(), at() interface.
 // (e.g.: ObIArray)
 #define __INNER_I_NAME__(it) __i__##it
-#define __INNER_I__(it) (*reinterpret_cast<int64_t *>(&__INNER_I_NAME__(it)))
+#define __INNER_ONCE_NAME__(it) __once__##it
+// Keep the index in an integer object. Aliasing a pointer as int64_t reads and
+// writes past its storage on wasm32. The outer loop only scopes the index;
+// break and continue in the body still apply to the element loop.
 #define FOREACH_CNT_X(it, c, extra_condition) \
-for (__typeof__((c).at(0)) *it = ((extra_condition) && (c).count() > 0 ? &(c).at(0) : NULL), *__INNER_I_NAME__(it) = NULL; \
-    (extra_condition) && __INNER_I__(it) < (c).count(); \
-    ++__INNER_I__(it), it = (__INNER_I__(it) < (c).count() ? &(c).at(__INNER_I__(it)) : NULL))
+for (int64_t __INNER_I_NAME__(it) = 0, __INNER_ONCE_NAME__(it) = 1; \
+     __INNER_ONCE_NAME__(it); __INNER_ONCE_NAME__(it) = 0) \
+  for (__typeof__((c).at(0)) *it = ((extra_condition) && (c).count() > 0 ? &(c).at(0) : NULL); \
+       (extra_condition) && __INNER_I_NAME__(it) < (c).count(); \
+       ++__INNER_I_NAME__(it), it = (__INNER_I_NAME__(it) < (c).count() ? &(c).at(__INNER_I_NAME__(it)) : NULL))
 #define FOREACH_CNT(it, c) FOREACH_CNT_X(it, c, true)
 
 // array iterate macro, in contrast to FOREACH_CNT, these macros can access index variable in the loop body
@@ -625,6 +629,9 @@ for (__typeof__((c).at(0)) *it = ((extra_condition) && (c).count() > 0 ? &(c).at
 #define CACHE_ALIGN_SIZE 64
 #elif __aarch64__
 #define CACHE_ALIGN_SIZE 128
+#elif defined(__wasm__)
+// Conservative false-sharing padding for browser host CPUs.
+#define CACHE_ALIGN_SIZE 128
 #endif
 
 #define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
@@ -707,19 +714,15 @@ for (__typeof__((c).at(0)) *it = ((extra_condition) && (c).count() > 0 ? &(c).at
     } \
   } while (false)
 
-#ifdef NDEBUG
-#define OB_ASSERT(x) (void)(x)
-#else
+// Evaluate once and remain fatal in both Debug and Release builds.
 #define OB_ASSERT(x)                                    \
   do{                                                   \
-    bool v=(x);                                         \
-    if(OB_UNLIKELY(!(v))) {                             \
+    if(OB_UNLIKELY(!(x))) {                             \
       _OB_LOG_RET(ERROR, oceanbase::common::OB_ERROR, "assert fail, exp=%s", #x);        \
       BACKTRACE_RET(ERROR, oceanbase::common::OB_ERROR, 1, "assert fail");               \
-      assert(v);                                        \
+      ob_abort();                                       \
     }                                                   \
   } while(false)
-#endif
 
 #ifndef ENABLE_DEBUG_LOG
 #define OB_SAFE_ASSERT(x)                                                                   \

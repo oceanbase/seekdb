@@ -8,6 +8,7 @@ SHOW COLLATION;
 Collation	Charset	Id	Default	Compiled	Sortlen
 utf8mb4_general_ci	utf8mb4	45	Yes	Yes	1
 utf8mb4_bin	utf8mb4	46		Yes	1
+utf8mb4_unicode_ci	utf8mb4	224		Yes	8
 binary	binary	63	Yes	Yes	1
 SHOW CHARACTER SET;
 Charset	Description	Default collation	Maxlen

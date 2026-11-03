@@ -34,7 +34,6 @@ int ObPxReduceTransmitOp::inner_open()
 
   if (!MY_SPEC.is_no_repart_exchange()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect no repartition", K(ret));
   } else if (OB_FAIL(ObPxTransmitOp::inner_open())) {
   }
   return ret;

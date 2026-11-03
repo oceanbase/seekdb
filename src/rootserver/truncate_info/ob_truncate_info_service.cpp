@@ -69,11 +69,9 @@ int ObTruncatePartKeyInfo::init(
   } else if (OB_UNLIKELY(ObPartitionLevel::PARTITION_LEVEL_ONE != part_level
       && ObPartitionLevel::PARTITION_LEVEL_TWO != part_level)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid part level", K(ret), K(part_level), K(data_table_id));
   } else if (OB_FAIL(resolve_part_expr(allocator, schema_guard, data_table_schema, PARTITION_LEVEL_ONE, part_expr_))) {
   } else if (ObPartitionLevel::PARTITION_LEVEL_TWO == part_level
       && OB_FAIL(resolve_part_expr(allocator, schema_guard, data_table_schema, PARTITION_LEVEL_TWO, subpart_expr_))) {
-    LOG_WARN("Failed to resolve subpart expr", K(ret), K(data_table_id));
   }
   return ret;
 }
@@ -91,11 +89,9 @@ int ObTruncatePartKeyInfo::check_only_have_ref_columns(
     || (ObPartitionLevel::PARTITION_LEVEL_ONE != check_part_level
         && ObPartitionLevel::PARTITION_LEVEL_TWO != check_part_level))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid part level", K(ret), K(schema_part_level), K(check_part_level));
   } else if (OB_FAIL(inner_check_only_have_ref_columns(data_table_schema, PARTITION_LEVEL_ONE, only_ref_columns))) {
   } else if (only_ref_columns && ObPartitionLevel::PARTITION_LEVEL_TWO == check_part_level
       && OB_FAIL(inner_check_only_have_ref_columns(data_table_schema, PARTITION_LEVEL_TWO, only_ref_columns))) {
-    LOG_WARN("Failed to check only have ref columns", K(ret), K(data_table_id));
   }
   return ret;
 }
@@ -112,8 +108,6 @@ int ObTruncatePartKeyInfo::inner_check_column_schema(
   if (OB_UNLIKELY(nullptr == ref_expr ||
                   nullptr == (column_schema = data_table_schema.get_column_schema(ref_col_id)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not found column schema by column id", KR(ret),
-             K(ref_col_id), KPC(ref_expr), KPC(column_schema));
   } else if (!column_schema->is_column_stored_in_sstable()) {
     only_ref_columns = false;
     LOG_INFO("[TRUNCATE INFO] expr is not stored in data schema", KR(ret), KPC(column_schema));
@@ -139,22 +133,18 @@ int ObTruncatePartKeyInfo::inner_check_only_have_ref_columns(
     check_part_expr = subpart_expr_;
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid part level", KR(ret), K(check_part_level));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(check_part_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null part expr", KR(ret), K(check_part_level), KP(check_part_expr));
   } else if (T_OP_ROW == check_part_expr->get_expr_type() || T_REF_COLUMN == check_part_expr->get_expr_type()) {
     only_ref_columns = true;
     if (0 == check_part_expr->get_param_count() && OB_FAIL(inner_check_column_schema(data_table_schema, *check_part_expr, only_ref_columns))) {
-      LOG_WARN("failed to check column schema", KR(ret), KPC(check_part_expr));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < check_part_expr->get_param_count() && only_ref_columns; ++i) {
       ObRawExpr *param_expr = nullptr;
       if (OB_ISNULL(param_expr = check_part_expr->get_param_expr(i))) {
         ret = OB_INVALID_DATA;
-        LOG_WARN("null expr in part_expr", KR(ret), K(i));
       } else if (T_REF_COLUMN == param_expr->get_expr_type()) {
         if (OB_FAIL(inner_check_column_schema(data_table_schema, *param_expr, only_ref_columns))) {
         }
@@ -202,7 +192,6 @@ int ObTruncatePartKeyInfo::resolve_part_expr(
   if (OB_FAIL(schema_checker.init(schema_guard))) {
   } else if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else {
     ObStmtFactory stmt_factory(allocator);
     TableItem table_item;
@@ -229,7 +218,6 @@ int ObTruncatePartKeyInfo::resolve_part_expr(
       ObDeleteStmt *delete_stmt = delete_resolver.create_stmt<ObDeleteStmt>();
       if (OB_ISNULL(delete_stmt) || OB_ISNULL(resolver_ctx.query_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("delete_stmt or query_ctx is NULL", K(delete_stmt), K(resolver_ctx.query_ctx_));
       } else if (OB_FAIL(delete_stmt->get_table_items().push_back(&table_item))) {
       } else if (OB_FAIL(delete_stmt->set_table_bit_index(table_schema.get_table_id()))) {
       } else if (ObPartitionLevel::PARTITION_LEVEL_ONE == build_part_level) {
@@ -247,7 +235,6 @@ int ObTruncatePartKeyInfo::resolve_part_expr(
                                                            raw_part_expr))) {
         } else if (OB_ISNULL(raw_part_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("raw_part_expr is NULL", K(ret), K(part_type));
         }
       }
       exec_ctx.set_physical_plan_ctx(NULL);
@@ -268,15 +255,12 @@ int ObTruncatePartKeyInfo::create_tmp_session(
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_sessid(sid))) {
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_session(sid, session))) {
     session = nullptr;
-    LOG_WARN("Failed to create session", K(ret), K(sid));
   } else {
     free_session_ctx.sessid_ = sid;
   }
   if (FAILEDx(schema_guard.get_server_runtime_info(runtime_info))) {
-    LOG_WARN("Failed to get server runtime info", K(ret));
   } else if (OB_ISNULL(runtime_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null server runtime schema", K(ret));
   } else if (OB_FAIL(session->load_default_sys_variable(false, false))) {
   } else if (OB_FAIL(session->load_default_configs_in_pc())) {
   } else if (OB_FAIL(session->init_runtime(runtime_info->get_runtime_name()))) {
@@ -306,10 +290,8 @@ int ObTruncatePartKeyInfo::extract_col_ref_expr(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(part_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null filter", K(ret));
   } else if (T_REF_COLUMN == part_expr->get_expr_type()) {
     if (!is_contain(exprs, part_expr) && OB_FAIL(exprs.push_back(part_expr))) {
-      LOG_WARN("Failed to push back", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_expr->get_param_count(); ++i) {
@@ -329,20 +311,17 @@ int ObTruncatePartKeyInfo::get_ref_column_id_array(
   if (OB_UNLIKELY(ObPartitionLevel::PARTITION_LEVEL_ONE != part_level
       && ObPartitionLevel::PARTITION_LEVEL_TWO != part_level)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid part level", K(ret), K(part_level));
   } else {
     ObRawExpr *raw_part_expr = ObPartitionLevel::PARTITION_LEVEL_ONE == part_level ? part_expr_ : subpart_expr_;
     ObSEArray<ObColDesc, 4> index_rowkey_col_desc;
     if (OB_ISNULL(raw_part_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("part expr is unexpected null", KR(ret), KP(raw_part_expr), K(part_level), KPC(part_expr_), KPC(subpart_expr_));
     } else if (OB_FAIL(index_table_schema.get_multi_version_column_descs(index_rowkey_col_desc))) {
     } else {
       ObSEArray<ObRawExpr*, 4> col_ref_exprs;
       if (OB_FAIL(extract_col_ref_expr(raw_part_expr, col_ref_exprs))) {
       } else if (OB_UNLIKELY(col_ref_exprs.empty())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected empty col ref expr", KR(ret), KPC(raw_part_expr));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < col_ref_exprs.count(); ++i) {
         ObColumnRefRawExpr *ref_expr = static_cast<ObColumnRefRawExpr*>(col_ref_exprs.at(i));
@@ -358,8 +337,6 @@ int ObTruncatePartKeyInfo::get_ref_column_id_array(
         } // for
         if (OB_UNLIKELY(!found)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected state, not found index rowkey projector for part expr", K(ret), K(i), K(expr_col_id),
-                  K(index_rowkey_col_desc), K(col_ref_exprs), "index_table_id", index_table_schema.get_table_id());
         }
       } // for
     }
@@ -388,7 +365,6 @@ int ObTruncateInfoService::init(ObMySQLProxy &sql_proxy)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(part_key_info_.init(allocator_, data_table_schema_))) {
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(sql_proxy, ddl_task_id_))) {
   } else {
@@ -405,7 +381,6 @@ int ObTruncateInfoService::check_only_have_ref_columns(
   bool tmp_only_ref_columns = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTruncateInfoService is not inited", K(ret));
   } else if (obcall::ObAlterTableArg::DROP_PARTITION == alter_type ||
       obcall::ObAlterTableArg::TRUNCATE_PARTITION == alter_type) {
     ret = part_key_info_.check_only_have_ref_columns(data_table_schema_, ObPartitionLevel::PARTITION_LEVEL_ONE, tmp_only_ref_columns);
@@ -430,10 +405,8 @@ int ObTruncateInfoService::check_stored_ref_columns_for_index(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTruncateInfoService is not inited", K(ret));
   } else if (OB_UNLIKELY(!part_key_info_.is_valid())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("ObTruncatePartKeyInfo is invalid", KR(ret), K_(part_key_info));
   } else {
     ret = part_key_info_.check_stored_ref_columns_for_index(index_table_schema, stored_ref_columns);
   }
@@ -463,10 +436,8 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
   index_tablet_array_.reuse();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTruncateInfoService is not inited", K(ret));
   } else if (OB_UNLIKELY(!index_table_schema.is_global_index_table())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input index schema is not global index", KR(ret), K(index_table_schema));
   } else if (OB_FAIL(ObDDLLock::lock_for_modify_truncate_info_in_trans(index_table_schema.get_table_id(), trans))) {
   } else if (OB_FAIL(index_table_schema.get_tablet_ids(index_tablet_array_))) {
   } else if (index_tablet_array_.empty()) {
@@ -474,12 +445,10 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
   } else if (OB_FAIL(ObTabletMappingTableOperator::batch_get(trans, index_tablet_array_, tablet_infos))) {
   } else if (OB_UNLIKELY(index_tablet_array_.count() != tablet_infos.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet info count", KR(ret), K_(index_tablet_array), K(tablet_infos));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn is NULL", KR(ret));
   } else if (OB_FAIL(gen_new_schema_version_for_index_(trans, ddl_operator, index_table_schema))) {
   } else if (OB_FAIL(loop_part_to_register_mds_(*conn, index_table_schema))) {
   } else {
@@ -568,14 +537,12 @@ int ObTruncatePartSchemaUtil::build_truncate_part_of_default_part(
   ObSEArray<ObBasePartition *, 8> other_part_array;
   if (OB_UNLIKELY(!alter_part.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(data_table_schema), K(alter_part));
   } else if (OB_FAIL(data_table_schema.get_other_part_by_name(alter_part.get_part_name(), build_part_level, other_part_array))) {
   } else {
     ObListRowValues list_row_values(allocator);
     for (int64_t idx = 0; OB_SUCC(ret) && idx < other_part_array.count(); ++idx) {
       if (OB_ISNULL(other_part_array.at(idx))) {
         ret = OB_INVALID_DATA;
-        LOG_WARN("invalid part ptr in array", KR(ret), K(idx), K(other_part_array.at(idx)));
       } else {
         const common::ObIArray<common::ObNewRow>& values = other_part_array.at(idx)->get_list_row_values();
         for (int64_t j = 0; OB_SUCC(ret) && j < values.count(); ++j) {
@@ -585,7 +552,6 @@ int ObTruncatePartSchemaUtil::build_truncate_part_of_default_part(
       }
     } // for
     if (FAILEDx(list_row_values.sort_array())) {
-      LOG_WARN("failed to sort list row values", KR(ret), K(list_row_values));
     } else if (OB_FAIL(truncate_part.init_list_part(
       allocator,
       ObTruncatePartition::LIST_PART,
@@ -641,7 +607,6 @@ int ObTruncatePartSchemaUtil::build_truncate_part(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!data_table_schema.is_valid() || !alter_part.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(data_table_schema), K(alter_part));
   } else if (OB_FAIL(truncate_part.part_key_idxs_.init(allocator, ref_part_id_array))) {
   } else if (is_range_part(part_type)) {
     ret = build_truncate_range_part_(allocator, part_type, alter_part, build_part_level, data_table_schema, truncate_part);
@@ -649,11 +614,9 @@ int ObTruncatePartSchemaUtil::build_truncate_part(
     ret = build_truncate_list_part_(allocator, part_type, alter_part, build_part_level, data_table_schema, input_found_part, truncate_part);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid part type", KR(ret), K(part_type));
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!truncate_part.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid truncate part", KR(ret), K(truncate_part));
   }
   return ret;
 }
@@ -673,7 +636,6 @@ int ObTruncatePartSchemaUtil::build_truncate_range_part_(
   const ObBasePartition *prev_part = nullptr;
   if (OB_UNLIKELY(!is_range_part(part_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(data_table_schema), K(alter_part));
   } else if (OB_FAIL(data_table_schema.get_partition_and_prev_by_name(
       alter_part.get_part_name(),
       build_part_level,
@@ -681,7 +643,6 @@ int ObTruncatePartSchemaUtil::build_truncate_range_part_(
       prev_part))) {
   } else if (OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("found part is null", KR(ret), K(alter_part), K(idx), KP(part), KP(prev_part));
   } else {
     const T *prev_part_ptr = (nullptr != prev_part) ? static_cast<const T*>(prev_part) : nullptr;
     ret = truncate_part.init_truncate_part(
@@ -712,7 +673,6 @@ int ObTruncatePartSchemaUtil::build_truncate_list_part_(
   const ObBasePartition *prev_part_placeholder = nullptr;
   if (OB_UNLIKELY(!is_list_part(part_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(alter_part), K(part_type));
   } else if (nullptr != input_found_part) {
     found_part = input_found_part;
   } else if (OB_FAIL(data_table_schema.get_partition_and_prev_by_name(
@@ -726,7 +686,6 @@ int ObTruncatePartSchemaUtil::build_truncate_list_part_(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(found_part)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("found part is null", KR(ret), KPC(input_found_part), K(idx), KPC(found_part));
   } else if (OB_FAIL(ObTruncatePartSchemaUtil::check_is_default_part(found_part->get_list_row_values_struct(), is_default_part))) {
   } else if (is_default_part) {
     if (OB_FAIL(build_truncate_part_of_default_part(allocator, *found_part, build_part_level, data_table_schema, truncate_part))) {
@@ -755,8 +714,6 @@ int ObTruncateInfoService::loop_part_to_register_mds_(
   const ObAlterTableArg::AlterPartitionType &alter_type = arg_.alter_part_type_;
   if (OB_UNLIKELY(nullptr == alter_part_array || alter_part_num <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partitiion array is unexpected null or empty", KR(ret), K(alter_table_schema),
-      KP(alter_part_array), K(alter_part_num));
   } else if (ObAlterTableArg::DROP_SUB_PARTITION == alter_type ||
       ObAlterTableArg::TRUNCATE_SUB_PARTITION == alter_type) {
     if (OB_FAIL(loop_subpart_to_register_mds_(conn, index_table_schema))) {
@@ -774,7 +731,6 @@ int ObTruncateInfoService::loop_part_to_register_mds_(
       ObTruncateInfo &truncate_info = truncate_arg.truncate_info_;
       if (OB_ISNULL(alter_part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("alter partitiion is unexpected null", KR(ret), KP(alter_part_array), K(idx));
       } else if (FALSE_IT(truncate_info.allocator_ = &loop_allocator_)) {
       } else if (OB_FAIL(ObTruncatePartSchemaUtil::build_truncate_part(
                      loop_allocator_, part_type, *alter_part,
@@ -790,7 +746,6 @@ int ObTruncateInfoService::loop_part_to_register_mds_(
     } // for
   } else {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invalid alter type", KR(ret), K(alter_type), K_(arg));
   }
   return ret;
 }
@@ -820,7 +775,6 @@ int ObTruncateInfoService::register_mds_(
   char *buf = nullptr;
   if (OB_ISNULL(buf = (char *)loop_allocator_.alloc(buf_len))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail alloc memory", KR(ret), K(buf_len));
   } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(register_mds_(conn, arg, buf, buf_len))) {
   }
@@ -854,7 +808,6 @@ int ObTruncateInfoService::loop_subpart_to_register_mds_(
   ObPartition **alter_part_array = alter_table_schema.get_part_array();
   if (OB_UNLIKELY(nullptr == alter_part_array || 1 != alter_table_schema.get_partition_num())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("truncate subpart should in same part info", KR(ret), KP(alter_part_array), K(alter_table_schema));
   } else {
     ObSubPartition **sub_partition_array = alter_part_array[0]->get_subpart_array();
     const int64_t subpart_num = alter_part_array[0]->get_sub_part_num();
@@ -866,7 +819,6 @@ int ObTruncateInfoService::loop_subpart_to_register_mds_(
     } else if (OB_FAIL(part_key_info_.get_ref_column_id_array(index_table_schema, PARTITION_LEVEL_TWO, subpart_ref_column_idx_array))) {
     } else if (OB_UNLIKELY(nullptr == sub_partition_array || subpart_num <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(sub_partition_array), K(subpart_num));
     } else {
       const ObPartition *alter_part_in_schema = nullptr;
       const ObSubPartition *alter_subpart_in_schema = nullptr;

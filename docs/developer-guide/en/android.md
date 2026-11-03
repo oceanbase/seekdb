@@ -4,79 +4,50 @@ Cross-compile seekdb for Android arm64-v8a on macOS, then deploy it to an emulat
 
 ## Prerequisites
 
-- macOS host (this guide is written for macOS)
-- Android NDK installed (**27.x is recommended** to match pre-built dependencies; other major versions are untested). Default path example: `~/Library/Android/sdk/ndk/27.3.13750724`
-- Android emulator running arm64-v8a (API 28+), or a physical device
-- Dependencies built via [ob-deps](https://github.com/oceanbase/ob-deps/tree/android_arm64-v8a) `ndk/build_all.sh`
-- `adb` available on PATH
-- `mysql` client (for connecting after launch)
-
-Set `ANDROID_NDK_HOME` if your NDK is in a non-default location:
-
-```bash
-export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.3.13750724
-```
-
-> **Note**: You may see a `CMake Deprecation Warning` during configuration (from NDK's `flags.cmake` using `cmake_minimum_required(VERSION 3.6.0)`). This warning can be ignored and does not affect the build.
+- macOS host
+- Android NDK 27.x, with `ANDROID_NDK_HOME` set to its installation directory
+- An arm64-v8a device or emulator running API 28 or later
+- `adb` and a MySQL-compatible client on `PATH`
 
 ## Build
 
-Use the supported Android entry point. It initializes Android dependencies, configures the build, and builds seekdb:
+Set the installed NDK path, initialize Android dependencies, then build with Bazel:
 
 ```bash
-./build.sh release --android --init --make -j16
+export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.3.13750724"
+python3 build.py init --android
+python3 build.py build --config=android seekdb
 ```
+
+`init --android` prepares host tools in `deps/3rd` and Android dependencies in
+`deps/android`, and installs the Android target for the pinned Rust toolchain.
+Native and Android builds can share one checkout.
 
 The binary is generated at:
 
-### 2. Configure and build
-
-To build only the observer binary:
-
-```bash
-cd build_android_release
-make seekdb -j$(nproc)
+```text
+build/bin/src/observer/seekdb
 ```
 
-### Build libseekdb (FFI shared library)
+This configuration produces an API 28 ARM64 PIE with 16 KiB page alignment and a statically linked C++ runtime. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
 
-In the same Android build directory, build the C API shared library (CMake target `libseekdb`, output `libseekdb.so`):
+## Allocator
 
-```bash
-cd build_android_release
-make libseekdb -j$(nproc)
-```
+Android builds use the bundled, statically linked jemalloc through SeekDB's
+explicit allocator interfaces. The build sets jemalloc's page size to 16 KiB
+and disables initial-exec TLS so the allocator can also be used in a loaded
+library. Host libc allocations keep their own allocation and release APIs.
+Server startup configures decay through `je_mallctl` for new arenas and arena 0,
+then enables background workers before the logger starts its workers. Bootstrap
+allocations use jemalloc's original defaults.
 
-The artifact is usually `build_android_release/src/include/libseekdb.so` (relative to the repo root). The public header is `src/include/seekdb.h` in the source tree.
+## Strip and deploy
 
-To reduce size, strip ELF with the NDK `llvm-strip` (not the host `strip`). On macOS or Linux hosts the toolchain lives under `toolchains/llvm/prebuilt/<host>/bin/`, for example:
-
-```bash
-NDK_STRIP=$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-strip)
-$NDK_STRIP -o /tmp/libseekdb.stripped build_android_release/src/include/libseekdb.so
-```
-
-You can also pack `seekdb.h` and `libseekdb.so` into **`libseekdb-android-arm64-v8a.zip`** with [`package/libseekdb/libseekdb-build.sh`](../../../package/libseekdb/libseekdb-build.sh) (**arm64-v8a only**). From `package/libseekdb/` run `./libseekdb-build.sh --android` (builds if needed), or `./libseekdb-build.sh <path/to/build_android_*/src/include>` to pack an existing tree. On macOS, a tree that only contains the NDK-built `libseekdb.so` still gets that naming (not `darwin-*`).
-
-The Android CMake build does not provide an `all_tests` target. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
-
-## Deploy to Emulator
-
-### Strip debug symbols
-
-```bash
-NDK_STRIP=$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-strip)
-
-$NDK_STRIP -o /tmp/seekdb build_android_release/src/observer/seekdb
-```
-
-macOS `strip` cannot process ELF binaries -- you must use the NDK strip.
-
-### Push to emulator
+Use the NDK strip tool because the macOS `strip` command cannot process Android ELF binaries:
 
 ```bash
 NDK_STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip"
-"$NDK_STRIP" -o /tmp/seekdb build_android_release/src/observer/seekdb
+"$NDK_STRIP" -o /tmp/seekdb build/bin/src/observer/seekdb
 adb push /tmp/seekdb /data/local/tmp/seekdb
 adb shell chmod +x /data/local/tmp/seekdb
 ```

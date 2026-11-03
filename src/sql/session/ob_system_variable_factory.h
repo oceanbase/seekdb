@@ -135,7 +135,7 @@ public:
 class ObSysVarSqlMode : public ObSqlModeVar
 {
 public:
-  ObSysVarSqlMode() : ObSqlModeVar(ObSysVarOnCheckFuncs::check_and_convert_sql_mode, ObSysVarOnUpdateFuncs::update_sql_mode, ObSysVarToObjFuncs::to_obj_sql_mode, ObSysVarToStrFuncs::to_str_sql_mode, ObSysVarGetMetaTypeFuncs::get_meta_type_varchar) {}
+  ObSysVarSqlMode() : ObSqlModeVar(ObSysVarOnCheckFuncs::check_and_convert_sql_mode, NULL, ObSysVarToObjFuncs::to_obj_sql_mode, ObSysVarToStrFuncs::to_str_sql_mode, ObSysVarGetMetaTypeFuncs::get_meta_type_varchar) {}
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_SQL_MODE; }
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(15); }
 };
@@ -5187,26 +5187,19 @@ public:
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_OB_IVF_NPROBES; }
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(715); }
 };
-class ObSysVarObHnswExtraInfoMaxSize : public ObIntSysVar
-{
-public:
-  ObSysVarObHnswExtraInfoMaxSize() : ObIntSysVar(NULL, NULL, NULL, NULL, NULL) {}
-  inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_OB_HNSW_EXTRA_INFO_MAX_SIZE; }
-  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(716); }
-};
 class ObSysVarPushJoinPredicate : public ObBoolSysVar
 {
 public:
   ObSysVarPushJoinPredicate() : ObBoolSysVar(NULL, NULL, NULL, NULL, NULL) {}
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR__PUSH_JOIN_PREDICATE; }
-  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(717); }
+  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(716); }
 };
 class ObSysVarObSparseDropRatioSearch : public ObIntSysVar
 {
 public:
   ObSysVarObSparseDropRatioSearch() : ObIntSysVar(NULL, NULL, NULL, NULL, NULL) {}
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_OB_SPARSE_DROP_RATIO_SEARCH; }
-  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(718); }
+  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(717); }
 };
 
 

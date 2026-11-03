@@ -249,7 +249,6 @@ int ObTabletMiniMergeCtx::get_merge_tables(ObGetMergeTablesResult &get_merge_tab
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObBasicTabletMergeCtx::get_merge_tables(get_merge_table_result))) {
     if (OB_NO_NEED_MERGE != ret) {
-      LOG_WARN("failed to get merge tables", KR(ret), KPC(this), K(get_merge_table_result));
     } else { // OB_NO_NEED_MERGE
       int tmp_ret = OB_SUCCESS;
       // then release memtable
@@ -274,7 +273,6 @@ int ObTabletMiniMergeCtx::update_tablet_directly(ObGetMergeTablesResult &get_mer
   } else if (OB_TMP_FAIL(new_tablet_handle.get_obj()->release_memtables(new_tablet_handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_))) {
   }
   if (FAILEDx(init_sstable_merge_history())) {
-    LOG_WARN("failed to init merge history", KR(ret));
   } else if (OB_FAIL(merge_info_.init(static_history_))) {
   } else if (OB_FAIL(static_param_.tables_handle_.assign(get_merge_table_result.handle_))) {
   } else {
@@ -314,14 +312,11 @@ int ObTabletExeMergeCtx::get_tables_by_key(ObGetMergeTablesResult &get_merge_tab
   ObTabletMergeExecuteDag *exe_dag = nullptr;
   if (OB_ISNULL(exe_dag = static_cast<ObTabletMergeExecuteDag *>(merge_dag_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge dag is not a execute dag", KR(ret), KPC(merge_dag_));
   } else if (OB_UNLIKELY(exe_dag->get_table_key_array().empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table key array is empty", KR(ret), KPC(exe_dag));
   } else if (OB_FAIL(get_tablet()->fetch_table_store(table_store_wrapper))) {
   } else if (OB_UNLIKELY(!table_store_wrapper.get_member()->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet store is invalid", KR(ret), KPC(table_store_wrapper.get_member()));
   } else if (OB_FAIL(get_merge_table_result.assign(exe_dag->get_result()))) {
   } else {
     const ObIArray<ObITable::TableKey> &table_key_array = exe_dag->get_table_key_array();
@@ -332,14 +327,12 @@ int ObTabletExeMergeCtx::get_tables_by_key(ObGetMergeTablesResult &get_merge_tab
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_NO_NEED_MERGE;
         } else {
-          LOG_WARN("failed to get table from new table_store", KR(ret));
         }
       } else if (OB_FAIL(get_merge_table_result.handle_.add_sstable(sstable_wrapper.get_sstable(), table_store_wrapper.get_meta_handle()))) {
       }
     } // end of for
     if (OB_SUCC(ret) && get_merge_table_result.handle_.get_count() != table_key_array.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected tables from current tablet", KR(ret), K(table_key_array), K(get_merge_table_result));
     }
   }
   return ret;
@@ -353,7 +346,6 @@ int ObTabletExeMergeCtx::prepare_compaction_filter()
     // init compaction filter for minor merge in TxDataTable
   } else if (OB_UNLIKELY(!get_tablet_id().is_ls_tx_data_tablet())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only tx data tablet can execute minor merge", KR(ret), "param", get_dag_param());
   } else if (!static_param_.scn_range_.start_scn_.is_base_scn()) {
     FLOG_INFO ("Skip filtering because this minor merge does not contain the oldest minor sstable",
       K(static_param_.scn_range_));

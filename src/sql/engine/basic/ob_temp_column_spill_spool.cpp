@@ -80,8 +80,6 @@ public:
                batch.row_count_ > options_.max_batch_size_ ||
                batch.vectors_->count() != column_count_) {
       ret = latch_error(OB_INVALID_ARGUMENT);
-      LOG_WARN("invalid spill batch", K(ret), KP(batch.vectors_),
-          K(batch.row_count_), K(column_count_), K(options_.max_batch_size_));
     } else {
       ObBatchRows batch_rows;
       int64_t stored_row_count = 0;
@@ -89,11 +87,8 @@ public:
       batch_rows.set_all_rows_active(true);
       if (OB_FAIL(store_.add_batch(*batch.vectors_, batch_rows, stored_row_count))) {
         ret = latch_error(ret);
-        LOG_WARN("failed to append spill batch", K(ret), K(batch.row_count_));
       } else if (OB_UNLIKELY(stored_row_count != batch.row_count_)) {
         ret = latch_error(OB_ERR_UNEXPECTED);
-        LOG_WARN("spill store accepted an unexpected row count", K(ret),
-            K(stored_row_count), K(batch.row_count_));
       } else {
         result.rotation_recommended_ =
             store_.get_mem_hold() > options_.rotation_threshold_;
@@ -111,10 +106,8 @@ public:
       // Once handed to the reader, seal remains a no-op.
     } else if (OB_FAIL(store_.dump(true /* all_dump */))) {
       ret = latch_error(ret);
-      LOG_WARN("failed to dump spill spool", K(ret));
     } else if (OB_FAIL(store_.finish_add_row(true /* need_dump */))) {
       ret = latch_error(ret);
-      LOG_WARN("failed to finish spill spool", K(ret));
     } else {
       state_ = query::SPILL_BATCH_SEALED;
     }
@@ -136,7 +129,6 @@ public:
       if (query::SPILL_BATCH_SEALED == state_) {
         if (OB_FAIL(store_.begin(iterator_, options_.async_read_))) {
           ret = latch_error(ret);
-          LOG_WARN("failed to begin spill iteration", K(ret));
         } else {
           state_ = query::SPILL_BATCH_READING;
         }
@@ -147,7 +139,6 @@ public:
           state_ = query::SPILL_BATCH_EXHAUSTED;
         } else {
           ret = latch_error(ret);
-          LOG_WARN("failed to read spill batch", K(ret));
         }
       } else if (OB_SUCC(ret)) {
         batch = query::ObSpillBatchView(output_vectors_, read_row_count);
@@ -202,22 +193,16 @@ public:
                     options.resident_memory_limit_ <= 0 ||
                     options.rotation_threshold_ <= 0 || options.dir_id_ < 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid spill spool options", K(ret), K(columns.count()),
-          K(options.max_batch_size_), K(options.resident_memory_limit_),
-          K(options.rotation_threshold_), K(options.dir_id_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
       if (OB_UNLIKELY(columns.at(i).type_ >= ObMaxType)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid spill column", K(ret), K(i),
-            K(columns.at(i).type_));
       }
     }
     if (OB_SUCC(ret)) {
       new_spool = OB_NEW(ObTempColumnSpillSpool, ObMemAttr("TempColSpool"));
       if (OB_ISNULL(new_spool)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate spill spool", K(ret));
       } else if (OB_FAIL(new_spool->init(columns, options))) {
       } else {
         spool = new_spool;

@@ -89,8 +89,7 @@ public:
 
   virtual int load_log_restore_source(
       common::ObIAllocator &allocator,
-      common::ObString &source,
-      int64_t &version) const = 0;
+      common::ObString &source) const = 0;
   virtual void publish_rpc_cert_expire_time(int64_t expire_time_us) = 0;
 
   virtual void reset_max_id_cache() = 0;

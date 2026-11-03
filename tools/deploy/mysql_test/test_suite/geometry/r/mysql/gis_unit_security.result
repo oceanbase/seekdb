@@ -1,0 +1,23 @@
+SET @long_unit = REPEAT('x', 8 * 1024 * 1024);
+SELECT LENGTH(@long_unit) AS long_unit_bytes;
+long_unit_bytes
+8388608
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)'), ST_GEOMFROMTEXT('POINT(1 1)'), @long_unit);
+ERROR SU001: The geometry passed to function st_distance is in SRID 0, which doesn't specify a length unit. Can't convert to 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)',4326), ST_GEOMFROMTEXT('POINT(1 1)',4326), @long_unit);
+ERROR SU001: There's no unit of measure named 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+SELECT ST_LENGTH(ST_GEOMFROMTEXT('LINESTRING(0 0,0 1)',4326), @long_unit);
+ERROR SU001: There's no unit of measure named 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+SET @long_unit = NULL;
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)'), ST_GEOMFROMTEXT('POINT(3 4)')) AS distance;
+distance
+5
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)',4326), ST_GEOMFROMTEXT('POINT(1 1)',4326), 'metre') = ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)',4326), ST_GEOMFROMTEXT('POINT(1 1)',4326)) AS metre_matches_default;
+metre_matches_default
+1
+SELECT ST_LENGTH(ST_GEOMFROMTEXT('LINESTRING(0 0,0 1)',4326), 'metre') = ST_LENGTH(ST_GEOMFROMTEXT('LINESTRING(0 0,0 1)',4326)) AS length_metre_matches_default;
+length_metre_matches_default
+1
+SELECT 1 AS server_alive;
+server_alive
+1

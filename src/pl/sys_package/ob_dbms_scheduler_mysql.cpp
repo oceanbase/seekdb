@@ -33,6 +33,54 @@ using namespace dbms_scheduler;
 namespace pl
 {
 
+static int splice_scheduler_update_sql(ObDMLSqlSplicer &dml, ObSqlString &sql)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString table_name;
+  // This invoker-rights API must not resolve its internal table in the
+  // caller's current database.
+  OZ (table_name.assign_fmt("%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_SCHEDULER_JOB_TNAME));
+  OZ (dml.splice_update_sql(table_name.ptr(), sql));
+  return ret;
+}
+
+static int add_job_owner_condition(sql::ObExecContext &ctx, ObDMLSqlSplicer &dml)
+{
+  int ret = OB_SUCCESS;
+  sql::ObSQLSessionInfo *session = ctx.get_my_session();
+  schema::ObSchemaGetterGuard *guard = NULL;
+  schema::ObSessionPrivInfo session_priv;
+  if (OB_ISNULL(session) || OB_ISNULL(ctx.get_sql_ctx())
+      || OB_ISNULL(guard = ctx.get_sql_ctx()->schema_guard_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!session->is_real_inner_session()) {
+    if (OB_FAIL(guard->get_session_priv_info(session->get_priv_user_id(), ObString(), session_priv))) {
+    } else {
+      schema::ObStmtNeedPrivs required(ctx.get_allocator());
+      schema::ObNeedPriv need_priv;
+      need_priv.priv_level_ = schema::OB_PRIV_USER_LEVEL;
+      need_priv.priv_set_ = OB_PRIV_SUPER;
+      OZ (required.need_privs_.init(1));
+      OZ (required.need_privs_.push_back(need_priv));
+      const int admin_ret = OB_SUCC(ret)
+          ? guard->check_priv(session_priv, session->get_enable_role_array(), required) : ret;
+      if (OB_SUCCESS == admin_ret) {
+        // SUPER may be granted directly or through an enabled role.
+      } else if (OB_ERR_NO_PRIVILEGE != admin_ret) {
+        ret = admin_ret;
+      } else {
+        ObSqlString owner;
+        // POWNER is stored in CURRENT_USER() form, including the account host.
+        OZ (owner.assign_fmt("%.*s@%.*s", session_priv.user_name_.length(),
+                              session_priv.user_name_.ptr(), session_priv.host_name_.length(),
+                              session_priv.host_name_.ptr()));
+        OZ (dml.add_pk_column("powner", ObHexEscapeSqlStr(owner.string())));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDBMSSchedulerMysql::execute_sql(sql::ObExecContext &ctx, ObSqlString &sql, int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
@@ -62,9 +110,13 @@ int ObDBMSSchedulerMysql::disable(
   CK (OB_LIKELY(3 == params.count()));
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
+  OZ (add_job_owner_condition(ctx, dml));
   OZ (dml.add_column("enabled", false));
-  OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
+  OZ (splice_scheduler_update_sql(dml, sql));
   OZ (execute_sql(ctx, sql, affected_rows));
+  if (OB_SUCC(ret) && 0 == affected_rows) {
+    ret = OB_ERR_NO_PRIVILEGE;
+  }
   CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
   query::ObISchedulerService *scheduler =
       ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
@@ -86,9 +138,13 @@ int ObDBMSSchedulerMysql::enable(
   CK (OB_LIKELY(1 == params.count()));
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
+  OZ (add_job_owner_condition(ctx, dml));
   OZ (dml.add_column("enabled", true));
-  OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
+  OZ (splice_scheduler_update_sql(dml, sql));
   OZ (execute_sql(ctx, sql, affected_rows));
+  if (OB_SUCC(ret) && 0 == affected_rows) {
+    ret = OB_ERR_NO_PRIVILEGE;
+  }
   CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
   query::ObISchedulerService *scheduler =
       ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
@@ -113,6 +169,7 @@ int ObDBMSSchedulerMysql::set_attribute(
   CK (OB_LIKELY(3 == params.count()));
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
+  OZ (add_job_owner_condition(ctx, dml));
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(
                                                                           ctx,
@@ -122,8 +179,11 @@ int ObDBMSSchedulerMysql::set_attribute(
                                                                           is_stat_window_attr,
                                                                           dml))) {
     } else if (is_stat_window_attr) {
-      OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
+      OZ (splice_scheduler_update_sql(dml, sql));
       OZ (execute_sql(ctx, sql, affected_rows));
+      if (OB_SUCC(ret) && 0 == affected_rows) {
+        ret = OB_ERR_NO_PRIVILEGE;
+      }
       CK (1 == affected_rows || 2 == affected_rows);
       query::ObISchedulerService *scheduler =
           ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
@@ -135,15 +195,9 @@ int ObDBMSSchedulerMysql::set_attribute(
       if (attr_name.empty()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "attr_name empty");
-        LOG_WARN("attr_name empty", K(ret), K(params.at(0).get_string()),
-                                                      K(params.at(1).get_string()),
-                                                      K(params.at(2).get_string()));
       } else if (attr_val.empty()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "attr_val empty");
-        LOG_WARN("attr_val empty", K(ret), K(params.at(0).get_string()),
-                                                      K(params.at(1).get_string()),
-                                                      K(params.at(2).get_string()));
       } else if (0 == attr_name.case_compare("max_run_duration")) { // set max run duration
         const int MAX_RUN_DURATION_LEN = 16;
         char max_run_duration_buf[MAX_RUN_DURATION_LEN];
@@ -153,9 +207,6 @@ int ObDBMSSchedulerMysql::set_attribute(
       } else {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "the job set attribute");
-        LOG_WARN("not support the job set attribute", K(ret), K(params.at(0).get_string()),
-                                                      K(params.at(1).get_string()),
-                                                      K(params.at(2).get_string()));
       }
     }
   }
@@ -184,7 +235,6 @@ int ObDBMSSchedulerMysql::_generate_job_id(int64_t &max_job_id)
       ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
   if (OB_ISNULL(scheduler)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("scheduler service is not initialized", K(ret));
   } else if (OB_FAIL(scheduler->allocate_job_id(max_job_id))) {
   }
   return ret;

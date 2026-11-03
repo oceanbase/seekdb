@@ -60,7 +60,6 @@ int ObWkbToS2Visitor::MakeS2Point(T_IBIN *geo, S2Cell *&res)
     S2Cell* p = new S2Cell(latlng);
     if (OB_ISNULL(p)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to alloc s2cell", K(ret));
     } else {
       res = p;
       bounder_.AddPoint(S2Point(latlng));
@@ -126,7 +125,6 @@ int ObWkbToS2Visitor::MakeProjS2Point(T_IBIN *geo, S2Cell *&res)
       p = new S2Cell(point);
       if (OB_ISNULL(p)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         res = p;
         bounder_.AddPoint(point);
@@ -156,7 +154,6 @@ int ObWkbToS2Visitor::MakeS2Polyline(T_IBIN *geo, S2Polyline *&res)
     S2Polyline* ptr = new S2Polyline(vertices);
     if (OB_ISNULL(ptr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to alloc s2cell", K(ret));
     } else {
       res = ptr;
     }
@@ -186,7 +183,6 @@ int ObWkbToS2Visitor::MakeProjS2Polyline(T_IBIN *geo, S2Polyline *&res)
     S2Polyline* ptr = new S2Polyline(vertices);
     if (OB_ISNULL(ptr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to alloc s2cell", K(ret));
     } else {
       res = ptr;
     }
@@ -219,7 +215,6 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
@@ -246,7 +241,6 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
@@ -260,7 +254,6 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(py)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to alloc s2cell", K(ret));
   } else {
     res = py;
   }
@@ -291,7 +284,6 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
@@ -317,7 +309,6 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
@@ -331,7 +322,6 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(py)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to alloc s2cell", K(ret));
   } else {
     res = py;
   }
@@ -345,7 +335,6 @@ int ObWkbToS2Visitor::visit(ObIWkbGeogPoint *geo)
   S2Cell *res = NULL;
   if (geo->length() < (WKB_GEO_BO_SIZE + WKB_GEO_TYPE_SIZE)) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
   } else if (OB_FAIL(MakeS2Point<ObIWkbGeogPoint>(geo, res))) {
   } else if (OB_FAIL(vector_emplace_back<S2Cell>(s2v_, res))) {
   }
@@ -370,7 +359,6 @@ int ObWkbToS2Visitor::visit(ObIWkbGeogLineString *geo)
   S2Polyline *polyline = nullptr;
   if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
   } else if (OB_FAIL(MakeS2Polyline<ObIWkbGeogLineString>(geo, polyline))) {
   } else if (OB_FAIL(vector_emplace_back<S2Polyline>(s2v_, polyline))) {
   } else {
@@ -397,7 +385,6 @@ int ObWkbToS2Visitor::visit(ObIWkbGeogPolygon *geo)
   S2Polygon *polygon = nullptr;
   if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
   } else if ((ret = MakeS2Polygon<ObIWkbGeogPolygon, ObWkbGeogPolygon,
                                   ObWkbGeogLinearRing, ObWkbGeogPolygonInnerRings>(geo, polygon)) != OB_SUCCESS) {
   } else if (OB_FAIL(vector_emplace_back<S2Polygon>(s2v_, polygon))) {
@@ -415,7 +402,6 @@ int ObWkbToS2Visitor::visit(ObIWkbGeomPolygon *geo)
     S2Polygon *poly = nullptr;
     if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
     } else if ((ret = MakeProjS2Polygon<ObIWkbGeomPolygon, ObWkbGeomPolygon,
                                         ObWkbGeomLinearRing, ObWkbGeomPolygonInnerRings>(geo, poly)) != OB_SUCCESS) {
     } else if (OB_FAIL(vector_emplace_back<S2Polygon>(s2v_, poly))) {
@@ -459,7 +445,6 @@ int64_t ObWkbToS2Visitor::get_cellids(ObS2Cellids &cells, bool is_query, bool ne
       prev_id = cell_union_[i];
     }
     if (OB_SUCC(ret) && has_reset_ && OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
-      LOG_WARN("fail to push_back cellid", K(ret));
     }
   }
   return ret;
@@ -536,7 +521,6 @@ int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cell
     if (OB_FAIL(cellid_set.create(128, "CellidSet", "HashNode"))) {
     } else if (!cellid_set.created()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("fail to init cellid set", K(ret));
     } else {
       if (need_buffer) {
         const int max_level_diff = 2;
@@ -567,18 +551,15 @@ int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cell
                 }
               } else if (OB_HASH_EXIST != ancestor_hash_ret) {
                 ret = ancestor_hash_ret;
-                LOG_WARN("fail to check if key exist", K(ret), K(i));
               }
             }
           }
         } else if (OB_HASH_EXIST != hash_ret) {
           ret = hash_ret;
-          LOG_WARN("fail to check if key exist", K(ret), K(i));
         }
         prev_id = cell_union_[i];
       }
       if (OB_SUCC(ret) && has_reset_ && OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
-        LOG_WARN("fail to push_back cellid", K(ret));
       }
     }
   }

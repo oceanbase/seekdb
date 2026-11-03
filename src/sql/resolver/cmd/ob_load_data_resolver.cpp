@@ -108,10 +108,8 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
       || OB_UNLIKELY(ENUM_TOTAL_COUNT != node->num_child_)
       || OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid node", K(ret), K(node->type_));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP_(session_info), K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
   } else if (OB_ISNULL(load_stmt = create_stmt<ObLoadDataStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -166,7 +164,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     } else {
       ret = OB_ERR_UNEXPECTED;
       //should not be here, parser will put error before this
-      LOG_WARN("unknown dumplicate settings", K(ret));
     }
     if (OB_SUCC(ret)) {
       load_args.dupl_action_ = dupl_action;
@@ -195,7 +192,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
                                                            is_table_exist))) {
     } else if (!is_table_exist) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table not exist", K(1UL), K(database_name), K(table_name), K(ret));
     } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                          database_name,
                                                          table_name,
@@ -203,7 +199,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
                                                          tschema))) {
     } else if (OB_UNLIKELY(tschema->is_view_table())) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("load data to the view is not supported", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "load data to the view is");
     } else if (OB_FAIL(check_trigger_constraint(tschema))) {
     } else {
@@ -219,7 +214,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
       if (OB_ISNULL(buf =
           static_cast<char *>(allocator_->alloc(size * sizeof(char))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory for database and table name failed", K(ret));
       } else if (OB_FAIL(databuff_printf(
                               buf, size, pos,
                               "`%.*s`.`%.*s`",
@@ -274,7 +268,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
         load_args.is_default_charset_ = false;
         if (!ObCharset::is_valid_collation(load_args.file_cs_type_)) {
           ret = OB_ERR_UNKNOWN_CHARSET;
-          LOG_WARN("charset invalid", K(ret), K(charset_name));
           LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset_name.length(), charset_name.ptr());
         }
       }
@@ -305,7 +298,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     if (NULL != child_node) {
       if (T_INTO_FIELD_LIST != child_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to resolve field_list_node", K(ret), KP(child_node));
       } else if (OB_FAIL(resolve_field_list_node(*child_node, data_struct_in_file))) {
       }
     }
@@ -318,7 +310,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     if (NULL != child_node) {
       if (T_INTO_LINE_LIST != child_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to resolve line_list_node", K(ret), KP(child_node));
       } else if (OB_FAIL(resolve_line_list_node(*child_node, data_struct_in_file))) {
       }
     }
@@ -332,7 +323,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
       if (T_IGNORE_ROWS != child_node->type_
           && T_GEN_ROWS != child_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to resolve ignore rows", K(ret), K(child_node));
       } else if (OB_UNLIKELY(1 != child_node->num_child_)
                  || OB_ISNULL(child_node->children_)
                  || OB_ISNULL(child_node->children_[0])) {
@@ -365,7 +355,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     if (NULL != child_node) {
       if (T_VALUE_LIST != child_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to resolve set clause", K(ret), K(child_node));
       } else if (OB_FAIL(resolve_set_clause(*child_node, case_mode, *load_stmt))) {
       }
     }
@@ -399,7 +388,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
                   || OB_ISNULL(child_node->children_[0])
                   || T_INT != child_node->children_[0]->type_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid grand child node", K(ret), K(child_node->num_child_));
         } else {
           load_stmt->get_load_arguments().diagnosis_limit_num_ = child_node->children_[0]->value_;
         }
@@ -408,7 +396,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
         load_stmt->get_load_arguments().diagnosis_limit_num_ = -1;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid from spec node", K(ret), K(child_node->type_));
       }
     }
   }
@@ -451,10 +438,8 @@ int ObLoadDataResolver::resolve_hints(const ParseNode &node)
 
   if (OB_ISNULL(stmt = static_cast<ObLoadDataStmt *>(get_basic_stmt()))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("stmt not created", K(ret));
   } else if (node.type_ != T_HINT_OPTION_LIST) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid node type", K(node.type_), K(ret));
   } else {
     ObLoadDataHint &stmt_hints = stmt->get_hints();
     stmt_hints.set_hint_str(ObString(static_cast<int32_t>(node.str_len_),
@@ -496,17 +481,14 @@ int ObLoadDataResolver::resolve_hints(const ParseNode &node)
       case T_LOAD_BATCH_SIZE: {
         if (2 != hint_node->num_child_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("max concurrent node should have 1 child", K(ret));
         } else if (OB_ISNULL(hint_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("child of max concurrent node should not be NULL", K(ret));
         } else if (OB_FAIL(stmt_hints.set_value(
                         ObLoadDataHint::BATCH_SIZE, hint_node->children_[0]->value_))) {
         } else if (OB_NOT_NULL(hint_node->children_[1])
                    && OB_FAIL(stmt_hints.set_value(ObLoadDataHint::BATCH_BUFFER_SIZE,
                                               ObString(hint_node->children_[1]->str_len_,
                                                       hint_node->children_[1]->str_value_)))) {
-          LOG_WARN("fail to set concurrent value", K(ret));
         }
         break;
       }
@@ -516,7 +498,6 @@ int ObLoadDataResolver::resolve_hints(const ParseNode &node)
           LOG_WARN("Unused parallel hint");
         } else if (OB_ISNULL(hint_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("child of stmt parallel degree node should not be NULL", K(ret));
         } else if (OB_FAIL(stmt_hints.set_value(
                         ObLoadDataHint::PARALLEL_THREADS, hint_node->children_[0]->value_))) {
         } else {
@@ -552,7 +533,6 @@ int ObLoadDataResolver::pattern_match(const ObString& str, const ObString& patte
   ObMemAttr attr("TLD_PATMATCH");
   if (OB_ISNULL(dp = (bool *)ob_malloc(m * n, attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     memset(dp, false, m * n);
     dp[0] = true;
@@ -610,7 +590,6 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
     if (OB_UNLIKELY(file_name.empty())) {
       if (ObLoadFileLocation::CLIENT_DISK != load_args.load_file_storage_) {
         ret = OB_FILE_NOT_EXIST;
-        LOG_WARN("file not exist", K(ret), K(file_name));
       } else {
         // do nothing
       }
@@ -625,7 +604,6 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
         ObArray<ObString> match_array;
         if (OB_ISNULL(full_path_buf = static_cast<char *>(allocator_->alloc(MAX_PATH_SIZE)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(ret));
         } else if (exist_wildcard(file_name)) {
           sub_file_name = file_name.trim_space_only();
           if (OB_FAIL(ob_write_string(*allocator_, sub_file_name, cstyle_file_name, true))) {
@@ -634,7 +612,6 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             int return_value = glob(cstyle_file_name.ptr(), 0, NULL, &glob_result);
             if (return_value == GLOB_NOMATCH) {
               ret = OB_FILE_NOT_EXIST;
-              LOG_WARN("No matches found for pattern", K(ret), K(ObString(cstyle_file_name)));
             } else if (return_value != 0) {
               ret = OB_ERR_SYS;
               LOG_WARN("fail to glob", K(ObString(cstyle_file_name)));
@@ -661,7 +638,6 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             }
             if (!sub_file_name.empty()) {
               if (cstyle_file_name.empty() && OB_FAIL(ob_write_string(*allocator_, sub_file_name, cstyle_file_name, true))) {
-                LOG_WARN("fail to write string", K(ret));
               } else if (OB_FAIL(match_array.push_back(cstyle_file_name))) {
               }
             }
@@ -670,7 +646,6 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
         if (OB_SUCC(ret)) {
           if (match_array.size() == 0) {
             ret = OB_FILE_NOT_EXIST;
-            LOG_WARN("files not exists", K(ret));
           } else {
             for (int32_t i = 0; OB_SUCC(ret) && i < match_array.size(); i++) {
               //security check for mysql mode
@@ -681,10 +656,8 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
               if (OB_ISNULL(actual_path = realpath(match_array[i].ptr(), full_path_buf))) {
 #endif
                 ret = OB_FILE_NOT_EXIST;
-                LOG_WARN("file not exist", K(ret), K(i), K(match_array[i]));
               } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
               } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
-                LOG_WARN("failed to check secure path", K(ret), K(secure_file_priv), K(actual_path));
               } else if (OB_FAIL(load_args.file_iter_.add_files(&match_array[i]))) {
               }
             }
@@ -723,7 +696,6 @@ int ObLoadDataResolver::validate_stmt(ObLoadDataStmt* stmt)
   //int64_t line_sep_char;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameter", K(ret));
   } else {
     ObDataInFileStruct& data_struct_in_file = stmt->get_data_struct_in_file();
 
@@ -734,7 +706,6 @@ int ObLoadDataResolver::validate_stmt(ObLoadDataStmt* stmt)
                       || data_struct_in_file.line_term_str_.length() > ObLoadDataStmt::MAX_DELIMIT_STR_LEN
                       || data_struct_in_file.line_start_str_.length() > ObLoadDataStmt::MAX_DELIMIT_STR_LEN)) {
         ret = OB_WRONG_FIELD_TERMINATORS;
-        LOG_WARN("field enclosed or escaped char is more than one byte", K(ret), K(data_struct_in_file));
       } else {
         if ((!data_struct_in_file.field_enclosed_str_.empty() && !ob_isascii(data_struct_in_file.field_enclosed_str_[0]))
             || (!data_struct_in_file.field_escaped_str_.empty() && !ob_isascii(data_struct_in_file.field_escaped_str_[0]))
@@ -818,7 +789,6 @@ int ObLoadDataResolver::resolve_field_node(const ParseNode &node, const ObNameCa
   uint64_t table_id = load_stmt.get_load_arguments().table_id_;
   if (OB_UNLIKELY(T_COLUMN_REF != node.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node type is not T_COLUMN_LIST", K(ret), K(node.type_));
   } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(&node, case_mode, q_name))) {
   } else if ((q_name.database_name_.length() > 0
                  && q_name.database_name_.case_compare(database_name) != 0)
@@ -837,7 +807,6 @@ int ObLoadDataResolver::resolve_field_node(const ParseNode &node, const ObNameCa
                                         false))) {
    } else if (OB_ISNULL(col_schema)) {
      ret = OB_ERR_UNEXPECTED;
-     LOG_WARN("column schema is null");
    } else {
     ObIArray<ObLoadDataStmt::FieldOrVarStruct> &field_or_var_list = load_stmt.get_field_or_var_list();
     ObLoadDataStmt::FieldOrVarStruct tmp_struct;
@@ -860,12 +829,10 @@ int ObLoadDataResolver::resolve_user_vars_node(const ParseNode &node, ObLoadData
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(T_USER_VARIABLE_IDENTIFIER != node.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node type is not T_USER_VARIABLE_IDENTIFIER", K(ret), K(node.type_));
   } else if (OB_UNLIKELY(1 != node.num_child_)
              || OB_ISNULL(node.children_)
              || OB_ISNULL(node.children_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid node", K(node.num_child_), K(node.children_), K(ret));
   } else {
     ObIArray<ObLoadDataStmt::FieldOrVarStruct> &field_or_var_list = load_stmt.get_field_or_var_list();
     ObString user_var;
@@ -891,7 +858,6 @@ int ObLoadDataResolver::resolve_empty_field_or_var_list_node(ObLoadDataStmt &loa
   const ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( table_id, table_schema))) {
   } else {
     ObColumnIterByPrevNextID iter(*table_schema);
@@ -899,7 +865,6 @@ int ObLoadDataResolver::resolve_empty_field_or_var_list_node(ObLoadDataStmt &loa
     while (OB_SUCC(ret) && OB_SUCC(iter.next(column_schema))) {
       if (OB_ISNULL(column_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The column is null", K(ret));
       } else if (!column_schema->is_hidden()
                  && !column_schema->is_invisible_column()) {
         ObLoadDataStmt::FieldOrVarStruct tmp_struct;
@@ -919,7 +884,6 @@ int ObLoadDataResolver::resolve_empty_field_or_var_list_node(ObLoadDataStmt &loa
       }
     }
     if (ret != OB_ITER_END) {
-      LOG_WARN("Failed to iterate all table columns. iter quit. ", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -934,16 +898,13 @@ int ObLoadDataResolver::resolve_field_or_var_list_node(const ParseNode &node,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(T_COLUMN_LIST != node.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node type is not T_COLUMN_LIST", K(ret), K(node.type_));
   } else if (OB_UNLIKELY(node.num_child_ <= 0) || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid child node", K(node.num_child_), K(ret));
   } else {
     const ParseNode *child_node = NULL;
     for (int32_t i = 0 ; i < node.num_child_ && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(child_node = node.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid grand child node", K(child_node), K(i), K(ret));
       } else if (T_COLUMN_REF == child_node->type_) {
         if (OB_FAIL(resolve_field_node(*child_node, case_mode, load_stmt))) {
         }
@@ -952,7 +913,6 @@ int ObLoadDataResolver::resolve_field_or_var_list_node(const ParseNode &node,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("resolve field var list failed", K(ret), K(child_node));
       }
     }//end of for
     LOG_DEBUG("check field var list", K(load_stmt.get_field_or_var_list()));
@@ -966,16 +926,13 @@ int ObLoadDataResolver::resolve_set_clause(const ParseNode &node, const ObNameCa
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(T_VALUE_LIST != node.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node type is not T_VALUE_LIST", K(ret), K(node.type_));
   } else if (OB_UNLIKELY(node.num_child_ <= 0) || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid child node", K(node.num_child_), K(ret));
   } else {
     const ParseNode *child_node = NULL;
     for (int32_t i = 0 ; i < node.num_child_ && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(child_node = node.children_[i]) || T_ASSIGN_ITEM != child_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid grand child node", K(child_node), K(i), K(ret));
       } else if (OB_FAIL(resolve_each_set_node(*child_node, case_mode, load_stmt))) {
       }
     }//end of for
@@ -1008,7 +965,6 @@ int ObLoadDataResolver::build_column_ref_expr(ObQualifiedName &q_name, ObRawExpr
                                        false))) {
   } else if (OB_ISNULL(col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null");
   } else if (OB_FAIL(ObRawExprUtils::build_column_expr(*params_.expr_factory_, *col_schema,
                                                        params_.session_info_, col_expr))) {
   } else {
@@ -1047,7 +1003,6 @@ int recursively_check_subquery_tables(ObSelectStmt *subquery_stmt, uint64_t load
   for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); ++i) {
     if (NULL == (item = table_items.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_items is null", K(table_items), K(i));
     } else switch (item->type_) {
       case TableItem::BASE_TABLE:
       case TableItem::ALIAS_TABLE:
@@ -1064,7 +1019,6 @@ int recursively_check_subquery_tables(ObSelectStmt *subquery_stmt, uint64_t load
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected error.", KPC(item));
     }
   }
   return ret;
@@ -1084,11 +1038,9 @@ int ObLoadDataResolver::resolve_each_set_node(const ParseNode &node, const ObNam
 
   if (OB_UNLIKELY(T_ASSIGN_ITEM != node.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node type is not T_COLUMN_LIST", K(ret), K(node.type_));
   } else if (OB_UNLIKELY(2 != node.num_child_)
              || OB_ISNULL(node.children_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid node", K(node.num_child_), K(node.children_), K(ret));
   } else {
     LOG_DEBUG("check parse node", "parse tree", SJ(ObParserResultPrintWrapper(node)));
   }
@@ -1102,7 +1054,6 @@ int ObLoadDataResolver::resolve_each_set_node(const ParseNode &node, const ObNam
     } else if (OB_FAIL(build_column_ref_expr(q_name, raw_expr))) {
     } else if (OB_ISNULL(ref_expr = static_cast<ObColumnRefRawExpr*>(raw_expr))){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column expr is null");
     } else if (ref_expr->is_generated_column()) {
       ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
       const ObString &column_name = ref_expr->get_column_name();
@@ -1135,7 +1086,6 @@ int ObLoadDataResolver::resolve_each_set_node(const ParseNode &node, const ObNam
     expr_node = node.children_[1];
     if (OB_ISNULL(expr_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid expr node", K(ret));
     } else {
       if (OB_FAIL(ObRawExprUtils::build_raw_expr(*params_.expr_factory_,
                                                  *params_.session_info_,
@@ -1154,8 +1104,6 @@ int ObLoadDataResolver::resolve_each_set_node(const ParseNode &node, const ObNam
                  || udf_info.count() > 0
                  || columns.count() > 0) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support set expression", K(ret),
-                 K(aggr_exprs), K(win_exprs), K(sub_query_info), K(udf_info));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "set expression");
       } else {
         assignment.expr_ = expr;
@@ -1192,7 +1140,6 @@ int ObLoadDataResolver::resolve_string_node(const ParseNode &node, ObString &tar
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("node type must be varchar or ?", K(ret), K(node.type_));
   }
   return ret;
 }
@@ -1203,22 +1150,18 @@ int ObLoadDataResolver::resolve_field_list_node(const ParseNode &node,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(T_INTO_FIELD_LIST != node.type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("node type is not T_INTO_FIELD_LIST", K(ret), K(node.type_));
   } else if (OB_UNLIKELY(node.num_child_ <= 0) || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid child node", K(node.num_child_), K(ret));
   } else {
     const ParseNode *child_node = NULL;
     for (int32_t i = 0 ; i < node.num_child_ && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(child_node = node.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid grand child node", K(child_node), K(i), K(ret));
       } else {
         switch (child_node->type_) {
           case T_FIELD_TERMINATED_STR: {
             if (OB_UNLIKELY(child_node->num_child_ != 1) || OB_ISNULL(child_node->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid grand child node", K(ret), K(i), K(child_node->num_child_));
             } else if (OB_FAIL(resolve_string_node(*child_node->children_[0], data_struct_in_file.field_term_str_))) {
             }
             break;
@@ -1228,7 +1171,6 @@ int ObLoadDataResolver::resolve_field_list_node(const ParseNode &node,
           case T_CLOSED_STR: {
             if (OB_UNLIKELY(child_node->num_child_ != 1) || OB_ISNULL(child_node->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid grand child node", K(child_node->num_child_), K(i), K(ret));
             } else if (OB_FAIL(resolve_string_node(*child_node->children_[0],
                                                    data_struct_in_file.field_enclosed_str_))) {
             }
@@ -1237,7 +1179,6 @@ int ObLoadDataResolver::resolve_field_list_node(const ParseNode &node,
           case T_ESCAPED_STR: {
             if (OB_UNLIKELY(child_node->num_child_ != 1) || OB_ISNULL(child_node->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid grand child node", K(child_node->num_child_), K(i), K(ret));
             } else if (OB_FAIL(resolve_string_node(*child_node->children_[0],
                                                    data_struct_in_file.field_escaped_str_))) {
             }
@@ -1259,26 +1200,21 @@ int ObLoadDataResolver::resolve_line_list_node(const ParseNode &node,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(T_INTO_LINE_LIST != node.type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("node type is not T_INTO_LINE_LIST", K(ret), K(node.type_));
   } else if (OB_UNLIKELY(node.num_child_ <= 0) || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid child node", K(node.num_child_), K(ret));
   } else {
     const ParseNode *child_node = NULL;
     for (int32_t i = 0 ; i < node.num_child_ && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(child_node = node.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid grand child node", K(child_node), K(i), K(ret));
       } else if (T_LINE_TERMINATED_STR == child_node->type_) {
         if (OB_ISNULL(child_node->children_) || OB_ISNULL(child_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid grand child node", K(child_node), K(i), K(ret));
         } else if (OB_FAIL(resolve_string_node(*child_node->children_[0], data_struct_in_file.line_term_str_))) {
         }
       } else if (T_LINE_START_STR == child_node->type_) {
         if (OB_ISNULL(child_node->children_) || OB_ISNULL(child_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid grand child node", K(child_node), K(i), K(ret));
         } else if (OB_FAIL(resolve_string_node(*child_node->children_[0], data_struct_in_file.line_start_str_))) {
         }
       } else {
@@ -1315,8 +1251,6 @@ int ObLoadDataResolver::check_trigger_constraint(const ObTableSchema *table_sche
       || OB_ISNULL(session_info_)
       || OB_ISNULL(schema_checker_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("object is null", K(ret), K(table_schema), K(schema_checker_), 
-             K(session_info_), K(schema_checker_->get_schema_guard()));
   } else {
     
 
@@ -1326,11 +1260,9 @@ int ObLoadDataResolver::check_trigger_constraint(const ObTableSchema *table_sche
       if (OB_FAIL(schema_guard->get_trigger_info( table_schema->get_trigger_list().at(i), trg_info))) {
       } else if (OB_ISNULL(trg_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("trigger info is null", K(ret), K(table_schema->get_trigger_list().at(i)));
       } else if (trg_info->is_enable()
                  && (trg_info->has_insert_event() || trg_info->has_update_event())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support load data if table has insert or update trigger", K(ret), KPC(trg_info));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "if table has insert or update trigger, load data");
       }
     }
@@ -1345,7 +1277,6 @@ int ObLoadDataResolver::resolve_partitions(const ParseNode &node, ObLoadDataStmt
   const ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is nullptr", KR(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( table_id, table_schema))) {
   }
   OB_ASSERT(1 == node.num_child_ && node.children_[0]->num_child_ > 0);
@@ -1363,7 +1294,6 @@ int ObLoadDataResolver::resolve_partitions(const ParseNode &node, ObLoadDataStmt
       ObPartGetter part_getter(*table_schema);
       if (T_USE_PARTITION == node.type_) {
         if (OB_FAIL(part_getter.get_part_ids(partition_name, partition_ids))) {
-          LOG_WARN("fail to get part ids", K(ret), K(partition_name));
           if (OB_UNKNOWN_PARTITION == ret) {
             LOG_USER_ERROR(OB_UNKNOWN_PARTITION, partition_name.length(), partition_name.ptr(),
                           table_schema->get_table_name_str().length(),

@@ -34,7 +34,6 @@ int ObSchemaRuntimeService::server_module_init(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_runtime_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_runtime_service is null", K(ret));
   } else {
     schema_runtime_service->schema_service_ = &schema_service;
   }

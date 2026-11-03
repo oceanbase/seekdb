@@ -63,10 +63,8 @@ int ObExprVecIVFCenterID::cg_expr(
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 4 && rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
-  } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 4 && OB_ISNULL(rt_expr.args_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, rt_expr.args_ is nullptr", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
+    OB_ASSERT(rt_expr.arg_cnt_ != 4 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = calc_center_id;
   }
   return ret;
@@ -91,7 +89,6 @@ int ObExprVecIVFCenterID::calc_center_id(
     }
   } else if (OB_UNLIKELY(4 != expr.arg_cnt_) || OB_ISNULL(expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {;
     common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;

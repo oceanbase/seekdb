@@ -1112,13 +1112,11 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         oceanbase::lib::Worker worker;
         oceanbase::lib::Worker::set_worker_to_thread_local(&worker);
         
-        ObPLogWriterCfg log_cfg;
-        
         if (OB_FAIL(ret)) {
         } else {
             t_after_preinit = ObTimeUtility::current_time();
             try {
-                ret = OBSERVER.init(opts, log_cfg);
+                ret = OBSERVER.init(opts);
             } catch (const std::exception& e) {
                 return SEEKDB_ERROR_MEMORY_ALLOC;
             }

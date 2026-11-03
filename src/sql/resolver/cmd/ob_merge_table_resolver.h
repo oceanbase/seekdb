@@ -58,7 +58,8 @@ private:
                         const common::ObString &cur_db_name, const common::ObString &cur_table_name,
                         const common::ObString &inc_db_name, const common::ObString &inc_table_name,
                         const common::ObIArray<common::ObString> &pk_cols,
-                        const common::ObIArray<common::ObString> &val_cols);
+                        const common::ObIArray<common::ObString> &val_cols,
+                        const common::ObIArray<common::ObString> &writable_val_cols);
 
   static int append_set_clause_(common::ObSqlString &sql,
                                 const common::ObIArray<common::ObString> &cols);

@@ -34,7 +34,6 @@ int ObGeoInteriorPointVisitor::init(ObGeometry *geo)
         exist_centroid_ = false;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("eval geo centroid failed", K(ret));
       }
     } else {
       centroid_pt_ = reinterpret_cast<ObCartesianPoint *>(res_geo);
@@ -62,7 +61,6 @@ int ObGeoInteriorPointVisitor::assign_interior_point(double x, double y)
   if (OB_ISNULL(interior_point_)) {
     if (OB_ISNULL(interior_point_ = OB_NEWx(ObCartesianPoint, allocator_, x, y, srid_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory for collection", K(ret));
     }
   } else {
     interior_point_->x(x);
@@ -78,7 +76,6 @@ int ObGeoInteriorPointVisitor::assign_interior_endpoint(double x, double y)
   if (OB_ISNULL(interior_endpoint_)) {
     if (OB_ISNULL(interior_endpoint_ = OB_NEWx(ObCartesianPoint, allocator_, x, y, srid_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory for collection", K(ret));
     }
   } else {
     interior_endpoint_->x(x);
@@ -352,7 +349,6 @@ int ObGeoInteriorPointVisitor::visit(ObIWkbGeomPolygon *geo)
     } else if (OB_FAIL(calculate_crossing_points(geo, interior_y, crossing_points))) {
     } else if (crossing_points.size() % 2) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("crossing_points size should be even", K(ret), K(crossing_points.size()));
     } else {
       double interior_x = 0;
       lib::ob_sort(crossing_points.begin(), crossing_points.end());
@@ -407,7 +403,6 @@ int ObGeoInteriorPointVisitor::visit(ObIWkbGeomCollection *geo)
           exist_centroid_ = false;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("eval geo centroid failed", K(ret));
         }
       } else {
         centroid_pt_ = reinterpret_cast<ObCartesianPoint *>(res_geo);
@@ -428,7 +423,6 @@ int ObGeoInteriorPointVisitor::get_interior_point(ObGeometry *&interior_point)
       // return ObCartesianGeometrycollection EMPTY
       if (OB_ISNULL(interior_point = OB_NEWx(ObCartesianGeometrycollection, allocator_, srid_, *allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for ObCartesianGeometrycollection", K(ret));
       }
     } else {
       interior_point = interior_endpoint_;

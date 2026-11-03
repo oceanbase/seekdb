@@ -50,7 +50,6 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
   const ObDeleteStmt *delete_stmt = get_stmt();
   if (OB_ISNULL(delete_stmt) || OB_ISNULL(get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(delete_stmt), K(ret));
   } else {
     bool need_limit = true;
     ObSEArray<OrderItem, 4> order_items;
@@ -122,7 +121,6 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
       if (OB_FAIL(candi_allocate_root_exchange())) {
       } else if (!delete_stmt->has_limit() &&
                  OB_FAIL(check_fullfill_safe_update_mode(get_plan_root()))) {
-        LOG_WARN("failed to check fullfill safe update mode", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -177,14 +175,12 @@ int ObDeleteLogPlan::create_delete_plans(ObIArray<CandidatePlan> &candi_plans,
   bool is_result_local = false;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_plans.count(); i++) {
     candi_plan = candi_plans.at(i);
     is_multi_part_dml = force_multi_part;
     if (OB_ISNULL(candi_plan.plan_tree_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (!force_multi_part &&
                OB_FAIL(check_need_multi_partition_dml(*get_stmt(),
                                                       *candi_plan.plan_tree_,
@@ -192,12 +188,10 @@ int ObDeleteLogPlan::create_delete_plans(ObIArray<CandidatePlan> &candi_plans,
                                                       use_parallel_das_dml_,
                                                       is_multi_part_dml,
                                                       is_result_local))) {
-      LOG_WARN("failed to check need multi-partition dml", K(ret));
     } else if (is_multi_part_dml && force_no_multi_part) {
       /*do nothing*/
     } else if (candi_plan.plan_tree_->is_sharding() && (is_multi_part_dml || is_result_local) &&
                OB_FAIL(allocate_exchange_as_top(candi_plan.plan_tree_, exch_info))) {
-      LOG_WARN("failed to allocate exchange as top", K(ret));
     } else if (OB_FAIL(allocate_delete_as_top(candi_plan.plan_tree_, is_multi_part_dml))) {
     } else if (OB_FAIL(delete_plans.push_back(candi_plan))) {
     } else { /*do nothing*/ }
@@ -213,11 +207,9 @@ int ObDeleteLogPlan::allocate_delete_as_top(ObLogicalOperator *&top,
   const ObDeleteStmt *delete_stmt = NULL;
   if (OB_ISNULL(top) || OB_ISNULL(delete_stmt = get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(top), K(delete_stmt), K(ret));
   } else if (OB_ISNULL(delete_op = static_cast<ObLogDelete*>(
                          get_log_op_factory().allocate(*this, LOG_DELETE)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate delete operator", K(ret));
   } else {
     delete_op->set_child(ObLogicalOperator::first_child, top);
     delete_op->set_is_multi_part_dml(is_multi_part_dml);
@@ -256,7 +248,6 @@ int ObDeleteLogPlan::prepare_dml_infos()
   const ObDeleteStmt *delete_stmt = get_stmt();
   if (OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     const ObIArray<ObDeleteTableInfo*>& table_infos = delete_stmt->get_delete_table_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
@@ -265,7 +256,6 @@ int ObDeleteLogPlan::prepare_dml_infos()
       ObSEArray<IndexDMLInfo*, 8> index_dml_infos;
       if (OB_ISNULL(table_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (OB_FAIL(prepare_table_dml_info_basic(*table_info,
                                                       table_dml_info,
                                                       index_dml_infos))) {
@@ -291,20 +281,17 @@ int ObDeleteLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
   const ObTableSchema* index_schema = NULL;
   if (OB_ISNULL(schema_guard) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null",K(ret), K(schema_guard), K(session_info));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < index_dml_infos.count(); ++i) {
     IndexDMLInfo* index_dml_info = index_dml_infos.at(i);
     if (OB_ISNULL(index_dml_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(i), K(ret));
     } else if (OB_FAIL(schema_guard->get_table_schema(
                                                       index_dml_info->ref_table_id_,
                                                       index_schema))) {
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get table schema", KPC(index_dml_info), K(ret));
     } else if (OB_FAIL(generate_index_column_exprs(table_info.table_id_,
                                                    *index_schema,
                                                    empty_assignments,
@@ -316,7 +303,6 @@ int ObDeleteLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
                                                               table_dml_info,
                                                               index_dml_infos,
                                                               all_index_dml_infos))) {
-    LOG_WARN("failed to prepare table dml info special", K(ret));
   }
   return ret;
 }

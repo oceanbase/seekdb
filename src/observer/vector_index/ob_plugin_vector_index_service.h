@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SERVICE_DEFINE_H_
 #define OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SERVICE_DEFINE_H_
 #include <type_traits> // For std::invoke_result
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/log/ob_log_base_type.h"
 #include "share/scn.h"

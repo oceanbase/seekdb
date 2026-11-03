@@ -67,7 +67,6 @@ int ObDMLStmtPrinter::print_hint()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(stmt_->get_query_ctx()) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     const char *hint_begin = "/*+";
     const char *hint_end = " */";
@@ -102,7 +101,6 @@ int ObDMLStmtPrinter::print_from(bool need_from)
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     int64_t from_item_size = stmt_->get_from_item_size();
     if (from_item_size > 0) {
@@ -119,7 +117,6 @@ int ObDMLStmtPrinter::print_from(bool need_from)
         }
         if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table_item should not be NULL", K(ret));
         } else if (OB_FAIL(print_table(table_item))) {
         } else {
           DATA_PRINTF(",");
@@ -147,7 +144,6 @@ int ObDMLStmtPrinter::print_table_with_subquery(const TableItem *table_item)
   if (OB_ISNULL(table_item) ||
       OB_ISNULL(table_item->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else {
     // force print alias name for select item in generated table. Otherwise,
     // create view v as select 1 from dual where 1 > (select `abs(c1)` from (select abs(c1) from t));
@@ -162,7 +158,6 @@ int ObDMLStmtPrinter::print_table_with_subquery(const TableItem *table_item)
     }
     if (OB_SUCC(ret) && OB_FAIL(print_subquery(table_item->ref_query_, 
                                subquery_print_params))) {
-      LOG_WARN("failed to print subquery", K(ret));
     } else if (!table_item->alias_name_.empty()) {
       DATA_PRINTF(" ");
       PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
@@ -182,10 +177,8 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_) || OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     switch (table_item->type_) {
     case TableItem::BASE_TABLE: {
@@ -208,13 +201,11 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
         const JoinedTable *join_table = static_cast<const JoinedTable*>(table_item);
         if (OB_ISNULL(join_table)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("join_table should not be NULL", K(ret));
         } else {
           // left table
           const TableItem *left_table = join_table->left_table_;
           if (OB_ISNULL(left_table)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("left_table should not be NULL", K(ret));
           } else {
             DATA_PRINTF("(");
             if (OB_SUCC(ret)) {
@@ -244,7 +235,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
                 }
               default: {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("unknown join type", K(ret), K(join_table->joined_type_));
                   break;
                 }
               }
@@ -255,7 +245,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
               const TableItem *right_table = join_table->right_table_;
               if (OB_ISNULL(right_table)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("right_table should not be NULL", K(ret));
               } else if (OB_FAIL(SMART_CALL(print_table(right_table)))) {
               } else {
                 // join conditions
@@ -287,7 +276,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
     case TableItem::GENERATED_TABLE: {
         if (OB_ISNULL(table_item->ref_query_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table item ref query is null", K(ret));
         // generated_table cannot appear in view_definition
         // view is converted to a generated table in the resolver phase, and needs to be treated as a base table
         } else if (table_item->is_view_table_) {
@@ -375,7 +363,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
     }
     default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown table type", K(ret), K(table_item->type_));
         break;
       }
     }
@@ -390,7 +377,6 @@ int ObDMLStmtPrinter::print_values_table(const TableItem &table_item, bool no_pr
   ObValuesTableDef *table_def = table_item.values_table_def_;
   if (OB_UNLIKELY(!table_item.is_values_table()) || OB_ISNULL(table_def)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("values table def should not be NULL", K(ret), KP(table_def));
   } else {
     const int64_t column_cnt = table_def->column_cnt_;
     if (ObValuesTableDef::ACCESS_EXPR == table_def->access_type_ ||
@@ -398,7 +384,6 @@ int ObDMLStmtPrinter::print_values_table(const TableItem &table_item, bool no_pr
       const ObIArray<ObRawExpr *> &values = table_def->access_exprs_;
       if (OB_UNLIKELY(column_cnt <= 0 || values.empty() || values.count() % column_cnt != 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(column_cnt), K(values));
       } else {
         DATA_PRINTF("(VALUES ");
         for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
@@ -485,7 +470,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
       } else {
         DATA_PRINTF("varchar(%d) ", len);
         if (OB_SUCC(ret) && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-          LOG_WARN("fail to print binary,charset,collection clause", K(ret));
         }
       }
       break;
@@ -503,7 +487,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
         DATA_PRINTF("TINYTEXT ");
       }
       if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-        LOG_WARN("fail to print binary,charset,collection clause", K(ret));
       }
       break;
     }
@@ -515,7 +498,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
         DATA_PRINTF("TEXT ");
       }
       if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-        LOG_WARN("fail to print binary,charset,collection clause", K(ret));
       }
       break;
     }
@@ -527,7 +509,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
         DATA_PRINTF("MEDIUMTEXT ");
       }
       if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-        LOG_WARN("fail to print binary,charset,collection clause", K(ret));
       }
       break;
     }
@@ -539,7 +520,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
         DATA_PRINTF("LONGTEXT ");
       }
       if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-        LOG_WARN("fail to print binary,charset,collection clause", K(ret));
       }
       break;
     }
@@ -806,12 +786,10 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
         }
         case ObGeoType::GEOTYPEMAX: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid cast geo sub type", K(ret), K(cast_type), K(geo_type));
           break;
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unknown cast geo sub type", K(ret), K(cast_type), K(geo_type));
           break;
         }
       }
@@ -819,7 +797,6 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unknown cast type", K(ret), K(cast_type));
       break;
     }
   } // end switch
@@ -839,7 +816,6 @@ int ObDMLStmtPrinter::get_json_table_column_if_exists(int32_t id, ObDmlJtColDef*
     ObDmlJtColDef* cur_col = col_stack.at(col_stack.count() - 1);
     if (OB_ISNULL(cur_col)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("current column info is null", K(ret));
     } else if (cur_col->col_base_info_.id_ == id) {
       exists = true;
       col = cur_col;
@@ -850,13 +826,11 @@ int ObDMLStmtPrinter::get_json_table_column_if_exists(int32_t id, ObDmlJtColDef*
         ObDmlJtColDef* nest_col = cur_col->nested_cols_.at(i);
         if (OB_ISNULL(nest_col)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("current column info is null", K(ret));
         } else if (nest_col->col_base_info_.id_ == id) {
           exists = true;
           col = nest_col;
         } else if (nest_col->col_base_info_.col_type_ == static_cast<int32_t>(NESTED_COL_TYPE) 
                   && OB_FAIL(col_stack.push_back(nest_col))) {
-          LOG_WARN("fail to store col node tmp", K(ret));
         }
       }
     }
@@ -864,7 +838,6 @@ int ObDMLStmtPrinter::get_json_table_column_if_exists(int32_t id, ObDmlJtColDef*
 
   if (OB_SUCC(ret) && !exists) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to find col node", K(ret));
   } 
   return ret;
 }
@@ -879,7 +852,6 @@ int ObDMLStmtPrinter::build_json_table_nested_tree(const TableItem* table_item, 
     ObDmlJtColDef* col_def = static_cast<ObDmlJtColDef*>(allocator->alloc(sizeof(ObDmlJtColDef)));
     if (OB_ISNULL(col_def)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate col node", K(ret));
     } else {
       col_def = new (col_def) ObDmlJtColDef();
       col_def->col_base_info_.assign(info);
@@ -888,7 +860,6 @@ int ObDMLStmtPrinter::build_json_table_nested_tree(const TableItem* table_item, 
         ColumnItem* col_item = stmt_->get_column_item_by_id(table_item->table_id_, info.output_column_idx_);
         if (OB_ISNULL(col_item)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get column item", K(ret), K(info.output_column_idx_));
         } else {
           col_def->error_expr_ = col_item->default_value_expr_;
           col_def->empty_expr_ = col_item->default_empty_expr_;
@@ -923,7 +894,6 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
     ObDmlJtColDef* cur_def = col_def.regular_cols_.at(i);
     if (OB_ISNULL(cur_def)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("current column info is null", K(ret));
     } else {
       const ObJtColBaseInfo& col_info = col_def.regular_cols_.at(i)->col_base_info_;
       if (i > 0) {
@@ -1153,7 +1123,6 @@ int ObDMLStmtPrinter::print_json_table(const TableItem *table_item)
   ObArenaAllocator alloc;
   ObDmlJtColDef* root_def = nullptr;
   if (OB_SUCC(ret) && OB_FAIL(build_json_table_nested_tree(table_item, &alloc, root_def))) {
-    LOG_WARN("fail to build column tree.", K(ret));
   } else if (root_def->col_base_info_.path_.length() > 0) {
     DATA_PRINTF(" , \'%.*s\'", LEN_AND_PTR(root_def->col_base_info_.path_));
   }
@@ -1178,7 +1147,6 @@ int ObDMLStmtPrinter::print_json_table(const TableItem *table_item)
     } else if (root_def->col_base_info_.on_error_ == 2) {
       DATA_PRINTF(" default ");
       if (OB_SUCC(ret) && OB_FAIL(expr_printer_.do_print(root_def->error_expr_, T_NONE_SCOPE))) {
-        LOG_WARN("fail to print default expr", K(ret));
       }
       DATA_PRINTF(" on error");
     }
@@ -1197,15 +1165,11 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_item should not be NULL", K(ret));
   } else if (TableItem::BASE_TABLE != table_item->type_
       && TableItem::ALIAS_TABLE != table_item->type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_type should be BASE_TABLE or ALIAS_TABLE", K(ret),
-             K(table_item->type_));
   } else {
     PRINT_TABLE_NAME(print_params_, table_item);
     if (OB_SUCC(ret)) {
@@ -1260,7 +1224,6 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected type", K(ret), K(table_item->snapshot_query_type_));
           }
         }
       }
@@ -1275,17 +1238,14 @@ int ObDMLStmtPrinter::print_semi_join()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < stmt_->get_semi_info_size(); ++i) {
     SemiInfo *semi_info = stmt_->get_semi_infos().at(i);
     const TableItem *right_table = NULL;
     if (OB_ISNULL(semi_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null semi info", K(ret));
     } else if (OB_ISNULL(right_table = stmt_->get_table_item_by_id(semi_info->right_table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else {
       DATA_PRINTF(", ");
       // join type
@@ -1309,7 +1269,6 @@ int ObDMLStmtPrinter::print_semi_join()
         }
       default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unknown join type", K(ret));
           break;
         }
       }
@@ -1346,7 +1305,6 @@ int ObDMLStmtPrinter::print_where()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     const ObIArray<ObRawExpr*> &condition_exprs = stmt_->get_condition_exprs();
     int64_t condition_exprs_size = condition_exprs.count();
@@ -1372,7 +1330,6 @@ int ObDMLStmtPrinter::print_quote_for_const(ObRawExpr* expr, bool &print_quote)
   print_quote = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (expr->is_const_or_param_expr()) {
     print_quote = expr->get_result_type().is_numeric_type();
   }
@@ -1401,7 +1358,6 @@ int ObDMLStmtPrinter::print_order_by()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     ObArenaAllocator alloc;
     ObConstRawExpr expr(alloc);
@@ -1432,7 +1388,6 @@ int ObDMLStmtPrinter::print_approx()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (stmt_->has_vec_approx()) {
     DATA_PRINTF(" approx ");
   }
@@ -1444,7 +1399,6 @@ int ObDMLStmtPrinter::print_vector_index_query_param()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     const share::ObVectorIndexQueryParam& param = stmt_->get_vector_index_query_param();
     if (param.is_valid()) {
@@ -1473,7 +1427,6 @@ int ObDMLStmtPrinter::print_limit()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (stmt_->has_fetch()) {
     /* Fetch already owns the row limiting syntax, so do not print LIMIT here. */
   } else {
@@ -1491,7 +1444,6 @@ int ObDMLStmtPrinter::print_limit()
           bool got_result = false;
           if (!offset_expr->is_static_const_expr()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("offset expr should be a const int", K(ret), KPC(offset_expr));
           } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(print_params_.exec_ctx_,
                                                                        offset_expr,
                                                                        result,
@@ -1499,7 +1451,6 @@ int ObDMLStmtPrinter::print_limit()
                                                                        allocator))) {
           } else if (!got_result || !result.is_int()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to get the result of offset expr", K(ret), KPC(offset_expr));
           } else {
             DATA_PRINTF("%ld", result.get_int());
           }
@@ -1519,7 +1470,6 @@ int ObDMLStmtPrinter::print_limit()
           bool got_result = false;
           if (!limit_expr->is_static_const_expr()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("limit expr should be a const int", K(ret), KPC(limit_expr));
           } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(print_params_.exec_ctx_,
                                                                        limit_expr,
                                                                        result,
@@ -1527,7 +1477,6 @@ int ObDMLStmtPrinter::print_limit()
                                                                        allocator))) {
           } else if (!got_result || !result.is_int()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to get the result of limit expr", K(ret), KPC(limit_expr));
           } else {
             DATA_PRINTF("%ld", result.get_int());
           }
@@ -1548,7 +1497,6 @@ int ObDMLStmtPrinter::print_fetch()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (stmt_->has_fetch()) {
     // offset
     if (OB_SUCC(ret)) {
@@ -1626,7 +1574,6 @@ int ObDMLStmtPrinter::print_temp_table_as_cte()
     //do nothing
   } else if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_FAIL(const_cast<ObDMLStmt*>(stmt_)->collect_temp_table_infos(temp_table_infos))) {
   } else if (temp_table_infos.empty()) {
     //do nothing
@@ -1635,12 +1582,10 @@ int ObDMLStmtPrinter::print_temp_table_as_cte()
     for(int64_t i = 0; OB_SUCC(ret) && i < temp_table_infos.count(); ++i) {
       if (temp_table_infos.at(i).table_items_.empty()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the cte tableitem can not be empty", K(ret));
       } else {
         TableItem *cte_table = temp_table_infos.at(i).table_items_.at(0);
         if (OB_ISNULL(cte_table)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null table item", K(ret));
         } else if (OB_FAIL(print_cte_define_title(cte_table))) {
         } else if (OB_FAIL(print_subquery(cte_table->ref_query_, PRINT_BRACKET))) {
         }
@@ -1670,7 +1615,6 @@ int ObDMLStmtPrinter::print_cte_define_title(TableItem* cte_table)
   ObSelectStmt *sub_select_stmt = NULL;
   if (OB_ISNULL(cte_table) || OB_ISNULL(sub_select_stmt = cte_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null params", K(ret));
   } else {
     PRINT_TABLE_NAME(print_params_, cte_table);
   }
@@ -1697,7 +1641,6 @@ int ObDMLStmtPrinter::print_cte_define_title(const ObSelectStmt *sub_select_stmt
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sub_select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null params", K(ret));
   } else {
     DATA_PRINTF("(");
     const ObIArray<SelectItem> &sub_select_items = sub_select_stmt->get_select_items();
@@ -1718,7 +1661,6 @@ int ObDMLStmtPrinter::print_with()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (!print_params_.print_origin_stmt_) {
     //do nothing
   } else if (stmt_->get_cte_definition_size() == 0) {
@@ -1732,7 +1674,6 @@ int ObDMLStmtPrinter::print_with()
       // Print definition
       if (OB_ISNULL(cte_table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the cte tableitem can not be null", K(ret));
       } else if (TableItem::NORMAL_CTE == cte_table->cte_type_
                 || TableItem::RECURSIVE_CTE == cte_table->cte_type_) {
         if (OB_FAIL(print_cte_define_title(cte_table))) {
@@ -1740,7 +1681,6 @@ int ObDMLStmtPrinter::print_with()
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected cte type", K(ret), K(cte_table->cte_type_));
       }
       // Print tail
       if (OB_FAIL(ret)) {

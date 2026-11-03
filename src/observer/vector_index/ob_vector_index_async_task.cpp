@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "share/ob_server_struct.h"
 #include "data_plane/vector/ob_i_vector_index_runtime.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
@@ -35,17 +36,16 @@ namespace share
 
 void ObVectorIndexHistoryTask::runTimerTask()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   do_work(); // ignore error
 }
 
 void ObVectorIndexHistoryTask::do_work()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector index history task is not init", KR(ret));
   } else if (is_paused_) {
     // timer paused or not leader, do nothing
   } else if (!ObVecIndexAsyncTaskUtil::check_runtime_ready()) { // skip
@@ -63,7 +63,6 @@ int ObVectorIndexHistoryTask::clear_history_task()
   ObMySQLTransaction trans;
   if (OB_ISNULL(sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sql_proxy_));
   } else if (is_paused_) {
     ret = OB_EAGAIN;
     FLOG_INFO("exit timer task once cuz leader switch", KR(ret));
@@ -90,7 +89,6 @@ int ObVectorIndexHistoryTask::move_task_to_history_table()
   int64_t move_rows = batch_size;
   if (OB_ISNULL(sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sql_proxy_));
   } else {
     while (OB_SUCC(ret) && move_rows != 0) {
       ObMySQLTransaction trans;
@@ -117,7 +115,6 @@ int ObVectorIndexHistoryTask::init(common::ObMySQLProxy &sql_proxy)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector index history task initialized twice", KR(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     disable_timeout_check();
@@ -143,7 +140,6 @@ int ObVecAsyncTaskScheduler::init(ObMySQLProxy &sql_proxy)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector index scheduler initialized twice", KR(ret));
   } else if (OB_FAIL(timer_.init(
       "VecIdxManager", common::ObMemAttr("VecIdxManager")))) {
   } else if (OB_FAIL(vec_history_task_.init(sql_proxy))) {
@@ -161,7 +157,6 @@ int ObVecAsyncTaskScheduler::start()
   FLOG_INFO("vector index scheduler begins to start");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(timer_.schedule(vec_history_task_, VEC_INDEX_CLEAR_TASK_PERIOD, true))) {
   }
   FLOG_INFO("vector index scheduler start finished", KR(ret));
@@ -212,10 +207,8 @@ int ObVecAsyncTaskExector::check_and_set_thread_pool()
   ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector index load task not inited", K(ret));
   } else if (OB_ISNULL(vector_index_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret));
   } else if (OB_FAIL(get_index_mgr(index_mgr))) {
   } else {
     ObVecIndexAsyncTaskHandler &thread_pool_handle = vector_index_service_->get_vec_async_task_handle();
@@ -239,7 +232,6 @@ int ObVecAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   bool is_active_time = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector async task not init", KR(ret));
   // vector_index_optimize_duty_time only constrains AUTO-triggered per-tablet
   // HNSW optimize task creation here. MANUAL tasks use ObVecTaskManager.
   } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::in_active_time(is_active_time))) {
@@ -258,7 +250,6 @@ int ObVecAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
       ObPluginVectorIndexAdaptor *adapter = iter->second;
       if (OB_ISNULL(adapter)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret));
       } else if (adapter->is_need_async_optimal()) {
         int64_t new_task_id = OB_INVALID_ID;
         int64_t index_table_id = OB_INVALID_ID;
@@ -269,7 +260,6 @@ int ObVecAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
         ObVecIndexAsyncTaskCtx* task_ctx = nullptr;
         if (OB_ISNULL(task_ctx_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("async task ctx is null", K(ret));
         } else if (FALSE_IT(task_ctx = new(task_ctx_buf) ObVecIndexAsyncTaskCtx())) {
         } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(new_task_id))) {
         } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::get_table_id_from_adapter(
@@ -290,7 +280,6 @@ int ObVecAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
 
           if (OB_FAIL(task_opt.add_task_ctx(tablet_id, task_ctx, inc_new_task))) {
           } else if (inc_new_task && OB_FAIL(task_ctx_array.push_back(task_ctx))) {
-            LOG_WARN("fail to push back task status", K(ret), K(task_ctx));
           }
         }
         if (OB_FAIL(ret) || !inc_new_task) {
@@ -351,7 +340,6 @@ int ObVecTaskManager::create_task()
       char *task_ctx_buf = static_cast<char *>(allocator.alloc(sizeof(ObVecIndexAsyncTaskCtx)));
       if (OB_ISNULL(task_ctx_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("async task ctx is null", K(ret));
       } else if (FALSE_IT(task_ctx = new(task_ctx_buf) ObVecIndexAsyncTaskCtx())) {
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(new_task_id))) {
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_trace_id(
@@ -385,7 +373,6 @@ int ObVecTaskManager::check_task_status()
   ObSEArray<int64_t, 4> tmp_task;
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(sql_proxy));
   } else {
     for (int i = 0; i < task_ids_.count() && OB_SUCC(ret); i++) {
       ObSqlString sql;
@@ -404,12 +391,10 @@ int ObVecTaskManager::check_task_status()
           if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("error unexpected, query result must not be NULL", K(ret));
           } else if (OB_FAIL(result->next())) {
             if (OB_ITER_END == ret) {
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("fail to get next row", K(ret));
             }
           } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
                          result, task_result))) {

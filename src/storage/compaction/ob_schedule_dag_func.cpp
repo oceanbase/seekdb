@@ -117,7 +117,6 @@ int ObDagParamFunc::fill_param(
   if (OB_UNLIKELY(!is_valid_merge_type(merge_type)
     || merge_snapshot_version < ObVersion::MIN_VERSION)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(merge_type), K(merge_snapshot_version));
   } else {
     param.tablet_id_ = tablet.get_tablet_meta().tablet_id_;
     param.merge_type_ = merge_type;

@@ -25,9 +25,7 @@
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_checker.h"
-#include "storage/blocksstable/ob_super_block_buffer_holder.h"
 #include "storage/blocksstable/ob_storage_object_handle.h"
-#include "storage/ob_super_block_struct.h"
 #include "storage/tablet/ob_tablet_block_aggregated_info.h"
 
 namespace oceanbase
@@ -46,20 +44,6 @@ namespace blocksstable
 class ObMacroBlockHandle;
 struct ObMacroBlocksWriteCtx;
 class ObObjectManager;
-
-class ObSuperBlockPreadChecker : public common::ObIODPreadChecker
-{
-public:
-  ObSuperBlockPreadChecker() : super_block_() {};
-  virtual ~ObSuperBlockPreadChecker() = default;
-
-  virtual int do_check(void *read_buf, const int64_t read_size) override;
-  OB_INLINE const storage::ObServerSuperBlock& get_super_block() const { return super_block_; }
-
-private:
-  storage::ObServerSuperBlock super_block_;
-  DISALLOW_COPY_AND_ASSIGN(ObSuperBlockPreadChecker);
-};
 
 struct ObMacroBlockInfo final
 {
@@ -184,7 +168,7 @@ public:
   virtual ~ObBlockManager();
 
   int init(common::ObIODevice *io_device, const int64_t block_size);
-  int start(const int64_t reserved_size, bool &need_format);
+  int start(const int64_t reserved_size);
   void stop();
   void wait();
   void destroy();
@@ -206,9 +190,6 @@ public:
       const ObMacroBlockReadInfo &read_info,
       ObMacroBlockHandle &macro_handle);
 
-  int read_super_block(storage::ObServerSuperBlock &super_block, ObSuperBlockBufferHolder &buf_holder);
-  int write_super_block(const storage::ObServerSuperBlock &super_block, ObSuperBlockBufferHolder &buf_holder);
-
   int64_t get_free_macro_block_count() const;
   int64_t get_used_macro_block_count() const;
   int64_t get_max_macro_block_count(int64_t reserved_size) const;
@@ -226,8 +207,7 @@ public:
   int resize_file(
       const int64_t new_data_file_size,
       const int64_t new_data_file_disk_percentage,
-      const int64_t reserved_size,
-      storage::ObServerSuperBlock &super_block);
+      const int64_t reserved_size);
 
   // reference count interfaces
   int inc_ref(const MacroBlockId &macro_id);
@@ -293,7 +273,6 @@ private:
 
 private:
   static constexpr double MARK_THRESHOLD = 0.2;
-  static const int64_t SUPER_BLOCK_OFFSET = 0;
   static const int64_t DEFAULT_LOCK_BUCKET_COUNT = 2048;
   static const int64_t DEFAULT_PENDING_FREE_COUNT = 1024;
 
@@ -407,16 +386,7 @@ private:
       storage::ObTabletHandle &handle,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_local_checkpoint_blocks(
-      MacroBlkIdMap &mark_info,
-      common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
-      storage::ObLocalStorageMetaService &meta_service,
-      ObMacroBlockMarkerStatus &tmp_status);
   int mark_tmp_file_blocks(
-      MacroBlkIdMap &mark_info,
-      common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
-      ObMacroBlockMarkerStatus &tmp_status);
-  int mark_server_meta_blocks(
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
@@ -501,7 +471,6 @@ private:
   ObBucketLock bucket_lock_;
   BlockMap block_map_;
 
-  ObIOFd super_block_fd_;
   int64_t default_block_size_;
   ObMacroBlockMarkerStatus marker_status_;
   common::SpinRWLock marker_lock_;

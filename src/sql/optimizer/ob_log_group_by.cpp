@@ -76,7 +76,6 @@ int ObLogGroupBy::set_aggr_exprs(const common::ObIArray<ObAggFunRawExpr *> &aggr
     ObAggFunRawExpr *aggr_expr = aggr_exprs.at(i);
     if (OB_ISNULL(aggr_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggr_expr is null", K(ret));
     } else {
       ret = aggr_exprs_.push_back(aggr_expr);
     }
@@ -100,7 +99,6 @@ int ObLogGroupBy::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   } else if (OB_FAIL(append_array_no_dup(all_exprs, rollup_exprs_))) {
   } else if (OB_FAIL(append(all_exprs, aggr_exprs_))) {
   } else if (is_three_stage_aggr() && all_exprs.push_back(three_stage_info_.aggr_code_expr_)) {
-    LOG_WARN("failed to push back exprs", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   } else { /*do nothing*/ }
 
@@ -171,7 +169,6 @@ int ObLogGroupBy::est_cost()
   double child_cost = 0;
   if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child));
   } else if (OB_FAIL(get_child_est_info(get_parallel(), child_card, child_ndv, selectivity))) {
   } else if (OB_FAIL(inner_est_cost(get_parallel(),
                                     child_card,
@@ -179,7 +176,6 @@ int ObLogGroupBy::est_cost()
                                     group_cost))) {
   } else if (need_re_est_child_cost() &&
              OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-    LOG_WARN("failed to re est child cost", K(ret));
   } else if (!need_re_est_child_cost() && 
              OB_FALSE_IT(child_cost=child->get_cost())) {
   } else {
@@ -201,7 +197,6 @@ int ObLogGroupBy::do_re_est_cost(EstimateCostInfo &param, double &card, double &
   double number_of_copies = get_number_of_copies();
   if (OB_ISNULL(child) || OB_UNLIKELY(number_of_copies < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child), K(number_of_copies));
   } else if (OB_FAIL(get_child_est_info(parallel, child_card, child_ndv, selectivity))) {
   } else {
     double child_cost = child->get_cost();
@@ -263,10 +258,8 @@ int ObLogGroupBy::inner_est_cost(const int64_t parallel, double child_card, doub
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child));
   } else if (OB_FAIL(get_group_rollup_exprs(group_rollup_exprs))) {
   } else {
     per_dop_card = child_card / parallel;
@@ -318,10 +311,8 @@ int ObLogGroupBy::get_child_est_info(const int64_t parallel, double &child_card,
   ObLogicalOperator *child = get_child(ObLogicalOperator::first_child);
   if (OB_ISNULL(child) || OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child));
   } else if ((get_group_by_exprs().empty() && get_rollup_exprs().empty())
              || SCALAR_AGGREGATE == algo_) {
     child_card = child->get_card();
@@ -352,7 +343,6 @@ int ObLogGroupBy::est_width()
   ObSEArray<ObRawExpr*, 16> output_exprs;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid plan", K(ret));
   } else if (OB_FAIL(get_gby_output_exprs(output_exprs))) {
   } else if (OB_FAIL(ObOptEstCost::estimate_width_for_exprs(get_plan()->get_basic_table_metas(),
                                                             get_plan()->get_selectivity_ctx(),
@@ -372,7 +362,6 @@ int ObLogGroupBy::get_gby_output_exprs(ObIArray<ObRawExpr *> &output_exprs)
   ObSEArray<ObRawExpr*, 16> extracted_col_or_aggr_exprs;
   if (OB_ISNULL(plan = get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input", K(ret));
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_winfunc_exprs_for_width_est()))) {
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_select_item_exprs_for_width_est()))) {
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_orderby_exprs_for_width_est()))) {
@@ -414,7 +403,6 @@ int ObLogGroupBy::print_outline_data(PlanText &plan_text)
     /* print outline in top group by */
   } else if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()), K(stmt));
   } else if (OB_FAIL(stmt->get_qb_name(qb_name))) {
   } else {
     if (OB_SUCC(ret) && has_push_down_) {
@@ -470,20 +458,16 @@ int ObLogGroupBy::print_used_hint(PlanText &plan_text)
     /* print outline in top group by */
   } else if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()));
   } else if (NULL != (hint = get_plan()->get_log_plan_hint().get_normal_hint(T_GBY_PUSHDOWN))
              && hint->is_enable_hint() == has_push_down_
              && OB_FAIL(hint->print_hint(plan_text))) {
-    LOG_WARN("failed to print used hint for group by", K(ret), K(*hint));
   } else if (NULL != (hint = get_plan()->get_log_plan_hint().get_normal_hint(T_USE_HASH_AGGREGATE))
              && hint->is_enable_hint() == use_hash_aggr_
              && static_cast<const ObAggHint*>(hint)->force_partition_sort() == use_part_sort_
              && OB_FAIL(hint->print_hint(plan_text))) {
-    LOG_WARN("failed to print used hint for group by", K(ret), K(*hint));
   } else if (NULL != (hint = get_plan()->get_log_plan_hint().get_normal_hint(T_PQ_GBY_HINT))
              && static_cast<const ObPQHint*>(hint)->is_dist_method_match(dist_method)
              && OB_FAIL(hint->print_hint(plan_text))) {
-    LOG_WARN("failed to print used hint for group by", K(ret), K(*hint));
   }
   return ret;
 }
@@ -494,13 +478,10 @@ int ObLogGroupBy::compute_const_exprs()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(my_plan_) || OB_UNLIKELY(get_num_of_child() < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("operator is invalid", K(ret), K(get_num_of_child()), K(my_plan_));
   } else if (OB_ISNULL(child = get_child(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret), K(child));
   } else if (!has_rollup() &&
              OB_FAIL(append(get_output_const_exprs(), child->get_output_const_exprs()))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::compute_const_exprs(get_filter_exprs(), get_output_const_exprs()))) {
   } else {/*do nothing*/}
   return ret;
@@ -512,7 +493,6 @@ int ObLogGroupBy::compute_equal_set()
   EqualSets *ordering_esets = NULL;
   if (OB_ISNULL(my_plan_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("operator is invalid", K(ret), K(my_plan_));
   } else if (!has_rollup()) {
     if (OB_FAIL(ObLogicalOperator::compute_equal_set())) {
     }
@@ -520,7 +500,6 @@ int ObLogGroupBy::compute_equal_set()
     set_output_equal_sets(&empty_expr_sets_);
   } else if (OB_ISNULL(ordering_esets = get_plan()->create_equal_sets())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to create equal sets", K(ret));
   } else if (OB_FAIL(ObEqualAnalysis::compute_equal_set(
                        &my_plan_->get_allocator(),
                        filter_exprs_,
@@ -540,7 +519,6 @@ int ObLogGroupBy::compute_fd_item_set()
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child)) || OB_ISNULL(my_plan_) ||
       OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect null", K(ret), K(child), K(my_plan_), K(get_stmt()));
   } else if (has_rollup()) {
     // do nothing
   } else if (OB_FAIL(my_plan_->get_fd_item_factory().create_fd_item_set(fd_item_set))) {
@@ -548,7 +526,6 @@ int ObLogGroupBy::compute_fd_item_set()
   } else if (group_exprs_.empty()) {
     // scalar group by
     if (get_stmt()->is_select_stmt() && OB_FAIL(create_fd_item_from_select_list(fd_item_set))) {
-      LOG_WARN("failed to create fd item from select list", K(ret));
     }
   } else if (!ObTransformUtils::need_compute_fd_item_set(group_exprs_)) {
     //do nothing
@@ -564,7 +541,6 @@ int ObLogGroupBy::compute_fd_item_set()
     /*do nothing*/
   } else if (OB_NOT_NULL(fd_item_set) && // rollup when fd_item_set is null
              OB_FAIL(deduce_const_exprs_and_ft_item_set(*fd_item_set))) {
-    LOG_WARN("falied to deduce fd item set", K(ret));
   } else {
     set_fd_item_set(fd_item_set);
   }
@@ -579,7 +555,6 @@ int ObLogGroupBy::create_fd_item_from_select_list(ObFdItemSet *fd_item_set)
   if (OB_ISNULL(fd_item_set) || OB_ISNULL(my_plan_) || OB_ISNULL(get_stmt()) ||
       OB_UNLIKELY(!get_stmt()->is_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect parameter", K(ret), K(fd_item_set), K(my_plan_), K(get_stmt()));
   } else if (OB_FAIL(static_cast<const ObSelectStmt *>(get_stmt())->get_select_exprs(select_exprs))) {
   } else if (ObTransformUtils::need_compute_fd_item_set(select_exprs)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
@@ -605,7 +580,6 @@ int ObLogGroupBy::compute_op_ordering()
     reset_op_ordering();
   } else if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret));
   } else if (has_rollup()) {
     ObSEArray<OrderItem, 4> ordering;
     bool has_ordering = true;
@@ -619,7 +593,6 @@ int ObLogGroupBy::compute_op_ordering()
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(set_op_ordering(ordering))) {
-      LOG_WARN("failed to set op ordering.", K(ret));
     } else {
       is_range_order_ = child->get_is_range_order();
       is_local_order_ = is_fully_partition_wise() && !get_op_ordering().empty() && !is_range_order_;
@@ -734,7 +707,6 @@ int ObLogGroupBy::set_three_stage_info(const ObThreeStageAggrInfo &info)
                                          three_stage_info_.aggr_code_expr_,
                                          &three_stage_info_.aggr_code_idx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("aggr code expr is not found", K(ret));
   }
   return ret;
 }
@@ -745,7 +717,6 @@ int ObLogGroupBy::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
   is_fixed = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else {
     is_fixed = ObOptimizerUtil::find_item(aggr_exprs_, expr) ||
                ObOptimizerUtil::find_item(rollup_exprs_, expr) ||
@@ -793,7 +764,6 @@ int ObLogGroupBy::compute_op_parallel_info()
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null child op", K(ret));
     } else if (child->get_part_cnt() > 0 &&
                get_parallel() > child->get_part_cnt()) {
       int64_t reduce_parallel = child->get_part_cnt();

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_STORAGE_LS_RESTORE_HELPER_
 #define OCEANBASE_STORAGE_LS_RESTORE_HELPER_
 
-#include "share/ob_task_define.h"
 #include "ob_storage_restore_struct.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "ob_standby_restore_storage_struct.h"
@@ -32,6 +31,10 @@ namespace oceanbase
 namespace standby
 {
 struct StandbyConfig;
+}
+namespace storage
+{
+class ObLSMeta;
 }
 namespace restore
 {
@@ -52,7 +55,7 @@ public:
   int check_restore_precondition();
   int init_for_ls_view();
   int fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info);
-  int fetch_ls_meta(ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn);
+  int fetch_ls_meta(storage::ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn);
   int init_for_build_tablets_sstable_info(const common::ObIArray<ObTabletHandle> &tablet_handle_array);
   int fetch_next_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header);
   int fetch_next_sstable_meta(obcall::ObCopyTabletSSTableInfo &sstable_info);

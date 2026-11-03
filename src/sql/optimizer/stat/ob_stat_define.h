@@ -16,3 +16,11 @@
 
 #pragma once
 #include "query/optimizer/stat/ob_stat_define.h"
+
+namespace oceanbase
+{
+namespace common
+{
+static constexpr int64_t OPT_STATS_MAINTENANCE_INTERVAL_US = 15L * 60L * 1000L * 1000L;
+}
+}

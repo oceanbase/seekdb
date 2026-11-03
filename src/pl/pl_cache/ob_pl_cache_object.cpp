@@ -91,7 +91,6 @@ int ObPLCacheObject::set_params_info(const ParamStore &params, bool is_anonymous
                 reinterpret_cast<const pl::ObPLComposite*>(params.at(i).get_ext());
         if (OB_ISNULL(composite)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("nested table is null", K(ret));
         } else {
           param_info.udt_id_ = composite->get_id();
           if (OB_INVALID_ID == param_info.udt_id_) { // anonymous array
@@ -138,7 +137,6 @@ int ObPLCacheObject::init_params_info_str()
   char *buf = (char *)allocator_.alloc(buf_len);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory for param info", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
       if (N - 1 != i) {
@@ -210,7 +208,6 @@ int ObPLCacheObject::update_cache_obj_stat(sql::ObILibCacheCtx &ctx)
   }
   if (OB_SUCC(ret) && OB_FAIL(init_params_info_str())) {
     // init param info str
-    LOG_WARN("fail to init param info str", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (ObLibCacheNameSpace::NS_ANON == get_ns() && OB_INVALID_ID != pc_ctx.key_.key_id_) {
@@ -248,7 +245,6 @@ int ObPLCacheObject::get_times(const ObPLCacheObject *pl_object, int64_t& execut
   } else if (ObLibCacheNameSpace::NS_PKG == pl_object->get_ns()) {
     const ObPLPackage *package = static_cast<const ObPLPackage*>(pl_object);
     if (NULL == package) {
-      LOG_WARN("failed to static cast ObPLPackage", K(ret), K(*pl_object));
       ret = OB_ERR_UNEXPECTED;
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < package->get_routine_table().count(); ++i) {

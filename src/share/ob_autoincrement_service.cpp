@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <inttypes.h>
+
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_autoincrement_service.h"
@@ -54,7 +56,6 @@ int CacheNode::combine_cache_node(CacheNode &new_node)
         || new_node.cache_end_ < new_node.cache_start_
         || cache_end_ > new_node.cache_start_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cache node is invalid", K(*this), K(new_node), K(ret));
     } else {
       if (cache_end_ > 0 && cache_end_ == new_node.cache_start_ - 1) {
         cache_end_ = new_node.cache_end_;
@@ -119,9 +120,6 @@ int TableNode::alloc_handle(ObSmallAllocator &allocator,
           needed_interval = max_value;
         } else {
           ret = OB_SIZE_OVERFLOW;
-          LOG_WARN("fail to alloc handle; cache is not enough",
-                   K(node), K(min_value), K(offset), K(increment), K(max_value), K(new_next_value),
-                   K(*this), K(ret));
         }
       } else {
         needed_interval = new_next_value + increment * (desired_count - 1);
@@ -136,7 +134,6 @@ int TableNode::alloc_handle(ObSmallAllocator &allocator,
             ret = OB_SIZE_OVERFLOW;
             // don't print warn log for common buffer burnout case, as we will fetch next buffer
             if (is_retry_alloc) {
-              LOG_WARN("fail to alloc handle; cache is not enough", K(*this), K(ret));
             }
           }
         }
@@ -153,7 +150,6 @@ int TableNode::alloc_handle(ObSmallAllocator &allocator,
       if (UINT64_MAX == needed_interval) {
         // compatible with MySQL; return error when reach UINT64_MAX
         ret = OB_ERR_REACH_AUTOINC_MAX;
-        LOG_WARN("reach UINT64_MAX", K(ret));
       } else {
         handle = new (handle) CacheHandle;
         handle->offset_ = offset;
@@ -182,7 +178,6 @@ int TableNode::alloc_handle(ObSmallAllocator &allocator,
       }
     }
   } else {
-    LOG_WARN("unexpected error", K(ret));
   }
 
   return ret;
@@ -293,8 +288,6 @@ int ObAutoincrementService::get_handle(AutoincParam &param, CacheHandle *&handle
   if (OB_UNLIKELY(effective_base_value > max_value)) {
     ret = param.autoinc_auto_increment_ > max_value
             ? OB_ERR_REACH_AUTOINC_MAX : OB_DATA_OUT_OF_RANGE;
-    LOG_WARN("auto-increment base value exceeds column range",
-             K(ret), K(effective_base_value), K(max_value), K(param));
   } else if (OB_FAIL(get_table_node(param, table_node))) {
   }
 
@@ -384,7 +377,6 @@ int ObAutoincrementService::refresh_local_sync_value(const uint64_t table_id,
   } else if (OB_SUCC(ret)) {
     atomic_update(table_node->local_sync_, sync_value);
   } else {
-    LOG_WARN("failed to get local auto-increment cache", K(key), K(ret));
   }
   // table node must be reverted after get to decrement reference count
   if (NULL != table_node) {
@@ -404,20 +396,17 @@ int ObAutoincrementService::lock_autoinc_row(const uint64_t &table_id,
     ObMySQLResult *result = NULL;
     ObISQLClient *sql_client = &trans;
     if (OB_FAIL(lock_sql.assign_fmt("SELECT sequence_key, sequence_value, sync_value "
-                                    "FROM %s WHERE sequence_key = %lu "
-                                    "AND column_id = %lu FOR UPDATE",
+                                    "FROM %s WHERE sequence_key = %" PRIu64 " "
+                                    "AND column_id = %" PRIu64 " FOR UPDATE",
                                     OB_ALL_AUTO_INCREMENT_TNAME,
                                     ObSchemaUtils::get_extract_schema_id(table_id),
                                     column_id))) {
     } else if (OB_FAIL(trans.read(res, lock_sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get result, result is NULL", KR(ret));
     } else if (OB_FAIL(result->next())) {
       if (OB_ITER_END == ret) {
-        LOG_WARN("autoincrement not exist", KR(ret), K(lock_sql));
       } else {
-        LOG_WARN("iterate next result fail", KR(ret), K(lock_sql));
       }
     }
   }
@@ -434,16 +423,15 @@ int ObAutoincrementService::reset_autoinc_row(const uint64_t &table_id,
   ObSqlString update_sql;
   int64_t affected_rows = 0;
   ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_SAVE);
-  if (OB_FAIL(update_sql.assign_fmt("UPDATE %s SET sequence_value = 1, sync_value = 0, truncate_version = %ld",
+  if (OB_FAIL(update_sql.assign_fmt("UPDATE %s SET sequence_value = 1, sync_value = 0, truncate_version = %" PRId64,
                                     OB_ALL_AUTO_INCREMENT_TNAME,
                                     autoinc_version))) {
-  } else if (OB_FAIL(update_sql.append_fmt(" WHERE sequence_key = %lu AND column_id = %lu",
+  } else if (OB_FAIL(update_sql.append_fmt(" WHERE sequence_key = %" PRIu64 " AND column_id = %" PRIu64,
                                             ObSchemaUtils::get_extract_schema_id(table_id),
                                             column_id))) {
   } else if (OB_FAIL(trans.write(update_sql.ptr(), affected_rows))) {
   } else if (OB_UNLIKELY(affected_rows > 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected rows", KR(ret), K(table_id), K(affected_rows), K(update_sql));
   }
   return ret;
 }
@@ -477,32 +465,26 @@ int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &table_id,
     if (OB_UNLIKELY(OB_INVALID_ID == table_id
                     || 0 == column_id)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("arg is not invalid", KR(ret), K(table_id), K(column_id));
     } else if (OB_FAIL(lock_sql.assign_fmt("SELECT truncate_version "
-                                    "FROM %s WHERE sequence_key = %lu "
-                                    "AND column_id = %lu FOR UPDATE",
+                                    "FROM %s WHERE sequence_key = %" PRIu64 " "
+                                    "AND column_id = %" PRIu64 " FOR UPDATE",
                                     OB_ALL_AUTO_INCREMENT_TNAME,
                                     ObSchemaUtils::get_extract_schema_id(table_id),
                                     column_id))) {
     } else if (OB_FAIL(trans.read(res, lock_sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get result, result is NULL", KR(ret));
     } else if (OB_FAIL(result->next())) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
         LOG_INFO("autoinc row not exist", K(table_id), K(column_id));
       } else {
-        LOG_WARN("iterate next result fail", KR(ret), K(lock_sql));
       }
     } else {
       int64_t inner_autoinc_version = OB_INVALID_VERSION;
       if (OB_FAIL(result->get_int(static_cast<int64_t>(0), inner_autoinc_version))) {
       } else if (inner_autoinc_version > autoinc_version) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("autoincrement's newest version can not less than inner version",
-                  KR(ret), K(table_id), K(column_id),
-                  K(inner_autoinc_version), K(autoinc_version));
       } else if (inner_autoinc_version < autoinc_version) {
         need_update_inner_table = true;
         LOG_INFO("inner autoinc version is old, we need to update inner table",
@@ -526,11 +508,8 @@ int ObAutoincrementService::calculate_idempotent_autoinc_val_for_ddl(
 
   if (OB_ISNULL(autoinc_param)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(autoinc_param),
-             K(table_all_slice_count), K(table_level_slice_idx), K(slice_row_idx));
   } else if (autoinc_param->pending_value_to_sync_ >= UINT64_MAX) {
     ret = OB_ERR_REACH_AUTOINC_MAX;
-    LOG_WARN("autoinc reach max", K(ret), K(autoinc_param->pending_value_to_sync_));
   } else {
     const int64_t range_id = slice_row_idx / autoinc_range_interval;
     const int64_t row_id_in_range = slice_row_idx % autoinc_range_interval;
@@ -674,7 +653,6 @@ int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode 
       // old request cannot get table node, it should retry
       } else if (OB_UNLIKELY(autoinc_version < table_node->autoinc_version_)) {
         ret = OB_AUTOINC_CACHE_NOT_EQUAL;
-        LOG_WARN("old reqeust can not get table node, it should retry", KR(ret), K(autoinc_version), K(table_node->autoinc_version_));
       } else {
         table_node->max_value_ = get_max_value(param.autoinc_col_type_);
       }
@@ -683,7 +661,6 @@ int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode 
   }
   if (OB_SUCC(ret)) {
   } else {
-    LOG_WARN("failed to get table node", K(param), K(ret));
   }
   return ret;
 }
@@ -699,7 +676,6 @@ int ObAutoincrementService::alloc_autoinc_try_lock(lib::ObMutex &alloc_mutex)
       if (OB_FAIL(THIS_WORKER.check_status())) {
       }
     } else {
-      LOG_WARN("fail to try lock mutex", K(ret));
     }
   }
   return ret;
@@ -721,7 +697,6 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
   const int64_t autoinc_version = param.autoinc_version_;
   if (part_num <= 0 || ObNullType == column_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(part_num), K(column_type), K(ret));
   } else {
     uint64_t sync_value = 0;
     uint64_t max_value = get_max_value(column_type);
@@ -745,14 +720,12 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
     uint64_t table_auto_increment = param.autoinc_auto_increment_;
     if (OB_UNLIKELY(table_auto_increment > max_value)) {
       ret = OB_ERR_REACH_AUTOINC_MAX;
-      LOG_WARN("reach max autoinc", K(ret), K(table_auto_increment));
     } else if (OB_FAIL(autoinc_store_.get_value(
                           key, offset, increment, max_value, table_auto_increment,
                           batch_count, auto_increment_cache_size, autoinc_version, sync_value,
                           start_inclusive, end_inclusive))) {
     } else if (sync_value > max_value || start_inclusive > max_value) {
       ret = OB_ERR_REACH_AUTOINC_MAX;
-      LOG_WARN("reach max autoinc", K(start_inclusive), K(max_value), K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -779,7 +752,6 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
     // ignore error for prefetch, cache is enough here
     // other thread will try next time
     if (fetch_prefetch && OB_FAIL(ret)) {
-      LOG_WARN("failed to prefetch; ignore this", K(ret));
       ret = OB_SUCCESS;
     }
   }
@@ -922,8 +894,6 @@ int ObAutoincrementService::sync_auto_increment(const ObTableSchema &table_schem
   if (OB_UNLIKELY(OB_INVALID_ID == table_id || 0 == column_id)
       || OB_ISNULL(column_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid auto-increment schema", K(ret), K(table_id), K(column_id),
-             KP(column_schema));
   } else {
     const uint64_t max_value = get_max_value(column_schema->get_data_type());
     const uint64_t value_to_sync = std::min(sync_value, max_value);
@@ -949,7 +919,6 @@ int ObAutoincrementService::calc_next_value(const uint64_t last_next_value,
   if (OB_UNLIKELY(increment <= 0)) {
     //There is a division by zero error, need defensive check
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("increment is invalid", K(ret), K(increment));
   } else {
     uint64_t real_offset = offset;
 
@@ -1025,7 +994,6 @@ int ObAutoincrementService::get_local_sequence_value_(const AutoincKey &key,
   if (OB_SUCCESS == tmp_ret) {
     if (OB_ISNULL(table_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("auto increment table node is null", K(ret), K(key));
     } else if (OB_FAIL(alloc_autoinc_try_lock(table_node->alloc_mutex_))) {
     } else {
       if (autoinc_version == table_node->autoinc_version_
@@ -1042,7 +1010,6 @@ int ObAutoincrementService::get_local_sequence_value_(const AutoincKey &key,
     }
   } else if (OB_ENTRY_NOT_EXIST != tmp_ret) {
     ret = tmp_ret;
-    LOG_WARN("failed to get auto increment table node", K(ret), K(key));
   }
   if (OB_NOT_NULL(table_node)) {
     node_map_.revert(table_node);
@@ -1063,7 +1030,6 @@ int ObAutoincrementService::get_sequence_value(const uint64_t table_id,
   } else if (!found_in_local_cache
              && OB_FAIL(autoinc_store_.get_sequence_value(
                   key, autoinc_version, seq_value))) {
-    LOG_WARN("autoincrement store get sequence value failed", K(ret), K(key));
   }
   return ret;
 }
@@ -1089,7 +1055,6 @@ int ObAutoincrementService::get_sequence_values(const ObIArray<AutoincKey> &auto
                    key, autoinc_versions.at(i), seq_value, found))) {
       } else if (found && OB_FAIL(seq_values.set_refactored(
                             key, seq_value, 1 /* overwrite */))) {
-        LOG_WARN("failed to update cached auto increment value", K(ret), K(key));
       }
     }
   }
@@ -1163,17 +1128,12 @@ int ObAutoIncInnerTableProxy::check_inner_autoinc_version(const int64_t &request
   int ret = OB_SUCCESS;
   if (0 == request_autoinc_version || 0 == inner_autoinc_version) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("autoinc version is zero", KR(ret), K(request_autoinc_version), K(inner_autoinc_version));
   // inner table did not update
   } else if (OB_UNLIKELY(inner_autoinc_version < request_autoinc_version)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner_autoinc_version can not less than autoinc_version", KR(ret), K(key),
-                                                                        K(inner_autoinc_version), K(request_autoinc_version));
   // old request
   } else if (OB_UNLIKELY(inner_autoinc_version > request_autoinc_version)) {
     ret = OB_AUTOINC_CACHE_NOT_EQUAL;
-    LOG_WARN("inner_autoinc_version is greater than autoinc_version, request needs retry", KR(ret), K(key),
-                                                                                           K(inner_autoinc_version), K(request_autoinc_version));
   }
   return ret;
 }
@@ -1200,7 +1160,6 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
   int64_t tmp_autoinc_version = autoinc_version;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
   } else {
     int sql_len = 0;
@@ -1208,13 +1167,12 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
       
       const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
       sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
-                         " SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu AND column_id = %lu FOR UPDATE",
+                         " SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %" PRIu64 " AND column_id = %" PRIu64 " FOR UPDATE",
                          table_name,
                          ObSchemaUtils::get_extract_schema_id(table_id),
                          column_id);
       if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("failed to format sql. size not enough", K(ret), K(sql_len));
       } else {
         int64_t fetch_table_id = OB_INVALID_ID;
         { // make sure %res destructed before execute other sql in the same transaction
@@ -1225,14 +1183,11 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
             auto &sql_client_retry_weak = *sql_client;
             if (OB_FAIL(sql_client_retry_weak.read(res, sql))) {
             } else if (NULL == (result = res.get_result())) {
-              LOG_WARN("failed to get result", K(ret));
               ret = OB_ERR_UNEXPECTED;
             } else if (OB_FAIL(result->next())) {
-              LOG_WARN("failed to get next", K(ret));
               if (OB_ITER_END == ret) {
                 // auto-increment column has been deleted
                 ret = OB_SCHEMA_ERROR;
-                LOG_WARN("failed to get next", K(ret));
               }
             } else {
               if (OB_FAIL(result->get_int(static_cast<int64_t>(0), fetch_table_id))) {
@@ -1255,11 +1210,8 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
                 if (OB_ITER_END != (tmp_ret = result->next())) {
                   if (OB_SUCCESS == tmp_ret) {
                     ret = OB_ERR_UNEXPECTED;
-                    LOG_WARN("more than one row", K(ret), K(table_id), K(column_id));
                   } else {
                     ret = tmp_ret;
-                    LOG_WARN("fail to iter next row", K(ret), K(table_id),
-                                                      K(column_id));
                   }
                 }
               }
@@ -1288,8 +1240,8 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
             start_inclusive = curr_new_value;
 
             sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
-                              "UPDATE %s SET sequence_value = %lu, gmt_modified = now(6)"
-                              " WHERE sequence_key = %lu AND column_id = %lu AND truncate_version = %ld",
+                              "UPDATE %s SET sequence_value = %" PRIu64 ", gmt_modified = now(6)"
+                              " WHERE sequence_key = %" PRIu64 " AND column_id = %" PRIu64 " AND truncate_version = %" PRId64,
                               table_name,
                               next_sequence_value,
                               table_id,
@@ -1299,11 +1251,8 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
             ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_SAVE);
             if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
               ret = OB_SIZE_OVERFLOW;
-              LOG_WARN("failed to format sql. size not enough", K(ret), K(sql_len));
             } else if (OB_FAIL(trans.write(sql, affected_rows))) {
             } else if (affected_rows != 1) {
-              LOG_WARN("failed to update sequence value",
-                      K(table_id), K(column_id), K(ret));
             }
           }
         }
@@ -1339,19 +1288,16 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                         " SELECT sequence_value, sync_value, truncate_version FROM %s"
-                        " WHERE sequence_key = %lu AND column_id = %lu",
+                        " WHERE sequence_key = %" PRIu64 " AND column_id = %" PRIu64,
                         table_name,
                         ObSchemaUtils::get_extract_schema_id(key.table_id_),
                         key.column_id_);
     if (OB_ISNULL(mysql_proxy_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("mysql proxy is null", K(ret));
     } else if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("failed to format sql. size not enough", K(ret), K(sql_len));
     } else if (OB_FAIL(mysql_proxy_->read(res, sql))) {
     } else if (NULL == (result = res.get_result())) {
-      LOG_WARN("failed to get result", K(ret));
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(result->next())) {
       if (OB_ITER_END == ret) {
@@ -1360,7 +1306,6 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
         seq_value = 0;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail get next value", K(key), K(ret));
       }
     } else {
       int64_t inner_autoinc_version = OB_INVALID_VERSION;
@@ -1374,10 +1319,8 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
         if (OB_ITER_END != (tmp_ret = result->next())) {
           if (OB_SUCCESS == tmp_ret) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("more than one row", K(ret), K(key));
           } else {
             ret = tmp_ret;
-            LOG_WARN("fail to iter next row", K(ret), K(key));
           }
         }
       }
@@ -1397,7 +1340,6 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<
   ObSqlString sql;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy is null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     sql.reset();
@@ -1410,7 +1352,7 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<
     int64_t P = (0 != M && N - 1 == i) ? M : FETCH_SEQ_NUM_ONCE;
     for (int64_t j = 0; OB_SUCC(ret) && j < P; ++j) {
       AutoincKey key = keys.at(i * FETCH_SEQ_NUM_ONCE + j);
-      if (OB_FAIL(sql.append_fmt("%s(%lu, %lu)",
+      if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", %" PRIu64 ")",
                                  (0 == j) ? "" : ", ",
                                  key.table_id_,
                                  key.column_id_))) {
@@ -1433,7 +1375,6 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<
         auto &sql_client_retry_weak = *sql_client;
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         } else if (NULL == (result = res.get_result())) {
-          LOG_WARN("failed to get result", K(ret));
           ret = OB_ERR_UNEXPECTED;
         } else {
           while(OB_SUCC(ret) && OB_SUCC(result->next())) {
@@ -1453,7 +1394,6 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<
           if (OB_ITER_END == ret) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("fail to get next result", K(ret), K(sql));
           }
         }
       }
@@ -1485,14 +1425,13 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
   int64_t tmp_autoinc_version = autoinc_version;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
   } else {
     
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
-    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu"
-                               " AND column_id = %lu FOR UPDATE",
+    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %" PRIu64
+                               " AND column_id = %" PRIu64 " FOR UPDATE",
                                table_name,
                                ObSchemaUtils::get_extract_schema_id(table_id),
                                column_id))) {
@@ -1505,14 +1444,11 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
         auto &sql_client_retry_weak = *sql_client;
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         } else if (NULL == (result = res.get_result())) {
-          LOG_WARN("failed to get result", K(ret));
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("failed to get next", K(ret));
           if (OB_ITER_END == ret) {
             // auto-increment column has been deleted
             ret = OB_SCHEMA_ERROR;
-            LOG_WARN("failed to get next", K(ret));
           }
         } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), fetch_table_id))) {
         } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(1), fetch_seq_value))) {
@@ -1525,10 +1461,8 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
           if (OB_ITER_END != (tmp_ret = result->next())) {
             if (OB_SUCCESS == tmp_ret) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("more than one row", K(ret), K(table_id), K(column_id));
             } else {
               ret = tmp_ret;
-              LOG_WARN("fail to iter next row", K(ret), K(table_id), K(column_id));
             }
           }
         }
@@ -1558,14 +1492,13 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
         //       > I can't get MAX_VALUE in DDL context. auto inc column type is needed.
         ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_SAVE);
         if (OB_FAIL(sql.assign_fmt(
-                    "UPDATE %s SET sync_value = %lu, sequence_value = %lu, gmt_modified = now(6) "
-                    "WHERE sequence_key=%lu AND column_id=%lu AND truncate_version=%ld",
+                    "UPDATE %s SET sync_value = %" PRIu64 ", sequence_value = %" PRIu64 ", gmt_modified = now(6) "
+                    "WHERE sequence_key=%" PRIu64 " AND column_id=%" PRIu64 " AND truncate_version=%" PRId64,
                     table_name, sync_value, new_seq_value,
                     table_id, column_id, inner_autoinc_version))) {
         } else if (OB_FAIL((trans.write(sql.ptr(), affected_rows)))) {
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error", K(affected_rows), K(ret));
         } else {
         }
 
@@ -1618,14 +1551,13 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
   uint64_t sync_value = 0;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
   } else {
 
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
-    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_value, truncate_version FROM %s WHERE sequence_key = %lu"
-                               " AND column_id = %lu FOR UPDATE",
+    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_value, truncate_version FROM %s WHERE sequence_key = %" PRIu64
+                               " AND column_id = %" PRIu64 " FOR UPDATE",
                                table_name,
                                ObSchemaUtils::get_extract_schema_id(table_id),
                                column_id))) {
@@ -1637,14 +1569,11 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
         auto &sql_client_retry_weak = *sql_client;
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         } else if (NULL == (result = res.get_result())) {
-          LOG_WARN("failed to get result", K(ret));
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("failed to get next", K(ret));
           if (OB_ITER_END == ret) {
             // auto-increment column has been deleted
             ret = OB_SCHEMA_ERROR;
-            LOG_WARN("failed to get next", K(ret));
           }
         } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(0), fetch_seq_value))) {
         } else if (OB_FAIL(result->get_int(static_cast<int64_t>(1), inner_autoinc_version))) {
@@ -1654,10 +1583,8 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
           if (OB_ITER_END != (tmp_ret = result->next())) {
             if (OB_SUCCESS == tmp_ret) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("more than one row", K(ret), K(table_id), K(column_id));
             } else {
               ret = tmp_ret;
-              LOG_WARN("fail to iter next row", K(ret), K(table_id), K(column_id));
             }
           }
         }
@@ -1682,14 +1609,13 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
           // push new seq value to inner table
           int64_t affected_rows = 0;
           if (OB_FAIL(sql.assign_fmt(
-                      "UPDATE %s SET sequence_value = %lu, gmt_modified = now(6) "
-                      "WHERE sequence_key=%lu AND column_id=%lu AND truncate_version=%ld",
+                      "UPDATE %s SET sequence_value = %" PRIu64 ", gmt_modified = now(6) "
+                      "WHERE sequence_key=%" PRIu64 " AND column_id=%" PRIu64 " AND truncate_version=%" PRId64,
                       table_name, new_seq_value,
                       table_id, column_id, inner_autoinc_version))) {
           } else if (OB_FAIL((trans.write(sql.ptr(), affected_rows)))) {
           } else if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected error", K(affected_rows), K(ret));
           } else {
           }
 

@@ -104,7 +104,6 @@ int ObSqlExpression::calc(ObExprCtx &expr_ctx,
   } else {
     if (OB_UNLIKELY(infix_expr_.is_empty())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("empty expression", K(ret));
     } else {
       ret = infix_expr_.calc(expr_ctx, row, result);
     }
@@ -118,7 +117,6 @@ int ObSqlExpression::calc(ObExprCtx &expr_ctx, const common::ObNewRow &row1,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(infix_expr_.is_empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty expression", K(ret));
   } else {
     ret = infix_expr_.calc(expr_ctx, row1, row2, result);
   }
@@ -353,10 +351,8 @@ int ObSqlExpressionUtil::expand_array_params(ObExprCtx &expr_ctx,
       const ObSqlArrayObj *array_params = nullptr;
       if (OB_UNLIKELY(!src_param.is_ext_sql_array())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("src_param is invalid", K(ret), K(src_param));
       } else if (OB_ISNULL(array_params = reinterpret_cast<ObSqlArrayObj*>(src_param.get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("array params is null", K(src_param));
       } else if (OB_UNLIKELY(array_params->count_ <= expr_ctx.cur_array_index_)) {
         if (expr_ctx.is_pre_calculation_) {
           ret = OB_ITER_END;
@@ -366,7 +362,6 @@ int ObSqlExpressionUtil::expand_array_params(ObExprCtx &expr_ctx,
         }
       } else if (OB_ISNULL(array_data = array_params->data_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("array data is null");
       } else {
         result = &array_data[expr_ctx.cur_array_index_];
       }

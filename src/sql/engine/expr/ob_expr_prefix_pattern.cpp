@@ -39,7 +39,6 @@ int ObExprPrefixPattern::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(3 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = ObExprPrefixPattern::eval_prefix_pattern;
   }
@@ -59,10 +58,8 @@ int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_FAIL(expr.eval_param_value(ctx, pattern, len_param, escape))) {
   } else if (OB_ISNULL(pattern) || OB_ISNULL(len_param) || OB_ISNULL(escape)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are unexpected null", K(ret), K(pattern), K(len_param), K(escape));
   } else if (len_param->is_null() || pattern->is_null()) {
     is_valid = false;
-    LOG_WARN("the lenth or escape param is not valid", K(ret), K(len_param), K(escape));
   } else if (escape->is_null()) {
     escape_coll = CS_TYPE_UTF8MB4_BIN;
     escape_str = ObString::make_string("\\");
@@ -81,7 +78,6 @@ int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx,
                                             prefix_len,
                                             result_len,
                                             is_valid))) {
-    LOG_WARN("fail to calc prefix pattern", K(ret));
   } else if (!is_valid) {
     expr_datum.set_null();
   } else if (OB_FAIL(ObExprSubstr::substr(
@@ -115,12 +111,10 @@ int ObExprPrefixPattern::calc_prefix_pattern(const ObString &pattern,
       ret = OB_SUCCESS;
       is_valid = false;
     } else {
-      LOG_WARN("failed to convert escape to wc", K(ret), K(escape_coll), K(escape));
     }
   } else if (OB_FAIL(ObCharset::mb_wc(CS_TYPE_UTF8MB4_BIN, ObString::make_string("%"), wildcard_wc))) {
   } else if (OB_UNLIKELY(OB_ISNULL(cs = ObCharset::get_charset(pattern_coll)) || OB_ISNULL(cs->cset))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected charset", K(ret), K(pattern_coll));
   } else {
     int64_t len_without_escape = 0;
     int64_t escape_count = 0;
@@ -142,7 +136,6 @@ int ObExprPrefixPattern::calc_prefix_pattern(const ObString &pattern,
           ret = OB_SUCCESS;
           is_valid = false;
         } else {
-          LOG_WARN("failed to convert pattern to wc", K(ret), K(pattern), K(pattern_coll));
         }
       } else if (find_escape) { //the prev character is escape
         find_escape = false;
@@ -173,7 +166,6 @@ int ObExprPrefixPattern::calc_result_type3(ObExprResType &type,
   if ((!ob_is_string_type(type1.get_type()) && !type1.is_null())
       || (!ob_is_string_type(type3.get_type()) && !type3.is_null())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param type", K(ret), K(type1), K(type2), K(type3));
   } else {
     type1.set_calc_meta(type1.get_obj_meta());
     type2.set_calc_meta(type2.get_obj_meta());

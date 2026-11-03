@@ -354,7 +354,6 @@ OB_DEF_DESERIALIZE(ObDatumRow)
     if (OB_FAIL(datum_buffer_.reserve(count_))) {
     }
   } else if (OB_ISNULL(storage_datums_) && OB_FAIL(init(count_))) {
-    LOG_WARN("fail to init datum row", K(ret), K_(count));
   }
   if (OB_SUCC(ret)) {
     OB_UNIS_DECODE_ARRAY(storage_datums_, count_);

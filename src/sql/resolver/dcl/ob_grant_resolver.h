@@ -233,12 +233,10 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
   uint64_t object_id = OB_INVALID_ID;
   if (OB_ISNULL(grant_stmt) || OB_ISNULL(schema_checker) || OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (priv_object_node != NULL) {
     if (priv_object_node->value_ == 1) {
       const share::schema::ObTableSchema *table_schema = NULL;
       if (OB_FAIL(schema_checker->get_table_schema( db, table, false, table_schema))) {
-        LOG_WARN("get table schema failed", K(ret));
         if (OB_TABLE_NOT_EXIST == ret && !is_grant) {
           ret = OB_SUCCESS;
         }
@@ -255,7 +253,6 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
       uint64_t routine_id = 0;
       bool is_proc = false;
       if (OB_FAIL(schema_checker->get_routine_id(db, table, routine_id, is_proc))) {
-        LOG_WARN("get routine id failed", K(ret));
         if (OB_ERR_SP_DOES_NOT_EXIST == ret && !is_grant) {
           ret = OB_SUCCESS;
         }

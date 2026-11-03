@@ -19,6 +19,7 @@
 #include "share/ob_dml_sql_splicer.h"
 
 #include "data_plane/tablelock/ob_session_table_lock.h"
+#include "lib/utility/utility.h"
 #include "query/session/ob_session_inner_sql.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
@@ -118,7 +119,6 @@ int ObGetLockExecutor::generate_lock_id_(const ObString &lock_name,
   uint64_t hash_val = 0;
   if (OB_ISNULL(lock_handle)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock handle can not be null", K(ret));
   } else if (OB_FAIL(data_plane::generate_named_lock_identity(
                  lock_name,
                  MIN_LOCK_HANDLE_ID,
@@ -149,7 +149,7 @@ int ObGetLockExecutor::write_lock_id_(ObLockContext &ctx,
 
   OZ (insert_dml.add_gmt_create(now));
   OZ (insert_dml.add_gmt_modified(now));
-  OZ (insert_dml.add_pk_column("name", lock_name));
+  OZ (insert_dml.add_pk_column("name", ObHexEscapeSqlStr(lock_name)));
   // make sure lock_obj will be timeout or success before lock_id is expired
   OZ (insert_dml.add_time_column("expiration", now + timeout_us + DEFAULT_EXPIRATION_US));
   OZ (insert_dml.add_column("lockid", lock_id));

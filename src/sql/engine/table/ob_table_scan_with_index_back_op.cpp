@@ -67,7 +67,6 @@ int ObTableScanWithIndexBackOp::inner_rescan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(index_scan_tree_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("index scan tree is null");
   } else if (OB_FAIL(index_scan_tree_->rescan())) {
   } else if (OB_FAIL(ObTableScanOp::inner_rescan())) {
   } else {
@@ -76,12 +75,10 @@ int ObTableScanWithIndexBackOp::inner_rescan()
       // First rescan, table iterator not initialized
       if (OB_FAIL(do_table_scan_with_index())) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("do table scan with index failed", K(ret));
         }
       }
     } else if (OB_FAIL(do_table_rescan_with_index())) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("do table rescan with index failed", K(ret));
       }
     }
   }
@@ -176,10 +173,8 @@ int ObTableScanWithIndexBackOp::do_table_rescan_with_index()
     read_action_ = READ_ITER_END;
   } else if (OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table iterator is null");
   } else if (OB_FAIL(data_plane::table_scan_rescan(result_, scan_param_))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("failed to rescan", K(ret), "scan_param", scan_param_);
     }
   } else {
     read_action_ = READ_ITERATOR;
@@ -199,7 +194,6 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
     case READ_TABLE_PARTITION: {
       if (OB_FAIL(do_table_rescan_with_index())) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("fail to get next row from ObNewRowIterator", K(ret));
         }
       }
       break;
@@ -207,7 +201,6 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
     case READ_ITERATOR: {
       if (OB_FAIL(result_->get_next_row(cur_row))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next row from ObNewRowIterator", K(ret));
         } else {
           // Reached the end of the iterator, read new data from storage
           read_action_ = READ_TABLE_PARTITION;

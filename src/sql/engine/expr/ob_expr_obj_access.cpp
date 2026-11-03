@@ -225,7 +225,6 @@ int ObExprObjAccess::ExtraInfo::get_collection_attr(int64_t* params,
   CK (OB_NOT_NULL(current_coll));
   if (OB_SUCC(ret) && !current_coll->is_inited()) {
     ret = OB_ERR_COLLECION_NULL;
-    LOG_WARN("Reference to uninitialized collection", K(ret), KPC(current_coll));
   }
   if (OB_SUCC(ret) && !current_access.is_property()) {
     if (current_access.is_const()) {
@@ -235,7 +234,6 @@ int ObExprObjAccess::ExtraInfo::get_collection_attr(int64_t* params,
     }
     if (element_idx < 0 || element_idx >= current_coll->get_count()) {
       ret = is_assoc_array ? OB_READ_NOTHING : OB_ERR_SUBSCRIPT_OUTSIDE_LIMIT;
-      LOG_WARN("", K(ret), K(element_idx));
     }
   }
   if (OB_SUCC(ret) && !current_access.is_property()) {
@@ -246,7 +244,6 @@ int ObExprObjAccess::ExtraInfo::get_collection_attr(int64_t* params,
     if (ObMaxType == element_obj.get_type()) {
       if (!for_write) {
         ret = OB_READ_NOTHING;
-        LOG_WARN("", K(ret), KPC(current_coll));
       } else {
         if (current_access.var_type_.is_composite_type()) {
           const pl::ObUserDefinedType *type = nullptr;
@@ -333,7 +330,6 @@ int ObExprObjAccess::ExtraInfo::get_record_attr(const pl::ObObjAccessIdx &curren
   }
   if (OB_SUCC(ret) && user_type->is_object_type() && for_write_ && current_composite->is_null()) {
     ret = OB_ERR_ACCESS_INTO_NULL;
-    LOG_WARN("", K(ret), KPC(current_composite));
   }
   OZ (current_record->get_element(current_access.var_index_, element_obj));
   CK (OB_NOT_NULL(current_value = element_obj));
@@ -439,7 +435,6 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
       }
     } else if (OB_UNLIKELY(0 >= attr_addr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get attribute failed", K(ret), K(attr_addr));
     } else if (for_write_ || res_type.is_ext()) {
       // When assigning a value to collection elements, force set the first and last of the collection to invalid
       // When obtaining first, last, it will be updated based on this flag.
@@ -463,7 +458,6 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
         if (OB_ISNULL(composite_write =
             static_cast<pl::ObPlCompiteWrite *>(ctx->get_expr_res_alloc().alloc(sizeof(pl::ObPlCompiteWrite))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloca memory", K(ret));
         } else {
           composite_write->allocator_ = allocator_addr;
           composite_write->value_addr_ = attr_addr;
@@ -476,7 +470,6 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
       ObObj *datum = reinterpret_cast<ObObj*>(attr_addr);
       if (ObMaxType == datum->get_type()) { //means has been deleted
         ret = OB_READ_NOTHING;
-        LOG_WARN("accessing deleted element, no data found", K(ret), KPC(datum), K(result));
       } else if (res_type.is_number() && datum->is_decimal_int()) {
         ObCastCtx cast_ctx(&alloc, NULL, CM_NONE, res_type.get_collation_type(), NULL);
         const ObObj *res_obj = nullptr;
@@ -488,8 +481,6 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
        if (!result.is_null()
                   && result.get_meta().get_type() != res_type.get_type()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("obj access result meta not equel to expr type",
-            K(ret), KPC(datum), K(result), K(res_type));
         }
       }
     }
@@ -525,7 +516,6 @@ int ObExprObjAccess::cg_expr(ObExprCGCtx &op_cg_ctx,
   ExtraInfo *info = OB_NEWx(ExtraInfo, (&alloc), alloc, T_OBJ_ACCESS_REF);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     const ObObjAccessRawExpr &raw_access = static_cast<const ObObjAccessRawExpr &>(raw_expr);
     if (OB_SUCC(ret)) {

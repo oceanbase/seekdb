@@ -200,7 +200,7 @@ public:
   virtual CalcPartIdType get_calc_id_type() const = 0;
 
 
-  static int calc_no_partition_location(const ObExpr &expr,
+  static int resolve_nonpartitioned_tablet(const ObExpr &expr,
                                         ObEvalCtx &ctx,
                                         ObDatum &res_datum);
   static int calc_partition_level_one(const ObExpr &expr,

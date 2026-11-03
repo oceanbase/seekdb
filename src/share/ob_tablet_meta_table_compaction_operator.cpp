@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "rust/config.h"
 #include "ob_tablet_meta_table_compaction_operator.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/tablet/ob_tablet_meta_table_storage.h"
@@ -26,7 +27,7 @@ namespace share
 {
 
 int ObTabletMetaTableCompactionOperator::get_status(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const ObTabletCompactionScnInfo &input_info,
     ObTabletCompactionScnInfo &ret_info)
 {
@@ -34,13 +35,11 @@ int ObTabletMetaTableCompactionOperator::get_status(
   ret_info.reset();
   if (OB_UNLIKELY(!input_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(input_info));
-  } else if (OB_ISNULL(meta_db_pool)) {
+  } else if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else {
       int64_t report_scn = 0;
       int64_t status = 0;
@@ -48,7 +47,6 @@ int ObTabletMetaTableCompactionOperator::get_status(
           report_scn,
           status))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("failed to get report_scn and status", KR(ret), K(input_info));
         }
       } else {
         ret_info = input_info;
@@ -61,19 +59,18 @@ int ObTabletMetaTableCompactionOperator::get_status(
 }
 
 int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const int64_t major_frozen_scn,
       const common::ObIArray<ObTabletID> &input_tablet_id_array)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     LOG_INFO("start to update unequal tablet id array", KR(ret), K(major_frozen_scn),
       "input_tablet_id_array_cnt", input_tablet_id_array.count());
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else {
       
       int64_t start_idx = 0;
@@ -109,25 +106,24 @@ int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
 }
 
 int ObTabletMetaTableCompactionOperator::get_min_compaction_scn(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     SCN &min_compaction_scn)
 {
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtil::current_time();
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     int64_t estimated_timeout_us = 0;
     ObTimeoutCtx timeout_ctx;
     // Set transaction and query timeouts based on the local tablet count.
     if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_estimated_timeout_us(
-        meta_db_pool, estimated_timeout_us))) {
+        store, estimated_timeout_us))) {
     } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(estimated_timeout_us))) {
     } else if (OB_FAIL(timeout_ctx.set_timeout(estimated_timeout_us))) {
     } else {
       ObTabletMetaTableStorage storage;
-      if (OB_FAIL(storage.init(meta_db_pool))) {
+      if (OB_FAIL(storage.init(store))) {
       } else {
         uint64_t min_compaction_scn_val = UINT64_MAX;
         if (OB_FAIL(storage.get_min_compaction_scn(min_compaction_scn_val))) {
@@ -144,7 +140,7 @@ int ObTabletMetaTableCompactionOperator::get_min_compaction_scn(
 }
 
 int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const uint64_t global_broadcast_scn_val,
     const ObTabletRuntimeInfo::ScnStatus &except_status,
     const volatile bool &stop)
@@ -152,20 +148,19 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtil::current_time();
   const int64_t BATCH_UPDATE_CNT = 1000;
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     LOG_INFO("start to batch update report scn", KR(ret), K(global_broadcast_scn_val));
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else {
       bool update_done = false;
       SMART_VAR(ObArray<ObTabletID>, tablet_ids) {
         while (OB_SUCC(ret) && !update_done && !stop) {
           int64_t affected_rows = 0;
           if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(
-              meta_db_pool, BATCH_UPDATE_CNT, tablet_ids))) {
+              store, BATCH_UPDATE_CNT, tablet_ids))) {
           } else if (0 == tablet_ids.count()) {
             update_done = true;
             LOG_INFO("finish all rounds of batch update report scn", KR(ret),
@@ -188,25 +183,24 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
 }
 
 int ObTabletMetaTableCompactionOperator::batch_update_status(
-    ObSQLiteConnectionPool *meta_db_pool)
+    LocalStore *store)
 {
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtil::current_time();
   const int64_t BATCH_UPDATE_CNT = 1000;
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     LOG_INFO("start to batch update status", KR(ret));
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else {
       bool update_done = false;
       SMART_VAR(ObArray<ObTabletID>, tablet_ids) {
         while (OB_SUCC(ret) && !update_done) {
           int64_t affected_rows = 0;
           if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(
-              meta_db_pool, BATCH_UPDATE_CNT, tablet_ids))) {
+              store, BATCH_UPDATE_CNT, tablet_ids))) {
           } else if (0 == tablet_ids.count()) {
             update_done = true;
             LOG_INFO("finish all rounds of batch update status", KR(ret),
@@ -227,33 +221,32 @@ int ObTabletMetaTableCompactionOperator::batch_update_status(
 }
 
 int ObTabletMetaTableCompactionOperator::get_estimated_timeout_us(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     int64_t &estimated_timeout_us)
 {
   int ret = OB_SUCCESS;
   int64_t tablet_count = 0;
   if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_tablet_count(
-      meta_db_pool, tablet_count))) {
+      store, tablet_count))) {
   } else {
     estimated_timeout_us = tablet_count * 1000L; // 1ms for each tablet
     estimated_timeout_us = MAX(estimated_timeout_us, THIS_WORKER.get_timeout_remain());
-    estimated_timeout_us = MIN(estimated_timeout_us, 3 * 3600 * 1000 * 1000L);
-    estimated_timeout_us = MAX(estimated_timeout_us, GCONF.rpc_timeout);
+    estimated_timeout_us = MIN(estimated_timeout_us, 3LL * 3600 * 1000 * 1000L);
+    estimated_timeout_us = MAX(estimated_timeout_us, config::rpc_timeout());
   }
   return ret;
 }
 
 int ObTabletMetaTableCompactionOperator::get_tablet_count(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     int64_t &tablet_count)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else if (OB_FAIL(storage.get_tablet_count(tablet_count))) {
     }
   }
@@ -261,7 +254,7 @@ int ObTabletMetaTableCompactionOperator::get_tablet_count(
 }
 
 int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const uint64_t global_broadcast_scn_val,
     const ObIArray<ObTabletID> &tablet_ids,
     const ObTabletRuntimeInfo::ScnStatus &except_status)
@@ -271,13 +264,11 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
   const int64_t all_tablet_cnt = tablet_ids.count();
   if (OB_UNLIKELY(all_tablet_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(all_tablet_cnt));
-  } else if (OB_ISNULL(meta_db_pool)) {
+  } else if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && (i < all_tablet_cnt); i += MAX_BATCH_COUNT) {
         const int64_t cur_end_idx = MIN(i + MAX_BATCH_COUNT, all_tablet_cnt);
@@ -285,7 +276,6 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
         for (int64_t idx = i; OB_SUCC(ret) && (idx < cur_end_idx); ++idx) {
           if (OB_UNLIKELY(!tablet_ids.at(idx).is_valid())) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid tablet id", KR(ret), K(tablet_ids.at(idx)));
           } else if (OB_FAIL(batch_tablet_ids.push_back(tablet_ids.at(idx)))) {
           }
         }
@@ -309,17 +299,15 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
 }
 
 int ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const int64_t batch_update_cnt,
     ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(batch_update_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(batch_update_cnt));
-  } else if (OB_ISNULL(meta_db_pool)) {
+  } else if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletID start_tablet_id = ObTabletID(ObTabletID::INVALID_TABLET_ID);
     if (tablet_ids.count() > 0) {
@@ -327,7 +315,7 @@ int ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(
     }
     tablet_ids.reuse();
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else if (OB_FAIL(storage.get_tablet_ids(start_tablet_id, batch_update_cnt, tablet_ids))) {
     }
   }
@@ -335,7 +323,7 @@ int ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(
 }
 
 int ObTabletMetaTableCompactionOperator::range_scan_for_compaction(
-      ObSQLiteConnectionPool *meta_db_pool,
+      LocalStore *store,
       const int64_t compaction_scn,
       const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
@@ -347,7 +335,6 @@ int ObTabletMetaTableCompactionOperator::range_scan_for_compaction(
   tablet_infos.reset();
   if (OB_UNLIKELY(batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(start_tablet_id), K(batch_size));
   } else if (start_tablet_id.id() == INT64_MAX) {
     ret = OB_ITER_END;
   } else {
@@ -355,7 +342,7 @@ int ObTabletMetaTableCompactionOperator::range_scan_for_compaction(
     ObTabletID tmp_end_tablet_id;
     while (OB_SUCC(ret) && tmp_start_tablet_id.id() < INT64_MAX) {
       if (OB_SUCC(inner_range_scan_for_compaction(
-              meta_db_pool, compaction_scn, tmp_start_tablet_id, batch_size,
+              store, compaction_scn, tmp_start_tablet_id, batch_size,
               only_unreported, tmp_end_tablet_id, tablet_infos))) {
         if (tablet_infos.empty()) {
           tmp_start_tablet_id = tmp_end_tablet_id;
@@ -377,7 +364,7 @@ int ObTabletMetaTableCompactionOperator::range_scan_for_compaction(
 
 
 int ObTabletMetaTableCompactionOperator::inner_range_scan_for_compaction(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const int64_t compaction_scn,
     const common::ObTabletID &start_tablet_id,
     const int64_t batch_size,
@@ -387,16 +374,14 @@ int ObTabletMetaTableCompactionOperator::inner_range_scan_for_compaction(
 {
   int ret = OB_SUCCESS;
   ObTabletID max_tablet_id;
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else if (OB_FAIL(inner_get_max_tablet_id_in_range(
-        meta_db_pool, start_tablet_id, batch_size, max_tablet_id))) {
+        store, start_tablet_id, batch_size, max_tablet_id))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get max tablet id in range", KR(ret), K(start_tablet_id));
       } else {
         ret = OB_SUCCESS;
         max_tablet_id = ObTabletID(INT64_MAX);
@@ -416,21 +401,19 @@ int ObTabletMetaTableCompactionOperator::inner_range_scan_for_compaction(
 }
 
 int ObTabletMetaTableCompactionOperator::inner_get_max_tablet_id_in_range(
-    ObSQLiteConnectionPool *meta_db_pool,
+    LocalStore *store,
     const common::ObTabletID &start_tablet_id,
     const int64_t batch_size,
     common::ObTabletID &end_tablet_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(meta_db_pool)) {
+  if (OB_ISNULL(store)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(meta_db_pool))) {
+    if (OB_FAIL(storage.init(store))) {
     } else if (OB_FAIL(storage.get_max_tablet_id_in_range(start_tablet_id, batch_size, end_tablet_id))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get max tablet id in range", KR(ret), K(start_tablet_id));
       }
     }
   }

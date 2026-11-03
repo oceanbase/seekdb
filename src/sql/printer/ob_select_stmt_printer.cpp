@@ -36,17 +36,13 @@ int ObSelectStmtPrinter::do_print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt should not be NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(stmt_);
     if (OB_UNLIKELY(NULL != column_list_
         && column_list_->count() != select_stmt->get_select_item_size())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column_list size should be equal select_item size", K(ret),
-          K(column_list_->count()), K(select_stmt->get_select_item_size()));
     } else {
       expr_printer_.init(buf_, 
                         buf_len_, 
@@ -67,10 +63,8 @@ int ObSelectStmtPrinter::print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     if (OB_FAIL(print_with())) {
@@ -94,22 +88,17 @@ int ObSelectStmtPrinter::print_set_op_stmt()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     // todo: Currently union flattening cannot guarantee to be the same as the original sql
     ObSEArray<ObSelectStmt*, 2> child_stmts;
     if (!select_stmt->is_set_stmt() || 2 > select_stmt->get_set_query().count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt_ should have set_op", K(ret), K(select_stmt->is_set_stmt()),
-                                           K(select_stmt->get_set_query().count()));
     } else if (OB_FAIL(child_stmts.assign(select_stmt->get_set_query()))) {
     } else if (OB_ISNULL(child_stmts.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("child_stmt should not be NULL", K(ret));
     } else {
       if (select_stmt->get_children_swapped()) {
         std::swap(child_stmts.at(0), child_stmts.at(1));
@@ -141,7 +130,6 @@ int ObSelectStmtPrinter::print_set_op_stmt()
         if (OB_FAIL(ret)) {
         } else if (OB_ISNULL(child_stmts.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("child_stmt should not be NULL", K(ret));
         } else {
           DATA_PRINTF("(");
           stmt_printer.init(buf_, buf_len_, pos_, child_stmts.at(i), column_list_);
@@ -167,17 +155,14 @@ int ObSelectStmtPrinter::print_recursive_union_stmt()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     TableItem *table = NULL;
     if (OB_FAIL(find_recursive_cte_table(select_stmt, table))) {
     } else if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else  {
       DATA_PRINTF("WITH RECURSIVE ");
       DATA_PRINTF("%.*s", LEN_AND_PTR(table->table_name_)); 
@@ -201,7 +186,6 @@ int ObSelectStmtPrinter::print_basic_stmt()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_select())) {
   } else if (OB_FAIL(print_from())) {
   } else if (OB_FAIL(print_where())) {
@@ -227,10 +211,8 @@ int ObSelectStmtPrinter::print_select()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     DATA_PRINTF("select ");
@@ -263,11 +245,9 @@ int ObSelectStmtPrinter::print_select()
             ObRawExpr *tmp_expr = expr;
             if (OB_ISNULL(expr)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("expr is null", K(ret), K(expr));
             } else if (OB_FAIL(ObRawExprUtils::erase_inner_added_exprs(tmp_expr, expr))) {
             } else if (OB_ISNULL(expr)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("expr is null");
             } else if (need_add_alias && NULL != column_list_ && select_item.is_real_alias_) {
               expr->set_alias_column_name(column_list_->at(i));
             }
@@ -309,10 +289,8 @@ int ObSelectStmtPrinter::print_group_by()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     const ObIArray<ObRawExpr*> &group_exprs = select_stmt->get_group_exprs();
@@ -368,10 +346,8 @@ int ObSelectStmtPrinter::print_having()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     const ObIArray<ObRawExpr*> &having_exprs = select_stmt->get_having_exprs();
@@ -398,10 +374,8 @@ int ObSelectStmtPrinter::print_order_by()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     ObArenaAllocator alloc;
@@ -416,7 +390,6 @@ int ObSelectStmtPrinter::print_order_by()
         bool found = false;
         if (OB_ISNULL(order_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret));
         } else if (T_FUN_SYS_CAST == order_expr->get_expr_type() &&
                    CM_IS_IMPLICIT_CAST(order_expr->get_cast_mode())) {
           order_expr = order_expr->get_param_expr(0);
@@ -427,7 +400,6 @@ int ObSelectStmtPrinter::print_order_by()
           bool skip = false;
           if (OB_ISNULL(select_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(ret));
           } else if (select_item.is_implicit_added_ || select_item.implicit_filled_) {
             skip = true;
           } else if (T_FUN_SYS_CAST == select_expr->get_expr_type() &&
@@ -448,7 +420,6 @@ int ObSelectStmtPrinter::print_order_by()
         } else {
           DATA_PRINTF(" ");
           if (FAILEDx(print_expr_except_const_number(order_item.expr_, T_ORDER_SCOPE))) {
-            LOG_WARN("fail to print order by expr", K(ret));
           }
         } 
         if (OB_SUCC(ret)) {
@@ -473,17 +444,14 @@ int ObSelectStmtPrinter::print_for_update()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     if (select_stmt->get_table_size() > 0) {
       const TableItem *table_item = select_stmt->get_table_item(0);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table item is NULL", K(ret));
       } else if (table_item->for_update_) {
         DATA_PRINTF(" for update");
         if (OB_SUCC(ret) && table_item->for_update_wait_us_ > 0) {
@@ -501,10 +469,8 @@ int ObSelectStmtPrinter::print_with_check_option()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     if (select_stmt->is_view_stmt()) {
@@ -534,17 +500,14 @@ int ObSelectStmtPrinter::find_recursive_cte_table(const ObSelectStmt* stmt, Tabl
   ObSelectStmt* set_query = NULL;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (!stmt->is_recursive_union() || 
              OB_ISNULL(set_query=stmt->get_set_query(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect recurisve cte stmt", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && !table && i < set_query->get_table_items().count(); ++i) {
     TableItem *table_item = set_query->get_table_item(i);
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else if (!table_item->is_fake_cte_table()) {
       //do nothing
     } else {

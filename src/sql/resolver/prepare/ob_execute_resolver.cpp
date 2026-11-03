@@ -31,12 +31,10 @@ int ObExecuteResolver::resolve(const ParseNode &parse_tree)
   ObExecuteStmt *execute_stmt = NULL;
   if (parse_tree.num_child_ != 2 || OB_ISNULL(session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", "num_child", parse_tree.num_child_, K(allocator_), K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(execute_stmt = create_stmt<ObExecuteStmt>())) {
       ret = OB_SQL_RESOLVER_NO_MEMORY;
-      LOG_WARN("failed to create execute stmt", K(ret));
     } else {
       stmt_ = execute_stmt;
     }
@@ -45,7 +43,6 @@ int ObExecuteResolver::resolve(const ParseNode &parse_tree)
     //resolver stmt name
     if (OB_ISNULL(parse_tree.children_[0])) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(parse_tree.children_[0]), K(ret));
     } else {
       ObString stmt_name;
       ObString name(parse_tree.children_[0]->str_len_, parse_tree.children_[0]->str_value_);
@@ -57,7 +54,6 @@ int ObExecuteResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_FAIL(session_info_->get_ps_session_info(ps_id, ps_session_info))) {
       } else if (OB_ISNULL(ps_session_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ps session info is NULL", K(stmt_name), K(ps_id), K(ret));
       } else {
         ps_type = ps_session_info->get_stmt_type();
         execute_stmt->set_prepare_id(ps_id);
@@ -71,13 +67,11 @@ int ObExecuteResolver::resolve(const ParseNode &parse_tree)
       //do nothing
     } else if (parse_tree.children_[1]->type_ != T_ARGUMENT_LIST) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(parse_tree.children_[1]->type_), K(ret));
     } else {
       ParseNode *arguments = parse_tree.children_[1];
       for(int32_t i = 0; OB_SUCC(ret) && i < arguments->num_child_; ++i) {
         if (OB_ISNULL(arguments->children_[i])) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(arguments->children_[i]), K(ret));
         } else {
           ObRawExpr *param_expr = NULL;
           if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *arguments->children_[i], param_expr, NULL))) {

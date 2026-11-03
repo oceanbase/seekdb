@@ -37,7 +37,6 @@ int ObPxTargetMonitor::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_init_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     parallel_servers_target_ = INT64_MAX;
     px_target_used_ = 0;

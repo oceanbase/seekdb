@@ -63,14 +63,12 @@ int ObFdItem::check_exprs_in_child(const ObIArray<ObRawExpr *> &exprs,
   bool in_child = false;
   if (OB_UNLIKELY(pos_start < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid array pos", K(pos_start), K(ret));
   }
   for (int64_t i = pos_start; OB_SUCC(ret) && i < exprs.count(); ++i) {
     if (exprs_set.has_member(i)) {
       // do nothing
     } else if (OB_FAIL(check_expr_in_child(exprs.at(i), equal_sets, in_child))) {
     } else if (in_child && OB_FAIL(exprs_set.add_member(i))) {
-      LOG_WARN("failed to add member to set", K(ret));
     }
   }
   return ret;
@@ -85,14 +83,12 @@ int ObFdItem::check_exprs_in_child(const common::ObIArray<OrderItem> &order_item
   bool in_child = false;
   if (OB_UNLIKELY(pos_start < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid array pos", K(pos_start), K(ret));
   }
   for (int64_t i = pos_start; OB_SUCC(ret) && i < order_items.count(); ++i) {
     if (exprs_set.has_member(i)) {
       // do nothing
     } else if (OB_FAIL(check_expr_in_child(order_items.at(i).expr_, equal_sets, in_child))) {
     } else if (in_child && OB_FAIL(exprs_set.add_member(i))) {
-      LOG_WARN("failed to add member to set", K(ret));
     }
   }
   return ret;
@@ -119,7 +115,6 @@ int ObTableFdItem::check_expr_in_child(const ObRawExpr *expr,
   is_in_child = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null expr", K(ret));
   } else if (expr->has_flag(CNT_AGG) || expr->has_flag(CNT_WINDOW_FUNC)) {
     //do nothing
   } else if (expr->has_flag(CNT_COLUMN) || expr->has_flag(CNT_SET_OP)) {
@@ -131,14 +126,12 @@ int ObTableFdItem::check_expr_in_child(const ObRawExpr *expr,
       const EqualSet *equal_set = equal_sets.at(i);
       if (OB_ISNULL(equal_set)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null equal set", K(ret));
       } else if (!ObOptimizerUtil::find_equal_expr(*equal_set, expr)) {
         continue;
       }  
       for (int64_t j = 0; OB_SUCC(ret) && !is_in_child && j < equal_set->count(); ++j) {
         if (OB_ISNULL(cur_expr = equal_set->at(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null expr", K(ret));
         } else if (cur_expr->get_relation_ids().is_empty() || 
                   !child_tables_.is_superset(cur_expr->get_relation_ids())) {
           // do nothing
@@ -176,11 +169,9 @@ int ObFdItemFactory::create_fd_item_set(ObFdItemSet *&fd_item_set)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(fd_item_set = (ObFdItemSet *)allocator_.alloc(sizeof(ObFdItemSet)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc fd item sets", K(ret));
   } else {
     fd_item_set = new(fd_item_set) ObFdItemSet();
     if (OB_FAIL(item_set_store_.store_obj(fd_item_set))) {
-      LOG_WARN("failed to store obj", K(ret));
       fd_item_set->~ObFdItemSet();
       fd_item_set = NULL;
     }
@@ -197,13 +188,11 @@ int ObFdItemFactory::get_parent_exprs_ptr(const ObIArray<ObRawExpr *> &parent_ex
   bool find = false;
   if (OB_UNLIKELY(parent_exprs.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get empty parent exprs", K(ret));
   } else {
     // check parent exprs exists
     for (int64_t i = 0; OB_SUCC(ret) && !find && i < parent_sets_.count(); ++i) {
       if (OB_ISNULL(parent_sets_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null fd parent set", K(ret));
       } else if (parent_exprs.count() == parent_sets_.at(i)->count() &&
                  ObOptimizerUtil::subset_exprs(*parent_sets_.at(i), parent_exprs)) {
         parent_exprs_ptr = parent_sets_.at(i);
@@ -230,11 +219,9 @@ int ObFdItemFactory::create_table_fd_item(ObTableFdItem *&fd_item,
   void *ptr = allocator_.alloc(sizeof(ObTableFdItem));
   if (OB_ISNULL(ptr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("no memory to create ObTableFdItem", K(ret));
   } else {
     fd_item = new(ptr) ObTableFdItem(is_unique, parent_exprs);
     if (OB_FAIL(item_store_.store_obj(fd_item))) {
-      LOG_WARN("failed to store obj", K(ret));
       fd_item->~ObTableFdItem();
       fd_item = NULL;
     }
@@ -279,11 +266,9 @@ int ObFdItemFactory::create_expr_fd_item(ObExprFdItem *&fd_item,
   void *ptr = allocator_.alloc(sizeof(ObExprFdItem));
   if (OB_ISNULL(ptr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("no memory to create ObExprFdItem", K(ret));
   } else {
     fd_item = new(ptr) ObExprFdItem(is_unique, parent_exprs);
     if (OB_FAIL(item_store_.store_obj(fd_item))) {
-      LOG_WARN("failed to store obj", K(ret));
       fd_item->~ObExprFdItem();
       fd_item = NULL;
     }
@@ -338,7 +323,6 @@ int ObFdItemFactory::copy_fd_item(ObFdItem *&fd_item, const ObFdItem &other)
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected fd item type", K(ret));
   }
   return ret;
 }
@@ -374,7 +358,6 @@ int ObFdItemFactory::do_deduce_fd_item_set(const EqualSets &equal_sets,
     if (OB_ISNULL(fd_item = fd_item_set.at(i))
         || OB_ISNULL(parent_exprs = fd_item->get_parent_exprs())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (deduced_fd.has_member(i)) {// has deduced
       /*do nothing*/
     } else {
@@ -391,7 +374,6 @@ int ObFdItemFactory::do_deduce_fd_item_set(const EqualSets &equal_sets,
         for (int64_t j = 0; OB_SUCC(ret) && j < column_exprs.count(); j++) {
           if (OB_ISNULL(expr = column_exprs.at(j))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(expr), K(ret));
           } else if (expr->is_const_expr() || ObOptimizerUtil::find_item(const_exprs, expr)) {
             /* do nothing */
           } else if (OB_FAIL(fd_item->check_expr_in_child(expr, equal_sets, is_in_child))) {

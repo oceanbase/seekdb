@@ -569,4 +569,97 @@ explain select /*+ index(t1 idx_ivf_pq) */ * from t1 order by l2_distance(c6, '[
 
 drop table t1;
 
+# issue #1439: idempotent OR filters must have idempotent selectivity
+--disable_warnings
+drop table if exists t_issue1439_or_selectivity;
+--enable_warnings
+create table t_issue1439_or_selectivity(
+  id bigint not null,
+  embedding vector(3) not null,
+  category int not null,
+  primary key(id),
+  key idx_category(category),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  eval insert into t_issue1439_or_selectivity values ($row, '[$row,0,0]', $row);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_issue1439_or_selectivity;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1439_OR_SELECTIVITY', numrows=>200000);
+--enable_result_log
+
+--let $duplicate_filter = (category = 1 OR category = 2)
+--let $loop = 1
+while ($loop < 32)
+{
+  --let $duplicate_filter = $duplicate_filter OR (category = 1 OR category = 2)
+  --inc $loop
+}
+
+--let $left_value = 0
+--let $right_value = 1
+--let $distinct_filter = (category = $left_value OR category = $right_value)
+--let $loop = 1
+while ($loop < 32)
+{
+  --inc $left_value
+  --inc $left_value
+  --inc $right_value
+  --inc $right_value
+  --let $distinct_filter = $distinct_filter OR (category = $left_value OR category = $right_value)
+  --inc $loop
+}
+
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1439_or_selectivity
+where category = 1 or category = 2
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select id from t_issue1439_or_selectivity
+where $duplicate_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1439_or_selectivity') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+
+# The equality constraints used for deduplication must also guard plan cache reuse.
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+eval select id from t_issue1439_or_selectivity
+where $duplicate_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select id from t_issue1439_or_selectivity
+where $distinct_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select id from t_issue1439_or_selectivity
+where $duplicate_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select id from t_issue1439_or_selectivity
+where $distinct_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator, p.cardinality, s.hit_count
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1439_or_selectivity') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by p.cardinality, p.plan_id;
+
+drop table t_issue1439_or_selectivity;
+
 alter system set vector_memory_limit = 0;

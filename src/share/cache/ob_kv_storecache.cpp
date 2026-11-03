@@ -18,7 +18,6 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "share/cache/ob_kv_storecache.h"
-#include "share/ob_task_define.h"
 #include "share/ob_debug_sync.h"             // DEBUG_SYNC
 
 namespace oceanbase
@@ -173,7 +172,6 @@ int ObKVGlobalCache::get_suitable_bucket_num(
     COMMON_LOG(ERROR, "failed to calculate suitable bucket num", K(ret),
                K(cache_memory_limit));
   } else {
-    share::ObTaskController::get().allow_next_syslog();
     COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num),
                K(cache_memory_limit));
   }
@@ -209,7 +207,7 @@ int ObKVGlobalCache::init(
                K(max_cache_size), K(block_size), K(cache_wash_interval));
   } else if (OB_FAIL(hazard_domain_.init(ObKVCacheStore::compute_mb_handle_num(max_cache_size, block_size)))) {
   } else if (OB_FAIL(store_.init(max_cache_size, block_size, cache_memory_limit))) {
-  } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
+  } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_, &insts_))) {
   } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, map_.get_node_allocator()))) {
   } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {
   } else if (OB_FAIL(replace_timer_.init("KVCacheRep", ObMemAttr("KVCacheRep")))) {

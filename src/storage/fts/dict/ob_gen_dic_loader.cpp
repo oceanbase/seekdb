@@ -34,7 +34,6 @@ int ObGenDicLoader::ObGenDicLoaderKey::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_name.empty() || CHARSET_INVALID == charset)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(parser_name), K(charset));
   } else if (OB_FAIL(set_parser_name(parser_name))) {
   } else {
     charset_ = charset;
@@ -46,7 +45,6 @@ int ObGenDicLoader::ObGenDicLoaderKey::assign(const ObGenDicLoaderKey &other)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the other is invalid", K(ret), K(other));
   } else if (OB_FAIL(set_parser_name(other.parser_name_))) {
   } else {
     charset_ = other.charset_;
@@ -73,10 +71,8 @@ int ObGenDicLoader::ObGenDicLoaderKey::set_parser_name(const char *parser_name)
   uint64_t len = STRLEN(parser_name);
   if (OB_ISNULL(parser_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("The parser name is nullptr", K(ret), KP(parser_name));
   } else if (OB_UNLIKELY(len >= OB_FT_PARSER_NAME_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("The parser name is too long", K(ret), KCSTRING(parser_name));
   } else {
     MEMSET(parser_name_, '\0', OB_FT_PARSER_NAME_LENGTH);
     MEMCPY(parser_name_, parser_name, len);
@@ -89,7 +85,6 @@ int ObGenDicLoader::ObGenDicLoaderKey::set_parser_name(const ObString &parser_na
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_name.empty() || (parser_name.length() >= OB_FT_PARSER_NAME_LENGTH))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parser name is not valid", K(ret), K(parser_name));
   } else {
     MEMSET(parser_name_, '\0', OB_FT_PARSER_NAME_LENGTH);
     MEMCPY(parser_name_, parser_name.ptr(), parser_name.length());
@@ -107,10 +102,8 @@ int ObGenDicLoader::init()
   TCWLockGuard guard(lock_);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("gen dic loader initialize twice", K(ret));
   } else if (!dic_loader_map_.created() 
       && OB_FAIL(dic_loader_map_.create(cap, ObMemAttr("dic_loader_map")))) {
-    LOG_WARN("fail to create dic loader map", K(ret), K(cap));
   } else {
     is_inited_ = true;
   }
@@ -127,11 +120,9 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
   ObDicLoader *dic_loader = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("gen dic loader is not inited", K(ret));
   } else if (parser_name.empty()
              || charset == CHARSET_INVALID) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(parser_name), K(charset));
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
     TCWLockGuard guard(lock_);
@@ -140,14 +131,12 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
         if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
         } else if (OB_ISNULL(dic_loader)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_key));
         } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
         } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
         } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get dic loader", K(ret), K(dic_loader_key));
       }
     } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
     }
@@ -174,7 +163,6 @@ int ObGenDicLoader::gen_dic_loader(
         dic_loader = OB_NEW(ObIKUTF8DicLoader, attr);
         if (OB_ISNULL(dic_loader)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory for the loader", K(ret), K(dic_loader_key));
         } else if (OB_FAIL(dic_loader->init())) {
         }
         break;
@@ -185,14 +173,12 @@ int ObGenDicLoader::gen_dic_loader(
         message.append_fmt("%s with the %s charset is",
                            ObFTSLiteral::PARSER_NAME_IK, ObCharset::charset_name(charset));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, message.ptr());
-        LOG_WARN("not support the charset", K(ret), K(charset), KCSTRING(lbt()));
         break;
       }
     }
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "the parser is");
-    LOG_WARN("not support the parser", K(ret), K(parser_name));
   }
   return ret;
 }

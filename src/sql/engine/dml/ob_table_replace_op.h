@@ -90,7 +90,7 @@ public:
   virtual int inner_close() override;
   virtual int inner_get_next_row() override;
   // Materialize all rows to be replace into to replace_row_store_
-  int load_all_replace_row(bool &is_iter_end);
+  int load_all_replace_row(bool &is_iter_end, transaction::ObTxSEQ &savepoint_no);
   int get_next_row_from_child();
   // Execute all attempted insert das tasks, fetch primary key of the main table for conflicting rows
   int fetch_conflict_rowkey(int64_t replace_row_cnt);
@@ -132,12 +132,12 @@ protected:
   // batch execution insert process_row and then write to das,
   int delete_row_to_das(bool need_do_trigger);
 
-  int calc_insert_tablet_loc(const ObInsCtDef &ins_ctdef,
+  int resolve_insert_tablet_access(const ObInsCtDef &ins_ctdef,
                              ObInsRtDef &ins_rtdef,
-                             ObDASTabletLoc *&tablet_loc);
-  int calc_delete_tablet_loc(const ObDelCtDef &del_ctdef,
+                             DASRuntimeTabletAccess *&tablet_access);
+  int resolve_delete_tablet_access(const ObDelCtDef &del_ctdef,
                              ObDelRtDef &del_rtdef,
-                             ObDASTabletLoc *&tablet_loc);
+                             DASRuntimeTabletAccess *&tablet_access);
 
   int inner_open_with_das();
 
@@ -150,6 +150,8 @@ protected:
   virtual ObDasParallelType check_das_parallel_type() override;
 private:
   int check_replace_ctdefs_valid() const;
+
+  int eval_replace_input();
 
   const ObIArray<ObExpr *> &get_all_saved_exprs();
 

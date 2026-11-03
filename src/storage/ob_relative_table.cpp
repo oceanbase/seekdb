@@ -60,9 +60,7 @@ int ObRelativeTable::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObRelativeTable has been inited. ", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_UNLIKELY(!tablet_id.is_valid())) {
-    LOG_WARN("invalid argument", K(ret), KP(param), K(tablet_id));
   } else {
     schema_param_ = param;
     tablet_id_ = tablet_id;
@@ -95,12 +93,10 @@ int ObRelativeTable::get_col_desc(
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else {
     const ObColumnParam *param = NULL;
     if (NULL == (param = schema_param_->get_column(column_id))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("wrong column id", K(ret), K(column_id), K(*schema_param_));
     } else {
       col_desc.col_id_ = column_id;
       col_desc.col_type_ = param->get_meta_type();
@@ -120,12 +116,10 @@ int ObRelativeTable::get_rowkey_col_desc_by_idx(
   col_desc.reset();
   if (idx < 0 || idx >= (rowkey_size = get_rowkey_column_num())) {
     ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("idx out of range", K(ret), K(rowkey_size));
   } else {
     const ObColumnParam *param = NULL;
     if (NULL == (param = schema_param_->get_column_by_idx(idx))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("wrong column id", K(ret), K(idx));
     } else {
       col_desc.col_id_ = param->get_column_id();
       col_desc.col_type_ = param->get_meta_type();
@@ -140,17 +134,14 @@ int ObRelativeTable::get_rowkey_col_id_by_idx(const int64_t idx, uint64_t &col_i
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else {
     const int64_t rowkey_size = get_rowkey_column_num();
     if (idx < 0 || idx >= rowkey_size) {
       ret = OB_ARRAY_OUT_OF_RANGE;
-      LOG_WARN("idx out of range", K(ret), K(rowkey_size));
     } else {
       const ObColumnParam *param = NULL;
       if (NULL == (param = schema_param_->get_rowkey_column_by_idx(idx))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("wrong column id", K(ret), K(idx));
       } else {
         col_id = param->get_column_id();
       }
@@ -164,7 +155,6 @@ int ObRelativeTable::get_rowkey_column_ids(ObIArray<ObColDesc> &column_ids) cons
   int ret = OB_SUCCESS;
   if (!is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_FAIL(schema_param_->get_rowkey_column_ids(column_ids))) {
   }
   return ret;
@@ -175,7 +165,6 @@ int ObRelativeTable::get_rowkey_column_ids(ObIArray<uint64_t> &column_ids) const
   int ret = OB_SUCCESS;
   if (!is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("relative table is invalid", K(ret), KPC(this));
   } else if (OB_FAIL(schema_param_->get_rowkey_column_ids(column_ids))) {
   }
   return ret;
@@ -186,12 +175,10 @@ int ObRelativeTable::get_column_data_length(const uint64_t column_id, int32_t &l
   int ret = OB_SUCCESS;
   if (!is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else {
     const ObColumnParam *param = NULL;
     if (NULL == (param = schema_param_->get_column(column_id))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column param shouldn't be NULL here", K(ret), K(column_id));
     } else {
       len = param->get_data_length();
     }
@@ -205,10 +192,8 @@ int ObRelativeTable::is_rowkey_column_id(const uint64_t column_id, bool &is_rowk
   is_rowkey = false;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_INVALID_ID == column_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column id", K(ret), K(column_id));
   } else if (OB_FAIL(schema_param_->is_rowkey_column(column_id, is_rowkey))) {
   }
   return ret;
@@ -221,10 +206,8 @@ int ObRelativeTable::is_column_nullable_for_write(const uint64_t column_id,
   is_nullable_for_write = false;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_INVALID_ID == column_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column id", K(ret), K(column_id));
   } else if (OB_FAIL(schema_param_->is_column_nullable_for_write(column_id, is_nullable_for_write))) {
   }
   return ret;
@@ -237,15 +220,12 @@ int ObRelativeTable::is_column_nullable_for_read(const uint64_t column_id,
   is_nullable_for_read = false;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_INVALID_ID == column_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column id", K(ret), K(column_id));
   } else {
     const ObColumnParam *col = schema_param_->get_column(column_id);
     if (OB_ISNULL(col)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("column schema is null", K(ret), K(column_id));
     } else {
       is_nullable_for_read = col->is_nullable_for_read();
     }
@@ -259,7 +239,6 @@ int ObRelativeTable::is_nop_default_value(const uint64_t column_id, bool &is_nop
   is_nop = false;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_HIDDEN_ROWID_COLUMN_ID == column_id) {
     //rowid column need to compute on fly
     is_nop = true;
@@ -267,7 +246,6 @@ int ObRelativeTable::is_nop_default_value(const uint64_t column_id, bool &is_nop
     const ObColumnParam *param = NULL;
     if (OB_ISNULL(param = schema_param_->get_column(column_id))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("wrong column id", K(ret), K(column_id), K(*schema_param_));
     } else if (param->get_cur_default_value().is_nop_value()) {
       is_nop = true;
     }
@@ -290,12 +268,10 @@ int ObRelativeTable::is_hidden_column(const uint64_t column_id, bool &is_hidden)
   is_hidden = false;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else {
     const ObColumnParam *col = schema_param_->get_column(column_id);
     if (OB_ISNULL(col)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("column schema is null", K(ret), K(column_id));
     } else {
       is_hidden = col->is_hidden();
     }
@@ -309,12 +285,10 @@ int ObRelativeTable::is_gen_column(const uint64_t column_id, bool &is_gen_col) c
   is_gen_col = false;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else {
     const ObColumnParam *col = schema_param_->get_column(column_id);
     if (OB_ISNULL(col)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("column schema is null", K(ret), K(column_id));
     } else {
       is_gen_col = col->is_gen_col();
     }
@@ -346,7 +320,6 @@ int ObRelativeTable::get_index_name(ObString &index_name) const
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_FAIL(schema_param_->get_index_name(index_name))) {
   }
   return ret;
@@ -358,7 +331,6 @@ int ObRelativeTable::get_primary_key_name(ObString &pk_name) const
 
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else {
     pk_name = schema_param_->get_pk_name();
   }
@@ -434,7 +406,6 @@ int ObRelativeTable::set_index_value(
                 col_desc.col_id_;
   if (table_row.is_invalid() || !col_map.is_inited() || rowkey_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(table_row), K(rowkey_size), K(ret));
   } else {
     if (OB_FAIL(col_map.get(id, idx)) || idx < 0) {
       ret = OB_ENTRY_NOT_EXIST;
@@ -467,7 +438,6 @@ int ObRelativeTable::prepare_truncate_part_filter(
   const ObTabletHandle *tablet_handle = get_tablet_handle();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!tablet_iter_.table_iter()->is_valid())) {
     LOG_DEBUG("[TRUNCATE INFO], empty tablet", KPC(tablet_iter_.table_iter()));
   } else if (OB_FAIL(tablet_iter_.table_iter()->get_boundary_table(false, table_ptr))) {
@@ -479,7 +449,6 @@ int ObRelativeTable::prepare_truncate_part_filter(
     if (OB_UNLIKELY(!read_version_range.is_valid())) {
     } else if (OB_UNLIKELY(nullptr != table_ptr && table_ptr->is_major_sstable() && major_table_version <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected major sstable", K(ret), KPC(table_ptr));
     } else if (OB_FAIL(ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
         *tablet_handle->get_obj(),
         read_info.get_columns_desc(),

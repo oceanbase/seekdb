@@ -71,7 +71,7 @@ struct TupleTypeIdx {
                               get_type_idx<IDX + 1>();
   }
   template <>
-  static constexpr int64_t get_type_idx<Tuple::get_element_size()>() {
+  constexpr int64_t get_type_idx<Tuple::get_element_size()>() {
     return Tuple::get_element_size();
   }
   static constexpr int64_t value = get_type_idx<0>();

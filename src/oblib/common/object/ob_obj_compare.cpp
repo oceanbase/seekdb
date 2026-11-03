@@ -103,7 +103,6 @@ OB_NOINLINE int compare_decimalint_views(const ObDecimalInt *lhs,
     rhs_value.from(rhs, rhs_bytes);
   }
   if (OB_SUCC(ret) && OB_FAIL(wide::compare(lhs_value, rhs_value, raw_cmp))) {
-    LOG_WARN("compare decimal int failed", K(ret));
   }
   if (OB_SUCC(ret)) {
     cmp_res = raw_cmp < 0 ? ObObjCmpFuncs::CR_LT

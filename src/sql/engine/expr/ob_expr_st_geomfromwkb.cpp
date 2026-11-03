@@ -119,13 +119,11 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       is_null_result = true;
     } else if (datum->get_int() < 0 || datum->get_int() > UINT_MAX32) {
          ret = OB_OPERATE_OVERFLOW;
-         LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (0 != (srid = datum->get_uint32())) {
       if (OB_FAIL(ObGeoExprUtils::get_srs_item(
               ctx, srs_guard, srid, srs_item))) {
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null srs item", K(ret));
       } else {
         is_geographical = srs_item->is_geographical_srs();
         is_lat_long = srs_item->is_lat_long_order();
@@ -158,7 +156,6 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
           expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       } else if (OB_FAIL(create_by_wkb_without_srid(tmp_allocator, wkb, srs_item, geo, bo))) {
-        LOG_WARN("failed to create geometry object with raw wkb", K(ret));
         ret = OB_ERR_GIS_INVALID_DATA;
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, get_func_name());
       } else if (OB_NOT_NULL(srs_item)) {
@@ -173,7 +170,6 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
 
   if (!is_null_result && OB_SUCC(ret)) {
     if (need_reverse && is_geographical && OB_FAIL(ObGeoExprUtils::reverse_coordinate(geo, get_func_name()))) {
-      LOG_WARN("failed to reverse geometry coordinate", K(ret));
     }
 
     if (OB_SUCC(ret) && !is_3d_geo && bo == ObGeoWkbByteOrder::BigEndian) {
@@ -196,7 +192,6 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     res.set_null();
   } else if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null geometry", K(ret));
   } else {
     ObString res_wkb;
     if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs_item, res_wkb))) {

@@ -108,7 +108,6 @@ int ObListRowValues::deserialize(ObIAllocator &allocator, const char *buf, const
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &size))) {
   } else if (OB_ISNULL(tmp_buf = tmp_allocator.alloc(sizeof(ObObj) * obj_capacity))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", KR(ret));
   } else {
     obj_array = new (tmp_buf) ObObj[obj_capacity];
     ObNewRow row;

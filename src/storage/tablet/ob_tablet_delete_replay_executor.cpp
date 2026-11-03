@@ -41,7 +41,6 @@ int ObTabletDeleteReplayExecutor::init(
     LOG_WARN("tablet delete replay executor init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", KR(ret), K(scn));
   } else {
     ctx_ = &ctx;
     scn_ = scn;
@@ -61,9 +60,7 @@ int ObTabletDeleteReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
 
   if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is null", K(ret), K(tablet_handle));
   } else if (CLICK_FAIL(tablet->get_latest_committed(data))) {
-    LOG_WARN("failed to get tablet status", K(ret), K(timeout));
   } else {
     data.tablet_status_ = ObTabletStatus::DELETED;
     data.data_type_ = ObTabletMdsUserDataType::REMOVE_TABLET;

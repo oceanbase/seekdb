@@ -19,7 +19,7 @@
 
 #include "share/tablet/ob_tablet_info.h"
 #include "lib/container/ob_iarray.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include "share/inner_table/local_table_schema.h"
 
 namespace oceanbase
 {
@@ -29,7 +29,7 @@ namespace share
 class ObTabletRuntimeInfoConstructor
 {
 public:
-  int operator()(share::ObSQLiteRowReader &reader, ObTabletRuntimeInfo &info);
+  int operator()(share::LocalRowReader &reader, ObTabletRuntimeInfo &info);
 };
 
 class ObTabletMetaTableStorage
@@ -38,10 +38,10 @@ public:
   ObTabletMetaTableStorage();
   virtual ~ObTabletMetaTableStorage();
 
-  // Initialize with shared connection pool instance
-  int init(ObSQLiteConnectionPool *pool);
+  // Initialize with the shared local store
+  int init(LocalStore *store);
 
-  bool is_inited() const { return nullptr != pool_; }
+  bool is_inited() const { return nullptr != store_; }
 
   // Batch get tablet infos
   int batch_get(
@@ -54,7 +54,7 @@ public:
 
   // Batch update local tablet runtime metadata within an external transaction.
   int batch_update(
-      ObSQLiteConnection *conn,
+      LocalTransaction &tx,
       const ObIArray<ObTabletRuntimeInfo> &tablet_infos);
 
   // Batch remove local tablet runtime metadata.
@@ -63,7 +63,7 @@ public:
 
   // Batch remove local tablet runtime metadata within an external transaction.
   int batch_remove(
-      ObSQLiteConnection *conn,
+      LocalTransaction &tx,
       const ObIArray<ObTabletRuntimeInfo> &tablet_infos);
 
   // Get data_size for a local tablet.
@@ -139,10 +139,7 @@ public:
       int64_t &affected_rows);
 
 private:
-  // Create table if not exists
-  int create_table_if_not_exists();
-
-  ObSQLiteConnectionPool *pool_;
+  LocalStore *store_;
 };
 
 } // namespace share

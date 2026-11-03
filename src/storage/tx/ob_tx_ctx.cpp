@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX TRANS
 
+#include "rust/config.h"
 #include "ob_tx_ctx.h"
+#include "share/ob_debug_sync.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tx_redo_submitter.h"
 #include "storage/tx/ob_trans_service.h"
@@ -110,7 +112,7 @@ int ObTxCtx::init(const uint32_t session_id,
 
     mt_ctx_.set_trans_ctx(this);
     mt_ctx_.set_for_replay(is_for_replay());
-    if (!GCONF.enable_record_trace_log) {
+    if (!config::enable_record_trace_log()) {
       tlog_ = NULL;
     } else {
       tlog_ = &trace_log_;
@@ -431,7 +433,8 @@ int ObTxCtx::handle_timeout(const int64_t delay)
 
       // go to preapre state when recover from redo complete
       if (!is_for_replay()) {
-        if (ObTxState::REDO_COMPLETE == get_downstream_state()) {
+        if (ObTxState::REDO_COMPLETE == get_downstream_state()
+            && get_target_state() != ObTxState::ABORT) {
           if (!is_logging_()) {
             if (OB_FAIL(one_phase_commit_())) {
             } else {
@@ -452,7 +455,7 @@ int ObTxCtx::handle_timeout(const int64_t delay)
       if (!is_for_replay()
           && get_target_state() == ObTxState::ABORT
           && get_target_state() != get_downstream_state()) {
-        if (OB_FAIL(compensate_abort_log_())) {
+        if (OB_FAIL(do_local_tx_end_(TxEndAction::ABORT_TX))) {
         }
       }
 
@@ -982,6 +985,58 @@ int ObTxCtx::gc_ctx_()
   return ret;
 }
 
+int ObTxCtx::takeover_from_replay()
+{
+  int ret = OB_SUCCESS;
+  CtxLockGuard guard(lock_);
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (!is_for_replay() || is_exiting_ || is_decided()) {
+    // Repeated activation must not change live local or finished transactions.
+  } else if (!replay_completeness_.is_complete() || is_logging_() || pending_write_) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "cannot take over an incomplete replay context", K(ret), KPC(this));
+  } else if (get_downstream_state() != ObTxState::INIT
+             && get_downstream_state() != ObTxState::REDO_COMPLETE) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "unexpected undecided replay transaction state", K(ret), KPC(this));
+  } else {
+    // INIT has no durable commit intent and its previous owner has gone away.
+    // As on OceanBase leader takeover, an undecided MDS table-lock transaction
+    // must abort even if its commit-info log has already been replayed.
+    const bool abort_tx = get_downstream_state() == ObTxState::INIT
+                          || is_contain_mds_type_(ObTxDataSourceType::TABLE_LOCK)
+                          || runtime_state_.is_force_abort();
+    commit_retry_timeout_ = get_commit_retry_interval_us_();
+    if (OB_FAIL(mt_ctx_.replay_to_commit(false /*is_resume*/))) {
+      (void)mt_ctx_.commit_to_replay();
+    } else if (OB_FAIL(register_timeout_task_(commit_retry_timeout_))) {
+      // Leave the context replay-only so activation can safely retry.
+      (void)mt_ctx_.commit_to_replay();
+    } else {
+      set_for_replay(false);
+      commit_cb_.disable();
+      if (abort_tx) {
+        part_trans_action_ = ObPartTransAction::ABORT;
+        runtime_state_.set_force_abort();
+        set_target_state(ObTxState::ABORT);
+        // The timeout is armed before the first attempt. It retries both the
+        // MDS TX_END notification and the durable abort if this attempt fails.
+        const int tmp_ret = do_local_tx_end_(TxEndAction::ABORT_TX);
+        if (OB_SUCCESS != tmp_ret) {
+          TRANS_LOG(WARN, "recovered transaction abort will retry", K(tmp_ret), KPC(this));
+        }
+      } else {
+        // Preserve the existing REDO_COMPLETE commit-recovery protocol. The
+        // timer also tolerates timestamp services becoming ready after LS online.
+        part_trans_action_ = ObPartTransAction::COMMIT;
+      }
+      TRANS_LOG(INFO, "replayed transaction taken over for local completion", K(abort_tx), KPC(this));
+    }
+  }
+  return ret;
+}
+
 int ObTxCtx::check_tx_status()
 {
   if (OB_SUCCESS == lock_.try_lock()) {
@@ -1022,7 +1077,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
       mt_ctx_.set_trans_version(exec_info_.prepare_version_);
     }
     exec_info_.multi_data_source_.reset();
-    exec_info_.mds_buffer_ctx_array_.reset();
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(deep_copy_mds_array_(ctx_info.exec_info_.multi_data_source_, _unused_))) {
@@ -1293,8 +1347,8 @@ int ObTxCtx::serial_submit_redo_after_write_(int &submitted_cnt)
 bool ObTxCtx::should_switch_to_parallel_logging_()
 {
   bool ok = false;
-  if (GCONF._enable_parallel_redo_logging) {
-    const int64_t switch_size = GCONF._parallel_redo_logging_trigger;
+  if (config::_enable_parallel_redo_logging()) {
+    const int64_t switch_size = config::_parallel_redo_logging_trigger();
     ok = pending_write_ > 1 && mt_ctx_.get_pending_log_size() > switch_size;
 #ifdef ENABLE_DEBUG_LOG
     if (!ok) {
@@ -1393,10 +1447,18 @@ int ObTxCtx::compensate_abort_log_()
   } else if(OB_FALSE_IT(runtime_state_.set_force_abort())) {
 
   } else if (OB_FAIL(submit_log_impl_(ObTxLogType::TX_ABORT_LOG))) {
+    const int submit_ret = ret;
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(restart_commit_retry_timer_())) {
+      TRANS_LOG(WARN, "restart abort log retry timer failed", KR(ret), KR(tmp_ret), K(*this));
+    } else if (OB_TX_NOLOGCB == ret) {
+      // Callback exhaustion is temporary. The abort has been accepted and
+      // handle_timeout will resubmit its log once a callback becomes available.
+      // Let explicit rollback wait for that decision instead of returning the
+      // internal flow-control error to the client.
+      ret = OB_SUCCESS;
     }
-    TRANS_LOG(WARN, "submit abort log failed", KR(ret), K(*this));
+    TRANS_LOG(WARN, "submit abort log failed", KR(submit_ret), KR(ret), K(*this));
   } else {
   }
   TRANS_LOG(INFO, "compensate abort log", K(ret), KPC(this));
@@ -1542,7 +1604,7 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
 
     log_sync_used_time = cur_ts - log_cb->get_submit_ts();
     ctx_lock_wait_time = guard.get_lock_acquire_used_time();
-    if (log_sync_used_time + ctx_lock_wait_time >= ObServerConfig::get_instance().clog_sync_time_warn_threshold) {
+    if (log_sync_used_time + ctx_lock_wait_time >= ::oceanbase::config::clog_sync_time_warn_threshold()) {
       TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "transaction log sync use too much time", KPC(log_cb),
                     K(log_sync_used_time), K(ctx_lock_wait_time));
     }
@@ -1586,6 +1648,9 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
         } else {
           invoke_on_succ_cnt++;
           const int64_t before_invoke_ts = ObTimeUtility::fast_current_time();
+          if (ObTxLogType::TX_ABORT_LOG == cur_cb->get_last_log_type()) {
+            DEBUG_SYNC(BEFORE_TX_ABORT_DECISION);
+          }
           if (OB_FAIL(on_success_ops_(cur_cb))) {
             TRANS_LOG(ERROR, "invoke on_success_ops failed", K(ret), K(*this), K(*cur_cb));
             if (OB_SUCCESS == save_ret) {
@@ -1989,7 +2054,7 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
       const int64_t log_sync_used_time = ObTimeUtility::current_time() - log_cb->get_submit_ts();
       CtxLockGuard guard(lock_);
       const int64_t ctx_lock_wait_time = guard.get_lock_acquire_used_time();
-      if (log_sync_used_time + ctx_lock_wait_time >= ObServerConfig::get_instance().clog_sync_time_warn_threshold) {
+      if (log_sync_used_time + ctx_lock_wait_time >= ::oceanbase::config::clog_sync_time_warn_threshold()) {
         TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "transaction log sync use too much time", KPC(log_cb),
                       K(log_sync_used_time), K(ctx_lock_wait_time));
       }
@@ -2086,7 +2151,7 @@ int ObTxCtx::get_gts_(SCN &gts)
 {
   int ret = OB_SUCCESS;
   MonotonicTs receive_gts_ts;
-  const int64_t GET_GTS_AHEAD_INTERVAL = 0; //GCONF._ob_get_gts_ahead_interval;
+  const int64_t GET_GTS_AHEAD_INTERVAL = 0;
   const MonotonicTs stc_ahead = get_stc_() - MonotonicTs(GET_GTS_AHEAD_INTERVAL);
   ObTsMgr *ts_mgr = trans_service_->get_ts_mgr();
 
@@ -2645,6 +2710,7 @@ int ObTxCtx::submit_commit_log_()
   return ret;
 }
 
+ERRSIM_POINT_DEF(ERRSIM_TX_ABORT_LOG_CALLBACK_ERROR)
 int ObTxCtx::submit_abort_log_()
 {
   int ret = OB_SUCCESS;
@@ -2687,7 +2753,7 @@ int ObTxCtx::submit_abort_log_()
     TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
     return_log_cb_(log_cb);
     log_cb = NULL;
-  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
+  } else if (OB_FAIL(OB_E(ERRSIM_TX_ABORT_LOG_CALLBACK_ERROR) prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
@@ -3728,7 +3794,7 @@ int ObTxCtx::replay_rollback_to(const ObTxRollbackToLog &log,
         if (OB_ISNULL(log_service)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "tenant logservice is null", K(ret), K(timestamp), K_(trans_id));
-        } else if (OB_FAIL(log_service->get_log_replay_service()->get_min_unreplayed_scn(min_unreplayed_scn))) {
+        } else if (OB_FAIL(log_service->get_min_unreplayed_scn(min_unreplayed_scn))) {
         } else if (min_unreplayed_scn == timestamp) {
           // all previous log replayed
           // the txn must not replay from its first log, aka. incomplete-replay
@@ -4362,7 +4428,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
              OB_FAIL(mt_ctx_.calc_checksum_before_scn(target_scn,
                  exec_info_.checksum_, exec_info_.checksum_scn_))) {
     TRANS_LOG(ERROR, "calc checksum before log ts failed", K(ret), KPC(this));
-  } else if (OB_FAIL(exec_info_.generate_mds_buffer_ctx_array())) {
   } else if (OB_FAIL(info.exec_info_.assign(exec_info_))) {
   } else {
     info.tx_id_ = trans_id_;
@@ -4371,7 +4436,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
       TRANS_LOG(INFO, "store ctx_info: ", K(ret), K(info), KPC(this));
     }
   }
-  exec_info_.mds_buffer_ctx_array_.reset();
 
   return ret;
 }
@@ -5244,7 +5308,7 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
   const int64_t MAX_PENDING_LOG_SIZE = 32L * 1024 * 1024;
 
   if (OB_SUCC(ret)) {
-    const int64_t trx_max_log_cb_limit = GCONF._trx_max_log_cb_limit;
+    const int64_t trx_max_log_cb_limit = config::_trx_max_log_cb_limit();
     // smaller than 16  || no limit with tx_log_cb =>  disable the check of pending logs
     if (trx_max_log_cb_limit >= 16) {
       const int64_t start_wait_us = ObTimeUtility::current_time();
@@ -6072,7 +6136,6 @@ int ObTxCtx::recover_tx_ctx_from_tx_op_(ObTxOpVector &tx_op_list, const SCN repl
   }
   ObTxBufferNodeArray _unused_;
   if (FAILEDx(deep_copy_mds_array_(mds_array, _unused_))) {
-    TRANS_LOG(WARN, "deep copy mds array failed", KR(ret), KPC(this));
   }
   int64_t mds_max_register_no = 0;
   if (mds_array.count() > 0) {

@@ -209,7 +209,6 @@ int ObShowTableStatus::get_table_stats()
       ObSqlString sql;
       if (OB_ISNULL(session_) || OB_ISNULL(sql_proxy_) || !sql_proxy_->is_inited()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(session_), K(sql_proxy_));
       } else if (OB_FAIL(sql.append_fmt(TABLE_STATUS_SQL, table_schema->get_table_id()))) {
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -217,7 +216,6 @@ int ObShowTableStatus::get_table_stats()
           if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to execute ", "sql", sql.ptr(), K(ret));
           }
           while (OB_SUCC(ret)) {
             if (OB_FAIL(result->next())) {
@@ -225,7 +223,6 @@ int ObShowTableStatus::get_table_stats()
                 ret = OB_SUCCESS;
                 break;
               } else {
-                LOG_WARN("get next row failed", K(ret));
               }
             } else {
               int64_t default_time = 0;
@@ -250,7 +247,6 @@ int ObShowTableStatus::get_table_stats()
               ret = OB_SUCCESS;
               LOG_WARN("the table stat is already fetched", K(table_schema->get_table_id()), K(tab_stat));
             } else {
-              LOG_WARN("failed to set table stat", K(ret));
             }
           }
         }

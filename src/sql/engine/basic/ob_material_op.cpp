@@ -33,7 +33,6 @@ int ObMaterialOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret));
   } else {
     is_first_ = true;
   }
@@ -78,7 +77,6 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
     }
   }
   if (OB_UNLIKELY(OB_ITER_END != ret)) {
-    LOG_WARN("fail to get next row", K(ret));
   } else {
     ret = OB_SUCCESS;
     // Last batch of data retain in memory
@@ -169,10 +167,8 @@ int ObMaterialOp::inner_get_next_row()
   } else {
     clear_evaluated_flag();
     if (is_first_ && OB_FAIL(get_all_row_from_child(*ctx_.get_my_session()))) {
-      LOG_WARN("failed to get all row from child", K(child_), K(ret));
     } else if (OB_FAIL(material_impl_.get_next_row(child_->get_spec().output_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get row from row store failed", K(ret));
       }
     }
   }
@@ -189,7 +185,6 @@ int ObMaterialOp::inner_get_next_batch(int64_t max_row_cnt)
     const ObBatchRows *input_brs = nullptr;
     if (OB_FAIL(child_->get_next_batch(std::min(MY_SPEC.max_batch_size_, max_row_cnt), input_brs))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next batch", K(ret));
       }
     } else {
       brs_.copy(input_brs);
@@ -197,12 +192,10 @@ int ObMaterialOp::inner_get_next_batch(int64_t max_row_cnt)
   } else {
     clear_evaluated_flag();
     if (is_first_ && OB_FAIL(get_all_batch_from_child(*ctx_.get_my_session()))) {
-      LOG_WARN("failed to get all batch from child", K(child_), K(ret));
     } else if (OB_FAIL(material_impl_.get_next_batch(child_->get_spec().output_, 
                                                      std::min(MY_SPEC.max_batch_size_, max_row_cnt),
                                                      read_rows))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next batch from datum store", K(ret));
       }
     }
 

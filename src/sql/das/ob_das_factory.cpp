@@ -49,7 +49,6 @@ template <int TYPE>
 int report_not_registered(int type)
 {
   int ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("das op not registered", K(ret), K(type));
   return ret;
 }
 
@@ -84,7 +83,6 @@ struct AllocDASOpHelper
     void *buffer = nullptr;
     if (OB_ISNULL(buffer = alloc.alloc(sizeof(OpType)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate Op buffer failed", K(ret), K(sizeof(OpType)));
     } else {
       das_op = new(buffer) OpType(alloc);
     }
@@ -102,7 +100,6 @@ struct AllocDASCtDefHelper
     void *buffer = nullptr;
     if (OB_ISNULL(buffer = alloc.alloc(sizeof(CtDefType)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate Op CtDef buffer failed", K(ret), K(sizeof(CtDefType)));
     } else {
       ctdef = new(buffer) CtDefType(alloc);
     }
@@ -120,7 +117,6 @@ struct AllocDASRtDefHelper
     void *buffer = nullptr;
     if (OB_ISNULL(buffer = alloc.alloc(sizeof(RtDefType)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate Op RtDef buffer failed", K(ret), K(sizeof(RtDefType)));
     } else {
       rtdef = new(buffer) RtDefType();
     }
@@ -179,7 +175,6 @@ int ObDASTaskFactory::create_das_ctdef(ObDASOpType op_type, ObIAllocator &alloc,
   int ret = OB_SUCCESS;
   if (!is_registered(op_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].ctdef_func_(alloc, ctdef))) {
   }
   return ret;
@@ -198,7 +193,6 @@ int ObDASTaskFactory::create_das_rtdef(ObDASOpType op_type, ObIAllocator &alloc,
   int ret = OB_SUCCESS;
   if (!is_registered(op_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].rtdef_func_(alloc, rtdef))) {
   }
   return ret;
@@ -209,7 +203,6 @@ int ObDASTaskFactory::create_das_task_op(ObDASOpType op_type, ObIDASTaskOp *&das
   int ret = OB_SUCCESS;
   if (!is_registered(op_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].op_func_(allocator_, das_op))) {
   } else {
     das_op->set_type(op_type);

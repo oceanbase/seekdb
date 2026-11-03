@@ -75,10 +75,8 @@ int ObDDLBatchRows::init(const ObIArray<ObColDesc> &col_descs,
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDDLBatchRows init twice", KR(ret), KP(this));
   } else if (OB_UNLIKELY(col_descs.empty() || nullptr == col_nullables || max_batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(col_descs), KP(col_nullables), K(max_batch_size));
   } else {
     if (OB_FAIL(init_vectors(col_descs, col_nullables, max_batch_size))) {
     } else {
@@ -97,10 +95,8 @@ int ObDDLBatchRows::init(const ObIArray<ObColumnSchemaItem> &column_schemas,
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDDLBatchRows init twice", KR(ret), KP(this));
   } else if (OB_UNLIKELY(column_schemas.empty() || max_batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(column_schemas), K(max_batch_size));
   } else {
     if (OB_FAIL(init_vectors(column_schemas, max_batch_size))) {
     } else {
@@ -160,13 +156,10 @@ int ObDDLBatchRows::append_row(const ObStorageDatum *datums, const int64_t colum
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(column_count != get_column_count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(column_count));
   } else if (OB_UNLIKELY(size_ >= max_batch_size_)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_));
   } else {
     for (int64_t src_idx = 0, dest_idx = (row_flag_.uncontain_hidden_pk_ ? 1 : 0);
          OB_SUCC(ret) && src_idx < column_count; ++src_idx, ++dest_idx) {
@@ -187,13 +180,10 @@ int ObDDLBatchRows::append_row(const ObIArray<ObDatum *> &datums)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(datums.count() != get_column_count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(datums.count()));
   } else if (OB_UNLIKELY(size_ >= max_batch_size_)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_));
   } else {
     for (int64_t src_idx = 0, dest_idx = (row_flag_.uncontain_hidden_pk_ ? 1 : 0);
          OB_SUCC(ret) && src_idx < datums.count(); ++src_idx, ++dest_idx) {
@@ -201,7 +191,6 @@ int ObDDLBatchRows::append_row(const ObIArray<ObDatum *> &datums)
       ObDDLVector *vector = vectors_.at(dest_idx);
       if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("datum is null", K(ret), K(datum), K(src_idx));
       } else if (OB_FAIL(vector->append_datum(size_, *datum))) {
       }
     }
@@ -218,13 +207,10 @@ int ObDDLBatchRows::append_batch(const ObDDLBatchRows &vectors, const int64_t of
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(vectors.vectors_.count() != vectors_.count() || offset < 0 || size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(vectors), K(offset), K(size));
   } else if (OB_UNLIKELY(size > remain_size())) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_), K(size));
   } else {
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
@@ -244,13 +230,10 @@ int ObDDLBatchRows::append_batch(const IVectorPtrs &vectors, const int64_t offse
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(vectors.count() != vectors_.count() || offset < 0 || size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(vectors), K(offset), K(size));
   } else if (OB_UNLIKELY(size > remain_size())) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_), K(size));
   } else {
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
@@ -271,14 +254,11 @@ int ObDDLBatchRows::append_selective(const ObDDLBatchRows &src,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(src.vectors_.count() != vectors_.count() || nullptr == selector ||
                          size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(src), KP(selector), K(size));
   } else if (OB_UNLIKELY(size > remain_size())) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_), K(size));
   } else {
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
@@ -298,13 +278,10 @@ int ObDDLBatchRows::append_selective(const IVectorPtrs &vectors, share::ObBatchS
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(vectors.count() != vectors_.count() || !selector.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(vectors), K(selector));
   } else if (OB_UNLIKELY(selector.size() > remain_size())) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_), K(selector.size()));
   } else {
     int64_t i = 0;
     while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
@@ -324,14 +301,11 @@ int ObDDLBatchRows::append_selective(const ObIArray<ObDatumVector> &datum_vector
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLBatchRows not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(datum_vectors.count() != vectors_.count() || nullptr == selector ||
                          size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KPC(this), K(datum_vectors), KP(selector), K(size));
   } else if (OB_UNLIKELY(size > remain_size())) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(max_batch_size_), K(size_), K(size));
   } else {
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {

@@ -60,16 +60,13 @@ int ObExprArrayDistinct::calc_result_type1(ObExprResType &type,
   ObCollectionTypeBase *coll_type = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (type1.is_null()) {
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid param type", K(ret), K(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else {
     type.set_collection(type1.get_subschema_id());
   }
@@ -137,7 +134,6 @@ int ObExprArrayDistinct::eval_array_distinct_batch(const ObExpr &expr, ObEvalCtx
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(arr_res->get_raw_binary(res_buf, res_buf_len))) {
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
         } else {

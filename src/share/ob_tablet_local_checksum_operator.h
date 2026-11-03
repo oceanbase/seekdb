@@ -26,8 +26,8 @@
 // Forward declaration
 namespace oceanbase {
 namespace share {
-class ObSQLiteConnection;
-class ObSQLiteConnectionPool;
+class LocalTransaction;
+class LocalStore;
 class ObTabletLocalChecksumTableStorage;
 }
 }
@@ -120,8 +120,8 @@ typedef ObArrayWithMap<share::ObTabletLocalChecksumItem> ObLocalTabletChecksumAr
 class ObTabletLocalChecksumOperator
 {
 public:
-  // Initialize SQLite storage (called once at startup)
-  static int init(ObSQLiteConnectionPool *pool);
+  // Initialize local storage (called once at startup)
+  static int init(LocalStore *store);
 
   // Get a batch of checksum_items
   // Default: checksum_items' compaction_scn = @compaction_scn
@@ -131,13 +131,13 @@ public:
       const SCN &compaction_scn,
       ObLocalTabletChecksumArray &items,
       const bool include_larger_than);
-  // Update checksum items within a SQLite transaction
+  // Update checksum items within a local transaction
   static int batch_update_with_trans(
-      share::ObSQLiteConnection *conn,
+      share::LocalTransaction &tx,
       const common::ObIArray<ObTabletLocalChecksumItem> &item);
-  // Remove checksum items within a SQLite transaction
+  // Remove checksum items within a local transaction
   static int batch_remove_with_trans(
-      share::ObSQLiteConnection *conn,
+      share::LocalTransaction &tx,
       const common::ObIArray<ObTabletRuntimeInfo> &tablet_infos);
   static int get_tablet_checksums(const ObIArray<compaction::ObTabletCheckInfo> &pairs,
       ObLocalTabletChecksumArray &tablet_checksum_items);

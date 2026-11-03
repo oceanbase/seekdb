@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace share
 {
-class ObSQLiteConnectionPool;
+class LocalStore;
 class SCN;
 
 // part compaction related member from __all_tablet_meta_table
@@ -73,29 +73,29 @@ class ObTabletMetaTableCompactionOperator
 {
 public:
   static int get_status(
-      ObSQLiteConnectionPool *meta_db_pool,
+      LocalStore *store,
       const ObTabletCompactionScnInfo &input_info,
       ObTabletCompactionScnInfo &ret_info);
   // update report_scn of all tablets in @tablet_ids
   static int batch_update_report_scn(
-      ObSQLiteConnectionPool *meta_db_pool,
+      LocalStore *store,
       const uint64_t global_broadcast_scn_val,
       const common::ObIArray<ObTabletID> &tablet_ids,
       const ObTabletRuntimeInfo::ScnStatus &except_status);
   // after major_freeze, update all tablets' report_scn to global_broadcast_scn_val
   static int batch_update_report_scn(
-      ObSQLiteConnectionPool *meta_db_pool,
+      LocalStore *store,
       const uint64_t global_broadcast_scn_val,
       const ObTabletRuntimeInfo::ScnStatus &except_status,
       const volatile bool &stop);
   // designed for 'clear merge error'. it updates all tablets' status to SCN_STATUS_IDLE
-  static int batch_update_status(ObSQLiteConnectionPool *meta_db_pool);
-  static int batch_update_unequal_report_scn_tablet(ObSQLiteConnectionPool *meta_db_pool,
+  static int batch_update_status(LocalStore *store);
+  static int batch_update_unequal_report_scn_tablet(LocalStore *store,
       const int64_t major_frozen_scn,
       const common::ObIArray<ObTabletID> &input_tablet_id_array);
-  static int get_min_compaction_scn(ObSQLiteConnectionPool *meta_db_pool,
+  static int get_min_compaction_scn(LocalStore *store,
                                     SCN &min_compaction_scn);
-  static int range_scan_for_compaction(ObSQLiteConnectionPool *meta_db_pool,
+  static int range_scan_for_compaction(LocalStore *store,
       const int64_t compaction_scn,
       const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
@@ -103,22 +103,22 @@ public:
       common::ObTabletID &end_tablet_id,
       ObIArray<ObTabletRuntimeInfo> &tablet_infos);
 private:
-  static int inner_range_scan_for_compaction(ObSQLiteConnectionPool *meta_db_pool,
+  static int inner_range_scan_for_compaction(LocalStore *store,
       const int64_t compaction_scn,
       const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
       const bool only_unreported,
       common::ObTabletID &end_tablet_id,
       ObIArray<ObTabletRuntimeInfo> &tablet_infos);
-  static int inner_get_max_tablet_id_in_range(ObSQLiteConnectionPool *meta_db_pool,
+  static int inner_get_max_tablet_id_in_range(LocalStore *store,
       const common::ObTabletID &start_tablet_id,
       const int64_t batch_size,
       common::ObTabletID &max_tablet_id);
-  static int get_estimated_timeout_us(ObSQLiteConnectionPool *meta_db_pool,
+  static int get_estimated_timeout_us(LocalStore *store,
                                       int64_t &estimated_timeout_us);
-  static int get_tablet_count(ObSQLiteConnectionPool *meta_db_pool,
+  static int get_tablet_count(LocalStore *store,
                               int64_t &tablet_count);
-  static int get_next_batch_tablet_ids(ObSQLiteConnectionPool *meta_db_pool,
+  static int get_next_batch_tablet_ids(LocalStore *store,
       const int64_t batch_update_cnt,
       common::ObIArray<ObTabletID> &tablet_ids);
 private:

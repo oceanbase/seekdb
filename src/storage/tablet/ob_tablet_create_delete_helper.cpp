@@ -19,7 +19,6 @@
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/meta_store/ob_storage_meta_io_util.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -47,11 +46,9 @@ int ObTabletCreateDeleteHelper::replay_mds_get_tablet(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ls is null", K(ret));
   } else if (OB_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, handle))) {
     if (OB_TABLET_NOT_EXIST == ret) {
     } else {
-      LOG_WARN("fail to get tablet", K(ret), K(key));
     }
   }
   return ret;
@@ -82,14 +79,11 @@ int ObTabletCreateDeleteHelper::get_tablet(
       current_time = ObClockGenerator::getClock();
       if (current_time - begin_time > timeout_us) {
         ret = OB_TABLET_NOT_EXIST;
-        LOG_WARN("continuously meet item not set error", K(ret), K(key),
-            K(begin_time), K(current_time), K(timeout_us));
       } else {
         ret = OB_SUCCESS;
         ob_usleep(SLEEP_TIME_US);
       }
     } else {
-      LOG_WARN("failed to get tablet", K(ret), K(key));
     }
   }
   return ret;
@@ -108,11 +102,9 @@ int ObTabletCreateDeleteHelper::check_and_get_tablet(
   if (OB_FAIL(get_tablet(key, handle, timeout_us))) {
     if (OB_TABLET_NOT_EXIST == ret) {
     } else {
-      LOG_WARN("failed to get tablet", K(ret), K(key), K(mode));
     }
   } else if (OB_ISNULL(tablet = handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is null", K(ret), K(handle));
   } else if (tablet->is_ls_inner_tablet()) {
     // no need to check ls inner tablet, do nothing
   } else if (ObMDSGetTabletMode::READ_WITHOUT_CHECK == mode) {
@@ -128,7 +120,6 @@ int ObTabletCreateDeleteHelper::check_and_get_tablet(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected mode", K(ret), K(key), K(mode));
   }
   return ret;
 }
@@ -147,13 +138,11 @@ int ObTabletCreateDeleteHelper::check_status_for_new_mds(
 
   if (OB_UNLIKELY(tablet.is_empty_shell())) {
     ret = OB_TABLET_NOT_EXIST;
-    LOG_WARN("tablet is empty shell", K(ret), K(tablet_id), K(user_data));
   } else if (OB_FAIL(tablet.get_latest(user_data, writer, trans_state, trans_version))) {
     if (OB_EMPTY_RESULT == ret) {
       ret = OB_TABLET_NOT_EXIST;
       LOG_WARN("tablet creation has not been committed, or has been roll backed", K(ret), K(tablet_id));
     } else {
-      LOG_WARN("failed to get snapshot", KR(ret), K(tablet_id));
     }
   } else {
     const ObTabletStatus::Status &status = user_data.tablet_status_.get_status();
@@ -166,7 +155,6 @@ int ObTabletCreateDeleteHelper::check_status_for_new_mds(
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected tablet status", K(ret), K(tablet_id), K(user_data));
     }
 
     if (OB_FAIL(ret)) {
@@ -194,8 +182,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_by_commit_version(
     // do nothing
   } else if (OB_UNLIKELY(create_commit_version == ObTransVersion::INVALID_TRANS_VERSION)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("create tablet trans version is invalid",
-        K(ret), K(tablet_id), K(snapshot_version), K(create_commit_version));
   } else if (snapshot_version < create_commit_version) {
     // read snapshot is smaller than create tablet trans version,
     // no previous committed transaction
@@ -220,7 +206,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_by_commit_version(
   } else if (ObTabletStatus::NORMAL == tablet_status) {
     if (OB_UNLIKELY(tablet.is_empty_shell())) {
       ret = OB_TABLET_NOT_EXIST;
-      LOG_WARN("tablet is empty shell", K(ret), K(tablet_id), K(snapshot_version), K(create_commit_version));
     }
   } else {
     ret = OB_TABLET_NOT_EXIST;
@@ -244,7 +229,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal(
 
   if (OB_UNLIKELY(ObTabletStatus::NORMAL != tablet_status)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(user_data));
   } else if (user_data.create_commit_version_ == ObTransVersion::MAX_TRANS_VERSION) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create commit version is max trans version",
@@ -293,14 +277,10 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_create_tx(
 
   if (trans_state < mds::TwoPhaseCommitState::ON_PREPARE) {
     ret = OB_SNAPSHOT_DISCARDED;
-    LOG_WARN("tablet creation transaction has not entered 2pc procedure",
-        K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
   } else if (OB_FAIL(read_snapshot.convert_for_tx(snapshot_version))) {
   } else if (trans_state >= mds::TwoPhaseCommitState::ON_PREPARE && trans_state < mds::TwoPhaseCommitState::ON_COMMIT) {
     if (read_snapshot < trans_version) {
       ret = OB_SNAPSHOT_DISCARDED;
-      LOG_WARN("read snapshot is smaller than prepare version",
-          K(ret), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
     } else {
       // Primary database.
       ret = OB_SNAPSHOT_DISCARDED;
@@ -333,7 +313,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
 
   if (OB_UNLIKELY(ObTabletStatus::DELETED != tablet_status)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(user_data));
   } else if (snapshot_version < user_data.create_commit_version_) {
     ret = OB_SNAPSHOT_DISCARDED;
     LOG_WARN("read snapshot smaller than create commit version",
@@ -342,8 +321,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
   } else if (trans_state < mds::TwoPhaseCommitState::ON_PREPARE) {
     if (read_snapshot.is_max()) {
       ret = OB_TABLET_NOT_EXIST;
-      LOG_WARN("read snapshot is MAX, maybe this is a write request",
-          K(ret), K(tablet_id), K(read_snapshot), K(user_data));
     }
   } else if (trans_state >= mds::TwoPhaseCommitState::ON_PREPARE && trans_state < mds::TwoPhaseCommitState::ON_COMMIT) {
     if (read_snapshot < trans_version) {
@@ -376,10 +353,8 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (OB_ISNULL(t3m)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage meta memory manager is null", K(ret));
   } else if (OB_FAIL(t3m->create_tmp_tablet(WashTabletPriority::WTP_HIGH, key, allocator, &ls, handle))) {
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -407,7 +382,6 @@ int ObTabletCreateDeleteHelper::create_msd_tablet(
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
   } else if (OB_FAIL(t3m->create_msd_tablet(WashTabletPriority::WTP_HIGH, key, tenant_ls, handle))) {
   } else if (OB_ISNULL(handle.get_obj())) {
@@ -427,9 +401,7 @@ int ObTabletCreateDeleteHelper::acquire_tmp_tablet(
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (CLICK_FAIL(t3m->acquire_tmp_tablet(WashTabletPriority::WTP_HIGH, key, allocator, handle))) {
-    LOG_WARN("fail to acquire temporary tablet", K(ret), K(key));
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("new tablet is null", K(ret), K(handle));
@@ -446,7 +418,6 @@ int ObTabletCreateDeleteHelper::acquire_tablet_from_pool(
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (OB_FAIL(t3m->acquire_tablet_from_pool(type, WashTabletPriority::WTP_HIGH, key, handle))) {
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -468,7 +439,6 @@ int ObTabletCreateDeleteHelper::create_empty_sstable(
 
   if (OB_UNLIKELY(!storage_schema.is_valid() || snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(snapshot_version), K(storage_schema));
   } else if (OB_FAIL(param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version))) {
   } else if (OB_FAIL(create_sstable(param, allocator, table_handle))) {
   }

@@ -106,6 +106,7 @@ public:
       group_row_offset_in_selector_(0),
       cnt_(1)
   {
+    is_expr_row_ = false;
   }
 
   ~ObGroupRowItem() {}

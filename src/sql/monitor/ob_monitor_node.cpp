@@ -53,7 +53,6 @@ uint64_t ObMonitorNode::calc_db_time()
         }
       } else {
         int ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("operator child is nullptr", K(ret), KPC(op_), K(i));
       }
     }
     if (db_time < 0) {
@@ -79,7 +78,6 @@ int ObMonitorNode::set_sql_id(const ObString &sql_id)
     sql_id_[0] = '\0';
   } else if (sql_id.length() > common::OB_MAX_SQL_ID_LENGTH) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql id length unexpected", K(ret), K(sql_id.length()));
   } else {
     MEMCPY(sql_id_, sql_id.ptr(), sql_id.length());
     sql_id_[sql_id.length()] = '\0';

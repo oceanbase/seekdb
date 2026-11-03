@@ -18,6 +18,8 @@
 #define STORAGE_BLOCKSSTABLE_OB_MACRO_BLOCK_H_
 
 #include "lib/compress/ob_compress_util.h"
+#include "lib/compress/ob_compressor.h"
+#include "lib/compress/ob_compressor_pool.h"
 #include "index_block/ob_index_block_util.h"
 #include "ob_block_sstable_struct.h"
 #include "ob_data_buffer.h"

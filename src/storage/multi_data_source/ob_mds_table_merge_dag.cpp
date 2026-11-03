@@ -47,18 +47,14 @@ int ObMdsTableMergeDag::init_by_param(const share::ObIDagInitParam *param)
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_ISNULL(param)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(param));
   } else {
     const ObMdsTableMergeDagParam *mds_param = static_cast<const ObMdsTableMergeDagParam*>(param);
     if (OB_UNLIKELY(!is_mds_mini_merge(mds_param->merge_type_))) {
       ret = OB_ERR_SYS;
-      LOG_WARN("param type is not mds table merge type", K(ret), KPC(mds_param));
     } else if (OB_UNLIKELY(!mds_param->flush_scn_.is_valid())) {
       ret = OB_ERR_SYS;
-      LOG_WARN("flush scn is invalid", K(ret), KPC(mds_param));
     } else if (OB_FAIL(ObTabletMergeDag::inner_init(mds_param))) {
     } else {
       flush_scn_ = mds_param->flush_scn_;
@@ -96,7 +92,6 @@ int ObMdsTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls basic tablet merge dag do not init", K(ret));
   } else {
     if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, ObIDag::get_type(),
         static_cast<int64_t>(tablet_id_.id()),

@@ -88,7 +88,6 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, pkg_id_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, subprogram_id_datum)) ||
       OB_FAIL(expr.args_[2]->eval(ctx, var_idx_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     uint64_t package_id = pkg_id_datum->get_uint64();
     uint64_t subprogram_id = subprogram_id_datum->get_uint64();

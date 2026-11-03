@@ -41,7 +41,6 @@ int ObLocalSessionVarHelper::remove_vars_same_with_session(ObLocalSessionVar &lo
   ObSEArray<const ObSessionSysVar *, 8> old_var_array;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(session));
   } else if (OB_FAIL(local_vars.get_local_vars(old_var_array))) {
   } else {
     bool is_same = false;
@@ -77,7 +76,6 @@ int ObLocalSessionVarHelper::get_different_vars_from_session(const ObLocalSessio
   local_diff_vars.reuse();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(session));
   } else if (OB_FAIL(local_vars.get_local_vars(var_array))) {
   } else {
     bool is_same = false;
@@ -85,7 +83,6 @@ int ObLocalSessionVarHelper::get_different_vars_from_session(const ObLocalSessio
     for (int64_t i = 0; OB_SUCC(ret) && i < var_array.count(); ++i) {
       if (OB_ISNULL(var_array.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(i));
       } else if (SYS_VAR_SQL_MODE == var_array.at(i)->type_) {
         /* just ignore sql mode now */
       } else if (OB_FAIL(check_var_same_with_session(*session, var_array.at(i), is_same, &session_val))) {
@@ -109,7 +106,6 @@ int ObLocalSessionVarHelper::check_var_same_with_session(const ObBasicSessionInf
   ObObj session_val;
   if (OB_ISNULL(local_var)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(local_var));
   } else if (SYS_VAR_SQL_MODE == local_var->type_) {
     is_same = local_var->val_.get_uint64() == session.get_sql_mode();
     if (!is_same && NULL != diff_val) {
@@ -132,10 +128,8 @@ int ObLocalSessionVarHelper::load_session_vars(const ObBasicSessionInfo *session
   int64_t var_num = sizeof(ALL_LOCAL_VARS) / sizeof(ObSysVarClassType);
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null session", K(ret));
   } else if (0 != local_vars.get_var_count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local_session_vars can only be inited once", K(ret));
   } else if (OB_FAIL(local_vars.set_local_var_capacity(var_num))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < var_num; ++i) {
@@ -154,7 +148,6 @@ int ObLocalSessionVarHelper::reserve_max_local_vars_capacity(ObLocalSessionVar &
   int64_t var_num = sizeof(ALL_LOCAL_VARS) / sizeof(ObSysVarClassType);
   if (0 != local_vars.get_var_count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local_session_vars can only be inited once", K(ret));
   } else if (OB_FAIL(local_vars.set_local_var_capacity(var_num))) {
   }
   return ret;
@@ -170,7 +163,6 @@ int ObLocalSessionVarHelper::update_session_vars_with_local(const ObLocalSession
   for (int64_t i = 0; OB_SUCC(ret) && i < var_array.count(); ++i) {
     if (OB_ISNULL(var_array.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(session.update_sys_variable(var_array.at(i)->type_, var_array.at(i)->val_))) {
     }
   }

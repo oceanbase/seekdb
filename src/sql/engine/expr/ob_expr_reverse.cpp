@@ -45,12 +45,10 @@ int ObExprReverse::do_reverse(const ObString &input_str,
   char *buf = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("nullptr allocator.", K(allocator));
   } else if (OB_UNLIKELY(input_length == 0)) {
     res_str.reset();
   } else if (OB_ISNULL(input_start)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid string, buf is null", K(ret));
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator->alloc(input_length)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc memory failed. ", "size", input_length);
@@ -158,7 +156,6 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
                 input_iter.get_inner_ret() : OB_INVALID_DATA;
-          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
         } else {
           output_result.set_result();
         }

@@ -43,7 +43,6 @@ OB_DEF_SERIALIZE(ObTableReplaceSpec)
     ObReplaceCtDef *replace_ctdef = replace_ctdefs_.at(i);
     if (OB_ISNULL(replace_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("replace_ctdef is nullptr", K(ret));
     }
     OB_UNIS_ENCODE(*replace_ctdef);
   }
@@ -67,7 +66,6 @@ OB_DEF_DESERIALIZE(ObTableReplaceSpec)
     ObReplaceCtDef *replace_ctdef = replace_ctdef_allocator.alloc();
     if (OB_ISNULL(replace_ctdef)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc insert_up_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*replace_ctdef);
     replace_ctdefs_.at(i) = replace_ctdef;
@@ -133,7 +131,6 @@ int ObTableReplaceOp::check_need_exec_single_row()
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ins_ctdef or del_ctdef of primary table is nullptr", K(ret));
     }
   }
   return ret;
@@ -148,7 +145,6 @@ int ObTableReplaceOp::inner_open()
   } else if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.replace_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ins ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(replace_row_store_.init(UINT64_MAX,
@@ -157,7 +153,7 @@ int ObTableReplaceOp::inner_open()
                                              false/*enable_dump*/))) {
   } else if (OB_FAIL(inner_open_with_das())) {
   } else {
-    conflict_checker_.set_local_tablet_loc(MY_INPUT.get_tablet_loc());
+    conflict_checker_.set_local_tablet_access(MY_INPUT.get_tablet_access());
   }
   return ret;
 }
@@ -166,7 +162,7 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
 {
   int ret = OB_SUCCESS;
   const ObExprFrameInfo *expr_frame_info = NULL;
-  ObDASTableLoc *table_loc = nullptr;
+  DASRuntimeTableAccess *table_access = nullptr;
   bool use_response_snapshot = false;
   expr_frame_info = nullptr != MY_SPEC.expr_frame_info_
                                ? MY_SPEC.expr_frame_info_
@@ -181,11 +177,10 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
     }
   }
   if (OB_FAIL(init_replace_rtdef())) {
-  } else if (OB_ISNULL(table_loc = replace_rtdefs_.at(0).ins_rtdef_.das_rtdef_.table_loc_)) {
+  } else if (OB_ISNULL(table_access = replace_rtdefs_.at(0).ins_rtdef_.das_rtdef_.table_access_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table location is invalid", K(ret));
   } else if (OB_FAIL(conflict_checker_.init_conflict_checker(expr_frame_info,
-                                                             table_loc,
+                                                             table_access,
                                                              use_response_snapshot))) {
   } else {
     // init update das_ref
@@ -221,7 +216,7 @@ OB_INLINE int ObTableReplaceOp::init_replace_rtdef()
     OZ(ObDMLService::init_ins_rtdef(dml_rtctx_, ins_rtdef, *ins_ctdef, trigger_clear_exprs_, fk_checkers_));
     OZ(ObDMLService::init_del_rtdef(dml_rtctx_, del_rtdef, *del_ctdef));
     if (OB_SUCC(ret)) {
-      ins_rtdef.das_rtdef_.table_loc_->is_writing_ = !(ins_ctdef->is_single_value_);
+      ins_rtdef.das_rtdef_.table_access_->is_writing_ = !(ins_ctdef->is_single_value_);
     }
   }
   return ret;
@@ -232,7 +227,7 @@ int ObTableReplaceOp::inner_rescan()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_rescan())) {
   } else {
-    conflict_checker_.set_local_tablet_loc(MY_INPUT.get_tablet_loc());
+    conflict_checker_.set_local_tablet_access(MY_INPUT.get_tablet_access());
     if (replace_rtctx_.das_ref_.has_task()) {
         if (OB_FAIL(replace_rtctx_.das_ref_.close_all_task())) {
         } else {
@@ -303,7 +298,6 @@ OB_INLINE int ObTableReplaceOp::get_next_row_from_child()
   clear_evaluated_flag();
   if (OB_FAIL(child_->get_next_row())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next row", K(ret));
     }
   } else {
     insert_rows_++;
@@ -312,7 +306,25 @@ OB_INLINE int ObTableReplaceOp::get_next_row_from_child()
   return ret;
 }
 
-OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end)
+int ObTableReplaceOp::eval_replace_input()
+{
+  int ret = OB_SUCCESS;
+  const ObInsCtDef &ins_ctdef = *MY_SPEC.replace_ctdefs_.at(0)->ins_ctdef_;
+  const ObInsRtDef &ins_rtdef = replace_rtdefs_.at(0).ins_rtdef_;
+  // Input expressions can still be lazy after child_->get_next_row(). Evaluate
+  // them before the speculative insert savepoint, but leave BEFORE triggers
+  // inside it so retrying a conflicting insert does not retain their first DML.
+  if (OB_FAIL(ObDMLService::init_heap_table_pk_for_ins(ins_ctdef, eval_ctx_))) {
+  } else if (OB_FAIL(ObDMLService::check_column_type(ins_ctdef.new_row_,
+                                                   ins_rtdef.cur_row_num_ + 1,
+                                                   ins_ctdef.column_infos_,
+                                                   *this))) {
+  }
+  return ret;
+}
+
+OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end,
+                                                    transaction::ObTxSEQ &savepoint_no)
 {
   int ret = OB_SUCCESS;
   is_iter_end = false;
@@ -333,12 +345,17 @@ OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end)
     bool is_skipped = false;
     if (OB_FAIL(get_next_row_from_child())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to load next row from child", K(ret));
       }
+    } else if (MY_SPEC.plan_->contain_pl_udf_or_trigger() && OB_FAIL(eval_replace_input())) {
+    // Trial inserts only buffer DAS_SERIALIZATION tasks until loading finishes.
+    // Advance past every input UDF's writes, including later rows in this batch.
+    // Writing triggers already force single-row execution, so their effects
+    // remain after the savepoint and are undone before the conflict retry.
+    } else if ((row_cnt == 0 || MY_SPEC.plan_->contain_pl_udf_or_trigger()) &&
+               OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no))) {
     } else if (OB_FAIL(insert_row_to_das(is_skipped))) {
     } else if (get_all_saved_exprs().empty()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected empty", K(ret));
     } else if (OB_FAIL(!is_skipped && replace_row_store_.add_row(get_all_saved_exprs(), &eval_ctx_))) {
     } else {
       row_cnt++;
@@ -375,13 +392,13 @@ int ObTableReplaceOp::final_insert_row_to_das()
     const ObInsCtDef &ins_ctdef = *(replace_ctdef.ins_ctdef_);
     ObReplaceRtDef &replace_rtdef = replace_rtdefs_.at(i);
     ObInsRtDef &ins_rtdef = replace_rtdef.ins_rtdef_;
-    ObDASTabletLoc *tablet_loc = nullptr;
+    DASRuntimeTabletAccess *tablet_access = nullptr;
     ObChunkDatumStore::StoredRow *stored_row_ = nullptr;
     ++ins_rtdef.cur_row_num_;
-    if (OB_FAIL(calc_insert_tablet_loc(ins_ctdef, ins_rtdef, tablet_loc))) {
-    } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_loc, replace_rtctx_, stored_row_))) {
+    if (OB_FAIL(resolve_insert_tablet_access(ins_ctdef, ins_rtdef, tablet_access))) {
+    } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_access, replace_rtctx_, stored_row_))) {
     } else {
-      LOG_TRACE("final insert one row", KPC(tablet_loc), "ins row", ROWEXPR2STR(eval_ctx_, ins_ctdef.new_row_));
+      LOG_TRACE("final insert one row", KPC(tablet_access), "ins row", ROWEXPR2STR(eval_ctx_, ins_ctdef.new_row_));
     }
   }
   return ret;
@@ -398,20 +415,19 @@ int ObTableReplaceOp::insert_row_to_das(bool &is_skipped)
     const ObInsCtDef &ins_ctdef = *(replace_ctdef.ins_ctdef_);
     ObReplaceRtDef &replace_rtdef = replace_rtdefs_.at(i);
     ObInsRtDef &ins_rtdef = replace_rtdef.ins_rtdef_;
-    ObDASTabletLoc *tablet_loc = nullptr;
+    DASRuntimeTabletAccess *tablet_access = nullptr;
     ObDMLModifyRowNode modify_row(this, &ins_ctdef, &ins_rtdef, ObDmlEventType::DE_INSERTING);
     ++ins_rtdef.cur_row_num_;
     if (OB_FAIL(ObDMLService::init_heap_table_pk_for_ins(ins_ctdef, eval_ctx_))) {
     } else if (OB_FAIL(ObDMLService::process_insert_row(ins_ctdef, ins_rtdef, *this, is_skipped))) {
     } else if (OB_UNLIKELY(is_skipped)) {
       break;
-    } else if (OB_FAIL(calc_insert_tablet_loc(ins_ctdef, ins_rtdef, tablet_loc))) {
-    } else if (OB_FAIL(ObDMLService::set_heap_table_hidden_pk(ins_ctdef, tablet_loc->tablet_id_, eval_ctx_))) {
-    } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_loc, dml_rtctx_, modify_row.new_row_))) {
+    } else if (OB_FAIL(resolve_insert_tablet_access(ins_ctdef, ins_rtdef, tablet_access))) {
+    } else if (OB_FAIL(ObDMLService::set_heap_table_hidden_pk(ins_ctdef, tablet_access->tablet_id_, eval_ctx_))) {
+    } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_access, dml_rtctx_, modify_row.new_row_))) {
     } else if (need_after_row_process(ins_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-        LOG_WARN("failed to push dml modify row to modified row list", K(ret));
     } else {
-      LOG_TRACE("insert one row", KPC(tablet_loc), "ins row", ROWEXPR2STR(eval_ctx_, ins_ctdef.new_row_));
+      LOG_TRACE("insert one row", KPC(tablet_access), "ins row", ROWEXPR2STR(eval_ctx_, ins_ctdef.new_row_));
     }
   }
   return ret;
@@ -422,7 +438,7 @@ int ObTableReplaceOp::delete_row_to_das(bool need_do_trigger)
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.replace_ctdefs_.count(); ++i) {
     bool is_skipped = false;
-    ObDASTabletLoc *tablet_loc = nullptr;
+    DASRuntimeTabletAccess *tablet_access = nullptr;
     const ObReplaceCtDef &replace_ctdef = *(MY_SPEC.replace_ctdefs_.at(i));
     const ObDelCtDef &del_ctdef = *(replace_ctdef.del_ctdef_);
     ObReplaceRtDef &replace_rtdef = replace_rtdefs_.at(i);
@@ -430,15 +446,14 @@ int ObTableReplaceOp::delete_row_to_das(bool need_do_trigger)
     ObChunkDatumStore::StoredRow *stored_row = nullptr;
     if (need_do_trigger &&
         OB_FAIL(ObDMLService::process_delete_row(del_ctdef, del_rtdef, is_skipped, *this))) {
-      LOG_WARN("process delete row failed", K(ret));
     } else if (OB_UNLIKELY(is_skipped)) {
       //this row has been skipped, so can not write to DAS buffer(include its global index)
       //so need to break this loop
       break;
-    } else if (OB_FAIL(calc_delete_tablet_loc(del_ctdef, del_rtdef, tablet_loc))) {
-    } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_loc, replace_rtctx_, stored_row))) {
+    } else if (OB_FAIL(resolve_delete_tablet_access(del_ctdef, del_rtdef, tablet_access))) {
+    } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_access, replace_rtctx_, stored_row))) {
     } else {
-      LOG_DEBUG("delete one row", KPC(tablet_loc), "del row", ROWEXPR2STR(eval_ctx_, del_ctdef.old_row_));
+      LOG_DEBUG("delete one row", KPC(tablet_access), "del row", ROWEXPR2STR(eval_ctx_, del_ctdef.old_row_));
     }
   }
   return ret;
@@ -460,7 +475,6 @@ int ObTableReplaceOp::fetch_conflict_rowkey(int64_t replace_row_cnt)
     // Do not clear rowkey expression's eval_flag, because the primary key uses column_ref expression, there is no eval_fun
     if (OB_FAIL(get_next_conflict_rowkey(task_iter))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next conflict rowkey from das_result", K(ret));
       }
     } else if (OB_FAIL(conflict_checker_.build_primary_table_lookup_das_task())) {
     }
@@ -476,11 +490,9 @@ int ObTableReplaceOp::fetch_conflict_rowkey(int64_t replace_row_cnt)
         transaction::ObTxReadSnapshot *snapshot = ins_op->get_das_snapshot_opt_info().get_response_snapshot();
         if (OB_ISNULL(snapshot)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret));
         } else if (!snapshot->is_valid()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected invalid snaopshot", K(ret), KPC(snapshot));
-        } else if (OB_FAIL(conflict_checker_.collect_all_snapshot(*snapshot, ins_op->get_tablet_loc()))) {
+        } else if (OB_FAIL(conflict_checker_.collect_all_snapshot(*snapshot, ins_op->get_tablet_access()))) {
         }
       ++task_iter;
     }
@@ -504,7 +516,6 @@ int ObTableReplaceOp::get_next_conflict_rowkey(DASTaskIter &task_iter)
     // clear_datum_eval_flag();
     if (OB_ISNULL(conflict_result)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("duplicted key result is null", K(ret));
     } else if (OB_FAIL(conflict_result->get_next_row(dup_row))) {
       if (OB_ITER_END == ret) {
         ++task_iter;
@@ -512,13 +523,11 @@ int ObTableReplaceOp::get_next_conflict_rowkey(DASTaskIter &task_iter)
           ret = OB_SUCCESS;
         }
       } else {
-        LOG_WARN("get next row from das result failed", K(ret));
       }
     } else if (OB_FAIL(ssr.init(dml_rtctx_.get_das_alloc(), ins_ctdef->table_rowkey_types_, false))) {
     } else if (OB_FAIL(ssr.shadow_copy(*dup_row))) {
     } else if (OB_ISNULL(stored_row = ssr.get_store_row())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("stored row is null", K(ret));
     } else if (OB_FAIL(stored_row->to_expr(conflict_checker_.checker_ctdef_.data_table_rowkey_expr_,
                                            conflict_checker_.eval_ctx_))) {
     } else {
@@ -590,11 +599,9 @@ int ObTableReplaceOp::do_replace_into()
     int64_t end_time = 0;
     // must set conflict_row fetch flag
     add_need_conflict_result_flag();
-    if (OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no))) {
-    } else if (OB_FAIL(load_all_replace_row(is_iter_end))) {
+    if (OB_FAIL(load_all_replace_row(is_iter_end, savepoint_no))) {
     } else if (OB_FAIL(post_all_try_insert_das_task(dml_rtctx_))) {
     } else if (!check_is_duplicated() && OB_FAIL(ObDMLService::handle_after_row_processing(this, &dml_modify_rows_))) {
-      LOG_WARN("try insert is not duplicated, failed to process foreign key handle", K(ret));
     } else if (!check_is_duplicated()) {
     }
     if (OB_FAIL(ret) || !check_is_duplicated()) {
@@ -659,7 +666,6 @@ int ObTableReplaceOp::replace_conflict_row_cache()
     ObChunkDatumStore::StoredRow *insert_new_row = NULL;
     if (OB_ISNULL(stored_row)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("replace_row is null", K(ret));
     } else if (OB_FAIL(stored_row->to_expr(get_all_saved_exprs(), eval_ctx_))) {
     } else if (OB_FAIL(conflict_checker_.convert_exprs_to_stored_row(get_primary_table_new_row(),
                                                                      insert_new_row))) {
@@ -677,7 +683,6 @@ int ObTableReplaceOp::replace_conflict_row_cache()
       bool same_row = false;
       if (OB_ISNULL(delete_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("delete row failed", K(ret));
       } else if (OB_FAIL(delete_row->to_expr(get_primary_table_old_row(), eval_ctx_))) {
       } else if (OB_FAIL(ObDMLService::process_delete_row(del_ctdef, del_rtdef, skip_delete, *this))) {
       } else if (OB_FAIL(conflict_checker_.delete_old_row(delete_row, ObNewRowSource::FROM_INSERT))) {
@@ -689,7 +694,6 @@ int ObTableReplaceOp::replace_conflict_row_cache()
         modify_row.old_row_ = const_cast<ObChunkDatumStore::StoredRow *>(delete_row);
         audit_record.insert_update_or_replace_duplicate_row_count_++;
         if (need_after_row_process(del_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-          LOG_WARN("failed to push dml modify row to modified row list", K(ret));
         }
       }
       if (OB_SUCC(ret) && !same_row) {
@@ -702,14 +706,12 @@ int ObTableReplaceOp::replace_conflict_row_cache()
     } else if (OB_FAIL(ObDMLService::process_insert_row(ins_ctdef, ins_rtdef, *this, is_skipped))) {
     } else if (OB_UNLIKELY(is_skipped)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected skipped", K(ret), KPC(insert_new_row));
     } else if (OB_FAIL(conflict_checker_.insert_new_row(insert_new_row, ObNewRowSource::FROM_INSERT))) {
     }
     if (OB_SUCC(ret)) {
       ObDMLModifyRowNode modify_row(this, &ins_ctdef, &ins_rtdef, ObDmlEventType::DE_INSERTING);
       modify_row.new_row_ = insert_new_row;
       if (need_after_row_process(ins_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-        LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       } else if (OB_FAIL(replace_implict_cursor(insert_rows + delete_rows, 0, insert_rows, delete_rows))) {
       }
     }
@@ -774,9 +776,9 @@ int ObTableReplaceOp::do_insert(ObConflictRowMap *primary_map)
   return ret;
 }
 
-int ObTableReplaceOp::calc_insert_tablet_loc(const ObInsCtDef &ins_ctdef,
+int ObTableReplaceOp::resolve_insert_tablet_access(const ObInsCtDef &ins_ctdef,
                                              ObInsRtDef &ins_rtdef,
-                                             ObDASTabletLoc *&tablet_loc)
+                                             DASRuntimeTabletAccess *&tablet_access)
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
@@ -784,24 +786,24 @@ int ObTableReplaceOp::calc_insert_tablet_loc(const ObInsCtDef &ins_ctdef,
       ObExpr *calc_part_id_expr = ins_ctdef.multi_ctdef_->calc_part_id_expr_;
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id;
-      ObDASTableLoc &table_loc = *ins_rtdef.das_rtdef_.table_loc_;
+      DASRuntimeTableAccess &table_access = *ins_rtdef.das_rtdef_.table_access_;
       if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx_, partition_id, tablet_id))) {
       } else if (!ins_ctdef.multi_ctdef_->hint_part_ids_.empty()
           && !has_exist_in_array(ins_ctdef.multi_ctdef_->hint_part_ids_, partition_id)) {
         ret = OB_PARTITION_NOT_MATCH;
-      } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, tablet_id, tablet_loc))) {
+      } else if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, tablet_id, tablet_access))) {
       }
     }
   } else {
     //direct write insert row to storage
-    tablet_loc = MY_INPUT.get_tablet_loc();
+    tablet_access = MY_INPUT.get_tablet_access();
   }
   return ret;
 }
 
-int ObTableReplaceOp::calc_delete_tablet_loc(const ObDelCtDef &del_ctdef,
+int ObTableReplaceOp::resolve_delete_tablet_access(const ObDelCtDef &del_ctdef,
                                              ObDelRtDef &del_rtdef,
-                                             ObDASTabletLoc *&tablet_loc)
+                                             DASRuntimeTabletAccess *&tablet_access)
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
@@ -809,14 +811,14 @@ int ObTableReplaceOp::calc_delete_tablet_loc(const ObDelCtDef &del_ctdef,
       ObExpr *calc_part_id_expr = del_ctdef.multi_ctdef_->calc_part_id_expr_;
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id;
-      ObDASTableLoc &table_loc = *del_rtdef.das_rtdef_.table_loc_;
+      DASRuntimeTableAccess &table_access = *del_rtdef.das_rtdef_.table_access_;
       if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx_, partition_id, tablet_id))) {
-      } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, tablet_id, tablet_loc))) {
+      } else if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, tablet_id, tablet_access))) {
       }
     }
   } else {
     //direct write delete row to storage
-    tablet_loc = MY_INPUT.get_tablet_loc();
+    tablet_access = MY_INPUT.get_tablet_access();
   }
   return ret;
 }

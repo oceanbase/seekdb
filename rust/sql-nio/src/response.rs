@@ -23,16 +23,16 @@ use crate::{
     NIO_MYSQL_ROW_BINARY, NIO_MYSQL_ROW_TEXT,
 };
 
-pub const MAX_LENENC_SIZE: usize = 9;
+pub(crate) const MAX_LENENC_SIZE: usize = 9;
 
 const ERROR_FIXED_SIZE: usize = 1 + 2 + 1 + 5;
 const AUTH_SWITCH_FIXED_SIZE: usize = 1 + 1;
 const FIELD_BASE_FIXED_SIZE: usize = 17;
-pub const MYSQL_TYPE_COMPLEX: u32 = 160;
+pub(crate) const MYSQL_TYPE_COMPLEX: u32 = 160;
 const MYSQL_TYPE_NOT_DEFINED: u32 = 65_535;
 
-pub use crate::capability::{CLIENT_PROTOCOL_41, CLIENT_SESSION_TRACK, CLIENT_TRANSACTIONS};
-pub const SERVER_SESSION_STATE_CHANGED: u16 = 1 << 14;
+pub(crate) use crate::capability::{CLIENT_PROTOCOL_41, CLIENT_SESSION_TRACK, CLIENT_TRANSACTIONS};
+pub(crate) const SERVER_SESSION_STATE_CHANGED: u16 = 1 << 14;
 
 const SESSION_TRACK_SYSTEM_VARIABLES: u8 = 0x00;
 const SESSION_TRACK_SCHEMA: u8 = 0x01;

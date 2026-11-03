@@ -596,7 +596,7 @@ protected:
 
 private:
   
-  char label_[lib::AOBJECT_LABEL_SIZE + 1];
+  char label_[lib::ObLabel::MAX_LENGTH + 1];
   int64_t ctx_id_;
 
   // variables used to record memory usage

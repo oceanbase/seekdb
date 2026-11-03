@@ -30,7 +30,6 @@ int ObPostExprItem::assign(const common::ObObj &obj)
   ObItemType item_type = static_cast<ObItemType>((obj.get_type()));
   if (OB_UNLIKELY(!IS_DATATYPE_OR_QUESTIONMARK_OP(item_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid obj type", K(ret), K(obj));
   } else {
     new(&v2_.v1_) ObObj(obj);
     item_type_ = item_type;
@@ -43,7 +42,6 @@ int ObPostExprItem::set_column(int64_t index)
   int ret = OB_SUCCESS;
   if (index < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid index", K(ret), K(index));
   } else {
     item_type_ = T_REF_COLUMN;
     v2_.cell_index_ = index;
@@ -56,7 +54,6 @@ int ObPostExprItem::assign(ObExprOperator *op)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("op is NULL", K(ret));
   } else {
     item_type_ = op->get_type();
     v2_.op_ = op;
@@ -69,7 +66,6 @@ int ObPostExprItem::assign(ObItemType item_type)
   int ret = OB_SUCCESS;
   if (T_INVALID == item_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("item type is invalid", K(ret));
   } else {
     item_type_ = item_type;
   }

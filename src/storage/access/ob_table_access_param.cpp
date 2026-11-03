@@ -115,7 +115,6 @@ int ObTableIterParam::refresh_lob_column_out_status()
   has_lob_column_out_ = false;
   if (OB_ISNULL(read_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null read info", K(ret));
   } else {
     const ObColDescIArray &out_cols = read_info_->get_columns_desc();
     for (int64_t i = 0; !has_lob_column_out_ && i < out_cols.count(); i++) {
@@ -235,15 +234,11 @@ int ObTableAccessParam::init(
 
   if(IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableAccessParam init twice", K(ret), K(*this));
   } else if (OB_ISNULL(scan_param.table_param_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(scan_param.table_param_));
   } else if (OB_UNLIKELY(nullptr == rowkey_read_info && nullptr == tablet_handle)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(rowkey_read_info), KP(tablet_handle));
   } else if (OB_NOT_NULL(tablet_handle) && OB_FAIL(check_valid_before_query_init(*scan_param.table_param_, *tablet_handle))) {
-    LOG_WARN("failed to check cs replica compat schema", K(ret), KPC(tablet_handle));
   } else {
     const share::schema::ObTableParam &table_param = *scan_param.table_param_;
     iter_param_.table_id_ = table_param.get_table_id();
@@ -343,7 +338,6 @@ int ObTableAccessParam::init_merge_param(
 
   if(IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableAccessParam init twice", K(ret), KPC(this));
   } else {
     iter_param_.table_id_ = table_id;
     iter_param_.tablet_id_ = tablet_id;
@@ -419,13 +413,11 @@ int set_row_scn(
   const ObITableReadInfo *read_info = iter_param.get_read_info(use_fuse_row_cache);
   if (OB_UNLIKELY(nullptr == read_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null read info", K(ret));
   } else {
     int64_t trans_idx = read_info->get_trans_col_index();
     if (OB_UNLIKELY(trans_idx < 0 || trans_idx >= store_row->count_ ||
                     store_row->storage_datums_[trans_idx].is_nop())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected trans_idx", K(ret), KPC(store_row), KPC(read_info));
     } else {
       int64_t version = -store_row->storage_datums_[trans_idx].get_int();
       if (version == share::SCN::max_scn().get_val_for_tx()) {
@@ -438,7 +430,6 @@ int set_row_scn(
         store_row->storage_datums_[trans_idx].set_int(version);
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("scn should be greater than 0", K(ret), K(version), KPC(store_row), KPC(read_info));
       }
     }
   }

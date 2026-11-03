@@ -43,11 +43,9 @@ int ObTabletCopyUtil::get_clipped_storage_schema_on_demand(
   ObSSTableMetaHandle meta_handle;
   if (OB_UNLIKELY(!latest_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(latest_schema));
   } else if (!sstable.is_major_sstable()) {
     storage_schema = &latest_schema;
   } else if (!clipped_schemas_map.created() && OB_FAIL(clipped_schemas_map.create(8/*bucket_num*/, "ClippedSchema"))) {
-    LOG_WARN("create clipped schema map failed", K(ret));
   } else if (OB_FAIL(sstable.get_meta(meta_handle))) {
   } else {
     int64_t schema_stored_cols_cnt = 0;
@@ -58,13 +56,10 @@ int ObTabletCopyUtil::get_clipped_storage_schema_on_demand(
       void *buf = nullptr;
       target_storage_schema = nullptr;
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("get storage schema failed", K(ret), K(table_key));
       } else if (OB_UNLIKELY(!try_create)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("clipped storage schema not found", K(ret), K(schema_stored_cols_cnt), K(sstable));
       } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObStorageSchema)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc mem failed", K(ret));
       } else if (OB_FALSE_IT(target_storage_schema = new(buf) ObStorageSchema())) {
       } else if (OB_FAIL(target_storage_schema->init(allocator,
           latest_schema/*old_schema*/,
@@ -92,7 +87,6 @@ int ObTabletCopyUtil::get_clipped_storage_schema_on_demand(
 
   if (OB_SUCC(ret) && OB_UNLIKELY(nullptr == storage_schema || !storage_schema->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected storage schema", K(ret), K(sstable), KPC(storage_schema));
   }
   return ret;
 }
@@ -139,7 +133,6 @@ int ObTabletCopyUtil::build_create_empty_sstable_param(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!meta.is_valid() || !table_key.is_valid() || !dst_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(meta), K(table_key), K(dst_tablet_id));
   } else if (OB_FAIL(create_sstable_param.init_for_empty_minor_sstable(
       dst_tablet_id,
       table_key.get_end_scn()/*start_scn*/,

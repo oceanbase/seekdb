@@ -42,32 +42,24 @@ int ObCreateRoleResolver::resolve(const ParseNode &parse_tree)
   if (T_CREATE_ROLE != parse_tree.type_
       || (2 != parse_tree.num_child_ && 3 != parse_tree.num_child_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expect 2 or 3 child, create role type",
-             "actual_num", parse_tree.num_child_,
-             "type", parse_tree.type_,
-             K(ret));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Session info should not be NULL", K(ret));
 	} else if (OB_ISNULL(create_role_stmt = create_stmt<ObCreateRoleStmt>())) {
 		ret = OB_ALLOCATE_MEMORY_FAILED;
 		LOG_ERROR("Failed to create ObCreateRoleStmt", K(ret));
 	} else if (NULL == parse_tree.children_[0]) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("role node is null", K(ret));
   } else { // Resolve role
     stmt_ = create_role_stmt;
     
     ParseNode *role = const_cast<ParseNode*>(parse_tree.children_[0]);
     if (OB_ISNULL(role)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("role should not be NULL", K(ret));
     } else {
 
       if (OB_SUCC(ret) && NULL != parse_tree.children_[1]) {
         if (T_IF_NOT_EXISTS != parse_tree.children_[1]->type_) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(parse_tree.children_[1]->type_), K(ret));
         } else {
           create_role_stmt->set_if_not_exists();
         }
@@ -82,7 +74,6 @@ int ObCreateRoleResolver::resolve(const ParseNode &parse_tree)
         ObString host_name;
         if (OB_ISNULL(cur_role)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid role", K(ret));
         } else {
           OZ (resolve_user_host(cur_role, user_name, host_name));
           user_name = user_name.trim_space_only();
@@ -105,10 +96,8 @@ int ObCreateRoleResolver::resolve(const ParseNode &parse_tree)
       // create role without password, do nothing
     } else if (OB_ISNULL(need_enc_node = parse_tree.children_[1])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("need_enc_node is NULL", K(ret));
     } else if (OB_ISNULL(pw_node = parse_tree.children_[2])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pw_node is NULL", K(ret));
     } else {
       ObString password(pw_node->str_len_, pw_node->str_value_);
       if (1 == need_enc_node->value_) { // identified by 

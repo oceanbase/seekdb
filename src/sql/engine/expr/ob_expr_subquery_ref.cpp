@@ -57,10 +57,8 @@ int ObExprSubQueryRef::ExtraInfo::init_extra_info(ObIAllocator *allocator,
   void *buf = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret), K(allocator));
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ExtraInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     extra_info = new(buf) ExtraInfo(*allocator, type);
     bool result_is_scalar = expr.is_scalar();
@@ -83,7 +81,6 @@ int ObExprSubQueryRef::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
   } else if (OB_ISNULL(copied_extra_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   } else if (OB_FAIL(copied_extra_info->scalar_result_type_.assign(scalar_result_type_))) {
   }
   return ret;
@@ -157,7 +154,6 @@ int ObExprSubQueryRef::assign(const ObExprOperator &other)
   const ObExprSubQueryRef *tmp_other = static_cast<const ObExprSubQueryRef *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (this != tmp_other) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -217,11 +213,9 @@ int ObExprSubQueryRef::expr_eval(
   // Reset all iters
   if (OB_ISNULL(extra_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra info is null", K(ret));
   } else if (OB_FAIL(get_subquery_iter(ctx, extra, iter))) {
   } else if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null iter returned", K(ret));
   } else if (OB_FAIL(iter->rewind())) {
   }
   if (OB_FAIL(ret)) {
@@ -239,7 +233,6 @@ int ObExprSubQueryRef::expr_eval(
         if (OB_FAIL(iter->get_curr_probe_row())) {
         } else if (OB_FAIL(iter->get_refactored(out))) {
           if (OB_HASH_NOT_EXIST != ret) {
-            LOG_WARN("failed to find in hash map", K(ret));
           } else {
             ret = OB_SUCCESS;
           }
@@ -256,7 +249,6 @@ int ObExprSubQueryRef::expr_eval(
           iter_end = true;
           expr_datum.set_null();
         } else {
-          LOG_WARN("get next row from subquery failed", K(ret));
         }
       } else if (OB_FAIL(iter->get_output().at(0)->eval(iter->get_eval_ctx(), datum))) {
       } else if (OB_FAIL(expr.deep_copy_datum(ctx, *datum))) {
@@ -280,11 +272,9 @@ int ObExprSubQueryRef::expr_eval(
         if (!can_insert) {
           //memory is exceed, do not insert new rows
         } else if (OB_FAIL(iter->get_arena_allocator(alloc)) || OB_ISNULL(alloc)) {
-          LOG_WARN("failed to get arena allocator", K(ret));
         } else if (OB_ISNULL(row_key.elems_
                   = static_cast<ObDatum *> (alloc->alloc(sizeof(ObDatum) * row_key.cnt_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc memory for row key", K(ret),  K(row_key.cnt_));
         } else if (OB_FAIL(value.deep_copy(*datum, *alloc))) {
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < row_key.cnt_; ++i) {
@@ -292,18 +282,15 @@ int ObExprSubQueryRef::expr_eval(
             }
           }
           if (OB_SUCC(ret) && OB_FAIL(iter->set_refactored(row_key, value, need_size))) {
-            LOG_WARN("failed to insert into hashmap", K(ret));
           }
         }
       }
       if (OB_SUCC(ret) && !found_in_hash_map && !iter_end) {
         if (OB_UNLIKELY(OB_SUCCESS == (ret = iter->get_next_row()))) {
           ret = OB_SUBQUERY_TOO_MANY_ROW;
-          LOG_WARN("subquery too many rows", K(ret));
         } else if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("get next row from subquery failed", K(ret));
         }
       }
     }
@@ -321,22 +308,16 @@ int ObExprSubQueryRef::get_subquery_iter(ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   if (!extra.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid extra info", K(ret), K(extra));
   } else {
     ObOperatorKit *kit = ctx.exec_ctx_.get_operator_kit(extra.op_id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->op_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), K(extra), KP(kit));
     } else if (PHY_SUBPLAN_FILTER != kit->op_->get_spec().type_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("is not subplan filter operator", K(ret), K(extra),
-               "spec", kit->op_->get_spec());
     } else {
       ObSubPlanFilterOp *op = static_cast<ObSubPlanFilterOp *>(kit->op_);
       if (extra.iter_idx_ >= op->get_subplan_iters().count()) {
         ret = OB_ARRAY_OUT_OF_RANGE;
-        LOG_WARN("out of range", K(ret), K(extra),
-                 "iter_cnt", op->get_subplan_iters().count());
       } else {
         iter = op->get_subplan_iters().at(extra.iter_idx_);
       }
@@ -354,11 +335,9 @@ int ObExprSubQueryRef::reset_onetime_expr(const ObExpr &expr, ObEvalCtx &ctx)
   bool reset_for_onetime_expr = true;
   if (OB_ISNULL(extra_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra info is null", K(ret));
   } else if (OB_FAIL(get_subquery_iter(ctx, extra, iter))) {
   } else if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null iter returned", K(ret));
   } else if (!iter->is_onetime_plan()) {
     // do nothing
   } else if (OB_FAIL(iter->rewind(reset_for_onetime_expr))) {

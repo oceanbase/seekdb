@@ -59,7 +59,6 @@ int ObExprChar::calc_result_typeN(ObExprResType &type, ObExprResType *types, int
   int ret = OB_SUCCESS;
   if (param_num <= 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument number, param should not less than 2", K(param_num), K(ret));
   } else if (OB_FAIL(calc_result_type(type, types[param_num-1]))) {
   } else {
     //set calc type
@@ -79,7 +78,6 @@ int ObExprChar::calc_result_type(ObExprResType &type, ObExprResType &type1) cons
   ObString cs_name;
   if (ObVarcharType != type1.get_type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid type", K(type1), K(ret));
   } else {
     type.set_varchar();
     if (type1.is_literal()) {
@@ -87,14 +85,12 @@ int ObExprChar::calc_result_type(ObExprResType &type, ObExprResType &type1) cons
       ObCharsetType charset_type = ObCharset::charset_type(charset_str);
       if (CHARSET_INVALID == charset_type) {
         ret = OB_ERR_UNKNOWN_CHARSET;
-        LOG_WARN("invalid character set", K(charset_str), K(ret));
         LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset_str.length(), charset_str.ptr());
       } else {
         type.set_collation_type(ObCharset::get_default_collation(charset_type));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid type", K(type1), K(ret));
     }
     type.set_collation_level(CS_LEVEL_COERCIBLE);
   }
@@ -112,15 +108,12 @@ int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   char align_buf[4] = {0};
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_ISNULL(cs = ObCharset::get_charset(expr.datum_meta_.cs_type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect collation type", K(ret), K(expr.datum_meta_.cs_type_));
   } else {
     mb_minlen = cs->mbminlen;
     if (OB_UNLIKELY(mb_minlen > 4)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected mb min len", K(ret), K(mb_minlen));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_-1; ++i) {
@@ -147,7 +140,6 @@ int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
       if (mb_minlen > 0 && append_len % mb_minlen != 0
           && OB_FAIL(str_buf.append(align_buf, mb_minlen - append_len % mb_minlen))) {
-        LOG_WARN("fail to append align character", K(ret));
       } else if (OB_FAIL(str_buf.append(buf, append_len))) {
       }
     }

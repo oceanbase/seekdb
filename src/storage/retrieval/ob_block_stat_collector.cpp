@@ -70,10 +70,8 @@ int ObBM25MaxScoreParamCollector::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_UNLIKELY(stat_cols.count() != stat_projectors.count() || stat_cols.count() != result_row.get_column_count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(stat_cols), K(stat_projectors), K(result_row));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < stat_cols.count(); ++i) {
@@ -81,10 +79,8 @@ int ObBM25MaxScoreParamCollector::init(
     if (col_type == blocksstable::ObSkipIndexColType::SK_IDX_BM25_MAX_SCORE_TOKEN_FREQ) {
       if (OB_UNLIKELY(token_freq_agg_idx_ != -1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected duplicate token freq column", K(ret), K(stat_cols));
       } else if (OB_UNLIKELY(!col_descs.at(i).col_type_.is_uint64())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected token freq column type", K(ret), K(i), K(stat_cols), K(col_descs));
       } else {
         token_freq_agg_idx_ = i;
         token_freq_data_idx_ = stat_projectors.at(i);
@@ -93,10 +89,8 @@ int ObBM25MaxScoreParamCollector::init(
     } else if (col_type == blocksstable::ObSkipIndexColType::SK_IDX_BM25_MAX_SCORE_DOC_LEN) {
       if (OB_UNLIKELY(doc_len_agg_idx_ != -1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected duplicate doc length column", K(ret), K(stat_cols));
       } else if (OB_UNLIKELY(!col_descs.at(i).col_type_.is_uint64())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected doc length column type", K(ret), K(i), K(stat_cols), K(col_descs));
       } else {
         doc_len_agg_idx_ = i;
         doc_len_data_idx_ = stat_projectors.at(i);
@@ -108,7 +102,6 @@ int ObBM25MaxScoreParamCollector::init(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(doc_len_agg_idx_ == -1 || token_freq_agg_idx_ == -1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected agg idxes", K(ret), K(doc_len_agg_idx_), K(token_freq_agg_idx_));
   } else {
     token_freq_res_->reuse();
     token_freq_res_->set_null();
@@ -124,13 +117,11 @@ int ObBM25MaxScoreParamCollector::collect_data_row(const blocksstable::ObDatumRo
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(token_freq_data_idx_ < 0
       || doc_len_data_idx_ < 0
       || token_freq_data_idx_ >= data_row.get_column_count()
       || doc_len_data_idx_ >= data_row.get_column_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected data idxes", K(ret), K(token_freq_data_idx_), K(doc_len_data_idx_), K(data_row.get_column_count()));
   } else {
     const uint64_t token_freq = data_row.storage_datums_[token_freq_data_idx_].get_uint();
     const uint64_t doc_len = data_row.storage_datums_[doc_len_data_idx_].get_uint();
@@ -150,11 +141,9 @@ int ObBM25MaxScoreParamCollector::collect_agg_row(const blocksstable::ObDatumRow
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(token_freq_agg_idx_ >= agg_row.get_column_count()
       || doc_len_agg_idx_ >= agg_row.get_column_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected agg idxes", K(ret), K(token_freq_agg_idx_), K(doc_len_agg_idx_), K(agg_row.get_column_count()));
   } else {
     const uint64_t token_freq = agg_row.storage_datums_[token_freq_agg_idx_].get_uint();
     const uint64_t doc_len = agg_row.storage_datums_[doc_len_agg_idx_].get_uint();
@@ -221,7 +210,6 @@ int ObBlockStatCollector::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_FAIL(result_row_.init(stat_cols.count()))) {
   } else if (OB_FAIL(init_collectors(stat_cols, stat_projectors, col_descs, allocator))) {
   } else {
@@ -237,11 +225,9 @@ int ObBlockStatCollector::collect_data_row(const blocksstable::ObDatumRow &data_
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(collect_row(data_row, min_data_row_projs_, loose_min_collectors_))) {
   } else if (OB_FAIL(collect_row(data_row, max_data_row_projs_, loose_max_collectors_))) {
   } else if (has_bm25_ && OB_FAIL(bm25_collector_.collect_data_row(data_row))) {
-    LOG_WARN("failed to collect bm25 stats", K(ret), K(data_row));
   }
   return ret;
 }
@@ -251,11 +237,9 @@ int ObBlockStatCollector::collect_agg_row(const blocksstable::ObDatumRow &agg_ro
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(collect_row(agg_row, min_agg_row_projs_, loose_min_collectors_))) {
   } else if (OB_FAIL(collect_row(agg_row, max_agg_row_projs_, loose_max_collectors_))) {
   } else if (has_bm25_ && OB_FAIL(bm25_collector_.collect_agg_row(agg_row))) {
-    LOG_WARN("failed to collect bm25 stats", K(ret), K(agg_row));
   }
   return ret;
 }
@@ -265,7 +249,6 @@ int ObBlockStatCollector::get_result_row(const blocksstable::ObDatumRow *&result
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     result_row = &result_row_;
   }
@@ -308,14 +291,12 @@ int ObBlockStatCollector::init_collectors(
       has_bm25_doc_len_param = true;
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported col stat type", K(ret), K(col_type), K(i), K(stat_cols));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(has_bm25_token_freq_param != has_bm25_doc_len_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("bm25 max score param not supported", K(ret), K(stat_cols));
   } else if (!has_bm25_token_freq_param || !has_bm25_doc_len_param) {
     has_bm25_ = false;
   } else if (OB_FAIL(bm25_collector_.init(stat_cols, stat_projectors, col_descs, result_row_, allocator))) {

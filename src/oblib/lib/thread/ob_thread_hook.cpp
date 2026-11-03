@@ -27,6 +27,8 @@
 #endif
 #ifdef __linux__
 #include <sys/epoll.h>
+#endif
+#if defined(__linux__) || defined(__EMSCRIPTEN__)
 #include <time.h>
 #include <pthread.h>
 #endif

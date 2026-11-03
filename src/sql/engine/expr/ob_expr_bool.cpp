@@ -154,7 +154,6 @@ CHECK_IS_TRUE_FUNC_NAME(decint_type)
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected precision", K(ret), K(expr.args_[0]->datum_meta_));
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -227,7 +226,6 @@ int ObExprBool::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_) || OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg cnt is invalid or args_ is NULL", K(ret), K(rt_expr));
   } else {
     const ObDatumMeta child_res_meta = rt_expr.args_[0]->datum_meta_;
     switch (child_res_meta.type_) {
@@ -265,7 +263,6 @@ int ObExprBool::cg_expr(ObExprCGCtx &expr_cg_ctx,
       }
       case ObMaxType: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("bool expr got unexpected type", K(ret), K(child_res_meta));
           break;
       }
       default: {

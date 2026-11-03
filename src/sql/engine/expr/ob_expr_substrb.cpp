@@ -43,7 +43,6 @@ int ObExprSubstrb::calc_result_typeN(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_FUNCTION_UNKNOWN;
-  LOG_WARN("substrb is not supported", K(ret));
   return ret;
 }
 
@@ -60,7 +59,6 @@ int ObExprSubstrb::calc(ObString &res_str, const ObString &text,
     res_str.reset();
   } else if (OB_ISNULL(text.ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("text.ptr() is null", K(ret));
   } else {
     if (0 == start) {
       start = 1;// 
@@ -72,7 +70,6 @@ int ObExprSubstrb::calc(ObString &res_str, const ObString &text,
       char* buf = static_cast<char *>(alloc.alloc(text_len));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(text_len), K(ret));
       } else {
         MEMCPY(buf, text.ptr(), text_len);
         res_len = min(length, text_len - start);
@@ -137,10 +134,8 @@ int ObExprSubstrb::ignore_invalid_byte(char* ptr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ptr is null", K(ret), K(len));
   } else if (0 > len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("len should be greater than zero", K(len), K(ret));
   } else if (len == 0) {
     // do nothing
   } else {
@@ -188,10 +183,8 @@ int ObExprSubstrb::reset_invalid_byte(char* ptr,
   int64_t well_formatted_len = len;
   if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ptr is null", K(ret), K(len));
   } else if (0 > len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("len should be greater than zero", K(len), K(ret));
   } else if (0 == len) {
     // do nothing
   } else if (OB_FAIL(ignore_invalid_byte(
@@ -218,7 +211,6 @@ int ObExprSubstrb::get_well_formatted_boundary(ObCollationType cs_type,
   int ret = OB_SUCCESS;
   if (pos < 0 || pos > len) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid position", K(ret), K(pos), K(len));
   } else if (NULL == ptr || len == 0) {
     boundary_pos = 0;
     boundary_len = 0;
@@ -253,7 +245,6 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *len = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
     ret = OB_INVALID_ARGUMENT_NUM;
-    LOG_WARN("arg_cnt must be 2 or 3", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, start, len))) {
   } else if (src->is_null() || start->is_null() || (3 == expr.arg_cnt_ && len->is_null())) {
     res.set_null();
@@ -267,11 +258,9 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     if (expr.is_called_in_sql_ 
          && (OB_FAIL(ObExprUtil::trunc_num2int64(*start, start_int)) ||
         (3 == expr.arg_cnt_ && OB_FAIL(ObExprUtil::trunc_num2int64(*len, len_int))))) {
-      LOG_WARN("trunc_num2int64 failed", K(ret));
     } else if (!expr.is_called_in_sql_  
                 && (OB_FAIL(ObExprUtil::round_num2int64(*start, start_int))
                 || (3 == expr.arg_cnt_ && OB_FAIL(ObExprUtil::round_num2int64(*len, len_int))))) {
-      LOG_WARN("round_num2int64 failed", K(ret));
     } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
       if (OB_FAIL(calc(res_str, src_str, start_int, len_int, cs_type, res_alloc))) {
       } else if (res_str.empty() && !expr.args_[0]->datum_meta_.is_clob()) {
@@ -342,7 +331,6 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
                 input_iter.get_inner_ret() : OB_INVALID_DATA;
-          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
         } else {
           output_result.set_result();
         }

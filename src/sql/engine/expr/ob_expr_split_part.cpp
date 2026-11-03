@@ -44,11 +44,9 @@ int ObExprSplitPart::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (param_num != 3 && param_num != 4) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("the param number of split_part should be 2 or 4", K(ret), K(param_num));
   } else if (ObJsonType == types[0].get_type()) {
     ObString func_name("SPLIT_PART");
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
-    LOG_WARN("The first argument type is incorrect", K(ret), K(types[0].get_type()));
     LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
   } else {
     if (ObTextType == types[0].get_type()
@@ -98,11 +96,9 @@ int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *end_part_datum = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_ && 4 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (4 == expr.arg_cnt_ &&
              OB_FAIL(expr.eval_param_value(ctx, str_datum, delimiter_datum,
                                            start_part_datum, end_part_datum))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (3 == expr.arg_cnt_) {
     if (OB_FAIL(expr.eval_param_value(ctx, str_datum, delimiter_datum, start_part_datum))) {
     } else {

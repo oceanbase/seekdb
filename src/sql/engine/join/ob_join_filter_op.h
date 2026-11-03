@@ -19,7 +19,7 @@
 
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/container/ob_se_array.h"
-#include "sql/optimizer/ob_table_location.h"
+#include "sql/optimizer/table_access_plan.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
 #include "sql/engine/px/ob_px_sqc_proxy.h"

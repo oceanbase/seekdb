@@ -57,7 +57,8 @@ public:
   virtual int start_tx(transaction::ObTxDesc &tx,
                        const transaction::ObTxParam &tx_param) = 0;
   virtual int abort_tx(transaction::ObTxDesc &tx, int cause) = 0;
-  virtual int rollback_tx(transaction::ObTxDesc &tx) = 0;
+  virtual int rollback_tx(transaction::ObTxDesc &tx,
+                          int64_t expire_ts = INT64_MAX) = 0;
   virtual int commit_tx(transaction::ObTxDesc &tx,
                         int64_t expire_ts) = 0;
   virtual int submit_commit_tx(transaction::ObTxDesc &tx,

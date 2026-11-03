@@ -37,7 +37,6 @@ int ObLoadFileIterator::add_files(ObString *start, const int64_t count)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(start) || OB_UNLIKELY(count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(start), K(count));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(files_.push_back(start[i]))) {
@@ -63,7 +62,6 @@ int ObLoadFileIterator::copy(const ObLoadFileIterator &other)
   int ret = OB_SUCCESS;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(ret), K(other));
   } else if (OB_FAIL(files_.assign(other.files_))) {
   }
   return ret;

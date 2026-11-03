@@ -33,10 +33,8 @@ int ObOptStatTaskInfo::init(common::ObIAllocator &allocator,
   const int32_t max_trace_id_len = 64;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(session));
   } else if (OB_ISNULL(trace_id_buf = static_cast<char*>(allocator.alloc(max_trace_id_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret), K(trace_id_buf));
   } else {
     session_id_ = session->get_sid();
     int64_t len = session->get_current_trace_id().to_string(trace_id_buf, max_trace_id_len);
@@ -55,7 +53,6 @@ int ObOptStatTaskInfo::deep_copy(ObOptStatTaskInfo &other, char *buf, int64_t bu
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(pos + other.size() > buf_len)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret));
   } else {
     session_id_ = other.session_id_;
     MEMCPY(buf + pos, other.trace_id_.ptr(), other.trace_id_.length());
@@ -150,7 +147,6 @@ int ObOptStatGatherStat::deep_copy(common::ObIAllocator &allocator, ObOptStatGat
   int64_t buf_len = size();
   if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret), K(buf_len));
   } else {
     new_stat = new (buf) ObOptStatGatherStat();
     int64_t pos = sizeof(*this);
@@ -193,7 +189,6 @@ int ObOptStatGatherStat::deep_copy(common::ObIAllocator &allocator, ObOptStatGat
       pos += gather_audit_.length();
       if (OB_UNLIKELY(pos != buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(pos), K(buf_len));
       }
     }
   }
@@ -229,7 +224,6 @@ int ObOptStatRunningMonitor::add_table_info(const common::ObTableStatParam &tabl
                                               table_param.hist_sample_info_.is_sample_ ? table_param.hist_sample_info_.sample_value_ : 100.0))) {
     } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(properties_sql_str.length())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("memory is not enough", K(ret), K(properties_sql_str));
     } else {
       MEMCPY(buf, properties_sql_str.ptr(), properties_sql_str.length());
       tmp_properties_str.assign_ptr(buf, static_cast<int32_t>(properties_sql_str.length()));
@@ -251,7 +245,6 @@ int ObOptStatRunningMonitor::add_monitor_info(ObOptStatRunningPhase current_phas
     char *buf = NULL;
     if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(tmp_str.length())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("memory is not enough", K(ret), K(buf));
     } else {
       ObString tmp_tab_gather_progress;
       MEMCPY(buf , tmp_str.ptr(), tmp_str.length());
@@ -313,7 +306,6 @@ int ObOptStatGatherStatList::push(ObOptStatGatherStat &stat_value)
   ObSpinLockGuard guard(lock_);
   if(!stat_list_.add_last(&stat_value)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to add stat", K(ret));
   }
   return ret;
 }
@@ -324,7 +316,6 @@ int ObOptStatGatherStatList::remove(ObOptStatGatherStat &stat_value)
   ObSpinLockGuard guard(lock_);
   if(NULL == stat_list_.remove(&stat_value)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to move stat", K(ret));
   }
   return ret;
 }
@@ -371,10 +362,8 @@ int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,
   DLIST_FOREACH(cur, stat_list_) {
     ObOptStatGatherStat *tmp_stat = NULL;
     if (cur->deep_copy(allocator, tmp_stat)) {
-      LOG_WARN("failed to deep copy", K(ret));
     } else if (OB_ISNULL(tmp_stat)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(tmp_stat));
     } else if (OB_FAIL(stat_array.push_back(*tmp_stat))) {
     }
   }
@@ -397,7 +386,6 @@ int ObOptStatGatherStatList::cancel_gather_stats(const ObString &task_id)
   }
   if (OB_SUCC(ret) && !is_cancel) {
     ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("The optimizer stats gather task has ended or the task doesn't exist", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "The optimizer stats gather task has ended or the task doesn't exist");
   }
   return ret;

@@ -66,7 +66,6 @@ int ObWhereSubQueryPullup::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
               K(trans_happened),
               K(get_trans_happened()));
     if (trans_happened && OB_FAIL(add_transform_hint(*stmt, &unnest_stmts))) {
-      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   return ret;
@@ -85,7 +84,6 @@ int ObWhereSubQueryPullup::transform_one_stmt_with_outline(ObIArray<ObParentDMLS
     is_happened = false;
     if (OB_FAIL(transform_anyall_query(stmt, unnest_stmts, is_happened))) {
     } else if (!is_happened && OB_FAIL(transform_single_set_query(stmt, unnest_stmts, is_happened))) {
-      LOG_WARN("failed to transform single set query", K(ret));
     } else if (!is_happened) {
     } else {
       ++ctx_->trans_list_loc_;
@@ -93,7 +91,6 @@ int ObWhereSubQueryPullup::transform_one_stmt_with_outline(ObIArray<ObParentDMLS
     }
   } while (OB_SUCC(ret) && is_happened);
   if (OB_SUCC(ret) && trans_happened && OB_FAIL(add_transform_hint(*stmt, &unnest_stmts))) {
-    LOG_WARN("failed to add transform hint", K(ret));
   }
   return ret;
 }
@@ -106,7 +103,6 @@ int ObWhereSubQueryPullup::transform_anyall_query(ObDMLStmt *stmt,
   ObSEArray<ObRawExpr*, 16> conditions;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret), K(stmt));
   } else if (!stmt->has_subquery()) {
     //do nothing
   } else if (OB_FAIL(conditions.assign(stmt->get_condition_exprs()))) {
@@ -132,13 +128,11 @@ int ObWhereSubQueryPullup::transform_one_expr(ObDMLStmt *stmt,
   TransformParam trans_param;
   if (OB_ISNULL(stmt) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(ret));
   } else if (OB_FAIL(gather_transform_params(stmt, expr, trans_param))) {
   } else if (!trans_param.can_be_transform_) {
     // do nothing
   } else if (OB_FAIL(do_transform_pullup_subquery(stmt, expr, trans_param, trans_happened))) {
   } else if (trans_happened && OB_FAIL(unnest_stmts.push_back(trans_param.subquery_))) {
-    LOG_WARN("failed to push back", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -151,12 +145,10 @@ int ObWhereSubQueryPullup::gather_transform_params(ObDMLStmt *stmt,
   trans_param.can_be_transform_ = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(stmt), K(expr), K(ret));
   } else if (T_OP_EXISTS == expr->get_expr_type() || T_OP_NOT_EXISTS == expr->get_expr_type()) {
     if (OB_ISNULL(expr->get_param_expr(0)) ||
         OB_UNLIKELY(!expr->get_param_expr(0)->is_query_ref_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid [not] exist predicate", K(*expr), K(ret));
     } else {
       trans_param.can_be_transform_ = true;
       trans_param.subquery_expr_ = static_cast<ObQueryRefRawExpr *>(expr->get_param_expr(0));
@@ -168,7 +160,6 @@ int ObWhereSubQueryPullup::gather_transform_params(ObDMLStmt *stmt,
     if (OB_ISNULL(expr->get_param_expr(0)) || OB_ISNULL(expr->get_param_expr(1)) ||
         OB_UNLIKELY(!expr->get_param_expr(1)->is_query_ref_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid anyall predicate", K(*expr), K(ret));
     } else if (OB_UNLIKELY(expr->get_param_expr(0)->has_flag(CNT_SUB_QUERY))) {
       // subquery in subquery, subquery = all subquery do not transform
     } else {
@@ -204,7 +195,6 @@ int ObWhereSubQueryPullup::can_be_unnested(const ObItemType op_type,
   need_add_limit_constraint = false;
   if (OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params have null", K(ret), K(subquery));
   } else if (subquery->has_distinct()
              || subquery->has_group_by()
              || subquery->has_window_function()
@@ -230,7 +220,6 @@ int ObWhereSubQueryPullup::check_limit(const ObItemType op_type,
   if (OB_ISNULL(subquery) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_) ||
       OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(subquery), K(ctx_), K(ctx_->exec_ctx_), K(plan_ctx));
   } else if (OB_FAIL(ObTransformUtils::check_const_select(ctx_, subquery, is_const_select))) {
   } else if (op_type != T_OP_EXISTS && op_type != T_OP_NOT_EXISTS && !is_const_select) {
     has_limit = subquery->has_limit();
@@ -271,7 +260,6 @@ int ObWhereSubQueryPullup::check_transform_validity(ObDMLStmt *stmt,
   bool can_unnest = false;
   if (OB_ISNULL(expr) || OB_ISNULL(stmt) || OB_ISNULL(trans_param.subquery_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(expr), K(stmt), K(trans_param.subquery_), K(ret));
   } else if (OB_FAIL(check_basic_validity(stmt, expr, trans_param))) {
   } else if (!trans_param.can_be_transform_) {
     /*do nothing*/
@@ -322,7 +310,6 @@ int ObWhereSubQueryPullup::check_basic_validity(ObDMLStmt *stmt,
   ObSelectStmt *subquery = trans_param.subquery_;
   if (OB_ISNULL(expr) || OB_ISNULL(stmt) || OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(ret), K(expr), K(stmt), K(subquery));
   } else if (!is_valid) {
     // do nothing
   } else if (OB_FAIL(check_hint_allowed_unnest(*stmt, *subquery, is_valid))) {
@@ -369,7 +356,6 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObQueryRefRawExpr *query_ref,
   bool check_status = false;
   if (OB_ISNULL(query_ref) || OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret), K(query_ref), K(subquery));
   } else if (0 == subquery->get_from_item_size()) {
     is_valid = false;
     OPT_TRACE("subquery do not have table item");
@@ -414,7 +400,6 @@ int ObWhereSubQueryPullup::is_where_having_subquery_correlated(const ObIArray<Ob
   for (int64_t i = 0; OB_SUCC(ret) && !is_correlated && i < conds.count(); ++i) {
     if (OB_ISNULL(conds.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL pointer error", K(conds.at(i)), K(ret));
     } else if (!conds.at(i)->has_flag(CNT_SUB_QUERY)) {
       // do nothing
     } else if (OB_FAIL(ObTransformUtils::is_correlated_expr(exec_params, conds.at(i), is_correlated))) {
@@ -435,13 +420,11 @@ int ObWhereSubQueryPullup::do_transform_pullup_subquery(ObDMLStmt *stmt,
       OB_ISNULL(query_ref) || OB_ISNULL(subquery) ||
       OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(stmt), K(expr), K(subquery), K(ctx_), K(query_ref), K(ret));
     //Just in case different parameters hit same plan, firstly we need add const param constraint.
     //In pullup_correlated_subquery_as_view limit expr will be set as null, so add constraint first.
   } else if (trans_param.need_add_limit_constraint_ &&
              OB_FAIL(ObTransformUtils::add_const_param_constraints(subquery->get_limit_expr(),
                                                                    ctx_))) {
-    LOG_WARN("failed to add const param constraints", K(ret));
   } else if (trans_param.need_create_spj_) {
     bool ignore_select_item = T_OP_EXISTS == expr->get_expr_type() ||
                               T_OP_NOT_EXISTS == expr->get_expr_type();
@@ -457,11 +440,9 @@ int ObWhereSubQueryPullup::do_transform_pullup_subquery(ObDMLStmt *stmt,
   } else if (trans_param.is_correlated_ &&
              OB_FAIL(pullup_correlated_subquery_as_view(stmt, subquery, expr,
                                                         query_ref))) {
-    LOG_WARN("failed to pullup subquery as view", K(ret));
   } else if (!trans_param.is_correlated_ &&
              OB_FAIL(pullup_non_correlated_subquery_as_view(stmt, subquery, expr,
                                                             query_ref))) {
-    LOG_WARN("failed to pullup subquery as view", K(ret));
   } else {
     trans_happened = true;
   }
@@ -479,7 +460,6 @@ int ObWhereSubQueryPullup::pullup_correlated_subquery_as_view(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(subquery) || OB_ISNULL(expr) || OB_ISNULL(ctx_)
       || OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(stmt), K(subquery), K(expr));
   } else if (OB_FAIL(ObOptimizerUtil::remove_item(stmt->get_condition_exprs(), expr))) {
   } else {
     // select * from t1 where exists (select 1 from t2 where t1.c1 = c1 and c2 = 2 limit 1);
@@ -524,7 +504,6 @@ int ObWhereSubQueryPullup::pullup_correlated_subquery_as_view(ObDMLStmt *stmt,
       join_type = LEFT_ANTI_JOIN;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected expr type", K(ret), K(expr->get_expr_type()));
     }
     
     if (OB_FAIL(ret)) {
@@ -538,7 +517,6 @@ int ObWhereSubQueryPullup::pullup_correlated_subquery_as_view(ObDMLStmt *stmt,
       if (OB_FAIL(ObTransformUtils::add_new_table_item(ctx_, stmt, subquery, table_item))) {
       } else if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table item should not be null", K(ret));
       } else if (column_exprs.empty()) {
         if (OB_FAIL(ObTransformUtils::create_dummy_select_item(*subquery, ctx_))) {
         } else if (OB_FAIL(final_semi_conds.assign(candi_semi_conds))) {
@@ -561,7 +539,6 @@ int ObWhereSubQueryPullup::pullup_correlated_subquery_as_view(ObDMLStmt *stmt,
       // do nothing
     } else if (OB_UNLIKELY(right_tables.count() != semi_conds.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unequal tables and semi conds count", K(ret), K(right_tables.count()), K(semi_conds.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < right_tables.count(); ++i) {
         SemiInfo *info = NULL;
@@ -570,10 +547,8 @@ int ObWhereSubQueryPullup::pullup_correlated_subquery_as_view(ObDMLStmt *stmt,
         ObSelectStmt *split_subquery = NULL;
         if (OB_ISNULL(split_right_table)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("split right table is NULL", K(ret));
         } else if (OB_ISNULL(split_subquery = split_right_table->ref_query_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("split ref query is NULL", K(ret));
         } else if (OB_FAIL(ObTransformUtils::decorrelate(split_semi_conditions, query_ref->get_exec_params()))) {
         } else if (OB_FAIL(generate_semi_info(stmt, split_right_table, split_semi_conditions, join_type, info))) {
         } else if (OB_FAIL(split_subquery->adjust_subquery_list())) {
@@ -583,7 +558,6 @@ int ObWhereSubQueryPullup::pullup_correlated_subquery_as_view(ObDMLStmt *stmt,
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
-      LOG_WARN("failed to formalize stmt", K(ret));
   }
   return ret;
 }
@@ -602,10 +576,8 @@ int ObWhereSubQueryPullup::generate_semi_info(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(right_table) ||
       OB_ISNULL(ctx_) || OB_ISNULL(alloc = ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(stmt), K(right_table), K(alloc), K(ret));
   } else if (OB_UNLIKELY(!right_table->is_generated_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected right table type in semi info", K(ret), K(right_table->type_));
   } else if (OB_ISNULL(info = static_cast<SemiInfo *>(alloc->alloc(sizeof(SemiInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to alloc semi info", K(ret));
@@ -631,7 +603,6 @@ int ObWhereSubQueryPullup::fill_semi_left_table_ids(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(ret), K(stmt), K(info));
   } else {
     info->left_table_ids_.reuse();
     ObSqlBitSet<> left_rel_ids;
@@ -641,7 +612,6 @@ int ObWhereSubQueryPullup::fill_semi_left_table_ids(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < info->semi_conditions_.count(); ++i) {
       if (OB_ISNULL(cond_expr = info->semi_conditions_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else if (OB_FAIL(cond_expr->pull_relation_id())) {
       } else if (OB_FAIL(left_rel_ids.add_members(cond_expr->get_relation_ids()))) {
       }
@@ -653,7 +623,6 @@ int ObWhereSubQueryPullup::fill_semi_left_table_ids(ObDMLStmt *stmt,
     } else if (OB_UNLIKELY(0 == stmt->get_from_item_size()) ||
                OB_ISNULL(table = stmt->get_table_item(stmt->get_from_item(0)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt from item is empty", K(ret), K(table));
     } else if (table->is_joined_table()) {
       ret = append(info->left_table_ids_, static_cast<JoinedTable*>(table)->single_table_ids_);
     } else if (OB_FAIL(info->left_table_ids_.push_back(table->table_id_))) {
@@ -668,7 +637,6 @@ int ObWhereSubQueryPullup::get_semi_oper_type(ObRawExpr *op, ObItemType &oper_ty
   oper_type = T_INVALID;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(op), K(ret));
   } else if (op->has_flag(IS_WITH_ALL)) {
     switch (op->get_expr_type()) {
     case T_OP_SQ_EQ:
@@ -740,26 +708,21 @@ int ObWhereSubQueryPullup::generate_anti_condition(ObDMLStmt *stmt,
       OB_ISNULL(left_arg) || OB_ISNULL(right_arg) || OB_ISNULL(subq_select_expr) ||
       OB_ISNULL(ctx_) || OB_ISNULL(expr_factory = ctx_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(stmt), K(subquery), K(cond_expr), K(left_arg),
-             K(right_arg), K(ctx_), K(expr_factory));
   } else if (OB_FAIL(ObTransformUtils::is_expr_not_null(ctx_, stmt, left_arg, 
                                                         NULLABLE_SCOPE::NS_WHERE, 
                                                         left_is_not_null, &left_constraints))) {
   } else if (left_is_not_null && 
              OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, left_constraints))) {
-    LOG_WARN("failed to add left constraints", K(ret));
   } else if (OB_FAIL(ObTransformUtils::is_expr_not_null(ctx_,  subquery, subq_select_expr,
                                                         NULLABLE_SCOPE::NS_TOP,
                                                         right_is_not_null, &right_constraints))) {
   } else if (right_is_not_null && 
              OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, right_constraints))) {
-    LOG_WARN("failed to add param not null constraint", K(ret));
   } else if (left_is_not_null && right_is_not_null) {
     anti_expr = cond_expr;
   } else if (OB_FAIL(expr_factory->create_raw_expr(T_OP_OR, new_cond_expr))) {
   } else if (OB_ISNULL(anti_expr = new_cond_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new_expr is null", K(new_cond_expr), K(ret));
   } else if (OB_FAIL(new_cond_expr->init_param_exprs(3))) {
   } else if (OB_FAIL(new_cond_expr->add_param_expr(cond_expr))) {
   }
@@ -782,12 +745,10 @@ int ObWhereSubQueryPullup::make_null_test(ObDMLStmt *stmt, ObRawExpr *in_expr, O
   ObRawExprFactory *expr_factory = NULL;
   if (OB_ISNULL(stmt) || OB_ISNULL(in_expr) || OB_ISNULL(ctx_) || OB_ISNULL(expr_factory = ctx_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(stmt), K(in_expr), KP_(ctx), KP(expr_factory));
   } else if (ObRawExprUtils::build_is_not_null_expr(*expr_factory,
                                                     in_expr,
                                                     false/*is_not_null*/,
                                                     out_expr)) {
-    LOG_WARN("failed to create is null expr", K(ret));
   } else if (OB_FAIL(out_expr->add_relation_ids(in_expr->get_relation_ids()))) {
   }
   return ret;
@@ -808,7 +769,6 @@ int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(expr) || OB_ISNULL(subquery)
       || OB_ISNULL(ctx_) || OB_ISNULL(expr_factory = ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(stmt), K(expr), K(ctx_), K(expr_factory));
   } else if (expr->has_flag(IS_WITH_ALL) || expr->has_flag(IS_WITH_ANY)) {
     ObItemType oper_type = T_INVALID;
     int64_t N = subquery->get_select_item_size();
@@ -816,18 +776,14 @@ int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
     ObRawExpr *left_hand = expr->get_param_expr(0);
     if (OB_ISNULL(left_hand)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("left param is null", K(ret));
     } else if (N > 1 &&
                OB_UNLIKELY(left_hand->get_expr_type() != T_OP_ROW ||
                            left_hand->get_param_count() != N ||
                            subq_exprs.count() != N)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid vector comparison",
-               K(ret), K(N), K(subq_exprs.count()), K(*left_hand));
     } else if (OB_FAIL(get_semi_oper_type(expr, oper_type))) {
     } else if (T_INVALID == oper_type) {
       ret = OB_ERR_ILLEGAL_TYPE;
-      LOG_WARN("Invalid oper type in subquery", K(ret), K(expr->get_expr_type()));
     } else if (N == 1 || oper_type == T_OP_EQ) {
       // a = b, a > b, a !=b, (a,b) = (c,d) ...
       for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
@@ -837,14 +793,12 @@ int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
         if (OB_SUCC(ret) && OB_FAIL(ObRawExprUtils::create_double_op_expr(
                             *expr_factory, ctx_->session_info_, oper_type,
                             cmp_expr, left_arg, right_arg))) {
-          LOG_WARN("failed to create comparison expr", K(ret));
         } else if (!expr->has_flag(IS_WITH_ALL)) {
           // do nothing
         } else if (OB_FAIL(generate_anti_condition(
                                    stmt, subquery, cmp_expr, select_expr, left_arg, right_arg, cmp_expr))) {
         } else if (OB_ISNULL(cmp_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("cmp expr is null", K(ret));
         } else if (OB_FAIL(cmp_expr->formalize(ctx_->session_info_))) {
         }
         if (OB_SUCC(ret)) {
@@ -869,7 +823,6 @@ int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
       if (OB_SUCC(ret) && OB_FAIL(ObRawExprUtils::create_double_op_expr(
                            *expr_factory, ctx_->session_info_, oper_type,
                            cmp_expr, left_hand, right_vector))) {
-        LOG_WARN("failed to create comparison expr", K(ret));
       } else if (!expr->has_flag(IS_WITH_ALL)) {
         // do nothing
       } else if (OB_FAIL(ObRawExprUtils::build_lnnvl_expr(
@@ -952,11 +905,8 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
   bool can_split;
   if (OB_ISNULL(stmt) || OB_ISNULL(subquery) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt or subquery, query ctx should not be null",
-             K(ret), K(stmt), K(subquery), K(expr));
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(expr_factory = ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx or expr_factory is null", K(ret), K(ctx_), K(expr_factory));
   } else if (expr->has_flag(IS_WITH_ANY)) {
     join_type = LEFT_SEMI_JOIN;
     // add as LEFT_SEMI/ANTI_JOIN,
@@ -965,7 +915,6 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
     join_type = LEFT_ANTI_JOIN;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected expr type", K(ret), K(expr->get_expr_type()));
   }
 
   if (OB_FAIL(ret)) {
@@ -982,7 +931,6 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
     if (OB_FAIL(ObTransformUtils::add_new_table_item(ctx_, stmt, subquery, table_item))) {
     } else if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_item should not be null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::create_columns_for_view(ctx_, *table_item,
                                                                stmt, right_exprs))) {
     } else if (OB_FAIL(generate_conditions(stmt, right_exprs, subquery, expr,
@@ -998,7 +946,6 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
     // do nothing
   } else if (OB_UNLIKELY(right_tables.count() != semi_conds.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unequal tables and semi conds count", K(ret), K(right_tables.count()), K(semi_conds.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < right_tables.count(); ++i) {
       SemiInfo *info = NULL;
@@ -1007,10 +954,8 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
       ObSelectStmt *split_subquery = NULL;
       if (OB_ISNULL(split_right_table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("split right table is NULL", K(ret));
       } else if (OB_ISNULL(split_subquery = split_right_table->ref_query_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("split ref query is NULL", K(ret));
       } else if (OB_FAIL(generate_semi_info(stmt, split_right_table, split_semi_conditions, join_type, info))) {
       } else if (OB_FAIL(split_subquery->adjust_subquery_list())) {
       } else if (OB_FAIL(split_subquery->formalize_stmt(ctx_->session_info_, false))) {
@@ -1018,7 +963,6 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
-      LOG_WARN("failed to formalize stmt", K(ret));
   }
   return ret;
 }
@@ -1040,7 +984,6 @@ int ObWhereSubQueryPullup::transform_single_set_query(ObDMLStmt *stmt,
   ObSEArray<ObQueryRefRawExpr*, 4> transformed_subqueries;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (0 == stmt->get_from_item_size() || !stmt->has_subquery()) {
     /*do dothing*/
   } else if (OB_FAIL(cond_exprs.assign(stmt->get_condition_exprs()))) {
@@ -1064,7 +1007,6 @@ int ObWhereSubQueryPullup::transform_single_set_query(ObDMLStmt *stmt,
       bool subq_match_idx = false;
       if (OB_ISNULL(query_expr) || OB_ISNULL(subquery = query_expr->get_ref_stmt())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObTransformUtils::check_subquery_match_index(ctx_, query_expr, subquery, subq_match_idx))) {
       } else if (queries.at(j).use_outer_join_ && subq_match_idx && subquery->get_table_items().count() > 1 &&
                  !subquery->get_stmt_hint().has_enable_hint(T_UNNEST) && !ctx_->force_subquery_unnest_) {
@@ -1103,7 +1045,6 @@ int ObWhereSubQueryPullup::transform_single_set_query(ObDMLStmt *stmt,
       if (OB_ISNULL(query_expr) || 
           OB_ISNULL(subquery = query_expr->get_ref_stmt())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObTransformUtils::check_subquery_match_index(ctx_, query_expr, subquery, subq_match_idx))) {
       } else if (queries.at(j).use_outer_join_ && subq_match_idx && subquery->get_table_items().count() > 1 && 
                  !subquery->get_stmt_hint().has_enable_hint(T_UNNEST) && !ctx_->force_subquery_unnest_) {
@@ -1136,7 +1077,6 @@ int ObWhereSubQueryPullup::get_single_set_subquery(ObDMLStmt &stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (expr->has_flag(IS_WITH_ANY) ||
              expr->has_flag(IS_WITH_ALL) ||
              T_OP_EXISTS == expr->get_expr_type() ||
@@ -1189,7 +1129,6 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
       OB_ISNULL(subquery = query_ref->get_ref_stmt()) ||
       OB_ISNULL(stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subquery is null", K(ret), K(subquery));
   } else if (OB_FAIL(check_hint_allowed_unnest(stmt, *subquery, is_valid))) {
   } else if (!is_valid) {
     // do nothing
@@ -1253,7 +1192,6 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
       ObRawExpr *param = NULL;
       if (OB_ISNULL(param = query_ref->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param expr is null", K(ret));
       } else {
         is_valid = !param->has_flag(CNT_SUB_QUERY) &&
                    !param->has_flag(CNT_AGG) &&
@@ -1280,7 +1218,6 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
     if (OB_SUCC(ret) && find) {
       if (OB_ISNULL(ctx_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid input", K(ret));
       } else if (OB_FAIL(ObTransformUtils::find_not_null_expr(*subquery,
                                                               param.not_null_column_,
                                                               is_valid,
@@ -1316,11 +1253,9 @@ int ObWhereSubQueryPullup::unnest_single_set_subquery(ObDMLStmt *stmt,
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_) ||
       OB_ISNULL(query_expr) || OB_ISNULL(subquery = query_expr->get_ref_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (is_vector_assign) {
     if (OB_UNLIKELY(!stmt->is_update_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update stmt is expected here", K(ret));
     } else if (OB_FAIL(static_cast<ObUpdateStmt *>(stmt)->get_vector_assign_values(
                          query_expr, query_refs))) {
     }
@@ -1338,7 +1273,6 @@ int ObWhereSubQueryPullup::unnest_single_set_subquery(ObDMLStmt *stmt,
     } else if (param.use_outer_join_ && 
                !param.null_reject_select_idx_.is_empty() && 
                OB_FAIL(wrap_case_when_for_select_expr(param, select_list))) {
-      LOG_WARN("failed to wrap case when for select expr", K(ret));
     } else if (OB_FAIL(pull_up_tables_and_columns(stmt, subquery))) {
     } else if (OB_FAIL(trans_from_list(stmt, subquery, param.use_outer_join_))) {
     } else if (OB_FAIL(append(stmt->get_part_exprs(), subquery->get_part_exprs()))) {
@@ -1363,7 +1297,6 @@ int ObWhereSubQueryPullup::wrap_case_when_for_select_expr(SingleSetParam& param,
   ObQueryRefRawExpr *query_expr = param.query_ref_expr_;
   if (OB_ISNULL(query_expr) || OB_ISNULL(subquery = query_expr->get_ref_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } 
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); i++) {
     if (!param.null_reject_select_idx_.has_member(i)) {
@@ -1386,10 +1319,8 @@ int ObWhereSubQueryPullup::wrap_case_when(ObSelectStmt &child_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is null", K(ctx_), K(ret));
   } else if (OB_ISNULL(not_null_column)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null column expr", K(ret));
   } else {
     ObRawExpr *null_expr = NULL;
     ObRawExpr *cast_expr = NULL;
@@ -1398,7 +1329,6 @@ int ObWhereSubQueryPullup::wrap_case_when(ObSelectStmt &child_stmt,
     if (OB_FAIL(ObRawExprUtils::build_null_expr(*factory, null_expr))) {
     } else if (OB_ISNULL(null_expr) || OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(
                               ctx_->expr_factory_,
                               ctx_->session_info_,
@@ -1413,7 +1343,6 @@ int ObWhereSubQueryPullup::wrap_case_when(ObSelectStmt &child_stmt,
                                                               ctx_))) {
     } else if (OB_ISNULL(case_when_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("case when expr is null", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(ctx_->expr_factory_,
                                                                ctx_->session_info_,
                                                                *case_when_expr,
@@ -1430,7 +1359,6 @@ int ObWhereSubQueryPullup::pull_up_tables_and_columns(ObDMLStmt *stmt, ObSelectS
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL pointer error", K(stmt), K(subquery), K(ret));
   } else if (OB_FAIL(append(stmt->get_table_items(), subquery->get_table_items()))) {
   } else if (OB_FAIL(append(stmt->get_joined_tables(), subquery->get_joined_tables()))) {
   } else if (OB_FAIL(append(stmt->get_column_items(), subquery->get_column_items()))) {
@@ -1450,20 +1378,17 @@ int ObWhereSubQueryPullup::pull_up_semi_info(ObDMLStmt* stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt), K(subquery), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < subquery->get_semi_info_size(); ++i) {
     SemiInfo *semi = NULL;
     ObSEArray<ObRawExpr *, 4> columns;
     if (OB_ISNULL(semi = subquery->get_semi_infos().at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("semi info is null", K(ret), K(semi));
     } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(semi->semi_conditions_, columns))) {
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < columns.count(); ++j) {
       if (OB_ISNULL(columns.at(j)) || OB_UNLIKELY(!columns.at(j)->is_column_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column is null", K(ret));
       } else {
         uint64_t table_id = static_cast<ObColumnRefRawExpr *>(columns.at(j))->get_table_id();
         if (table_id == semi->right_table_id_ ||
@@ -1484,7 +1409,6 @@ int ObWhereSubQueryPullup::trans_from_list(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params have null", K(ret), K(stmt), K(subquery));
   } else if (use_outer_join) {
     TableItem *left_table = NULL;
     TableItem *right_table = NULL;
@@ -1520,7 +1444,6 @@ int ObWhereSubQueryPullup::check_hint_status(const ObDMLStmt &stmt, bool &need_t
   const ObHint *cur_trans_hint = NULL;
   if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (!query_hint->has_outline_data()) {
     need_trans = true;
   } else if (NULL == (cur_trans_hint = query_hint->get_outline_trans_hint(ctx_->trans_list_loc_)) ||
@@ -1533,7 +1456,6 @@ int ObWhereSubQueryPullup::check_hint_status(const ObDMLStmt &stmt, bool &need_t
       if (OB_ISNULL(subquery_expr = stmt.get_subquery_exprs().at(i)) ||
           OB_ISNULL(select_stmt = subquery_expr->get_ref_stmt())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(subquery_expr), K(select_stmt));
       } else {
         need_trans = query_hint->is_valid_outline_transform(ctx_->trans_list_loc_,
                                                             get_hint(select_stmt->get_stmt_hint()));
@@ -1556,7 +1478,6 @@ int ObWhereSubQueryPullup::check_hint_allowed_unnest(const ObDMLStmt &stmt,
   const ObHint *no_rewrite2 = subquery.get_stmt_hint().get_no_rewrite_hint();
   if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (query_hint->has_outline_data()) {
     // outline data allowed unnest
     allowed = query_hint->is_valid_outline_transform(ctx_->trans_list_loc_, myhint);
@@ -1567,7 +1488,6 @@ int ObWhereSubQueryPullup::check_hint_allowed_unnest(const ObDMLStmt &stmt,
     if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite1))) {
     } else if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite2))) {
     } else if (is_disable && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-      LOG_WARN("failed to add used trans hint", K(ret));
     }
   }
   return ret;
@@ -1582,7 +1502,6 @@ int ObWhereSubQueryPullup::construct_transform_hint(ObDMLStmt &stmt, void *trans
       || OB_ISNULL(unnest_stmts = static_cast<ObIArray<ObSelectStmt*>*>(trans_params))
       || OB_UNLIKELY(unnest_stmts->empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(trans_params), K(unnest_stmts));
   } else {
     ObHint *hint = NULL;
     ObDMLStmt *child_stmt = NULL;
@@ -1591,7 +1510,6 @@ int ObWhereSubQueryPullup::construct_transform_hint(ObDMLStmt &stmt, void *trans
     for (int64_t i = 0; OB_SUCC(ret) && i < unnest_stmts->count(); ++i) {
       if (OB_ISNULL(child_stmt = unnest_stmts->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(child_stmt));
       } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_UNNEST, hint))) {
       } else if (OB_FAIL(child_stmt->get_qb_name(child_qb_name))) {
       } else if (OB_FAIL(ctx_->add_src_hash_val(child_qb_name))) {
@@ -1599,7 +1517,6 @@ int ObWhereSubQueryPullup::construct_transform_hint(ObDMLStmt &stmt, void *trans
       } else if (NULL != (myhint = get_hint(child_stmt->get_stmt_hint()))
                  && myhint->is_enable_hint()
                  && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-        LOG_WARN("failed to add used trans hint", K(ret));
       } else {
         hint->set_qb_name(child_qb_name);
       }
@@ -1631,7 +1548,6 @@ int ObWhereSubQueryPullup::check_can_split(ObSelectStmt *subquery,
   bool is_contain = false;
   if (OB_ISNULL(subquery) || OB_ISNULL(subquery->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(subquery));
   } else if (join_type != LEFT_SEMI_JOIN) {
     can_split = false;
     OPT_TRACE("can not split cartesian tables, not a semi join");

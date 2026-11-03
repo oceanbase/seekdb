@@ -30,7 +30,6 @@ int ObCachedGeomBase::init()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(origin_geo_) || OB_ISNULL(allocator_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null.", KP(origin_geo_), KP(allocator_), K(ret));
   } else if (!is_inited_) {
     ObGeoVertexCollectVisitor vertex_visitor(vertexes_);
     if (OB_FAIL(origin_geo_->do_visit(vertex_visitor))) {
@@ -52,7 +51,6 @@ int ObCachedGeomBase::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context, boo
             && origin_geo_->type() == ObGeoType::POINT
             && res == true
             && OB_FAIL(ObGeoTypeUtil::eval_point_box_intersects(gis_context.get_srs(), &geo, origin_geo_, res))) {
-    LOG_WARN("eval box intersection failed", K(ret));
   }
   return ret;
 }
@@ -84,7 +82,6 @@ int ObCachedGeomBase::check_any_vertexes_in_geo(ObGeometry& geo, bool &res)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else {
     int size = get_vertexes().size();
     for (uint32_t i = 0; i < size && OB_SUCC(ret) && !res; i++) {

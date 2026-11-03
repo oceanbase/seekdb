@@ -38,7 +38,6 @@ int ObStatRowCount::decode(ObObj &obj)
   int64_t row_count = 0;
   if (OB_ISNULL(tab_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table stat entry is not properly given", K(ret));
   } else if (OB_FAIL(cast_int(obj, row_count))) {
   } else {
     tab_stat_->set_row_count(row_count);
@@ -62,12 +61,10 @@ int ObStatAvgRowLen::decode(ObObj &obj)
   UNUSED(obj);
   if (OB_ISNULL(tab_stat_) || OB_ISNULL(col_stats_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table stat and column stats are not set", K(ret), K(tab_stat_), K(col_stats_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < col_stats_->count(); ++i) {
     if (OB_ISNULL(col_stats_->at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column stat is null", K(ret), K(i));
     } else {
       avg_row_size += col_stats_->at(i)->get_avg_len();
     }
@@ -83,7 +80,6 @@ int ObStatColItem::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_param_) || OB_ISNULL(get_fmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column param is null", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, get_fmt(),
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
@@ -96,7 +92,6 @@ int ObStatMaxValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column param is null", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                      " MAX(`%.*s`)",
                                      col_param_->column_name_.length(),
@@ -113,7 +108,6 @@ int ObStatMaxValue::decode(ObObj &obj,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("col stat is not given", K(ret), K(col_stat_));
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
   } else {
@@ -127,7 +121,6 @@ int ObStatMinValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column param is null", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                      " MIN(`%.*s`)",
                                      col_param_->column_name_.length(),
@@ -144,7 +137,6 @@ int ObStatMinValue::decode(ObObj &obj,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("col stat is not given", K(ret), K(col_stat_));
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
   } else {
@@ -159,7 +151,6 @@ int ObStatNumNull::decode(ObObj &obj)
   int64_t num_not_null = 0;
   if (OB_ISNULL(col_stat_) || OB_ISNULL(tab_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column stat is not given", K(ret), K(col_stat_), K(tab_stat_));
   } else if (OB_FAIL(cast_int(obj, num_not_null))) {
   } else {
     col_stat_->set_num_not_null(num_not_null);
@@ -174,7 +165,6 @@ int ObStatNumDistinct::decode(ObObj &obj)
   int64_t num_distinct = 0;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(col_stat_));
   } else if (OB_FAIL(cast_int(obj, num_distinct))) {
   } else {
     col_stat_->set_num_distinct(num_distinct);
@@ -188,7 +178,6 @@ int ObStatAvgLen::decode(ObObj &obj)
   int64_t avg_len = 0;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column stat is not given", K(ret));
   } else if (OB_FAIL(cast_int(obj, avg_len))) {
   } else {
     col_stat_->set_avg_len(avg_len);
@@ -204,12 +193,9 @@ int ObStatLlcBitmap::decode(ObObj &obj)
       OB_ISNULL(col_stat_->get_llc_bitmap()) ||
       OB_UNLIKELY(!obj.is_varchar() && !obj.is_varbinary())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(col_stat_), K(obj));
   } else if (OB_FAIL(obj.get_string(llc_bitmap_buf))) {
   } else if (OB_UNLIKELY(llc_bitmap_buf.length() > col_stat_->get_llc_bitmap_size())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(llc_bitmap_buf.length()),
-                                     K(col_stat_->get_llc_bitmap_size()));
   } else {
     MEMCPY(col_stat_->get_llc_bitmap(), llc_bitmap_buf.ptr(), llc_bitmap_buf.length());
     col_stat_->set_llc_bitmap_size(llc_bitmap_buf.length());
@@ -229,14 +215,12 @@ int ObStatTopKHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column param is null", K(ret), K(col_param_));
   } else {
     int64_t bkt_num = col_param_->bucket_num_;
     if (bkt_num < MIN_BUCKET_SIZE) {
       bkt_num = MIN_BUCKET_SIZE;
     } else if (bkt_num > MAX_BUCKET_SIZE) {
       ret = OB_ERR_INVALID_SIZE_SPECIFIED;
-      LOG_WARN("get invalid argument, expected value in the range[1, 2048]", K(ret), K(bkt_num));
     }
     double err_rate = 1.0 / get_window_size(bkt_num);
     if (OB_SUCC(ret)) {
@@ -301,7 +285,6 @@ int ObStatTopKHist::decode(ObObj &obj,
   if (OB_ISNULL(col_param_) || OB_ISNULL(tab_stat_) || OB_ISNULL(col_stat_) ||
       OB_UNLIKELY((bucket_num = col_param_->bucket_num_) <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param is null", K(ret), K(bucket_num), K(col_param_));
   } else if (OB_FAIL(topk_hist.read_result(obj))) {
   } else if (OB_FAIL(build_histogram_from_topk_items(allocator,
                                                      topk_hist.get_buckets(),
@@ -380,7 +363,6 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
   int64_t num = std::min(bkts.count(), max_bucket_num);
   if (OB_UNLIKELY(max_bucket_num <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid bucket size", K(ret), K(max_bucket_num));
   } else if (not_null_count == 0) {
     // all vals are null, there is no need to build a histogram
     histogram.set_type(ObHistType::INVALID_TYPE);
@@ -449,7 +431,6 @@ int ObPartitionId::decode(ObObj &obj)
   int64_t partition_id = -1;
   if (OB_ISNULL(tab_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table stat and column stats are not set", K(ret), K(tab_stat_));
   } else if (OB_FAIL(cast_int(obj, partition_id))) {
   } else {
     tab_stat_->set_partition_id(partition_id);
@@ -639,7 +620,6 @@ int ObGlobalMaxEval::flush(common::ObIAllocator *alloc)
   int ret = OB_SUCCESS;
   ObObj temp_value_;
   if (is_valid() && OB_FAIL(ob_write_obj(*alloc, global_max_, temp_value_))) {
-    LOG_WARN("failed to deep copy min obj", K(ret));
   } else if (is_valid()) {
     global_max_ = temp_value_;
   }
@@ -660,7 +640,6 @@ int ObGlobalMinEval::flush(common::ObIAllocator *alloc)
   int ret = OB_SUCCESS;
   ObObj temp_value_;
   if (is_valid() && OB_FAIL(ob_write_obj(*alloc, global_min_, temp_value_))) {
-    LOG_WARN("failed to deep copy min obj", K(ret));
   } else if (is_valid()) {
     global_min_ = temp_value_;
   }
@@ -672,7 +651,6 @@ int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column param is null", K(ret), K(col_param_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                      " HYBRID_HIST(`%.*s`, %ld)",
                                      col_param_->column_name_.length(),
@@ -694,7 +672,6 @@ int ObStatHybridHist::decode(ObObj &obj,
   if (OB_ISNULL(col_param_) || OB_ISNULL(col_stat_) ||
       OB_UNLIKELY((bucket_num = col_param_->bucket_num_) <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param is null", K(ret), K(bucket_num), K(col_param_), K(col_stat_));
   } else if (obj.is_null()) {
     col_stat_->get_histogram().reset();
   } else if (OB_FAIL(hybrid_hist.read_result(obj))) {
@@ -810,7 +787,6 @@ int ObStatAvgLen::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int64_t type_count = sizeof(DEFAULT_DATA_TYPE_LEGNTH) / sizeof(int32_t);
   if (OB_ISNULL(col_param_) || OB_ISNULL(get_fmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column param is null", K(ret));
   } else if (col_param_->column_type_ < type_count &&
              DEFAULT_DATA_TYPE_LEGNTH[col_param_->column_type_] > 0) {
     const char* fmt = " (%d * COUNT(`%.*s`))/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";

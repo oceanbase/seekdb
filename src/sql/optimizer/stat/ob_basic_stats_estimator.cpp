@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_basic_stats_estimator.h"
+#include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "sql/optimizer/stat/ob_topk_hist_estimator.h"
@@ -51,7 +52,6 @@ int ObBasicStatsEstimator::estimate(const ObOptStatGatherParam &param,
   //            3. AvgRowLen should be added at the last
   if (OB_UNLIKELY(dst_opt_stats.empty()) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected empty", K(ret), K(dst_opt_stats.empty()), K(param.allocator_));
   } else if (OB_FAIL(ObDbmsStatsUtils::init_col_stats(allocator,
                                                       column_params.count(),
                                                       src_col_stats))) {
@@ -72,15 +72,12 @@ int ObBasicStatsEstimator::estimate(const ObOptStatGatherParam &param,
       } else if (OB_FAIL(add_stat_item(ObPartitionId(src_tab_stat, calc_part_id_str, -1)))) {
       } else if (param.is_specify_partition_ &&
                  OB_FAIL(ObStatsEstimator::fill_partition_info(allocator, param.partition_infos_))) {
-        LOG_WARN("failed to add partition info", K(ret));
       }
     } else if (OB_UNLIKELY(param.partition_infos_.count() > 1) ||
                OB_ISNULL(dst_opt_stats.at(0).table_stat_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param.partition_infos_));
     } else if (!param.partition_infos_.empty() &&
                OB_FAIL(fill_partition_info(allocator, param, param.partition_infos_.at(0)))) {
-      LOG_WARN("failed to add partition info", K(ret));
     } else {
       src_tab_stat->set_partition_id(dst_opt_stats.at(0).table_stat_->get_partition_id());
     }
@@ -93,10 +90,8 @@ int ObBasicStatsEstimator::estimate(const ObOptStatGatherParam &param,
     } else if (OB_UNLIKELY(param.partition_infos_.count() > 1) ||
                OB_ISNULL(dst_opt_stats.at(0).table_stat_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param.partition_infos_));
     } else if (!param.partition_infos_.empty() &&
                OB_FAIL(fill_partition_info(allocator, param, param.partition_infos_.at(0)))) {
-      LOG_WARN("failed to add partition info", K(ret));
     } else {
       src_tab_stat->set_partition_id(dst_opt_stats.at(0).table_stat_->get_partition_id());
     }
@@ -109,7 +104,6 @@ int ObBasicStatsEstimator::estimate(const ObOptStatGatherParam &param,
         OB_FAIL(add_stat_item(ObStatNumDistinct(col_param, src_col_stats.at(i), param.need_approx_ndv_))) ||
         OB_FAIL(add_stat_item(ObStatAvgLen(col_param, src_col_stats.at(i)))) ||
         OB_FAIL(add_stat_item(ObStatLlcBitmap(col_param, src_col_stats.at(i))))) {
-      LOG_WARN("failed to add statistic item", K(ret));
     } else {/*do nothing*/}
   }
   if (OB_SUCC(ret)) {
@@ -141,10 +135,8 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
   } else if (OB_FAIL(get_all_tablet_id_and_object_id(param, tablet_ids, partition_ids))) {
   } else if (param.part_level_ == share::schema::PARTITION_LEVEL_TWO &&
              OB_FAIL(first_part_tab_stats.prepare_allocate(param.all_part_infos_.count()))) {
-    LOG_WARN("failed to prepare allocate", K(ret));
   } else if (param.part_level_ == share::schema::PARTITION_LEVEL_TWO &&
              OB_FAIL(generate_first_part_idx_map(param.all_part_infos_, first_part_idx_map))) {
-    LOG_WARN("failed to generate first part idx map", K(ret));
   } else if (OB_FAIL(do_estimate_block_count(
                  ctx, table_id, tablet_ids, partition_ids, estimate_result))) {
   } else {
@@ -153,10 +145,8 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
       void *buf = NULL;
       if (OB_ISNULL(param.allocator_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(param.allocator_));
       } else if (OB_ISNULL(buf = param.allocator_->alloc(sizeof(BlockNumStat)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret), K(buf));
       } else {
         block_num_stat = new (buf) BlockNumStat();
         block_num_stat->tab_macro_cnt_ = estimate_result.at(i).macro_block_count_;
@@ -178,7 +168,6 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
           int64_t cur_part_id = -1;
           if (OB_UNLIKELY(!ObDbmsStatsUtils::is_subpart_id(param.all_subpart_infos_, partition_id, cur_part_id))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(partition_id), K(cur_part_id), K(param));
           } else {
             if (OB_FAIL(global_tab_stat.add(1,
                                             0,
@@ -192,12 +181,6 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
               if (OB_FAIL(first_part_idx_map.get_refactored(cur_part_id, idx))) {
               } else if (OB_UNLIKELY(idx < 0 || idx >= first_part_tab_stats.count())) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get invalid part id",
-                         K(ret),
-                         K(idx),
-                         K(partition_id),
-                         K(cur_part_id),
-                         K(first_part_tab_stats.count()));
               } else if (OB_FAIL(first_part_tab_stats.at(idx).add(1,
                                                                   0,
                                                                   0,
@@ -218,10 +201,8 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
         void *buf = NULL;
         if (OB_ISNULL(param.allocator_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(param.allocator_));
         } else if (OB_ISNULL(buf = param.allocator_->alloc(sizeof(BlockNumStat)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc memory", K(ret), K(buf));
         } else {
           block_num_stat = new (buf) BlockNumStat();
           block_num_stat->tab_macro_cnt_ = global_tab_stat.get_macro_block_count();
@@ -232,12 +213,10 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
           } else if (param.part_level_ == share::schema::PARTITION_LEVEL_TWO &&
                      OB_UNLIKELY(first_part_tab_stats.count() != param.all_part_infos_.count())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(first_part_tab_stats), K(param.all_part_infos_));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < first_part_tab_stats.count(); ++i) {
               if (OB_ISNULL(buf = param.allocator_->alloc(sizeof(BlockNumStat)))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_WARN("failed to alloc memory", K(ret), K(buf));
               } else {
                 block_num_stat = new (buf) BlockNumStat();
                 block_num_stat->tab_macro_cnt_ = first_part_tab_stats.at(i).get_macro_block_count();
@@ -268,14 +247,12 @@ int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
   const int64_t MAX_RETRY_CNT = 10;
   do {
     if (OB_FAIL(THIS_WORKER.check_status())) {
-      LOG_WARN("failed to check status", K(ret));
       retry_cnt = MAX_RETRY_CNT;
     } else if (OB_FAIL(do_estimate_block_count_and_row_count(ctx, table_id,
                                                              tablet_ids,
                                                              partition_ids, estimate_res))) {
-      LOG_WARN("failed to do estimate block count and row count", K(ret));
-      if (DAS_CTX(ctx).is_refresh_location_error(ret)) {
-        DAS_CTX(ctx).refresh_location_cache_by_errno(true, ret);
+      if (DAS_CTX(ctx).is_tablet_retry_error(ret)) {
+        DAS_CTX(ctx).record_access_error(ret);
         ++ retry_cnt;
         ob_usleep(1000L * 1000L); // retry interval 1s
       } else {
@@ -293,82 +270,35 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
                                                                  ObIArray<EstimateBlockRes> &estimate_res)
 {
   int ret = OB_SUCCESS;
-  typedef common::ObSEArray<ObCandiTabletLoc, 4> ObCandiTabletLocArray;
-  SMART_VAR(ObCandiTabletLocArray, candi_tablet_locs) {
-    if (OB_FAIL(get_tablet_locations(ctx, table_id, tablet_ids, partition_ids, candi_tablet_locs))) {
-    } else if (OB_UNLIKELY(candi_tablet_locs.count() != tablet_ids.count()
-        || candi_tablet_locs.count() != partition_ids.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet location count does not match", K(ret), K(candi_tablet_locs.count()),
-          K(tablet_ids.count()), K(partition_ids.count()));
-    } else if (OB_FAIL(estimate_res.prepare_allocate(partition_ids.count()))) {
-    } else {
-      obcall::ObEstBlockArg arg;
-      obcall::ObEstBlockRes result;
-      for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs.count(); ++i) {
-        const ObCandiTabletLoc &tablet_loc = candi_tablet_locs.at(i);
-        const ObOptTabletLoc &opt_tablet_loc = tablet_loc.get_partition_location();
-        if (OB_UNLIKELY(tablet_ids.at(i) != opt_tablet_loc.get_tablet_id())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tablet location does not match", K(ret), K(tablet_ids), K(i),
-                   K(opt_tablet_loc.get_tablet_id()));
-        } else {
-          obcall::ObEstBlockArgElement arg_element;
-          arg_element.tablet_id_ = opt_tablet_loc.get_tablet_id();
-          if (OB_FAIL(arg.tablet_params_arg_.push_back(arg_element))) {
-          }
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
-      } else if (OB_UNLIKELY(result.tablet_params_res_.count() != estimate_res.count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected local storage estimation result count", K(ret), K(result), K(estimate_res));
-      } else {
-        for (int64_t i = 0; i < estimate_res.count(); ++i) {
-          estimate_res.at(i).part_id_ = partition_ids.at(i);
-          estimate_res.at(i).macro_block_count_ = result.tablet_params_res_.at(i).macro_block_count_;
-          estimate_res.at(i).micro_block_count_ = result.tablet_params_res_.at(i).micro_block_count_;
-          estimate_res.at(i).sstable_row_count_ = result.tablet_params_res_.at(i).sstable_row_count_;
-          estimate_res.at(i).memtable_row_count_ = result.tablet_params_res_.at(i).memtable_row_count_;
-        }
-      }
-    }
-  }
-  return ret;
-}
-int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
-                                                const uint64_t ref_table_id,
-                                                const ObIArray<ObTabletID> &tablet_ids,
-                                                const ObIArray<ObObjectID> &partition_ids,
-                                                ObCandiTabletLocIArray &candi_tablet_locs)
-{
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = ctx.get_my_session();
-  if (OB_ISNULL(session) || OB_UNLIKELY(tablet_ids.count() != partition_ids.count())) {
+  if (OB_ISNULL(ctx.get_my_session())
+      || OB_UNLIKELY(tablet_ids.count() != partition_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session), K(tablet_ids.count()), K(partition_ids.count()));
+  } else if (OB_FAIL(estimate_res.prepare_allocate(partition_ids.count()))) {
   } else {
-    candi_tablet_locs.reset();
-    if (OB_FAIL(candi_tablet_locs.prepare_allocate(tablet_ids.count()))) {
-    } else {
-      share::ObLSLocation local_location;
-      if (OB_FAIL(local_location.init(share::SYS_LS, GCTX.self_addr(), 1))) {
+    obcall::ObEstBlockArg arg;
+    obcall::ObEstBlockRes result;
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+      obcall::ObEstBlockArgElement arg_element;
+      arg_element.tablet_id_ = tablet_ids.at(i);
+      if (OB_FAIL(arg.tablet_params_arg_.push_back(arg_element))) {
       }
-      for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
-        if (OB_FAIL(candi_tablet_locs.at(i).set_local_location(
-                       partition_ids.at(i),
-                       OB_INVALID_ID,
-                       tablet_ids.at(i),
-                       local_location,
-                       GCTX.self_addr()))) {
-        }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
+    } else if (OB_UNLIKELY(result.tablet_params_res_.count() != estimate_res.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      for (int64_t i = 0; i < estimate_res.count(); ++i) {
+        estimate_res.at(i).part_id_ = partition_ids.at(i);
+        estimate_res.at(i).macro_block_count_ = result.tablet_params_res_.at(i).macro_block_count_;
+        estimate_res.at(i).micro_block_count_ = result.tablet_params_res_.at(i).micro_block_count_;
+        estimate_res.at(i).sstable_row_count_ = result.tablet_params_res_.at(i).sstable_row_count_;
+        estimate_res.at(i).memtable_row_count_ = result.tablet_params_res_.at(i).memtable_row_count_;
       }
     }
   }
   return ret;
 }
-
 int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
                                                    const uint64_t table_id,
                                                    int64_t &result,
@@ -389,14 +319,12 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
         "from %s where table_id = %lu;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else if (!need_inc_modified_count &&
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) as signed) as modified_count " \
         "from %s where table_id = %lu;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
@@ -405,14 +333,12 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else if (OB_FAIL(client_result->next())) {
       } else if (OB_FAIL(client_result->get_obj(obj_pos, result_obj))) {
       } else if (result_obj.is_null()) {
         result = 0;
       } else if (OB_UNLIKELY(!result_obj.is_integer_type())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected obj type", K(ret), K(result_obj.get_type()));
       } else {
         result = result_obj.get_int();
       }
@@ -461,7 +387,6 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         int64_t cur_part_id = -1; //current partition for first part
         int64_t cur_inc_mod_count = 0;//current inc_mod_count for first part
@@ -480,7 +405,6 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
           } else if (OB_FAIL(client_result->get_obj(idx2, inc_mod_count_obj))) {
           } else if (!inc_mod_count_obj.is_null() &&
                      OB_FAIL(inc_mod_count_obj.get_int(inc_mod_count))) {
-            LOG_WARN("failed to get int", K(ret), K(inc_mod_count_obj));
           } else if (OB_FAIL(ObDbmsStatsUtils::get_dst_partition_by_tablet_id(ctx,
                                                                               dst_tablet_id,
                                                                               partition_infos,
@@ -517,7 +441,6 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
         // cacl global part
         if (OB_FAIL(ret)) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("failed to get result", K(ret));
           } else {
             ret = OB_SUCCESS;
             if (cur_part_id != -1 &&
@@ -525,14 +448,12 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
                                                    has_subpart_invalid_inc ? -1 : cur_inc_mod_count,
                                                    stale_percent_threshold,
                                                    partition_stat_infos))) {
-              LOG_WARN("failed to check partition stat state", K(ret));
             } else if (OB_FAIL(add_var_to_array_no_dup(monitor_modified_part_ids, cur_part_id))) {
             } else if (is_check_global &&
                        OB_FAIL(check_partition_stat_state(global_part_id,
                                                           has_part_invalid_inc ? -1 : table_inc_modified,
                                                           stale_percent_threshold,
                                                           partition_stat_infos))) {
-              LOG_WARN("failed to check partition stat state", K(ret));
             } else {/*do nothing*/}
           }
         }
@@ -603,7 +524,6 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
   uint64_t table_id = param.table_id_;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(conn));
   } else if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid( is_valid))) {
   } else if (!is_valid) {
     // do nothing
@@ -612,7 +532,7 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
     /*do nothing*/
   } else if (OB_FAIL(udpate_sql.append_fmt(
         "update %s set last_inserts = inserts, last_updates = updates, last_deletes = deletes " \
-        "where table_id = %lu %s %s;",
+        "where table_id = %" PRIu64 " %s %s;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
         !tablet_list.empty() ? "and tablet_id in" : " ",
@@ -650,7 +570,6 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         while (OB_SUCC(ret) && !is_locked && OB_SUCC(client_result->next())) {
           ObObj tmp;
@@ -668,10 +587,8 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
           } else if (OB_FAIL(tmp.get_int(lock_val))) {
           } else if (OB_FAIL(client_result->get_obj(idx3, tmp))) {
           } else if (!tmp.is_null() && OB_FAIL(tmp.get_int(row_cnt))) {
-            LOG_WARN("failed to get int", K(ret), K(tmp));
           } else if (OB_FAIL(client_result->get_obj(idx4, tmp))) {
           } else if (!tmp.is_null() && OB_FAIL(tmp.get_int(consecutive_failed_count))) {
-            LOG_WARN("failed to get int", K(ret), K(tmp));
           } else if (global_part_id == part_val && lock_val > 0) {
             is_locked = true;
           } else {
@@ -682,7 +599,6 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
         }
         if (OB_FAIL(ret)) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("failed to get result", K(ret));
           } else {
            ret = OB_SUCCESS;
           }
@@ -768,7 +684,7 @@ int ObBasicStatsEstimator::gen_tablet_list(const ObTableStatParam &param,
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == tablet_ids.count() - 1 ? ')' : ',');
-      if (OB_FAIL(tablet_list.append_fmt("%c%lu%c", prefix, tablet_ids.at(i), suffix))) {
+      if (OB_FAIL(tablet_list.append_fmt("%c%" PRIu64 "%c", prefix, tablet_ids.at(i), suffix))) {
       } else {/*do nothing*/}
     }
   }
@@ -832,7 +748,6 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx = 0;
@@ -865,7 +780,6 @@ int ObBasicStatsEstimator::generate_first_part_idx_map(const ObIArray<PartInfo> 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(all_part_infos.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected empty", K(ret), K(all_part_infos.empty()));
   } else if (OB_FAIL(first_part_idx_map.create(all_part_infos.count(), "ObStatsEst"))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_part_infos.count(); ++i) {
@@ -888,7 +802,6 @@ int ObBasicStatsEstimator::refine_basic_stats(const ObOptStatGatherParam &param,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (sample_value_ >= 0.000001 && sample_value_ < 100.0) {
     for (int64_t i = 0; OB_SUCC(ret) && i < dst_opt_stats.count(); ++i) {
       bool need_re_estimate = false;
@@ -916,7 +829,6 @@ int ObBasicStatsEstimator::check_stat_need_re_estimate(const ObOptStatGatherPara
   need_re_estimate = false;
   if (OB_ISNULL(opt_stat.table_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(opt_stat.table_stat_));
   } else if (opt_stat.table_stat_->get_row_count() * sample_value_ / 100 >= MAGIC_MIN_SAMPLE_SIZE) {
     //do nothing
   } else if (OB_FAIL(new_param.assign(origin_param))) {
@@ -947,7 +859,6 @@ int ObBasicStatsEstimator::check_stat_need_re_estimate(const ObOptStatGatherPara
       for (int64_t i = 0; OB_SUCC(ret) && i < opt_stat.column_stats_.count(); ++i) {
         if (OB_ISNULL(opt_stat.column_stats_.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret));
         } else {
           ObObj null_val;
           null_val.set_null();
@@ -978,14 +889,12 @@ int ObBasicStatsEstimator::fill_hints(common::ObIAllocator &alloc,
   const char *no_use_plan_cache_hint = " USE_PLAN_CACHE(NONE)";
   if (OB_UNLIKELY(table_name.empty() || gather_vectorize < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(table_name), K(gather_vectorize));
   } else if (OB_FAIL(default_hints.append_fmt("NO_REWRITE DBMS_STATS OPT_PARAM('ROWSETS_MAX_ROWS', %ld)",
                                                gather_vectorize))) {
   } else if (OB_FAIL(default_hints.append_fmt(use_full_table_hint,
                                               table_name.length(),
                                               table_name.ptr()))) {
   } else if (!use_plan_cache && OB_FAIL(default_hints.append(no_use_plan_cache_hint))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else if (OB_FAIL(add_hint(default_hints.string(), alloc))) {
   } else {
   }
@@ -1012,6 +921,7 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
 
 int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
                                                          const int64_t max_table_cnt,
+                                                         const bool only_collectable,
                                                          int64_t &last_table_id,
                                                          int64_t &last_tablet_id,
                                                          int64_t &total_part_cnt,
@@ -1019,11 +929,45 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSqlString select_sql;
-  if (OB_FAIL(select_sql.append_fmt(
+  ObSqlString collectable_candidate_join;
+  ObSqlString collectable_candidate_filter;
+  // Exclude candidates that cannot currently be gathered before LIMIT. The
+  // pending probe skips this filter so an unlock is retried without new DML.
+  if (only_collectable && OB_FAIL(collectable_candidate_join.append_fmt(
+          " LEFT JOIN %s schema_table ON schema_table.table_id = m.table_id "
+          " LEFT JOIN %s schema_part "
+          " ON schema_table.part_level = 1 "
+          " AND schema_part.table_id = m.table_id "
+          " AND schema_part.tablet_id = m.tablet_id "
+          " LEFT JOIN %s schema_subpart "
+          " ON schema_table.part_level = 2 "
+          " AND schema_subpart.table_id = m.table_id "
+          " AND schema_subpart.tablet_id = m.tablet_id "
+          " LEFT JOIN %s leaf_stat "
+          " ON leaf_stat.table_id = m.table_id "
+          " AND leaf_stat.partition_id = "
+          " CASE schema_table.part_level "
+          " WHEN 0 THEN schema_table.table_id "
+          " WHEN 1 THEN schema_part.part_id "
+          " WHEN 2 THEN schema_subpart.sub_part_id END ",
+          share::OB_ALL_TABLE_TNAME,
+          share::OB_ALL_PART_TNAME,
+          share::OB_ALL_SUB_PART_TNAME,
+          share::OB_ALL_TABLE_STAT_TNAME))) {
+  } else if (only_collectable && OB_FAIL(collectable_candidate_filter.append_fmt(
+          " AND coalesce(leaf_stat.stattype_locked, 0) = 0 "
+          " AND coalesce(leaf_stat.spare2, 0) < 5 "
+          " AND NOT EXISTS (SELECT 1 FROM %s global_stat "
+          " WHERE global_stat.table_id = m.table_id "
+          " AND global_stat.stattype_locked > 0 "
+          " AND global_stat.partition_id IN (-1, m.table_id)) ",
+          share::OB_ALL_TABLE_STAT_TNAME))) {
+  } else if (OB_FAIL(select_sql.append_fmt(
           "SELECT table_id, tablet_id, avg(changed_ratio) over (partition by table_id)  ratio from "\
           " ( SELECT    m.table_id, m.tablet_id, (CASE WHEN (m.last_inserts-m.last_deletes) = 0 THEN 1 + cast(coalesce(up.valchar, gp.spare4) as double) "\
           "                            ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 / (m.last_inserts-m.last_deletes) END) as changed_ratio "\
           "  FROM    %s m "\
+          " %.*s "\
           "  LEFT JOIN %s up "\
           "  ON        m.table_id = up.table_id "\
           "  AND       up.pname = 'ASYNC_GATHER_STALE_RATIO' "\
@@ -1034,12 +978,17 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           " double) "\
           "    ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 "\
           " / (m.last_inserts-m.last_deletes) END) > cast(coalesce(up.valchar, gp.spare4) as double) "\
+          " %.*s "\
           " AND m.table_id > %lu and m.tablet_id > %lu"\
           " )t "\
           " order by ratio desc,table_id, tablet_id  limit %lu ",
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
+          static_cast<int>(collectable_candidate_join.length()),
+          collectable_candidate_join.empty() ? "" : collectable_candidate_join.ptr(),
           share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
           share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
+          static_cast<int>(collectable_candidate_filter.length()),
+          collectable_candidate_filter.empty() ? "" : collectable_candidate_filter.ptr(),
           last_table_id,
           last_tablet_id,
           max_table_cnt
@@ -1052,7 +1001,6 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx_col1 = 0;
@@ -1066,7 +1014,6 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           } else if (OB_FAIL(obj.get_int(tablet_id))) {
           } else if ((stat_tables.empty() || table_id != (stat_tables.at(stat_tables.count() - 1).table_id_)) &&
                      OB_FAIL(stat_tables.push_back(AsyncStatTable(table_id)))) {
-            LOG_WARN("failed to push back", K(ret));
           } else if (OB_FAIL(stat_tables.at(stat_tables.count() - 1).tablet_ids_.push_back(static_cast<uint64_t>(tablet_id)))) {
           } else {
             last_table_id = table_id;
@@ -1085,6 +1032,29 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
       }
     }
     
+  }
+  return ret;
+}
+
+int ObBasicStatsEstimator::has_async_gather_stats_tables(ObExecContext &ctx,
+                                                         bool &has_pending)
+{
+  int ret = OB_SUCCESS;
+  int64_t total_part_cnt = 0;
+  int64_t last_table_id = 0;
+  int64_t last_tablet_id = 0;
+  ObSEArray<AsyncStatTable, 1> stat_tables;
+  has_pending = false;
+  if (OB_FAIL(get_async_gather_stats_tables(ctx,
+                                            1,
+                                            false,
+                                            last_table_id,
+                                            last_tablet_id,
+                                            total_part_cnt,
+                                            stat_tables))) {
+    LOG_WARN("failed to check async gather stats candidates", K(ret));
+  } else {
+    has_pending = total_part_cnt > 0;
   }
   return ret;
 }
@@ -1137,7 +1107,6 @@ int ObBasicStatsEstimator::fill_partition_info(ObIAllocator &allocator,
     int64_t buf_len = raw_sql_str.length();
     if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(raw_sql_str.length())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), K(raw_sql_str.length()));
     } else {
       MEMCPY(buf, raw_sql_str.ptr(), raw_sql_str.length());
       where_string_.assign(buf, raw_sql_str.length());

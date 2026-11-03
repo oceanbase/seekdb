@@ -60,10 +60,8 @@ int ObExprVecVid::cg_expr(
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
-  } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 1 && OB_ISNULL(rt_expr.args_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, rt_expr.args_ is nullptr", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
+    OB_ASSERT(rt_expr.arg_cnt_ != 1 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_vec_id;
   }
   return ret;
@@ -79,7 +77,6 @@ int ObExprVecVid::cg_expr(
     expr_datum.set_null();
   } else if (OB_UNLIKELY(1 != raw_ctx.arg_cnt_) || OB_ISNULL(raw_ctx.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(raw_ctx), KP(raw_ctx.args_));
   } else {
     ObExpr *calc_part_id_expr = raw_ctx.args_[0];
     ObObjectID partition_id = OB_INVALID_ID;
@@ -91,7 +88,6 @@ int ObExprVecVid::cg_expr(
       uint64_t seq_id = 0;
       if (OB_ISNULL(auto_inc)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet autoincrement service is unavailable", K(ret));
       } else if (OB_FAIL(auto_inc->next_value(tablet_id, seq_id))) {
       } else {
         expr_datum.set_int(seq_id);

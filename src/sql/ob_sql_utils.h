@@ -17,6 +17,7 @@
 #ifndef _OCEANBASE_SQL_OB_SQL_UTILS_H
 #define _OCEANBASE_SQL_OB_SQL_UTILS_H
 
+#include "rust/config.h"
 #include "common/ob_range.h"
 #include "sql/rewrite/ob_query_range_provider.h"
 #include "common/object/ob_object.h"
@@ -65,7 +66,7 @@ class ObDMLStmt;
 class ObOpRawExpr;
 class OrderItem;
 class ObSqlExecutorCtx;
-class ObTableLocation;
+class TableAccessPlan;
 class ObQueryRange;
 class ObSqlExpression;
 class ObPhysicalPlan;
@@ -83,7 +84,6 @@ class ObColumnRefRawExpr;
 class ObResolverParams;
 class ObGlobalHint;
 class ObSqlSchemaGuard;
-class ObCandiTabletLoc;
 struct ObPlanCacheCtx;
 
 struct EstimatedPartition {
@@ -527,7 +527,7 @@ public:
   {
     int64_t thredhold = OB_MAX_SQL_LENGTH;
 
-    thredhold = GCONF._query_record_size_limit;
+    thredhold = config::_query_record_size_limit();
 
     return thredhold;
   }
@@ -640,9 +640,6 @@ public:
   static int check_enable_mysql_compatible_dates(const sql::ObSQLSessionInfo *session,
                                                  const bool is_ddl_scenario,
                                                  bool &enabled);
-
-  static int get_strong_partition_replica_addr(const ObCandiTabletLoc &phy_part_loc_info,
-                                               ObAddr &selected_addr);
 
   static int match_ccl_rule(ObIAllocator &alloc, ObSQLSessionInfo &session, ObSqlCtx &context,
                             const ObString &sql, bool is_ps_mode,

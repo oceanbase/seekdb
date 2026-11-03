@@ -53,14 +53,12 @@ private:
     PtResType *dest_geo = NULL;
     if (OB_ISNULL(dest_geo = OB_NEWx(PtResType, (context.get_allocator()), g->get_srid(), context.get_allocator()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       transformer.forward(*src_geo, *dest_geo);
       double x = fabs((reinterpret_cast<ObPoint*>(dest_geo))->x());
       double y = fabs((reinterpret_cast<ObPoint*>(dest_geo))->y());
       if (isnan(x) || x == INFINITY || isnan(y) || y == INFINITY) {
         ret = OB_ERROR_OUT_OF_RANGE;
-        LOG_WARN("target geometry out of range", K(ret));
       } else {
         result = dest_geo;
       }
@@ -76,10 +74,8 @@ private:
     common::ObIAllocator *alloc = context.get_allocator();
     if (OB_ISNULL(alloc)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("unexpected null allocator for transform functor", K(ret));
     } else if (OB_ISNULL(dest_geo = OB_NEWx(GeometryResType, alloc, g->get_srid(), *alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to create geo by type", K(ret));
     } else {
       lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
       lib::ObMallocHookAttrGuard boost_cache_guard(lib::ObMemAttr("BoostCache"));
@@ -104,10 +100,8 @@ private:
     common::ObIAllocator *alloc = context.get_allocator();
     if (OB_ISNULL(alloc)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("unexpected null allocator for transform functor", K(ret));
     } else if (OB_ISNULL(dest_geo = OB_NEWx(GCOutType, alloc, 0, *alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to create geometry collection", K(ret));
     } else {
       typename GCInType::iterator iter = src_geo->begin();
       typename GCInType::const_pointer sub_ptr;
@@ -155,7 +149,6 @@ private:
           }
           default : {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected geometry type", K(ret));
           }
 
         }

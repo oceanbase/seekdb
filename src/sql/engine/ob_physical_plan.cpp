@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "rust/config.h"
 #include "ob_physical_plan.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/engine/ob_operator_factory.h"
@@ -46,7 +47,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     expr_op_factory_(allocator_),
     literal_stmt_type_(stmt::T_NONE),
     plan_type_(OB_PHY_PLAN_UNINITIALIZED),
-    location_type_(OB_PHY_PLAN_UNINITIALIZED),
+    access_shape_(OB_PHY_PLAN_UNINITIALIZED),
     require_local_execution_(false),
     use_px_(false),
     px_dop_(0),
@@ -65,11 +66,11 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     contain_table_scan_(false),
     has_nested_sql_(false),
     session_id_(0),
-    table_locations_(allocator_),
-    das_table_locations_(allocator_),
+    table_access_plans_(allocator_),
+    das_table_access_plans_(allocator_),
     row_param_map_(allocator_),
     is_update_uniq_index_(false),
-    contain_index_location_(false),
+    has_index_access_plan_(false),
     base_constraints_(allocator_),
     strict_constrinats_(allocator_),
     non_strict_constrinats_(allocator_),
@@ -135,7 +136,7 @@ void ObPhysicalPlan::reset()
   expr_op_factory_.destroy();
   literal_stmt_type_ = stmt::T_NONE;
   plan_type_ = OB_PHY_PLAN_UNINITIALIZED;
-  location_type_ = OB_PHY_PLAN_UNINITIALIZED;
+  access_shape_ = OB_PHY_PLAN_UNINITIALIZED;
   require_local_execution_ = false;
   use_px_ = false;
   px_dop_ = 0;
@@ -156,7 +157,7 @@ void ObPhysicalPlan::reset()
   has_nested_sql_ = false;
   session_id_ = 0;
   is_update_uniq_index_ = false;
-  contain_index_location_ = false;
+  has_index_access_plan_ = false;
   ObPlanCacheObject::reset();
   is_late_materialized_ = false;
   is_plain_insert_ = false;
@@ -296,7 +297,6 @@ int ObPhysicalPlan::set_param_fields(const common::ParamsFieldArray &params)
   int64_t N = params.count();
   WITH_CONTEXT(mem_context_) {
     if(N > 0 && OB_FAIL(param_columns_.reserve(N))) {
-      LOG_WARN("failed to reserved param field", K(ret));
     }
     ObField tmp_field;
     for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
@@ -351,7 +351,7 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
     ATOMIC_INC(&(stat_.timeout_count_));
     ATOMIC_AAF(&(stat_.total_process_time_), record.get_process_time());
   }
-  if (!GCONF.enable_perf_event) { // short route
+  if (!config::enable_perf_event()) { // short route
     ATOMIC_AAF(&(stat_.elapsed_time_), record.get_elapsed_time());
     ATOMIC_AAF(&(stat_.cpu_time_), record.get_elapsed_time() - record.exec_record_.wait_time_end_
                                    - (record.exec_timestamp_.run_ts_ - record.exec_timestamp_.receive_ts_));
@@ -386,7 +386,7 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
       ATOMIC_INC(&(stat_.hit_count_));
     }
 
-    if (record.get_elapsed_time() > GCONF.trace_log_slow_query_watermark) {
+    if (record.get_elapsed_time() > config::trace_log_slow_query_watermark()) {
       ATOMIC_INC(&(stat_.slow_count_));
     }
     int64_t slowest_usec = ATOMIC_LOAD(&stat_.slowest_exec_usec_);
@@ -620,7 +620,7 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     stat_.sql_id_,
                     is_contain_inner_table_,
                     is_update_uniq_index_,
-                    location_type_,
+                    access_shape_,
                     use_px_,
                     vars_,
                     px_dop_,
@@ -651,39 +651,39 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     px_parallel_rule_,
                     px_worker_share_plan_enabled_);
 
-int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
+int ObPhysicalPlan::set_table_access_plans(const ObTablePartitionInfoArray &infos,
                                         ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  table_locations_.reset();
-  das_table_locations_.reset();
-  if (OB_FAIL(table_locations_.prepare_allocate_and_keep_count(infos.count(),
+  table_access_plans_.reset();
+  das_table_access_plans_.reset();
+  if (OB_FAIL(table_access_plans_.prepare_allocate_and_keep_count(infos.count(),
                                                  allocator_))) {
-  } else if (OB_FAIL(das_table_locations_.prepare_allocate_and_keep_count(infos.count(),
+  } else if (OB_FAIL(das_table_access_plans_.prepare_allocate_and_keep_count(infos.count(),
                                                             allocator_))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
-    ObTableLocation &tl = infos.at(i)->get_table_location();
+    TableAccessPlan &tl = infos.at(i)->get_table_access_plan();
     const ObTableSchema *table_schema = nullptr;
     if (tl.use_das()) {
-      if (OB_FAIL(das_table_locations_.push_back(tl))) {
+      if (OB_FAIL(das_table_access_plans_.push_back(tl))) {
       }
-    } else if (OB_FAIL(table_locations_.push_back(tl))) {
+    } else if (OB_FAIL(table_access_plans_.push_back(tl))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
     } else {
-      contain_index_location_ |= table_schema->is_index_table();
+      has_index_access_plan_ |= table_schema->is_index_table();
     }
-    LOG_DEBUG("set table location", K(tl), K(tl.use_das()));
+    LOG_DEBUG("set table access", K(tl), K(tl.use_das()));
   }
 
   return ret;
 }
 
-int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> &base_constraints,
+int ObPhysicalPlan::set_access_constraints(const ObIArray<TableAccessConstraint> &base_constraints,
                                              const ObIArray<ObPwjConstraint *> &strict_constraints,
                                              const ObIArray<ObPwjConstraint *> &non_strict_constraints)
 {
-  // deep copy location constraints
+  // deep copy access constraints
   int ret = OB_SUCCESS;
   if (base_constraints.count() > 0) {
     base_constraints_.reset();
@@ -706,10 +706,8 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
       for (int64_t i = 0; OB_SUCC(ret) && i < strict_constraints.count(); ++i) {
         if (OB_ISNULL(cur_cons = strict_constraints.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(i));
         } else if (cur_cons->count() <= 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected empty array", K(ret));
         } else {
           strict_constrinats_.at(i).reset();
           strict_constrinats_.at(i).set_allocator(&allocator_);
@@ -734,10 +732,8 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
       for (int64_t i = 0; OB_SUCC(ret) && i < non_strict_constraints.count(); ++i) {
         if (OB_ISNULL(cur_cons = non_strict_constraints.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(i));
         } else if (cur_cons->count() <= 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected empty array", K(ret));
         } else {
           non_strict_constrinats_.at(i).reset();
           non_strict_constrinats_.at(i).set_allocator(&allocator_);
@@ -762,11 +758,11 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
   return ret;
 }
 
-bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) const
+bool ObPhysicalPlan::has_same_access_constraints(const ObPhysicalPlan &r) const
 {
   bool is_same = true;
-  const ObIArray<LocationConstraint>& l_base_cons = get_base_constraints();
-  const ObIArray<LocationConstraint>& r_base_cons = r.get_base_constraints();
+  const ObIArray<TableAccessConstraint>& l_base_cons = get_base_constraints();
+  const ObIArray<TableAccessConstraint>& r_base_cons = r.get_base_constraints();
   const ObIArray<ObPlanPwjConstraint>& l_non_strict_cons = get_non_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& r_non_strict_cons = r.get_non_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& l_strict_cons = get_strict_constraints();
@@ -810,12 +806,10 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
   UNUSED(op_id);
   if (type >= PHY_END || child_cnt < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type), K(child_cnt));
   } else if (OB_FAIL(ObOperatorFactory::alloc_op_spec(
               allocator_, type, child_cnt, op))) {
   } else if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL operator spec returned", K(ret));
   } else {
     // Here is directly assigning log operator id to spec
     uint32_t tmp_op_id = UINT32_MAX;
@@ -1015,8 +1009,6 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
             ret = OB_SUCCESS;
             break;
           } else {
-            LOG_WARN("failed to write plan tmp tbl name info",
-                     K(pc_ctx.tmp_table_names_.at(i)), K(i), K(ret));
           }
         }
       }
@@ -1041,7 +1033,6 @@ int ObPhysicalPlan::set_logical_plan(ObLogicalPlanRawData &logical_plan)
   char *buf = NULL;
   if (OB_ISNULL(buf = (char*)allocator_.alloc(logical_plan.logical_plan_len_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret));
   } else {
     if (NULL != logical_plan_.logical_plan_) {
       allocator_.free(logical_plan_.logical_plan_);
@@ -1115,7 +1106,6 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
       const ObOpSpec *op = all_ops.at(i);
       if (OB_ISNULL(op)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null ptr", K(ret));
       } else if (op->id_ != feedback_node.op_id_) {
         // do nothing
       } else if (op->is_pdml_operator()) {
@@ -1152,7 +1142,6 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
   if (OB_FAIL(logical_plan_.uncompress_logical_plan(ctx.get_allocator(), plan_items))) {
   } else if (feedback_nodes.count() != plan_items.count()) {
     //ignore error code
-    LOG_WARN("unexpect feedback node count", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < plan_items.count(); ++i) {
       const ObExecFeedbackNode &feedback_node = feedback_nodes.at(i);
@@ -1162,10 +1151,8 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
       }
       if (OB_ISNULL(plan_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null plan item", K(ret));
       } else if (feedback_node.op_id_ != plan_item->id_) {
         ret = OB_SUCCESS;
-        LOG_WARN("unexpect feedback node info", K(ret));
       } else {
         int64_t real_cost = 0;
         if (0 != feedback_node.output_row_count_ &&
@@ -1199,7 +1186,6 @@ int ObPhysicalPlan::set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_
   }
   if (OB_ISNULL(all_local_session_vars)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(all_local_session_vars));
   } else if (OB_FAIL(all_local_session_vars_.reserve(all_local_session_vars->count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars->count(); ++i) {

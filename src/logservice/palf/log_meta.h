@@ -21,6 +21,7 @@
 
 namespace oceanbase
 {
+namespace share { class LocalStore; }
 namespace palf
 {
 // LogMeta is not a mutil version data strucate, therefore,
@@ -38,7 +39,6 @@ public:
   int generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
                                  const AccessMode &access_mode);
 
-  int load(const char *buf, int64_t buf_len);
   bool is_valid() const;
   void reset();
 
@@ -59,6 +59,14 @@ private:
   LogSnapshotMeta log_snapshot_meta_;
   static constexpr int64_t LOG_META_VERSION = 4;
 };
+
+namespace meta_store {
+int create(share::LocalStore &store, const LogMeta &meta);
+int load(share::LocalStore &store, LogMeta &meta, block_id_t &expected_next_block_id);
+int save(share::LocalStore &store, const LogMeta &meta);
+int update_manifest(share::LocalStore &store, block_id_t expected_next_block_id);
+int remove(share::LocalStore &store);
+}
 } // end namespace palf
 } // end namespace oceanbase
 

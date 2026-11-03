@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "rust/config.h"
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
@@ -52,7 +53,7 @@ int ObDataAccessService::execute_das_task(
   int ret = OB_SUCCESS;
   if (OB_FAIL(execute_local_das_task(task_ops))) {
   }
-  DAS_CTX(das_ref.get_exec_ctx()).save_cur_exec_status(ret);
+  DAS_CTX(das_ref.get_exec_ctx()).record_access_error(ret);
   return ret;
 }
 
@@ -69,7 +70,6 @@ OB_NOINLINE int ObDataAccessService::execute_local_das_task(
   if (OB_FAIL(task_ops.get_aggregated_tasks(task_list))) {
   } else if (task_list.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty task_list", K(ret));
   } else if (OB_FAIL(do_local_das_task(task_list))) {
   }
   return ret;
@@ -80,21 +80,7 @@ int ObDataAccessService::clear_task_exec_env(ObDASRef &das_ref, ObIDASTaskOp &ta
   int ret = OB_SUCCESS;
   if (OB_FAIL(task_op.end_das_task())) {
   }
-  DAS_CTX(das_ref.get_exec_ctx()).save_cur_exec_status(OB_SUCCESS);
-  return ret;
-}
-
-int ObDataAccessService::refresh_task_location_info(ObDASRef &das_ref, ObIDASTaskOp &task_op)
-{
-  int ret = OB_SUCCESS;
-  ObExecContext &exec_ctx = das_ref.get_exec_ctx();
-  ObDASTabletLoc *tablet_loc = const_cast<ObDASTabletLoc*>(task_op.get_tablet_loc());
-  int64_t retry_cnt = DAS_CTX(exec_ctx).get_cur_retry_cnt();
-  if (OB_FAIL(ObDASUtils::wait_das_retry(retry_cnt))) {
-  } else if (OB_FAIL(DAS_CTX(exec_ctx).build_local_tablet_loc(tablet_loc->loc_meta_->ref_table_id_,
-                                                              tablet_loc->tablet_id_,
-                                                              *tablet_loc))) {
-  }
+  DAS_CTX(das_ref.get_exec_ctx()).record_access_error(OB_SUCCESS);
   return ret;
 }
 
@@ -113,14 +99,14 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
     if (OB_TMP_FAIL(ObQueryRetryCtrl::get_das_retry_func(task_op.errcode_, retry_func))) {
     } else if (retry_func != nullptr) {
       bool need_retry = false;
-      const ObDASTabletLoc *tablet_loc = task_op.get_tablet_loc();
-      const ObDASTableLocMeta *loc_meta = tablet_loc != nullptr ? tablet_loc->loc_meta_ : nullptr;
+      const DASRuntimeTabletAccess *tablet_access = task_op.get_tablet_access();
+      const DASTableAccessMeta *access_meta = tablet_access != nullptr ? tablet_access->access_meta_ : nullptr;
       retry_func(das_ref, task_op, need_retry);
       LOG_INFO("[DAS RETRY] check if need tablet level retry",
                KR(task_op.errcode_), K(need_retry), K(task_op.task_flag_),
                "continuous_retry_cnt", das_ctx.get_cur_retry_cnt(),
                "total_retry_cnt", das_ctx.get_total_retry_cnt(),
-               KPC(loc_meta), KPC(tablet_loc));
+               KPC(access_meta), KPC(tablet_access));
       if (need_retry &&
           task_op.get_inner_rescan() &&
           das_ctx.get_total_retry_cnt() > 100) { //hard code retry 100 times.
@@ -131,14 +117,17 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
       }
       if (need_retry) {
         task_op.in_part_retry_ = true;
-        das_ctx.set_last_errno(task_op.get_errcode());
+        das_ctx.record_retry_error(task_op.get_errcode());
         das_ctx.inc_cur_retry_cnt();
         if (OB_TMP_FAIL(clear_task_exec_env(das_ref, task_op))) {
         }
         if (OB_FAIL(das_ref.get_exec_ctx().check_status())) {
-        } else if (OB_FAIL(refresh_task_location_info(das_ref, task_op))) {
+        } else if (OB_FAIL(ObDASUtils::wait_das_retry(das_ctx.get_cur_retry_cnt()))) {
+        } else if (OB_FAIL(das_ctx.validate_tablet_access(
+                       task_op.get_tablet_access()->access_meta_->ref_table_id_,
+                       task_op.get_tablet_access()->tablet_id_))) {
         } else {
-          LOG_INFO("[DAS RETRY] Start retrying the DAS task now", KPC(task_op.get_tablet_loc()));
+          LOG_INFO("[DAS RETRY] Start retrying the DAS task now", KPC(task_op.get_tablet_access()));
           das_task_wrapper.reuse();
           task_op.set_task_status(ObDasTaskStatus::UNSTART);
           if (OB_FAIL(das_task_wrapper.push_back_task(&task_op))) {
@@ -148,7 +137,7 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
             LOG_INFO("[DAS RETRY] DAS Task succeeds after multiple retries",
                      "continuous_retry_cnt", das_ctx.get_cur_retry_cnt(),
                      "total_retry_cnt", das_ctx.get_total_retry_cnt(),
-                     KPC(task_op.get_tablet_loc()));
+                     KPC(task_op.get_tablet_access()));
           } else {
             int64_t cur_retry_cnt = das_ctx.get_cur_retry_cnt();
             int64_t total_retry_cnt = das_ctx.get_total_retry_cnt();
@@ -157,7 +146,7 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
                        "and the execution may be blocked by a specific exception", KR(ret),
                        "continuous_retry_cnt", cur_retry_cnt,
                        "total_retry_cnt", das_ctx.get_total_retry_cnt(),
-                       KPC(task_op.get_tablet_loc()));
+                       KPC(task_op.get_tablet_access()));
             }
           }
         }
@@ -199,17 +188,10 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
 {
   int ret = OB_SUCCESS;
 
-  ObDasAggregatedTask das_task_wrapper;
-  if (scan_op.is_local_task()) {
-    if (OB_FAIL(scan_op.rescan())) {
-    }
-  } else if (OB_FAIL(das_task_wrapper.push_back_task(&scan_op))) {
-  } else if (OB_FAIL(execute_local_das_task(das_task_wrapper))) {
-    scan_op.errcode_ = ret;
-    LOG_WARN("execute local das task failed", K(ret));
+  if (OB_FAIL(scan_op.rescan())) {
   }
   OB_ASSERT(scan_op.errcode_ == ret);
-  if (OB_FAIL(ret) && GCONF._enable_partition_level_retry && scan_op.can_part_retry()) {
+  if (OB_FAIL(ret) && config::_enable_partition_level_retry() && scan_op.can_part_retry()) {
     //only fast select can be retry with partition level
     if (OB_FAIL(retry_das_task(das_ref, scan_op))) {
     }
@@ -222,7 +204,6 @@ int ObDataAccessService::do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list) {
 
   for (int64_t i = 0; OB_SUCC(ret) && i < task_list.count(); i++) {
     if (OB_FAIL(task_list.at(i)->start_das_task())) {
-      LOG_WARN("start local das task failed", K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(task_list.at(i)->state_advance())) {
       }
@@ -248,7 +229,6 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
     TRANS_LOG(ERROR, "query runtime environment is null", KR(ret));
   } else if (OB_ISNULL(task = ObDASParallelTaskFactory::alloc(das_ref.get_das_ref_count_ctx()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_FAIL(task->init(&agg_task, timeout_ts))) {
   } else {
     
@@ -267,7 +247,6 @@ int ObDataAccessService::parallel_execute_das_task(common::ObIArray<ObIDASTaskOp
   int ret = OB_SUCCESS;
   if (task_list.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty task_list", K(ret));
   } else if (OB_FAIL(do_local_das_task(task_list))) {
   }
   return ret;
@@ -281,7 +260,6 @@ int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggreg
   } else if (OB_FAIL(push_parallel_task(das_ref, agg_task))) {
     // NOTICE: if error occur, must release the reference count
     das_ref.get_das_ref_count_ctx().inc_concurrency_limit();
-    LOG_WARN("fail to push parallel task", K(ret));
   }
   return ret;
 }

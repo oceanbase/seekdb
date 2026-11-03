@@ -20,7 +20,7 @@
  #include "sql/session/ob_sql_session_info.h"
  #include "sql/engine/ob_exec_context.h"
 #include "query/vector/ob_vector_index_util.h"
- #include "sql/parser/ob_item_type.h"
+ #include "query/parser/ob_item_type.h"
  #include "sql/engine/expr/ob_array_expr_utils.h"
  #include "data_plane/vector/ob_vector_l2_distance.h"
  #include "data_plane/vector/ob_vector_cosine_distance.h"
@@ -115,13 +115,11 @@
    
    if (3 != expr.arg_cnt_) {
      ret = OB_NOT_SUPPORTED;
-     LOG_WARN("unexpected argument count", K(ret), K(expr.arg_cnt_));
    } else {
      ObDatum *datum = NULL;
      if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
      } else if (datum->is_null()) {
        ret = OB_INVALID_ARGUMENT;
-       LOG_WARN("distance_type is null", K(ret));
      } else {
        dis_type = static_cast<ObExprVectorDistance::ObVecDisType>(datum->get_int());
      }

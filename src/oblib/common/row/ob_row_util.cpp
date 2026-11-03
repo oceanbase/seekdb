@@ -47,7 +47,6 @@ int ObRowUtil::convert(const char *compact_row, int64_t buf_len, ObNewRow &row)
       row.cells_[cell_idx++] = cell;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("accept row column count is not enough", K(ret), K(cell_idx), K_(row.count));
     }
   }
   return ret;

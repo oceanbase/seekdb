@@ -96,7 +96,6 @@ int ObLSRestoreStatus::set_status(int32_t status)
   int ret = OB_SUCCESS;
   if (!is_valid_(status)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid status", K(ret), K(status));
   } else {
     status_ = static_cast<Status>(status);
   }
@@ -117,7 +116,6 @@ int ObLSRestoreStatus::serialize(char *buf, const int64_t len, int64_t &pos) con
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::encode_i8(buf, len, new_pos, static_cast<int8_t>(status_)))) {
   } else {
     pos = new_pos;
@@ -133,7 +131,6 @@ int ObLSRestoreStatus::deserialize(const char *buf, const int64_t len, int64_t &
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i8(buf, len, new_pos, (int8_t*)(&status_)))) {
   } else {
     pos = new_pos;

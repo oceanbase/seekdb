@@ -31,16 +31,12 @@ int ObCachedTransStateMgr::init(int64_t max_cnt)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObCachedTransStateMgr has already been initiated", K(ret));
   } else if (max_cnt <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("max count is invalid", K(ret), K(max_cnt));
   } else {
     void *buf = nullptr;
     if (OB_ISNULL(buf = allocator_.alloc(max_cnt * sizeof(ObMergeCachedTransState)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(max_cnt),
-          "alloc_size", max_cnt * sizeof(ObMergeCachedTransState));
     } else {
       array_ = new(buf) ObMergeCachedTransState[max_cnt]();
       max_cnt_ = max_cnt;
@@ -68,10 +64,8 @@ int ObCachedTransStateMgr::get_trans_state(
   ObMergeCachedTransKey key(trans_id, sql_seq);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObCachedTransStateMgr is not initialized", K(ret));
   } else if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid key", K(ret), K(key));
   } else {
     uint64_t idx = cal_idx(key);
     if (array_[idx].key_ == key && array_[idx].is_valid()) {
@@ -95,10 +89,8 @@ int ObCachedTransStateMgr::add_trans_state(
   ObMergeCachedTransState status(trans_id, sql_seq, commited_trans_version, trans_state, can_read);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObCachedTransStateMgr is not initialized", K(ret));
   } else if (!status.is_valid()) {
     ret = OB_INVALID_ARGUMENT; 
-    LOG_WARN("invalid trans state", K(ret), K(status));
   } else {
     array_[cal_idx(key)] = status;
   }

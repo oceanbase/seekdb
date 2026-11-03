@@ -69,7 +69,6 @@ int ObTmpWriteBufferPoolEntryArray::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("tmp file entry array init twice", KR(ret));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                      OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                      ObMemAttr("TmpFileEntArPt")))) {
@@ -105,7 +104,6 @@ int ObTmpWriteBufferPoolEntryArray::add_new_bucket_()
   ObArray<ObPageEntry> *bucket = nullptr;
   if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObArray<ObPageEntry>)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory for new bucket", KR(ret), K(buckets_.size()), K(size_));
   } else if (FALSE_IT(bucket = new (buf) ObArray<ObPageEntry>())) {
   } else if (OB_FAIL(buckets_.push_back(bucket))) {
   } else {
@@ -125,7 +123,6 @@ int ObTmpWriteBufferPoolEntryArray::push_back(const ObPageEntry &entry)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file entry array not init", KR(ret));
   } else {
     if (bucket_idx >= buckets_.size()) {
       if (OB_FAIL(add_new_bucket_())) {

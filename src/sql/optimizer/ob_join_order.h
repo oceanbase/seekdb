@@ -349,7 +349,7 @@ class Path
       weak_sharding_(),
       exchange_allocated_(false),
       phy_plan_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
-      location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
+      access_shape_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
       contain_fake_cte_(false),
       contain_pw_merge_op_(false),
       contain_das_op_(false),
@@ -376,7 +376,7 @@ class Path
         weak_sharding_(),
         exchange_allocated_(false),
         phy_plan_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
-        location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
+        access_shape_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
         contain_fake_cte_(false),
         contain_pw_merge_op_(false),
         contain_das_op_(false),
@@ -425,13 +425,13 @@ class Path
       }
       return ret_sharding;
     }
-    inline ObShardingInfo* try_get_sharding_with_table_location() const
+    inline ObShardingInfo* try_get_sharding_with_access_targets() const
     {
       ObShardingInfo *ret_sharding = NULL;
-      if (NULL != strong_sharding_ && NULL != strong_sharding_->get_phy_table_location_info()) {
+      if (NULL != strong_sharding_ && NULL != strong_sharding_->get_access_targets()) {
         ret_sharding = strong_sharding_;
       } else if (!weak_sharding_.empty() && NULL != weak_sharding_.at(0)
-                 && NULL != weak_sharding_.at(0)->get_phy_table_location_info()) {
+                 && NULL != weak_sharding_.at(0)->get_access_targets()) {
         ret_sharding = weak_sharding_.at(0);
       }
       return ret_sharding;
@@ -486,7 +486,7 @@ class Path
     }
     inline bool parallel_more_than_part_cnt(const int64_t ratio = 1) const
     {
-      const ObShardingInfo *sharding = try_get_sharding_with_table_location();
+      const ObShardingInfo *sharding = try_get_sharding_with_access_targets();
       return NULL != sharding && parallel_ > sharding->get_part_cnt() * ratio;
     }
     int compute_path_property_from_log_op();
@@ -505,7 +505,7 @@ class Path
                  K_(nl_params),
                  K_(exchange_allocated),
                  K_(phy_plan_type),
-                 K_(location_type),
+                 K_(access_shape),
                  K_(is_pipelined_path),
                  K_(is_nl_style_pipelined_path),
                  K_(ambient_card),
@@ -530,14 +530,14 @@ class Path
     common::ObSEArray<ObExecParamRawExpr *, 4, common::ModulePageAllocator, true> nl_params_; // parameters for inner path
     common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> subquery_exprs_;
     ObShardingInfo *strong_sharding_; // may be null
-    // weak sharding is used for partition-wise-join check, thus it should have table location, otherwise it is meaningless
+    // weak sharding is used for partition-wise-join check, thus it should have table access, otherwise it is meaningless
     common::ObSEArray<ObShardingInfo*, 8, common::ModulePageAllocator, true> weak_sharding_;
     common::ObSEArray<ObPCParamEqualInfo, 4, common::ModulePageAllocator, true> equal_param_constraints_;
     common::ObSEArray<ObPCConstParamInfo, 4, common::ModulePageAllocator, true> const_param_constraints_;
     common::ObSEArray<ObExprConstraint, 4, common::ModulePageAllocator, true> expr_constraints_;
     bool exchange_allocated_;
     ObPhyPlanType phy_plan_type_;
-    ObPhyPlanType location_type_;
+    ObPhyPlanType access_shape_;
     bool contain_fake_cte_;
     bool contain_pw_merge_op_;
     bool contain_das_op_;
@@ -679,7 +679,7 @@ class Path
     bool can_das_dynamic_part_pruning() const { return can_das_dynamic_part_pruning_ > 0; }
     int64_t get_part_cnt_before_das_dynamic_part_pruning() const {
       return  can_das_dynamic_part_pruning() && NULL != table_partition_info_
-              ? table_partition_info_->get_phy_tbl_location_info().get_partition_cnt() : 1;
+              ? table_partition_info_->get_access_targets().get_tablet_count() : 1;
     }
     virtual bool is_index_merge_path() const { return false; }
     TO_STRING_KV(K_(table_id),
@@ -1620,7 +1620,7 @@ struct NullAwareAntiJoinInfo {
                             ObIArray<int64_t> &subpart_ids,
                             int64_t &subpart_cnt_in_parts);
 
-    int get_index_partition_ids(const ObCandiTabletLocIArray &part_loc_info_array,
+    int get_index_partition_ids(const TabletAccessTargetIArray &tablet_accesses,
                                 const share::schema::ObTableSchema &table_schema,
                                 const share::schema::ObTableSchema &index_schema,
                                 ObIArray<int64_t> &index_part_ids);
@@ -2049,7 +2049,7 @@ struct NullAwareAntiJoinInfo {
     int compute_sharding_info_for_base_paths(ObIArray<AccessPath *> &access_paths);
 
     int set_sharding_info_for_base_path(ObIArray<AccessPath *> &access_paths, const int64_t cur_idx);
-    int compute_sharding_info_with_part_info(ObTableLocationType location_type,
+    int compute_sharding_info_with_part_info(TableAccessShape access_shape,
                                             ObTablePartitionInfo* table_partition_info,
                                             ObShardingInfo *&sharding_info);
     int get_sharding_info_from_available_access_paths(const uint64_t table_id,
@@ -2466,7 +2466,7 @@ struct NullAwareAntiJoinInfo {
     int get_query_range_count(const QueryRangeInfo &range_info,
                               int64_t &range_cnt);
 
-    int compute_table_location(const uint64_t table_id,
+    int compute_access_plan(const uint64_t table_id,
                                const uint64_t ref_id,
                                const bool is_global_index,
                                ObTablePartitionInfo *&table_partition_info);
@@ -2924,7 +2924,7 @@ struct NullAwareAntiJoinInfo {
                          bool is_precise, ObIArray<ObPCConstParamInfo> &param_infos);
     int check_match_to_type(ObRawExpr *to_type, ObRawExpr *candi_expr, bool &is_same, ObExprEqualCheckContext &equal_ctx);
     bool virtual_table_index_can_range_scan(uint64_t table_id);
-    int compute_table_location_for_index_info_entry(const uint64_t table_id,
+    int compute_index_access_plan(const uint64_t table_id,
                                                     const uint64_t ref_table_id,
                                                     IndexInfoEntry *index_info_entry);
     int compute_sharding_info_for_index_info_entry(const uint64_t table_id,

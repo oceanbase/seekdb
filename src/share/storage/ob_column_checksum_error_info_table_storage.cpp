@@ -18,10 +18,8 @@
 
 #include "share/storage/ob_column_checksum_error_info_table_storage.h"
 #include "lib/oblog/ob_log.h"
-#include "lib/string/ob_sql_string.h"
 #include "share/ob_column_checksum_error_operator.h"
-#include "share/storage/ob_sqlite_connection.h"
-#include "share/storage/ob_sqlite_table_schema.h"
+#include "share/storage/local_store.h"
 
 namespace oceanbase
 {
@@ -29,7 +27,7 @@ namespace share
 {
 
 ObColumnChecksumErrorInfoTableStorage::ObColumnChecksumErrorInfoTableStorage()
-  : pool_(nullptr)
+  : store_(nullptr)
 {
 }
 
@@ -37,33 +35,16 @@ ObColumnChecksumErrorInfoTableStorage::~ObColumnChecksumErrorInfoTableStorage()
 {
 }
 
-int ObColumnChecksumErrorInfoTableStorage::init(ObSQLiteConnectionPool *pool)
+int ObColumnChecksumErrorInfoTableStorage::init(LocalStore *store)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(pool_ = pool)) {
+  if (OB_ISNULL(store_ = store)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
-  } else if (OB_FAIL(create_table_if_not_exists())) {
+  } else if (!store_->is_inited()) {
+    ret = OB_NOT_INIT;
   }
   if (OB_FAIL(ret)) {
-    pool_ = NULL;
-  }
-  return ret;
-}
-
-int ObColumnChecksumErrorInfoTableStorage::create_table_if_not_exists()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(pool_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
-  } else {
-    ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
-    } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_COLUMN_CHECKSUM_ERROR_INFO, nullptr))) {
-    }
+    store_ = nullptr;
   }
   return ret;
 }
@@ -73,33 +54,19 @@ int ObColumnChecksumErrorInfoTableStorage::insert(const ObColumnChecksumErrorInf
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
-    const char *insert_sql =
-      "INSERT INTO __all_column_checksum_error_info "
-      "(frozen_scn, index_type, data_table_id, index_table_id, "
-      " data_tablet_id, index_tablet_id, column_id, data_column_checksum, index_column_checksum) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+    const auto insert_request = LocalRequest::insert(checksum_error::schema())
+        .set(checksum_error::FrozenScn, error_info.frozen_scn_.get_val_for_inner_table_field())
+        .set(checksum_error::IndexType, error_info.is_global_index_ ? 1 : 0)
+        .set(checksum_error::DataTableId, error_info.data_table_id_)
+        .set(checksum_error::IndexTableId, error_info.index_table_id_)
+        .set(checksum_error::DataTabletId, error_info.data_tablet_id_.id())
+        .set(checksum_error::IndexTabletId, error_info.index_tablet_id_.id())
+        .set(checksum_error::ColumnId, error_info.column_id_)
+        .set(checksum_error::DataColumnChecksum, error_info.data_column_checksum_)
+        .set(checksum_error::IndexColumnChecksum, error_info.index_column_checksum_);
 
-    auto binder = [&](ObSQLiteBinder &b) -> int {
-      b.bind_int64(error_info.frozen_scn_.get_val_for_inner_table_field());
-      b.bind_int64(error_info.is_global_index_ ? 1 : 0);
-      b.bind_int64(error_info.data_table_id_);
-      b.bind_int64(error_info.index_table_id_);
-      b.bind_int64(error_info.data_tablet_id_.id());
-      b.bind_int64(error_info.index_tablet_id_.id());
-      b.bind_int64(error_info.column_id_);
-      b.bind_int64(error_info.data_column_checksum_);
-      b.bind_int64(error_info.index_column_checksum_);
-      return OB_SUCCESS;
-    };
-
-    ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
-    } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
-    }
+    ret = store_->execute(insert_request);
   }
   return ret;
 }
@@ -109,61 +76,28 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (error_infos.empty()) {
     // do nothing
   } else {
-    const char *insert_sql =
-      "INSERT INTO __all_column_checksum_error_info "
-      "(frozen_scn, index_type, data_table_id, index_table_id, "
-      " data_tablet_id, index_tablet_id, column_id, data_column_checksum, index_column_checksum) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+    ret = store_->write([&](LocalTransaction &tx) -> int {
+      for (int64_t i = 0; OB_SUCC(ret) && i < error_infos.count(); ++i) {
+        const ObColumnChecksumErrorInfo &error_info = error_infos.at(i);
+        const auto insert_request = LocalRequest::insert(checksum_error::schema())
+            .set(checksum_error::FrozenScn, error_info.frozen_scn_.get_val_for_inner_table_field())
+            .set(checksum_error::IndexType, error_info.is_global_index_ ? 1 : 0)
+            .set(checksum_error::DataTableId, error_info.data_table_id_)
+            .set(checksum_error::IndexTableId, error_info.index_table_id_)
+            .set(checksum_error::DataTabletId, error_info.data_tablet_id_.id())
+            .set(checksum_error::IndexTabletId, error_info.index_tablet_id_.id())
+            .set(checksum_error::ColumnId, error_info.column_id_)
+            .set(checksum_error::DataColumnChecksum, error_info.data_column_checksum_)
+            .set(checksum_error::IndexColumnChecksum, error_info.index_column_checksum_);
 
-    ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
-    } else {
-      // Begin transaction for batch insert
-      if (OB_FAIL(guard->begin_transaction())) {
-      } else {
-        ObSQLiteStmt *stmt = nullptr;
-        if (OB_FAIL(guard->prepare_execute(insert_sql, stmt))) {
-        } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < error_infos.count(); ++i) {
-            const ObColumnChecksumErrorInfo &error_info = error_infos.at(i);
-            auto binder = [&](ObSQLiteBinder &b) -> int {
-              b.bind_int64(error_info.frozen_scn_.get_val_for_inner_table_field());
-              b.bind_int64(error_info.is_global_index_ ? 1 : 0);
-              b.bind_int64(error_info.data_table_id_);
-              b.bind_int64(error_info.index_table_id_);
-              b.bind_int64(error_info.data_tablet_id_.id());
-              b.bind_int64(error_info.index_tablet_id_.id());
-              b.bind_int64(error_info.column_id_);
-              b.bind_int64(error_info.data_column_checksum_);
-              b.bind_int64(error_info.index_column_checksum_);
-              return OB_SUCCESS;
-            };
-
-            if (OB_FAIL(guard->step_execute(stmt, binder))) {
-            }
-          }
-
-          // Finalize statement
-          guard->finalize_execute(stmt);
-
-          // Commit or rollback transaction
-          if (OB_FAIL(ret)) {
-            int rollback_ret = guard->rollback();
-            if (OB_SUCCESS != rollback_ret) {
-            }
-          } else {
-            if (OB_FAIL(guard->commit())) {
-            }
-          }
-        }
+        ret = tx.execute(insert_request);
       }
-    }
+
+      return ret;
+    });
   }
   return ret;
 }
@@ -181,28 +115,17 @@ int ObColumnChecksumErrorInfoTableStorage::get(
   error_infos.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
-    const char *select_sql =
-      "SELECT frozen_scn, index_type, data_table_id, index_table_id, "
-      "       data_tablet_id, index_tablet_id, column_id, data_column_checksum, index_column_checksum "
-      "FROM __all_column_checksum_error_info "
-      "WHERE frozen_scn = ? AND index_type = ? "
-      "  AND data_table_id = ? AND index_table_id = ? "
-      "  AND data_tablet_id = ? AND index_tablet_id = ? "
-      "ORDER BY column_id;";
+    const auto select_request = LocalRequest::select(checksum_error::schema(), {checksum_error::FrozenScn, checksum_error::IndexType, checksum_error::DataTableId, checksum_error::IndexTableId, checksum_error::DataTabletId, checksum_error::IndexTabletId, checksum_error::ColumnId, checksum_error::DataColumnChecksum, checksum_error::IndexColumnChecksum})
+        .eq(checksum_error::FrozenScn, frozen_scn.get_val_for_inner_table_field())
+        .eq(checksum_error::IndexType, is_global_index ? 1 : 0)
+        .eq(checksum_error::DataTableId, data_table_id)
+        .eq(checksum_error::IndexTableId, index_table_id)
+        .eq(checksum_error::DataTabletId, data_tablet_id.id())
+        .eq(checksum_error::IndexTabletId, index_tablet_id.id())
+        .order(checksum_error::ColumnId);
 
-    auto binder = [&](ObSQLiteBinder &b) -> int {
-      b.bind_int64(frozen_scn.get_val_for_inner_table_field());
-      b.bind_int64(is_global_index ? 1 : 0);
-      b.bind_int64(data_table_id);
-      b.bind_int64(index_table_id);
-      b.bind_int64(data_tablet_id.id());
-      b.bind_int64(index_tablet_id.id());
-      return OB_SUCCESS;
-    };
-
-    auto row_processor = [&](ObSQLiteRowReader &reader) -> int {
+    auto row_processor = [&](LocalRowReader &reader) -> int {
       ObColumnChecksumErrorInfo error_info;
       uint64_t frozen_scn_val = reader.get_int64();
       int64_t index_type = reader.get_int64();
@@ -229,13 +152,8 @@ int ObColumnChecksumErrorInfoTableStorage::get(
       return ret;
     };
 
-    ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
-    } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
+    if (OB_FAIL(store_->query(select_request, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
       }
@@ -251,26 +169,10 @@ int ObColumnChecksumErrorInfoTableStorage::delete_expired(
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
-    // SQLite doesn't support DELETE ... LIMIT, use subquery with rowid instead
-    ObSqlString sql;
-    if (OB_FAIL(sql.append_fmt("DELETE FROM __all_column_checksum_error_info "
-                                "WHERE rowid IN ("
-                                "  SELECT rowid FROM __all_column_checksum_error_info "
-                                "  WHERE frozen_scn < %lu "
-                                "  ORDER BY frozen_scn "
-                                "  LIMIT %ld"
-                                ")",
-                                frozen_scn_before.get_val_for_inner_table_field(), limit))) {
-    } else {
-      ObSQLiteConnectionGuard guard(pool_);
-      if (!guard) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
-      } else if (OB_FAIL(guard->execute(sql.ptr(), nullptr))) {
-      }
-    }
+    const auto request = LocalRequest::erase(checksum_error::schema())
+        .lt(checksum_error::FrozenScn, static_cast<int64_t>(frozen_scn_before.get_val_for_inner_table_field())).order(checksum_error::FrozenScn).take(limit);
+    ret = store_->execute(request);
   }
   return ret;
 }

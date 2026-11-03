@@ -45,7 +45,6 @@ int ObShowCreateDatabase::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_) || OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member is NULL", K(ret), K(allocator_), K(schema_guard_));
   } else {
     if (!start_to_read_) {
       const ObDatabaseSchema *db_schema = NULL;
@@ -58,7 +57,6 @@ int ObShowCreateDatabase::inner_get_next_row(common::ObNewRow *&row)
                  show_database_id, db_schema))) {
       } else if (OB_UNLIKELY(NULL == db_schema)) {
         ret = OB_ERR_BAD_DATABASE;
-        LOG_WARN("db_schema is null", K(ret), K(show_database_id));
       } else {
         if (OB_FAIL(fill_row_cells(show_database_id, db_schema->get_database_name_str()))) {
         } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
@@ -71,7 +69,6 @@ int ObShowCreateDatabase::inner_get_next_row(common::ObNewRow *&row)
     if (OB_LIKELY(OB_SUCCESS == ret && start_to_read_)) {
       if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("fail to get next row", K(ret));
         }
       } else {
         row = &cur_row_;
@@ -93,7 +90,6 @@ int ObShowCreateDatabase::calc_show_database_id(uint64_t &show_database_id)
     if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
       if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
       } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
                  && ObIntType == start_key_obj_ptr[0].get_type()) {
         show_database_id = start_key_obj_ptr[0].get_int();
@@ -115,7 +111,6 @@ int ObShowCreateDatabase::fill_row_cells(uint64_t show_database_id,
       || OB_ISNULL(allocator_)
       || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("class isn't inited", K(cur_row_.cells_), K(schema_guard_), K(allocator_), K(session_));
   } else if (OB_UNLIKELY(cur_row_.count_ < output_column_ids_.count())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN,
@@ -188,8 +183,6 @@ int ObShowCreateDatabase::fill_row_cells(uint64_t show_database_id,
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid column id", K(ret), K(cell_idx),
-                     K(i), K(output_column_ids_), K(col_id));
           break;
         }
       }

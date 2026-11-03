@@ -39,14 +39,12 @@ int ObAdaptiveAutoDop::calculate_table_auto_dop(const ObPhysicalPlan &plan, Auto
   const ObOpSpec *root_spec = plan.get_root_op_spec();
   if (OB_ISNULL(root_spec)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("root spec is null", K(ret));
   } else if (map.created()) {
     map.clear();
   } else if (OB_FAIL(map.create(common::hash::cal_next_prime(256), attr, attr))) {
   }
   if (OB_SUCC(ret)
       && OB_FAIL(inner_calculate_table_auto_dop(*root_spec, map, table_dop, is_single_part))) {
-    LOG_WARN("failed to inner calculate table auto dop", K(ret));
   }
   if (OB_FAIL(ret)) {
     map.clear();
@@ -69,7 +67,6 @@ int ObAdaptiveAutoDop::inner_calculate_table_auto_dop(const ObOpSpec &spec, Auto
       const ObOpSpec *child_spec = spec.get_child(i);
       if (OB_ISNULL(child_spec)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("spec is null", K(ret));
       } else if (OB_FAIL(SMART_CALL(
                    inner_calculate_table_auto_dop(*child_spec, map, dop, is_single_part)))) {
       } else {
@@ -105,47 +102,44 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObOpSpec &spec, int64_t &tab
              && OB_FAIL(ObSQLUtils::extract_pre_query_range(
                   query_range_provider, ctx_.get_allocator(), ctx_, key_ranges,
                   ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
-    LOG_WARN("failed to extract pre query ranges", K(ret));
     // step2: build est tasks.
   } else if (OB_FAIL(build_storage_estimation_tasks(tsc_spec, cost_tsc_info, key_ranges, tasks,
                                                     is_single_part, part_cnt))) {
   } else if (OB_FAIL(do_storage_estimation(tasks, res_reliable))) {
   } else if (res_reliable && tasks.count() > 0
              && OB_FAIL(calculate_tsc_auto_dop(tasks, cost_tsc_info, part_cnt, table_dop))) {
-    LOG_WARN("failed to calculate table dop", K(ret));
   }
   return ret;
 }
 
 int ObAdaptiveAutoDop::choose_storage_estimation_partitions(const int64_t partition_limit,
-                                                            const DASTabletLocSEArray &tablet_locs,
-                                                            DASTabletLocSEArray &chosen_tablet_locs)
+                                                            const DASRuntimeTabletSEArray &tablet_accesses,
+                                                            DASRuntimeTabletSEArray &chosen_tablet_accesses)
 {
   int ret = OB_SUCCESS;
   ObSqlBitSet<> min_max_index;
   int64_t min_index = 0;
   int64_t max_index = 0;
   const int STORAGE_EST_SAMPLE_SEED = 1;
-  if (partition_limit <= 0 || partition_limit >= tablet_locs.count()) {
-    if (OB_FAIL(chosen_tablet_locs.assign(tablet_locs))) {
+  if (partition_limit <= 0 || partition_limit >= tablet_accesses.count()) {
+    if (OB_FAIL(chosen_tablet_accesses.assign(tablet_accesses))) {
     }
   } else {
-    for (int64_t i = 1; i < tablet_locs.count(); i ++) {
-      if (tablet_locs.at(i)->tablet_id_.id() <
-          tablet_locs.at(min_index)->tablet_id_.id()) {
+    for (int64_t i = 1; i < tablet_accesses.count(); i ++) {
+      if (tablet_accesses.at(i)->tablet_id_.id() <
+          tablet_accesses.at(min_index)->tablet_id_.id()) {
         min_index = i;
       }
-      if (tablet_locs.at(i)->tablet_id_.id() >
-          tablet_locs.at(max_index)->tablet_id_.id()) {
+      if (tablet_accesses.at(i)->tablet_id_.id() >
+          tablet_accesses.at(max_index)->tablet_id_.id()) {
         max_index = i;
       }
     }
     if (OB_FAIL(min_max_index.add_member(min_index)) ||
         OB_FAIL(min_max_index.add_member(max_index))) {
-      LOG_WARN("failed to add member", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::choose_random_members(
-                          STORAGE_EST_SAMPLE_SEED, tablet_locs, partition_limit,
-                          chosen_tablet_locs, &min_max_index))) {
+                          STORAGE_EST_SAMPLE_SEED, tablet_accesses, partition_limit,
+                          chosen_tablet_accesses, &min_max_index))) {
     }
   }
   return ret;
@@ -157,52 +151,50 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
   int64_t &part_cnt)
 {
   int ret = OB_SUCCESS;
-  ObDASTableLoc *match_table_loc = nullptr;
+  DASRuntimeTableAccess *match_access_plan = nullptr;
   ObDASCtx &das_ctx = ctx_.get_das_ctx();
   const ObSimpleTableSchemaV2 *table_schema = nullptr;
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   common::ObIAllocator &allocator = ctx_.get_allocator();
-  const DASTableLocList &table_locs = das_ctx.get_table_loc_list();
+  const DASRuntimeTableList &table_accesses = das_ctx.get_table_accesses();
   const int64_t index_id = cost_tsc_info.get_index_id();
   const int64_t MAX_EST_TASK_NUM = 10;
 
-  FOREACH(table_loc, table_locs)
+  FOREACH(table_access, table_accesses)
   {
-    if (index_id == (*table_loc)->get_ref_table_id()) {
-      match_table_loc = (*table_loc);
+    if (index_id == (*table_access)->get_ref_table_id()) {
+      match_access_plan = (*table_access);
       break;
     }
   }
-  if (OB_ISNULL(sql_ctx) || OB_ISNULL(match_table_loc)) {
+  if (OB_ISNULL(sql_ctx) || OB_ISNULL(match_access_plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("is null", K(ret), K(sql_ctx), K(match_table_loc));
   } else if (OB_FAIL(
                sql_ctx->schema_guard_->get_simple_table_schema( index_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null schema", K(ret));
   } else {
-    const DASTabletLocList &tablet_locs = match_table_loc->get_tablet_locs();
-    is_single_part = (1 == tablet_locs.size());
-    part_cnt = tablet_locs.size();
+    const DASRuntimeTabletList &tablet_accesses = match_access_plan->get_tablet_accesses();
+    is_single_part = (1 == tablet_accesses.size());
+    part_cnt = tablet_accesses.size();
     int64_t schema_version = table_schema->get_schema_version();
-    DASTabletLocSEArray candi_tablet_locs;
-    DASTabletLocSEArray chosen_tablet_locs;
-    if (OB_FAIL(candi_tablet_locs.reserve(tablet_locs.size()))) {
+    DASRuntimeTabletSEArray tablet_targets;
+    DASRuntimeTabletSEArray chosen_tablet_accesses;
+    if (OB_FAIL(tablet_targets.reserve(tablet_accesses.size()))) {
     } else {
-      FOREACH_X(tablet_loc, tablet_locs, OB_SUCC(ret))
+      FOREACH_X(tablet_access, tablet_accesses, OB_SUCC(ret))
       {
-        if (OB_FAIL(candi_tablet_locs.push_back(*tablet_loc))) {
+        if (OB_FAIL(tablet_targets.push_back(*tablet_access))) {
         }
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(choose_storage_estimation_partitions(MAX_EST_TASK_NUM, candi_tablet_locs,
-                                                            chosen_tablet_locs))) {
+    } else if (OB_FAIL(choose_storage_estimation_partitions(MAX_EST_TASK_NUM, tablet_targets,
+                                                            chosen_tablet_accesses))) {
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < chosen_tablet_locs.count(); i++) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < chosen_tablet_accesses.count(); i++) {
         if (OB_FAIL(add_estimation_tasks(tsc_spec, cost_tsc_info, schema_version,
-                                         chosen_tablet_locs.at(i), ranges, tasks))) {
+                                         chosen_tablet_accesses.at(i), ranges, tasks))) {
         }
       }
     }
@@ -213,7 +205,7 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
 int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
                                             const ObCostTableScanSimpleInfo &cost_tsc_info,
                                             const int64_t schema_version,
-                                            ObDASTabletLoc *tablet_loc, ObQueryRangeArray &ranges,
+                                            DASRuntimeTabletAccess *tablet_access, ObQueryRangeArray &ranges,
                                             ObIArray<ObBatchEstTasks *> &tasks)
 {
   int ret = OB_SUCCESS;
@@ -225,24 +217,21 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
   if (!tasks.empty()) {
     if (OB_ISNULL(task = tasks.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid local storage estimation task", K(ret));
     }
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObBatchEstTasks)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("memory is not enough", K(ret));
   } else if (FALSE_IT(task = new (ptr) ObBatchEstTasks())) {
   } else if (OB_FAIL(tasks.push_back(task))) {
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(index_est_arg = task->arg_.index_params_.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate index argument", K(ret));
   } else {
     task->arg_.schema_version_ = schema_version;
     index_est_arg->index_id_ = cost_tsc_info.get_index_id();
     index_est_arg->scan_flag_ = tsc_spec.get_query_flag();
     index_est_arg->range_columns_count_ = cost_tsc_info.get_range_columns_count();
-    index_est_arg->tablet_id_ = tablet_loc->tablet_id_;
+    index_est_arg->tablet_id_ = tablet_access->tablet_id_;
     
     
     index_est_arg->tx_id_ = sql_ctx->session_info_->get_tx_id();
@@ -264,7 +253,6 @@ int ObAdaptiveAutoDop::construct_scan_range_batch(ObIAllocator &allocator,
     void *ptr = allocator.alloc(sizeof(SQLScanRange));
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ptr), K(ret));
     } else {
       SQLScanRange *range = new (ptr) SQLScanRange();
       *range = *(scan_ranges.at(0));
@@ -276,7 +264,6 @@ int ObAdaptiveAutoDop::construct_scan_range_batch(ObIAllocator &allocator,
     void *ptr = allocator.alloc(sizeof(SQLScanRangeArray));
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ptr), K(ret));
     } else {
       range_array = new (ptr) SQLScanRangeArray();
       batch.type_ = ObSimpleBatch::T_MULTI_SCAN;
@@ -298,10 +285,8 @@ int ObAdaptiveAutoDop::do_storage_estimation(ObIArray<ObBatchEstTasks *> &tasks,
   for (int64_t i = 0; OB_SUCC(ret) && res_reliable && i < tasks.count(); ++i) {
     if (OB_ISNULL(tasks.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task is null", K(ret));
     } else if (OB_FAIL(do_storage_estimation(*tasks.at(i)))) {
       res_reliable = false;
-      LOG_WARN("failed to do storage estimation", K(ret));
       break;
     }
   }
@@ -352,12 +337,10 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
     int64_t parallel_servers_target = 0;
     if (OB_ISNULL(runtime = share::server_runtime())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
                && OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
                     *GCTX.schema_service_, SYS_VAR_PARALLEL_SERVERS_TARGET,
                     parallel_servers_target))) {
-      LOG_WARN("fail to read runtime variable", K(ret));
     } else {
       min_cpu = std::max(runtime->min_cpu(), 0.0);
       parallel_servers_target = std::max(parallel_servers_target, static_cast<int64_t>(0));

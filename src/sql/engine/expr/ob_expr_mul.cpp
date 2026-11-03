@@ -57,10 +57,8 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
     // only support vector/array/varchar * vector/array/varchar now // array and varchar need cast to array(float)
     uint16_t res_subschema_id = UINT16_MAX;
     if (OB_FAIL(ObArrayExprUtils::calc_cast_type2(type_, type1, type2, type_ctx, res_subschema_id))) {
-      LOG_WARN("failed to calc cast type", K(ret), K(type1));
     } else if (UINT16_MAX == res_subschema_id) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected result subschema_id", K(ret));
     } else {
       type.set_collection(res_subschema_id);
     }
@@ -100,7 +98,6 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
         if (OB_UNLIKELY(PRECISION_UNKNOWN_YET == type.get_precision() ||
                         SCALE_UNKNOWN_YET == type.get_scale())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected decimal int precision and scale", K(ret), K(type));
         } else if ((type1.get_scale() + type2.get_scale() <= OB_MAX_DECIMAL_SCALE)
               && (type1.get_precision() + type2.get_precision() <= MAX_PRECISION_DECIMAL_INT_256)) {
           // use specialized functions without additional casts
@@ -205,7 +202,6 @@ int ObExprMul::mul_int(ObObj &res,
     res.set_int(left_i * right_i);
   } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (OB_UNLIKELY(is_int_uint_mul_out_of_range(left_i, right_i))) {
       ret = OB_OPERATE_OVERFLOW;
@@ -252,7 +248,6 @@ int ObExprMul::mul_uint(ObObj &res,
     res.set_uint64(left_i * right_i);
   } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (OB_UNLIKELY(is_int_uint_mul_out_of_range(right_i, left_i))) {
       ret = OB_OPERATE_OVERFLOW;
@@ -281,7 +276,6 @@ int ObExprMul::mul_double(ObObj &res,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     double left_d = left.get_double();
     double right_d = right.get_double();
@@ -297,10 +291,8 @@ int ObExprMul::mul_double(ObObj &res,
                       left_d,
                       right_d);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      LOG_WARN("double out of range", K(ret), K(left), K(right), K(res));
       res.set_null();
     }
-    LOG_DEBUG("succ to mul double", K(left), K(right));
   }
   UNUSED(allocator);
   UNUSED(scale);
@@ -316,12 +308,10 @@ int ObExprMul::mul_double_no_overflow(ObObj &res,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     double left_d = left.get_double();
     double right_d = right.get_double();
     res.set_double(left_d * right_d);
-    LOG_DEBUG("succ to mul double", K(left), K(right));
   }
   return ret;
 }
@@ -338,7 +328,6 @@ int ObExprMul::mul_number(ObObj &res,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocator is null", K(ret));
   } else if (OB_FAIL(left.get_number().mul_v3(right.get_number(), res_nmb, *allocator))) {
-    LOG_WARN("failed to mul numbers", K(ret), K(left), K(right));
   } else {
     ObObjType res_type = res.get_type();
     if (ObUNumberType == res_type) {
@@ -591,7 +580,6 @@ struct ObNumberMulFunc
     number::ObNumber r_num(r.get_number());
     number::ObNumber res_num;
     if (OB_FAIL(l_num.mul_v3(r_num, res_num, local_alloc))) {
-      LOG_WARN("mul num failed", K(ret), K(l_num), K(r_num));
     } else {
       res.set_number(res_num);
     }
@@ -606,7 +594,6 @@ int ObExprMul::mul_number(EVAL_FUNC_ARG_DECL)
 
 int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  LOG_DEBUG("mul_number_batch begin");
   int ret = OB_SUCCESS;
   ObDatumVector l_datums;
   ObDatumVector r_datums;
@@ -614,7 +601,6 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
   const ObExpr &right = *expr.args_[1];
 
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
-    LOG_WARN("number multiply batch evaluation failure", K(ret));
   } else {
     l_datums = left.locate_expr_datumvector(ctx);
     r_datums = right.locate_expr_datumvector(ctx);
@@ -653,7 +639,6 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       } else {
         // normal path: no speedup
         if (OB_FAIL(l_num.mul_v3(r_num, res_num, local_alloc))) {
-          LOG_WARN("mul num failed", K(ret), K(l_num), K(r_num));
         } else {
           results.at(i)->set_number(res_num);
           eval_flags.set(i);
@@ -662,7 +647,6 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       }
     }
   }
-  LOG_DEBUG("mul_number_batch done");
   return ret;
 
 }
@@ -746,7 +730,6 @@ struct ObDecimalIntBatchMulRawWithCheck
       int64_t pos = 0;
       databuff_printf(expr_str, OB_MAX_TWO_OPERATOR_EXPR_LENGTH, pos, "");
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DECIMAL", expr_str);
-      LOG_WARN("decimal int out of range", K(ret));
     }
     return ret;
   }
@@ -764,7 +747,6 @@ struct ObDecimalIntBatchMulRawWithRoundCheck : public ObDecimalIntBatchMulRawWit
       int64_t pos = 0;
       databuff_printf(expr_str, OB_MAX_TWO_OPERATOR_EXPR_LENGTH, pos, "");
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DECIMAL", expr_str);
-      LOG_WARN("decimal int out of range", K(ret));
     }
     return ret;
   }
@@ -917,7 +899,6 @@ struct ObDecimalNumberMulFunc
     res_int = res_int * (*reinterpret_cast<const Righ *>(r.ptr_));
     number::ObNumber res_num;
     if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
-      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
     } else {
       res.set_number(res_num);
       alloc.free();  // for batch function reuse alloc
@@ -997,7 +978,6 @@ int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool use_number_
       DECINT_SWITCH_CASE_NUMBER_RESULT(128, 128, 128)
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected decimal integer precision", K(ret), K(lp), K(ls), K(rp), K(rs));
         break;
     }
   } else if (res_s <= OB_MAX_DECIMAL_SCALE && res_p <= MAX_PRECISION_DECIMAL_INT_256) { // mysql
@@ -1027,7 +1007,6 @@ int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool use_number_
       DECINT_SWITCH_CASE(256, 256, 128)
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected precision in mysql", K(ret), K(lp), K(ls), K(rp), K(rs));
         break;
     }
   } else { // mysql with round or overflow check
@@ -1058,7 +1037,6 @@ int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool use_number_
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected precision", K(ret), K(rt_expr.datum_meta_));
         break;
     }
   }
@@ -1087,7 +1065,6 @@ int ObExprMul::cg_expr(ObExprCGCtx &op_cg_ctx,
 
   rt_expr.inner_functions_ = NULL;
   rt_expr.may_not_need_raw_check_ = false;
-  LOG_DEBUG("arrive here cg_expr", K(ret), K(rt_expr));
   switch (rt_expr.datum_meta_.type_) {
     case ObIntType: {
       SET_MUL_FUNC_PTR(mul_int_int);
@@ -1139,7 +1116,6 @@ int ObExprMul::cg_expr(ObExprCGCtx &op_cg_ctx,
 
   if (OB_ISNULL(rt_expr.eval_func_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected result type", K(ret), K(rt_expr.datum_meta_.type_), K(left), K(right));
   }
   return ret;
 }

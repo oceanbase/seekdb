@@ -34,14 +34,12 @@ int ObMultiPrefixTree::HashTable::create(const int64_t bucket_cnt_limit,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(created_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already created", K(ret));
   } else if (OB_UNLIKELY(bucket_cnt_limit <= 0)
       || OB_UNLIKELY(hnode_cnt_limit <= 0)
       || OB_UNLIKELY(bucket_cnt_limit < hnode_cnt_limit)
       || OB_ISNULL(alloc)
       || OB_UNLIKELY(0 != (bucket_cnt_limit & (bucket_cnt_limit - 1)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(bucket_cnt_limit), K(hnode_cnt_limit));
   } else {
     bucket_cnt_limit_ = bucket_cnt_limit;
     hnode_cnt_limit_ = hnode_cnt_limit;
@@ -50,10 +48,8 @@ int ObMultiPrefixTree::HashTable::create(const int64_t bucket_cnt_limit,
     const int64_t hnodes_size = hnode_cnt_limit_ * static_cast<int64_t>(sizeof(HashNode));
     if (OB_ISNULL(buckets_ = reinterpret_cast<HashNode **>(alloc_->alloc(buckets_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for bucket", K(ret), K(bucket_cnt_limit_));
     } else if (OB_ISNULL(hash_nodes_ = reinterpret_cast<HashNode *>(alloc_->alloc(hnodes_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for nodes", K(ret), K(hnode_cnt_limit_));
     } else {
       MEMSET(buckets_, 0, buckets_size);
       created_ = true;
@@ -67,7 +63,6 @@ int ObMultiPrefixTree::HashTable::build(TreeNode &tnode, const int64_t move_step
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!created_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not created", K(ret));
   } else {
     const char *str = NULL;
     const int64_t common_length = tnode.length_;
@@ -153,7 +148,6 @@ int ObMultiPrefixTree::init(const int64_t cell_cnt, const int64_t bucket_cnt_lim
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     const int64_t cnode_size = cell_cnt * static_cast<int64_t>(sizeof(CellNode));
     const int64_t tnode_size = MAX_TNODE_CNT * static_cast<int64_t>(sizeof(TreeNode));
@@ -162,10 +156,8 @@ int ObMultiPrefixTree::init(const int64_t cell_cnt, const int64_t bucket_cnt_lim
     if (OB_FAIL(ht_.create(bucket_cnt_limit, cnode_cnt_limit, &alloc_))) {
     } else if (OB_ISNULL(cell_nodes_ = reinterpret_cast<CellNode *>(alloc_.alloc(cnode_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc cell nodes", K(ret), K(cnode_size));
     } else if (OB_ISNULL(tree_nodes_ = reinterpret_cast<TreeNode *>(alloc_.alloc(tnode_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc tree nodes", K(ret), K(tnode_size));
     } else {
       MEMSET(cell_nodes_, 0, cnode_size);
       cnode_cnt_ = cell_cnt;
@@ -181,7 +173,6 @@ int ObMultiPrefixTree::init_root_node(const ObColDatums *col_datums)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else { // col_values is checked before
     tree_nodes_[0].reset();
     for (int64_t row_id = 0; OB_SUCC(ret) && row_id < col_datums->count(); ++row_id) {
@@ -195,7 +186,6 @@ int ObMultiPrefixTree::init_root_node(const ObColDatums *col_datums)
         cell_nodes_[row_id].len_ = -2;
       } else if (datum.is_ext()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported extend datum type", K(ret), K(datum));
       } else {
         tree_nodes_[0].cells_.add_first(&cell_nodes_[row_id]);
       }
@@ -211,7 +201,6 @@ int ObMultiPrefixTree::try_previous_length(const int64_t last_prefix_length, boo
   stop = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (0 == last_prefix_length) {
     stop = true;
     // do nothing
@@ -225,7 +214,6 @@ int ObMultiPrefixTree::try_previous_length(const int64_t last_prefix_length, boo
     if (!stop && 0 < root.cells_.get_size()) {
       if (OB_FAIL(add_node(root, root.cells_, 0))) {
         if (OB_DATA_OUT_OF_RANGE != ret) {
-          LOG_WARN("failed to add new tree node", K(ret));
         }
       }
     }
@@ -244,12 +232,9 @@ int ObMultiPrefixTree::build_tree(
   bool stop = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(cnode_cnt_ != col_datums->count())
       || OB_UNLIKELY(0 > last_prefix_length)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(cnode_cnt),
-        K(col_datums->count()), K(last_prefix_length));
   } else {
 
     if (OB_FAIL(init_root_node(col_datums))) {
@@ -264,7 +249,6 @@ int ObMultiPrefixTree::build_tree(
             ret = OB_SUCCESS;
             suitable = false;
           } else {
-            LOG_WARN("failed to traverse level", K(ret), K(level), K(stop));
           }
         } else if (!stop) {
           ++level;
@@ -288,10 +272,8 @@ int ObMultiPrefixTree::traverse_by_level(const int64_t level, bool &stop,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(0 > level)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(level));
   } else {
     stop = true;
     const int64_t cnt = tnode_cnt_; // tree nodes count might be changed
@@ -308,7 +290,6 @@ int ObMultiPrefixTree::traverse_by_level(const int64_t level, bool &stop,
               // not suitable
             }
           } else {
-            LOG_WARN("failed to build hashtable", K(ret), K(level));
           }
         }
 
@@ -327,7 +308,6 @@ int ObMultiPrefixTree::traverse_by_level(const int64_t level, bool &stop,
                 // split tree node
                 if (OB_FAIL(add_node(tnode, hnode.cells_, move_step))) {
                   if (OB_DATA_OUT_OF_RANGE != ret) {
-                    LOG_WARN("failed to add new tree node", K(ret));
                   }
                 } else {
                   stop = false;
@@ -352,7 +332,6 @@ int ObMultiPrefixTree::add_node(TreeNode &par_tnode, CellList &cells, const int6
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(MAX_TNODE_CNT == tnode_cnt_)) {
     ret = OB_DATA_OUT_OF_RANGE;
   } else {
@@ -378,7 +357,6 @@ int ObMultiPrefixTree::complete_build(int64_t &prefix_count,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     prefix_count = 0;
     total_prefix_length = 0;
@@ -408,8 +386,6 @@ int ObMultiPrefixTree::complete_build(int64_t &prefix_count,
         tnode.ref_ = tnode.children_->ref_;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child's prefix is NULL, unexpected", K(ret), K(tnode),
-            "child", *tnode.children_);
       }
     }
 
@@ -467,16 +443,12 @@ int ObMultiPrefixTreeFactory::create(const int64_t cell_cnt,
   if (OB_UNLIKELY(0 >= cell_cnt || 0 >= bucket_cnt_limit
       || cell_cnt > bucket_cnt_limit)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(cell_cnt),
-        K(bucket_cnt_limit));
   } else if (0 < prefix_trees_.count()) {
     ObMultiPrefixTree *cached_prefix_tree = prefix_trees_[prefix_trees_.count() - 1];
     if (OB_ISNULL(cached_prefix_tree)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cached_prefix_tree is null", K(ret));
     } else if (OB_UNLIKELY(!cached_prefix_tree->is_inited())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cached_prefix_tree is not inited", K(ret));
     } else if (cached_prefix_tree->get_cnode_cnt_limit() >= cell_cnt
         && cached_prefix_tree->get_bucket_cnt_limit() >= bucket_cnt_limit) {
       // reuse prefix tree when needed
@@ -489,10 +461,7 @@ int ObMultiPrefixTreeFactory::create(const int64_t cell_cnt,
   if (OB_SUCC(ret) && NULL == prefix_tree) {
     if (OB_ISNULL(prefix_tree = allocator_.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc multi-prefix prefix_tree", K(ret));
     } else if (OB_FAIL(prefix_tree->init(cell_cnt, bucket_cnt_limit))) {
-      LOG_WARN("failed to init multi-prefix prefix_tree", K(ret),
-          K(cell_cnt), K(bucket_cnt_limit));
       allocator_.free(prefix_tree);
     }
   }
@@ -504,12 +473,9 @@ int ObMultiPrefixTreeFactory::recycle(ObMultiPrefixTree *prefix_tree)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(prefix_tree)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(prefix_tree));
   } else if (OB_UNLIKELY(!prefix_tree->is_inited())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("prefix_tree is not inited", K(ret));
   } else if (OB_FAIL(prefix_trees_.push_back(prefix_tree))) {
-    LOG_WARN("failed to push back prefix_tree", K(ret));
     allocator_.free(prefix_tree);
   }
   return ret;

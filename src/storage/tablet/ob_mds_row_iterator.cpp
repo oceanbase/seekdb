@@ -57,16 +57,13 @@ int ObMdsRowIterator::init(
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!scan_param.is_mds_query_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not mds query request", K(ret), K(scan_param));
   } else {
     const ObRowkeyReadInfo *rowkey_read_info = ObMdsSchemaHelper::get_instance().get_rowkey_read_info();
 
     if (OB_UNLIKELY(!scan_param.read_version_range_.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid version range", K(ret), K(scan_param.read_version_range_));
     } else if (OB_FAIL(access_param_.init(scan_param, nullptr/*tablet_handle*/, rowkey_read_info))) {
     } else if (OB_FAIL(access_ctx_.init(scan_param, store_ctx, scan_param.read_version_range_, nullptr/*cached_iter_node*/))) {
     } else if (OB_FAIL(init_get_table_param(scan_param, tablet_handle))) {
@@ -119,13 +116,10 @@ int ObMdsRowIterator::get_next_rows(int64_t &count, int64_t capacity)
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_ISNULL(multiple_merge_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("multiple merge is null", K(ret), KP_(multiple_merge));
   } else if (OB_FAIL(multiple_merge_->get_next_rows(count, capacity))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next rows", K(ret), KPC(this));
     }
   }
 
@@ -138,13 +132,10 @@ int ObMdsRowIterator::get_next_row(blocksstable::ObDatumRow *&row)
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_ISNULL(multiple_merge_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("multiple merge is null", K(ret), KP_(multiple_merge));
   } else if (OB_FAIL(multiple_merge_->get_next_row(row))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next row", K(ret), KPC(this));
     }
   }
 
@@ -158,11 +149,9 @@ int ObMdsRowIterator::get_next_mds_kv(common::ObIAllocator &allocator, mds::MdsD
   blocksstable::ObDatumRow *row = nullptr;
   if (OB_FAIL(get_next_row(row))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next row", K(ret));
     }
   } else if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is null", K(ret), KP(row), KPC(this));
   } else if (OB_FAIL(convert(allocator, *row, kv))) {
   }
 
@@ -205,31 +194,23 @@ int ObMdsRowIterator::init_and_open_iter(ObTableScanParam &scan_param)
 
   if (OB_FAIL(!table_scan_range_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table scan range is invalid", K(ret), K_(table_scan_range));
   } else if (table_scan_range_.is_get()) {
     const common::ObIArray<blocksstable::ObDatumRowkey> &rowkeys = table_scan_range_.get_rowkeys();
     if (rowkeys.empty()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("rowkeys is empty", K(ret), K(rowkeys));
     } else if (rowkeys.count() == 1 && OB_FAIL(init_and_open_single_get_merge(scan_param))) {
-      LOG_WARN("fail to init and open single get merge", K(ret), K(scan_param));
     } else if (rowkeys.count() > 1 && OB_FAIL(init_and_open_multiple_get_merge(scan_param))) {
-      LOG_WARN("fail to init and open multiple get merge", K(ret), K(scan_param));
     }
   } else if (table_scan_range_.is_scan()) {
     const common::ObIArray<blocksstable::ObDatumRange> &datum_ranges = table_scan_range_.get_ranges();
     if (datum_ranges.empty()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("datum ranges is empty", K(ret), K(datum_ranges));
     } else if (datum_ranges.count() == 1 && OB_FAIL(init_and_open_multiple_scan_merge(scan_param))) {
-      LOG_WARN("fail to init and open multiple scan merge", K(ret), K(scan_param));
     } else if (datum_ranges.count() > 1) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("multiple datum ranges for mds is not supported", K(ret), K(datum_ranges));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table scan range is not GET or SCAN", K(ret), K_(table_scan_range));
   }
 
   return ret;
@@ -242,7 +223,6 @@ int ObMdsRowIterator::init_and_open_single_get_merge(ObTableScanParam &scan_para
 
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(ObSingleMerge));
   } else {
     ObSingleMerge *single_merge = new (buf) ObSingleMerge();
     const blocksstable::ObDatumRowkey &rowkey = table_scan_range_.get_rowkeys().at(0);
@@ -269,7 +249,6 @@ int ObMdsRowIterator::init_and_open_multiple_get_merge(ObTableScanParam &scan_pa
 
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(ObMultipleGetMerge));
   } else {
     ObMultipleGetMerge *multiple_get_merge = new (buf) ObMultipleGetMerge();
     const common::ObIArray<blocksstable::ObDatumRowkey> &rowkeys = table_scan_range_.get_rowkeys();
@@ -296,7 +275,6 @@ int ObMdsRowIterator::init_and_open_multiple_scan_merge(ObTableScanParam &scan_p
 
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(ObMultipleScanMerge));
   } else {
     ObMultipleScanMerge *multiple_scan_merge = new (buf) ObMultipleScanMerge();
     const blocksstable::ObDatumRange &datum_range = table_scan_range_.get_ranges().at(0);

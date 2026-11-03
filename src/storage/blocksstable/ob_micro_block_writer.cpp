@@ -98,7 +98,6 @@ int ObMicroBlockWriter::init(const ObDataStoreDesc *data_store_desc)
     }
     if (OB_NOT_NULL(col_desc_array_ = &data_store_desc->get_rowkey_col_descs())) {
       if (FAILEDx(checksum_helper_.init(col_desc_array_, data_store_desc->contain_full_col_descs()))) {
-        STORAGE_LOG(WARN, "fail to init checksum_helper", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -127,8 +126,6 @@ int ObMicroBlockWriter::inner_init()
     }
 
     if (FAILEDx(reserve_header(column_count_, rowkey_column_count_, is_major_))) {
-      STORAGE_LOG(WARN, "micro block writer fail to reserve header",
-          K(ret), K_(column_count));
     } else if (OB_FAIL(index_buffer_.write(static_cast<int32_t>(0)))) {
     } else if (OB_UNLIKELY(data_buffer_.length() != get_data_base_offset()
           || index_buffer_.length() != get_index_base_offset())) {

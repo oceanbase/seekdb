@@ -95,7 +95,6 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   // transform to tree node
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, is_null))) {
   }
 
@@ -132,7 +131,6 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           ObIJsonBase *j_val;
           if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
             ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-            LOG_WARN("failed: get_json_val.", K(ret));
           } else {
             ObIJsonBase *j_pos_node = hit.last();
             ObJsonPathBasicNode *path_last = j_path->last_path_node();
@@ -147,7 +145,6 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                 void *buf = temp_allocator.alloc(sizeof(ObJsonArray));
                 if (OB_ISNULL(buf)) {
                   ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("failed: alloc jsonarray node.", K(ret));
                 } else {
                   ObJsonArray *j_new_arr = new (buf) ObJsonArray(&temp_allocator);
                   ObIJsonBase *jb_new_arr = j_new_arr;
@@ -155,7 +152,6 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                   ObIJsonBase *jb_parent = j_parent;
                   if (OB_FAIL(jb_new_arr->array_append(j_pos_node))
                       || OB_FAIL(jb_new_arr->array_append(j_val))) {
-                    LOG_WARN("failed: array append node.", K(ret), K(*j_pos_node), K(*j_val));
                   } else if (OB_ISNULL(jb_parent)) { // root
                     j_base = jb_new_arr;
                   } else if (OB_FAIL(jb_parent->replace(j_pos_node, jb_new_arr))){

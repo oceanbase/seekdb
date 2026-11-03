@@ -64,7 +64,6 @@ int ObCsvFileWriter::alloc_buf(common::ObIAllocator &allocator, int64_t buf_len)
   char *buf = NULL;
   if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate buffer", K(ret), K(buf_len));
   } else {
     buf_ = buf;
     buf_len_ = buf_len;
@@ -80,7 +79,6 @@ int ObCsvFileWriter::init_compress_writer(ObIAllocator &allocator,
   void *ptr = NULL;
   if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObCompressStreamWriter)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate stream writer", K(ret), K(sizeof(ObCompressStreamWriter)));
   } else {
     compress_stream_writer_ = new(ptr) ObCompressStreamWriter();
   }
@@ -89,7 +87,6 @@ int ObCsvFileWriter::init_compress_writer(ObIAllocator &allocator,
                                                compression_algorithm,
                                                allocator,
                                                buffer_size))) {
-    LOG_WARN("failed to init compress stream writer", K(ret));
   }
   return ret;
 }
@@ -145,9 +142,7 @@ int ObCsvFileWriter::flush_to_compress_stream(const char *data, int64_t data_len
   if (data == NULL || data_len == 0) {
   } else if (!has_compress_ || OB_ISNULL(compress_stream_writer_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null compress stream writer", K(ret));
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
-    LOG_WARN("failed to open file", K(ret), K(url_));
   } else if (OB_FAIL(compress_stream_writer_->write(data, data_len))) {
   }
   return ret;
@@ -158,7 +153,6 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
   int ret = OB_SUCCESS;
   if (data == NULL || data_len == 0) {
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
-    LOG_WARN("failed to open file", K(ret), K(url_));
   } else if (OB_FAIL(file_appender_.append(data, data_len, false))) {
   }
   return ret;
@@ -174,7 +168,6 @@ int ObCsvFileWriter::close_file()
   int ret = OB_SUCCESS;
   if (has_compress_ && OB_NOT_NULL(compress_stream_writer_) && is_file_opened_
       && OB_FAIL(compress_stream_writer_->finish_file_compress())) {
-    LOG_WARN("failed to flush compress buffer", K(ret));
   } else if (OB_FAIL(ObExternalFileWriter::close_file())) {
   }
   return ret;

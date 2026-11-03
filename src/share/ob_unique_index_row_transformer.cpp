@@ -31,7 +31,6 @@ int ObUniqueIndexRowTransformer::check_need_shadow_columns(
   need_shadow_columns = false;
   if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || unique_key_cnt > row.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt));
   } else if (OB_FAIL(check_mysql_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
   }
   return ret;
@@ -47,7 +46,6 @@ int ObUniqueIndexRowTransformer::check_mysql_need_shadow_columns(
   need_shadow_columns = false;
   if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || unique_key_cnt > row.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt));
   } else {
     bool rowkey_has_null = false;
     // MySQL unique indexes use shadow columns when any unique-key column is NULL.
@@ -55,7 +53,6 @@ int ObUniqueIndexRowTransformer::check_mysql_need_shadow_columns(
       const int64_t idx = NULL == projector ? i : projector->at(i);
       if (idx >= row.count_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, idx exceed the row cells count", K(ret), K(idx), K(row));
       } else {
         rowkey_has_null = row.cells_[idx].is_null();
       }
@@ -78,7 +75,6 @@ int ObUniqueIndexRowTransformer::convert_to_unique_index_row(
   need_shadow_columns = false;
   if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || shadow_column_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt), K(shadow_column_cnt));
   } else if (OB_FAIL(check_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
   } else {
     // 1. fill the unique key columns

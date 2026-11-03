@@ -31,7 +31,7 @@ class ObOptStatService
 {
 public:
   ObOptStatService() : inited_(false) {}
-  virtual int init(common::ObMySQLProxy *proxy, ObServerConfig *config);
+  virtual int init(common::ObMySQLProxy *proxy);
   virtual int get_table_stat(const ObOptTableStat::Key &key,
                              ObOptTableStat &tstat);
   virtual int get_column_stat(const ObOptColumnStat::Key &key,

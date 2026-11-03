@@ -196,7 +196,6 @@ int ObInnerConnectionLockRuntime::process_lock_rpc(
   observer::ObInnerSQLConnection *inner_conn = static_cast<observer::ObInnerSQLConnection *>(conn);
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(arg), KP(conn));
   } else {
     const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type = arg.get_operation_type();
     switch (operation_type) {
@@ -274,7 +273,6 @@ int ObInnerConnectionLockRuntime::process_lock_rpc(
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Unknown operation type", K(ret), K(operation_type));
         break;
       }
     }
@@ -408,7 +406,6 @@ int ObInnerConnectionLockRuntime::unlock_table(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObTableLockOpType::OUT_TRANS_UNLOCK != arg.op_type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
     ret = request_lock_(arg,
                         ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLE,
@@ -488,7 +485,6 @@ int ObInnerConnectionLockRuntime::unlock_tablet(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObTableLockOpType::OUT_TRANS_UNLOCK != arg.op_type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
     ret = request_lock_(arg,
                         ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_ALONE_TABLET,
@@ -513,7 +509,6 @@ int ObInnerConnectionLockRuntime::unlock_obj(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObTableLockOpType::OUT_TRANS_UNLOCK != arg.op_type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
     ret = request_lock_(arg,
                         ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_OBJ,
@@ -538,7 +533,6 @@ int ObInnerConnectionLockRuntime::unlock_obj(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObTableLockOpType::OUT_TRANS_UNLOCK != arg.op_type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
     ret = request_lock_(arg,
                         ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_OBJS,
@@ -562,7 +556,6 @@ int ObInnerConnectionLockRuntime::replace_lock(
   {
     if (!inner_conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner conn must be already in trans", K(ret));
     } else if (OB_FAIL(res.init())) {
     } else if (OB_FAIL(replace_lock_(req, inner_conn, res))) {
     }
@@ -585,7 +578,6 @@ int ObInnerConnectionLockRuntime::replace_lock(const ObReplaceAllLocksRequest &r
   {
     if (!inner_conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner conn must be already in trans", K(ret));
     } else if (OB_FAIL(res.init())) {
     } else if (OB_FAIL(replace_lock_(req, inner_conn, res))) {
     }
@@ -602,7 +594,6 @@ int ObInnerConnectionLockRuntime::replace_lock_(const ObReplaceLockRequest &req,
 
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid conn", KR(ret));
   } else if (OB_ISNULL(tx_desc = conn->get_session().get_tx_desc())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid tx_desc");
@@ -631,7 +622,6 @@ int ObInnerConnectionLockRuntime::replace_lock_(const ObReplaceAllLocksRequest &
 
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid conn", KR(ret));
   } else if (OB_ISNULL(tx_desc = conn->get_session().get_tx_desc())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid tx_desc");
@@ -693,7 +683,6 @@ int ObInnerConnectionLockRuntime::do_obj_lock_(const ObLockRequest &arg,
 
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid conn", KR(ret));
   } else if (OB_ISNULL(tx_desc = conn->get_session().get_tx_desc())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid tx_desc");
@@ -708,7 +697,6 @@ int ObInnerConnectionLockRuntime::do_obj_lock_(const ObLockRequest &arg,
       if (OB_FAIL(handle_request_by_operation_type_(*tx_desc, tx_param, arg, operation_type))) {
       }
       if (OB_SUCC(ret) && OB_FAIL(res.close())) {
-        LOG_WARN("close result set failed", K(ret));
       }
     } // MTL_SWITCH
   } // else
@@ -728,7 +716,6 @@ int ObInnerConnectionLockRuntime::request_lock_(const ObLockRequest &arg,
   {
     if (!conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner conn must be already in trans", K(ret));
     } else if (OB_FAIL(res.init())) {
     } else if (OB_FAIL(do_obj_lock_(arg, operation_type, conn, res))) {
     }
@@ -754,7 +741,6 @@ int ObInnerConnectionLockRuntime::request_lock_(const uint64_t table_id, // as o
   {
     if (!conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner conn must be already in trans", K(ret));
     } else if (OB_FAIL(res.init())) {
     } else {
         // we can safely rewrite the argument here, because it is only used local.
@@ -786,7 +772,6 @@ int ObInnerConnectionLockRuntime::request_lock_(const uint64_t table_id, // as o
           ret = OB_ERR_UNEXPECTED;
         }
         if (OB_SUCC(ret) && OB_FAIL(do_obj_lock_(*lock_arg, operation_type, conn, res))) {
-          LOG_WARN("close result set failed", K(ret));
         }
     }
   }

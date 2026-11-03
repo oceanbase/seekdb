@@ -666,7 +666,6 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
   ObColumnSchemaV2 *col = NULL;
   ObStorageColumnSchema col_schema;
   if (FAILEDx(column_array_.reserve(input_schema.get_column_count()))) {
-    STORAGE_LOG(WARN, "Fail to reserve column array", K(ret));
   }
   int64_t col_idx = 0;
   int64_t col_cnt_in_sstable = 0;
@@ -720,7 +719,6 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
 #endif
       }
       if (FAILEDx(col_schema.deep_copy_default_val(*allocator_, orig_default_val))) {
-        STORAGE_LOG(WARN, "failed to deep copy", K(ret), K(orig_default_val));
       } else if (OB_FAIL(column_array_.push_back(col_schema))) {
         STORAGE_LOG(WARN, "Fail to push into column array", K(ret), K(col_schema));
         col_schema.destroy(*allocator_);
@@ -859,8 +857,6 @@ int ObStorageSchema::get_skip_index_col_attr(
         }
       }
       if (FAILEDx(skip_idx_attrs.push_back(rowkey_skip_idx_attr))) {
-        STORAGE_LOG(WARN, "fail to append rowkey skip index attr to array",
-            K(ret), K(i), K(rowkey_skip_idx_attr));
       }
     }
     // add dummy idx for stored multi-version columns
@@ -894,8 +890,6 @@ int ObStorageSchema::get_skip_index_col_attr(
           }
         }
         if (FAILEDx(skip_idx_attrs.push_back(no_rowkey_skip_idx_attr))) {
-          STORAGE_LOG(WARN, "fail to append no rowkey skip index attr to array",
-              K(ret), K(col_idx), K(rowkey_skip_idx_attr));
         }
       }
     }

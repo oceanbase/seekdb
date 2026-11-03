@@ -67,7 +67,6 @@ int ObForkTableUtil::collect_complete_domain_index_schemas(
       } else if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("index table schema is null", K(ret), K(index_table_id));
       } else if (index_schema->is_in_recyclebin() ||
                  INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
         continue;
@@ -159,7 +158,6 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
   if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, *table_schema, tablet_ids))) {
   }
 
@@ -221,7 +219,6 @@ int ObForkTableUtil::collect_index_tablet_ids(
       if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("index table schema is null", K(ret), K(index_table_id));
       } else if (index_schema->is_in_recyclebin() ||
                  INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
         // Skip indexes not yet built or already recycled to keep tablet counts aligned.
@@ -233,7 +230,6 @@ int ObForkTableUtil::collect_index_tablet_ids(
           // skip incomplete domain/aux index
         } else if (OB_SUCCESS != tmp_ret) {
           ret = tmp_ret;
-          LOG_WARN("failed to get complete domain index schema", K(ret), K(index_table_id));
         } else {
           ObSEArray<ObTabletID, 4> index_tablet_ids;
           if (OB_FAIL(aux_index_schema.get_tablet_ids(index_tablet_ids))) {
@@ -274,7 +270,6 @@ int ObForkTableUtil::collect_lob_aux_tablet_ids(
     if (OB_FAIL(schema_guard.get_table_schema( lob_meta_tid, lob_meta_schema))) {
     } else if (OB_ISNULL(lob_meta_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("LOB meta table schema is null", K(ret), K(lob_meta_tid));
     } else {
       ObSEArray<ObTabletID, 4> lob_meta_tablet_ids;
       if (OB_FAIL(lob_meta_schema->get_tablet_ids(lob_meta_tablet_ids))) {
@@ -292,7 +287,6 @@ int ObForkTableUtil::collect_lob_aux_tablet_ids(
     if (OB_FAIL(schema_guard.get_table_schema( lob_piece_tid, lob_piece_schema))) {
     } else if (OB_ISNULL(lob_piece_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("LOB piece table schema is null", K(ret), K(lob_piece_tid));
     } else {
       ObSEArray<ObTabletID, 4> lob_piece_tablet_ids;
       if (OB_FAIL(lob_piece_schema->get_tablet_ids(lob_piece_tablet_ids))) {
@@ -318,7 +312,6 @@ int ObForkTableUtil::collect_table_ids_from_table(
   // 1. main table
   const uint64_t main_table_id = table_schema.get_table_id();
   if (OB_SUCC(ret) && OB_FAIL(table_ids.push_back(main_table_id))) {
-    LOG_WARN("fail to push back main table id", K(ret), K(main_table_id));
   }
 
   // 2. index table
@@ -340,7 +333,6 @@ int ObForkTableUtil::collect_table_ids_from_table(
           } else if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
           } else if (OB_ISNULL(index_schema)) {
             ret = OB_TABLE_NOT_EXIST;
-            LOG_WARN("index table schema is null", K(ret), K(index_table_id));
           } else if (index_schema->is_in_recyclebin() ||
                      INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
             continue;
@@ -351,7 +343,6 @@ int ObForkTableUtil::collect_table_ids_from_table(
               // skip incomplete domain/aux index
             } else if (OB_SUCCESS != tmp_ret) {
               ret = tmp_ret;
-              LOG_WARN("failed to get complete domain index schema", K(ret), K(index_table_id));
             } else {
               if (OB_FAIL(table_ids.push_back(index_table_id))) {
               }
@@ -370,9 +361,7 @@ int ObForkTableUtil::collect_table_ids_from_table(
     const uint64_t lob_piece_table_id = table_schema.get_aux_lob_piece_tid();
 
     if (OB_INVALID_ID != lob_meta_table_id && OB_FAIL(table_ids.push_back(lob_meta_table_id))) {
-      LOG_WARN("fail to push back LOB meta table id", K(ret), K(lob_meta_table_id));
     } else if (OB_INVALID_ID != lob_piece_table_id && OB_FAIL(table_ids.push_back(lob_piece_table_id))) {
-      LOG_WARN("fail to push back LOB piece table id", K(ret), K(lob_piece_table_id));
     }
   }
 
@@ -409,11 +398,9 @@ int ObForkTableUtil::obtain_snapshot(
 
   if (OB_UNLIKELY(data_table_schemas.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("data_table_schemas is empty", K(ret));
   } else if (OB_FAIL(ObDDLTaskUtil::calc_snapshot_with_gts(new_fetched_snapshot))) {
   } else if (new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the snapshot is not valid", K(ret), K(new_fetched_snapshot));
   } else if (OB_FAIL(snapshot_scn.convert_for_tx(new_fetched_snapshot))) {
   } else {
     // Collect tablet ids from all tables
@@ -421,7 +408,6 @@ int ObForkTableUtil::obtain_snapshot(
       const ObTableSchema *table_schema = data_table_schemas.at(i);
       if (OB_ISNULL(table_schema)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("table schema is null", K(ret), K(i));
       } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
                      schema_guard, *table_schema, tablet_ids))) {
       } else {
@@ -441,8 +427,6 @@ int ObForkTableUtil::obtain_snapshot(
           const bool has_timeout = THIS_WORKER.is_timeout_ts_valid();
           const bool timeouted = has_timeout ? THIS_WORKER.is_timeout() : true;
           if (timeouted) {
-            LOG_WARN("batch acquire snapshot timeout on nowait conflict",
-                     KR(ret), K(retry_count), K(has_timeout), K(tablet_ids));
           } else {
             if (REACH_TIME_INTERVAL(1000 * 1000)) { // 1s
               LOG_INFO("retry batch acquire snapshot on nowait conflict",
@@ -456,7 +440,6 @@ int ObForkTableUtil::obtain_snapshot(
             continue;
           }
         } else {
-          LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
         }
       }
       break;
@@ -480,13 +463,10 @@ int ObForkTableUtil::release_snapshot(
   ObSEArray<ObTabletID, 16> tablet_ids;
   if (OB_ISNULL(task)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("invalid argument", K(ret));
   } else if (!task->is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("args have not been inited", K(ret), K(task->get_task_type()));
   } else if (OB_UNLIKELY(table_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table_ids is empty", K(ret));
   } else {
     int64_t schema_version = task->get_src_schema_version();
     if (OB_FAIL(DDL_SIM(task->get_task_id(), DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {

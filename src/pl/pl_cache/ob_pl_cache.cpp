@@ -62,7 +62,6 @@ int ObPLTableColumnInfo::deep_copy_type_info(const common::ObIArray<common::ObSt
       char *buf = NULL;
       if (OB_ISNULL(buf = static_cast<char*>(inner_alloc_->alloc(info.length())))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(i), K(info), K(ret));
       } else if (FALSE_IT(MEMCPY(buf, info.ptr(), info.length()))) {
       } else if (OB_FAIL(type_info_.push_back(ObString(info.length(), buf)))) {
       }
@@ -78,7 +77,6 @@ int PCVPlSchemaObj::deep_copy_column_infos(const ObTableSchema *schema)
 
   if (OB_ISNULL(schema) || OB_ISNULL(inner_alloc_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected null argument", K(ret), K(schema), K(inner_alloc_));
   } else {
     ObTableSchema::const_column_iterator cs_iter = schema->column_begin();
     ObTableSchema::const_column_iterator cs_iter_end = schema->column_end();
@@ -105,7 +103,6 @@ int PCVPlSchemaObj::deep_copy_column_infos(const ObTableSchema *schema)
           } else {
             if (nullptr == (obj_buf = inner_alloc_->alloc(sizeof(ObPLTableColumnInfo)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("failed to allocate memory", K(ret));
             } else if (FALSE_IT(column_info = new(obj_buf)ObPLTableColumnInfo(inner_alloc_))) {
               // do nothing
             } else {
@@ -122,7 +119,6 @@ int PCVPlSchemaObj::deep_copy_column_infos(const ObTableSchema *schema)
                 if (OB_ISNULL(name_buf =
                     static_cast<char*>(inner_alloc_->alloc(column_name.length() + 1)))) {
                   ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("failed to alloc column name buf", K(ret), K(column_name));
                 } else {
                   MEMCPY(name_buf, column_name.ptr(), column_name.length());
                   ObString deep_copy_name(column_name.length(), name_buf);
@@ -148,7 +144,6 @@ int PCVPlSchemaObj::init(const ObTableSchema *schema)
 
   if (OB_ISNULL(schema) || OB_ISNULL(inner_alloc_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected null argument", K(ret), K(schema), K(inner_alloc_));
   } else {
     database_id_ = schema->get_database_id();
     schema_id_ = schema->get_table_id();
@@ -161,7 +156,6 @@ int PCVPlSchemaObj::init(const ObTableSchema *schema)
     const ObString &tname = schema->get_table_name_str();
     if (nullptr == (buf = static_cast<char *>(inner_alloc_->alloc(tname.length())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(tname.length()));
     } else {
       MEMCPY(buf, tname.ptr(), tname.length());
       table_name_.assign_ptr(buf, tname.length());
@@ -210,7 +204,6 @@ int PCVPlSchemaObj::init_without_copy_name(const ObSimpleTableSchemaV2 *schema)
 
   if (OB_ISNULL(schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected null argument", K(ret), K(schema));
   } else {
     database_id_ = schema->get_database_id();
     schema_id_ = schema->get_table_id();
@@ -392,7 +385,6 @@ int ObPLObjectValue::obtain_new_column_infos(share::schema::ObSchemaGetterGuard 
               table_schema))) {
   } else if (nullptr == table_schema) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get an unexpected null schema", K(ret), K(table_schema));
   } else if (table_schema->is_index_table()) {
     // do nothing
   } else {
@@ -428,7 +420,6 @@ int ObPLObjectValue::check_value_version(share::schema::ObSchemaGetterGuard *sch
   is_old_version = false;
   if (OB_ISNULL(schema_guard)) {
     int ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_guard));
   } else if (0 == schema_array.count()) {
     // do nothing
   } else {
@@ -443,7 +434,6 @@ int ObPLObjectValue::check_value_version(share::schema::ObSchemaGetterGuard *sch
         const PCVPlSchemaObj &schema_obj2 = schema_array.at(i);
         if (nullptr == schema_obj1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("got an unexpected null table schema", K(ret), K(schema_obj1));
         } else if (*schema_obj1 == schema_obj2) { // schema do match
           // do nothing
         } else if (schema_obj1->schema_type_ == schema_obj2.schema_type_ &&
@@ -490,7 +480,6 @@ int ObPLObjectValue::need_check_schema_version(ObPLCacheCtx &pc_ctx,
     if (need_check && (pl_routine_obj_->is_prcr() || pl_routine_obj_->is_sfc())
       && static_cast<ObPLExecutableUnit*>(pl_routine_obj_)->has_incomplete_rt_dep_error()) {
         ret = OB_OLD_SCHEMA_VERSION;
-        LOG_WARN("Need to remove cache obj which dependency routine has error schema.", K(ret));
     }
   }
   return ret;
@@ -517,7 +506,6 @@ int ObPLObjectValue::get_all_dep_schema(ObSchemaGetterGuard &schema_guard,
                                      table_schema))) {
     } else if (nullptr == table_schema) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get an unexpected null table schema", K(ret));
     } else if (table_schema->is_index_table()) {
       // do nothing
     } else if (OB_FAIL(tmp_schema_obj.init_without_copy_name(table_schema))) {
@@ -550,7 +538,6 @@ int ObPLObjectValue::get_all_dep_schema(ObPLCacheCtx &pc_ctx,
     // do nothing
   } else if (OB_ISNULL(pc_ctx.schema_guard_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     schema_array.reset();
     const ObSimpleTableSchemaV2 *table_schema = nullptr;
@@ -561,7 +548,6 @@ int ObPLObjectValue::get_all_dep_schema(ObPLCacheCtx &pc_ctx,
       PCVPlSchemaObj *pcv_schema = stored_schema_objs_.at(i);
       if (OB_ISNULL(pcv_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("got unexpected null", K(ret));
       } else if (TABLE_SCHEMA != pcv_schema->schema_type_) {
         // if no table schema, get schema version is enough
         int64_t new_version = 0;
@@ -572,7 +558,6 @@ int ObPLObjectValue::get_all_dep_schema(ObPLCacheCtx &pc_ctx,
         if (OB_INVALID_VERSION == new_version) {
           ret = OB_OLD_SCHEMA_VERSION;
           copy_obj_schema_version(pl_routine_obj_->get_stat_for_update().out_of_date_dependcy_version_, pcv_schema);
-          LOG_WARN("can not get newer schema version", K(ret), KPC(pcv_schema));
         } else if (OB_SUCC(ret)) {
           tmp_schema_obj.schema_id_ = pcv_schema->schema_id_; // same id
           tmp_schema_obj.schema_type_ = pcv_schema->schema_type_; // same type
@@ -598,7 +583,6 @@ int ObPLObjectValue::get_all_dep_schema(ObPLCacheCtx &pc_ctx,
       } else if (nullptr == table_schema) {
         ret = OB_OLD_SCHEMA_VERSION;
         copy_obj_schema_version(pl_routine_obj_->get_stat_for_update().out_of_date_dependcy_version_, pcv_schema);
-        LOG_WARN("table not exist", K(ret), K(*pcv_schema), K(table_schema));
       } else if (OB_FAIL(tmp_schema_obj.init_without_copy_name(table_schema))) {
       } else if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
       } else {
@@ -620,7 +604,6 @@ int ObPLObjectValue::match_dep_schema(const ObPLCacheCtx &pc_ctx,
   ObSQLSessionInfo *session_info = pc_ctx.session_info_;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(session_info));
   } else if (schema_array.count() != stored_schema_objs_.count()) {
     is_same = false;
   } else {
@@ -629,7 +612,6 @@ int ObPLObjectValue::match_dep_schema(const ObPLCacheCtx &pc_ctx,
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
       if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid null table schema", K(ret), K(i));
       } else {
         // do nothing
       }
@@ -682,7 +664,6 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
 
   if (OB_ISNULL(schema_guard)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null argument", K(ret), K(schema_guard));
   } else if (OB_FAIL(stored_schema_objs_.init(dep_table_store.count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dep_table_store.count(); i++) {
@@ -693,7 +674,6 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
         // if not table schema, store schema id and version
         if (nullptr == (obj_buf = pc_alloc_->alloc(sizeof(PCVPlSchemaObj)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret));
         } else if (FALSE_IT(pcv_schema_obj = new(obj_buf)PCVPlSchemaObj(pc_alloc_))) {
           // do nothing
         } else if (FALSE_IT(pcv_schema_obj->is_explicit_db_name_ = table_version.is_db_explicit_)) {
@@ -708,12 +688,10 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
                   table_schema))) {
       } else if (nullptr == table_schema) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get an unexpected null schema", K(ret), K(table_schema));
       } else if (table_schema->is_index_table()) {
         // do nothing
       } else if (nullptr == (obj_buf = pc_alloc_->alloc(sizeof(PCVPlSchemaObj)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else if (FALSE_IT(pcv_schema_obj = new(obj_buf)PCVPlSchemaObj(pc_alloc_))) {
         // do nothing
       } else if (OB_FAIL(pcv_schema_obj->init(table_schema))) {
@@ -810,7 +788,6 @@ int ObPLObjectValue::match_complex_type_info(const ObPlParamInfo &param_info,
             reinterpret_cast<const pl::ObPLComposite*>(param.get_ext());
     if (OB_ISNULL(composite)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("nested table is null", K(ret));
     } else if (param_info.udt_id_ != composite->get_id()) {
       is_same = false;
     }
@@ -909,7 +886,6 @@ int ObPLObjectSet::init(ObILibCacheCtx &ctx, const ObILibCacheObject *obj)
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(key_.deep_copy(allocator_, pc_ctx.key_))) {
   } else {
     is_inited_ = true;
@@ -925,10 +901,8 @@ int ObPLObjectSet::create_new_pl_object_value(ObPLObjectValue *&pl_object_value)
 
   if (nullptr == (buff = allocator_.alloc(sizeof(ObPLObjectValue)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for ObPLObjectValue", K(ret));
   } else if (nullptr == (pl_object_value = new(buff)ObPLObjectValue(allocator_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to construct ObPLObjectValue", K(ret));
   } else {
     // do nothing
   }
@@ -965,9 +939,6 @@ int ObPLObjectSet::before_cache_evicted()
   if (OB_FAIL(ret)) {
   } else if (plan_cache->get_mem_hold() > plan_cache->get_mem_high()) {
     if (compile_time >= LONG_COMPILE_TIME) {
-      LOG_WARN("Plan cache size reached upper limit and evict obj which need long time to re-compile",
-                  K(ret), K(stat_array), K(compile_time), 
-                  K(plan_cache->get_mem_hold()), K(plan_cache->get_mem_high()));
     } else {
       LOG_TRACE("Plan cache size reached upper limit need check plan cache mem conf", 
                   K(ret), K(stat_array), 
@@ -983,7 +954,6 @@ void ObPLObjectSet::free_pl_object_value(ObPLObjectValue *pl_object_value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pl_object_value)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument",K(ret));
   } else {
     pl_object_value->~ObPLObjectValue();
     allocator_.free(pl_object_value);
@@ -1042,10 +1012,8 @@ int ObPLObjectSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
       if (OB_OLD_SCHEMA_VERSION == ret) {
         has_old_version_err = true;
       } else {                                  
-        LOG_WARN("failed to get all table schema", K(ret));
       }
     } else if (schema_array.count() != 0 && OB_FAIL(pl_object_value->match_dep_schema(pc_ctx, schema_array, is_same))) {
-      LOG_WARN("failed to match_dep_schema", K(ret));
     } else if (!is_same) {
       ret = OB_OLD_SCHEMA_VERSION;
       has_old_version_err = true;
@@ -1074,7 +1042,6 @@ int ObPLObjectSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
   }
   if (OB_SUCC(ret) && nullptr == cache_obj) {
     ret = has_old_version_err ? OB_OLD_SCHEMA_VERSION : OB_SQL_PC_NOT_EXIST;
-    LOG_WARN("failed to get cache obj in pl cache", K(ret), K(pc_ctx.key_), K(out_of_date_objs));
   }
   return ret;
 }
@@ -1091,7 +1058,6 @@ int ObPLObjectSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
 
   if (OB_ISNULL(cache_object)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null cache obj", K(ret));
   } else if (OB_UNLIKELY(!cache_object->is_prcr() &&
                          !cache_object->is_sfc() &&
                          !cache_object->is_pkg() &&
@@ -1115,7 +1081,6 @@ int ObPLObjectSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
                                                   true,
                                                   schema_array,
                                                   is_old_version)) {
-            LOG_WARN("fail to check table version", K(ret));
           } else if (true == is_old_version) {
           } else {
             ret = OB_SQL_PC_PLAN_DUPLICATE;
@@ -1133,7 +1098,6 @@ int ObPLObjectSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
     if (OB_FAIL(create_new_pl_object_value(pl_object_value))) {
     } else if (OB_UNLIKELY(nullptr == pl_object_value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(pl_object_value->init(*cache_obj, pc_ctx))) {
     } else {
       bool is_old_version = false;
@@ -1152,15 +1116,12 @@ int ObPLObjectSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
                                                 true,
                                                 schema_array,
                                                 is_old_version)) {
-        LOG_WARN("fail to check table version", K(ret));
       } else if (true == is_old_version) {
         ret = OB_OLD_SCHEMA_VERSION;
-        LOG_WARN("old schema version, to be delete", K(ret), K(pl_object_value->pl_routine_obj_->get_object_id()));
       } else {
         pl_object_value->pl_routine_obj_ = cache_object;
         if (!object_value_sets_.add_last(pl_object_value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to add pcv to object_value_sets_", K(ret));
           free_pl_object_value(pl_object_value);
           pl_object_value = nullptr;
         } else {
@@ -1198,7 +1159,6 @@ int ObPLCacheCtx::assemble_format_routine_name(ObString& out_name, ObPLCacheObje
   } else if (OB_ISNULL(new_buffer =
       static_cast<char*>(routine->get_allocator().alloc(db_name.length() + rt_name.length() + 2)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc format name buf", K(ret), K(db_name), K(rt_name));
   } else {
     if (db_name.ptr() != NULL && db_name.length() > 0) {
       MEMCPY(new_buffer, db_name.ptr(), db_name.length());

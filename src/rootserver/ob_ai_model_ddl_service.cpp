@@ -36,7 +36,6 @@ int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
   } else if (OB_NOT_NULL(old_schema)) {
     ret = OB_AI_FUNC_MODEL_EXISTS;
     LOG_USER_ERROR(OB_AI_FUNC_MODEL_EXISTS, arg.model_info_.get_name().length(), arg.model_info_.get_name().ptr());
-    LOG_WARN("ai model already exists", K(ret), K(arg.model_info_.get_name()));
   } else {
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     ObAiModelDDLOperator ddl_operator(ddl_service_.get_schema_service());
@@ -75,7 +74,6 @@ int ObAiModelDDLService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
   } else if (OB_ISNULL(old_schema)) {
     ret = OB_AI_FUNC_MODEL_NOT_FOUND;
     LOG_USER_ERROR(OB_AI_FUNC_MODEL_NOT_FOUND, ai_model_name.length(), ai_model_name.ptr());
-    LOG_WARN("ai model not found", K(ret), K(ai_model_name));
   } else {
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     ObAiModelDDLOperator ddl_operator(ddl_service_.get_schema_service());

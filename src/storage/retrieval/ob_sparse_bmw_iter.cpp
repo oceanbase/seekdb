@@ -45,7 +45,6 @@ int ObSRBMWIterImpl::init(
   if (OB_FAIL(ObSRDaaTIterImpl::init(iter_param, dim_iters, iter_allocator, relevance_collector))) {
   } else if (OB_UNLIKELY(iter_param.topk_limit_ < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(iter_param));
   } else if (iter_param.topk_limit_ == 0) {
     top_k_count_ = 0;
     status_ = BMWStatus::FINISHED;
@@ -90,15 +89,12 @@ int ObSRBMWIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(capacity <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(capacity));
   } else if (BMWStatus::FINISHED == status_) {
     // skip
   } else if (OB_FAIL(top_k_search())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to top k search", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -106,7 +102,6 @@ int ObSRBMWIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
 
   if (FAILEDx(project_rows_from_top_k_heap(capacity, count))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to project rows from top k heap", K(ret));
     }
   }
   return ret;
@@ -117,10 +112,8 @@ int ObSRBMWIterImpl::top_k_search()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(BMWStatus::MAX_STATUS != status_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected max status", K(ret), K_(status));
   } else if (OB_FAIL(build_top_k_heap())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to build top k heap", K(ret));
     } else {
       status_ = BMWStatus::FINISHED;
     }
@@ -141,7 +134,6 @@ int ObSRBMWIterImpl::top_k_search()
     case BMWStatus::FIND_NEXT_PIVOT: {
       if (OB_FAIL(next_pivot(pivot_iter_idx))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to next pivot id", K(ret));
         } else {
           status_ = BMWStatus::FINISHED;
           ret = OB_SUCCESS;
@@ -166,7 +158,6 @@ int ObSRBMWIterImpl::top_k_search()
     case BMWStatus::EVALUATE_PIVOT: {
       if (OB_FAIL(evaluate_pivot(pivot_iter_idx))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to evaluate pivot id", K(ret));
         } else {
           status_ = BMWStatus::FINISHED;
           ret = OB_SUCCESS;
@@ -179,7 +170,6 @@ int ObSRBMWIterImpl::top_k_search()
     case BMWStatus::FIND_NEXT_PIVOT_RANGE: {
       if (OB_FAIL(next_pivot_range(skip_range_cnt))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to next pivot range", K(ret));
         } else {
           status_ = BMWStatus::FINISHED;
           ret = OB_SUCCESS;
@@ -193,7 +183,6 @@ int ObSRBMWIterImpl::top_k_search()
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status", K(ret), K_(status));
     }
     }
   }
@@ -206,7 +195,6 @@ int ObSRBMWIterImpl::build_top_k_heap()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!top_k_heap_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty top k heap", K(ret));
   } else {
     bool need_project = true;
     double relevance = 0.0;
@@ -214,14 +202,12 @@ int ObSRBMWIterImpl::build_top_k_heap()
     while (OB_SUCC(ret) && top_k_heap_.count() < top_k_count_) {
       if (OB_FAIL(fill_merge_heap())) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to fill merge heap", K(ret));
         }
       } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
       }
     }
 
     if (FAILEDx(fill_merge_heap())) {
-      LOG_WARN("failed to fill merge heap after build top k heap", K(ret));
     }
   }
   return ret;
@@ -233,7 +219,6 @@ int ObSRBMWIterImpl::process_collected_row(const ObDatum &id_datum, const double
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(top_k_heap_.count() > top_k_count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected top k heap count", K(ret), K(top_k_heap_.count()), K_(top_k_count));
   } else if (top_k_heap_.count() < top_k_count_) {
     if (OB_FAIL(id_cache_.at(top_k_heap_.count()).from_datum(id_datum))) {
     } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count())))) {
@@ -313,11 +298,9 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
       ++next_round_iter_end_cnt;
     } else if (OB_ISNULL(iter = get_iter(iter_idx)) || OB_UNLIKELY(!iter->in_shallow_status())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null iter", K(ret));
     } else if (OB_FAIL(iter->get_curr_block_max_info(max_score_tuple))) {
     } else if (OB_ISNULL(max_score_tuple)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null max score tuple", K(ret));
     } else if (nullptr == minimum_max_domain_id) {
       minimum_max_domain_id = max_score_tuple->max_domain_id_;
     } else if (OB_FAIL(domain_id_cmp_.compare(*max_score_tuple->max_domain_id_, *minimum_max_domain_id, cmp_ret))) {
@@ -360,7 +343,6 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
   while (OB_SUCC(ret) && !is_candidate_range) {
     if (OB_FAIL(fill_merge_heap_with_shallow_dims(max_evaluated_id, last_border_inclusive))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to fill merge heap with shallow dims", K(ret));
       }
     } else if (OB_FAIL(try_generate_next_range_from_merge_heap(
         is_candidate_range, min_unevaluated_id, max_evaluated_id))) {
@@ -375,13 +357,10 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
   } else if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(!is_candidate_range)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected no candidate range is found", K(ret),
-        K(last_border_inclusive), KPC(max_evaluated_id), KPC(min_unevaluated_id));
   } else {
     // found a new top k candidate range, fill heap with non-shallow dim iters for next pivot searching
     if (OB_ISNULL(min_unevaluated_id)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null advance to domain id", K(ret));
     } else if (OB_FAIL(advance_dim_iters_for_next_round(*min_unevaluated_id, false))) {
     }
   }
@@ -399,14 +378,12 @@ int ObSRBMWIterImpl::evaluate_pivot(const int64_t pivot_iter_idx)
   bool need_project = false;
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null iter", K(ret));
   } else if (OB_FAIL(iter->get_curr_id(pivot_id))) {
   } else if (OB_FAIL(advance_dim_iters_for_next_round(*pivot_id, true))) {
   } else if (OB_FAIL(collect_dims_by_id(collected_id, pivot_relevance, need_project))) {
   } else if (OB_FAIL(unify_dim_iters_for_next_round())) {
   } else if (OB_FAIL(fill_merge_heap())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to fill merge heap after evaluate pivot", K(ret));
     }
   }
 
@@ -420,7 +397,6 @@ int ObSRBMWIterImpl::evaluate_pivot_range(const int64_t pivot_iter_idx, bool &is
   const ObDatum *pivot_id = nullptr;
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null iter", K(ret));
   } else if (OB_FAIL(iter->get_curr_id(pivot_id))) {
   }
 
@@ -431,10 +407,8 @@ int ObSRBMWIterImpl::evaluate_pivot_range(const int64_t pivot_iter_idx, bool &is
     ObISRDimBlockMaxIter *iter = get_iter(iter_idx);
     if (OB_ISNULL(iter) || OB_UNLIKELY(is_next_round_iter_end(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected iter idx", K(ret), K(i), K(iter_idx));
     } else if (OB_FAIL(iter->advance_shallow(*pivot_id, true))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to advance shallow", K(ret), K(iter_idx));
       } else {
         set_next_round_iter_end(i);
         ret = OB_SUCCESS;
@@ -462,7 +436,6 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
 
   if (OB_ISNULL(last_range_border_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null last evaluated domain id", K(ret));
   }
 
   ObSRMergeItem item;
@@ -473,10 +446,8 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
       // skip
     } else if (OB_ISNULL(iter = get_iter(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null iter", K(ret));
     } else if (OB_FAIL(iter->advance_shallow(*last_range_border_id, inclusive))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to advance shallow", K(ret), K(iter_idx));
       } else {
         ret = OB_SUCCESS;
       }
@@ -494,7 +465,6 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
   } else if (merge_heap_->empty()) {
     ret = OB_ITER_END;
   } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
-    LOG_WARN("failed to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
   }
@@ -526,7 +496,6 @@ int ObSRBMWIterImpl::try_generate_next_range_from_merge_heap(
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_ISNULL(iter = get_iter(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null iter", K(ret));
     } else if (iter->in_shallow_status()) {
       // already in shallow status, no need to advance shallow
     } else if (OB_FAIL(iter->get_curr_id(curr_domain_id))) {
@@ -538,7 +507,6 @@ int ObSRBMWIterImpl::try_generate_next_range_from_merge_heap(
     } else if (OB_FAIL(iter->get_curr_block_max_info(max_score_tuple))) {
     } else if (OB_ISNULL(max_score_tuple)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null max score tuple", K(ret));
     } else {
       int cmp_ret = 0;
       if (nullptr == minimum_max_domain_id) {
@@ -578,12 +546,10 @@ int ObSRBMWIterImpl::project_rows_from_top_k_heap(const int64_t capacity, int64_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(BMWStatus::FINISHED != status_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status", K(ret), K_(status));
   } else if (OB_UNLIKELY(top_k_heap_.empty())) {
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(capacity < 0 || capacity > buffered_domain_ids_.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(capacity), K(buffered_domain_ids_.count()));
   } else {
     ObExpr *relevance_proj_expr = iter_param_->relevance_proj_expr_;
     ObExpr *id_proj_expr = iter_param_->id_proj_expr_;
@@ -631,7 +597,6 @@ int ObSRBMWIterImpl::unify_dim_iters_for_next_round()
     const ObDatum *curr_domain_id = nullptr;
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null iter", K(ret));
     } else if (!iter->in_shallow_status()) {
       // skip
     } else if (OB_FAIL(iter->get_curr_id(curr_domain_id))) {
@@ -654,14 +619,11 @@ int ObSRBMWIterImpl::advance_dim_iters_for_next_round(
     if (is_next_round_iter_end(i)) {
       if (!iter_end_available) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected iter end", K(ret), K(i), K(iter_idx));
       }
     } else if (OB_ISNULL(iter = get_iter(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null iter", K(ret));
     } else if (OB_FAIL(iter->advance_to(target_id))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to advance to target id", K(ret), K(iter_idx));
       } else {
         ret = OB_SUCCESS;
       }
@@ -680,7 +642,6 @@ int ObSRBMWIterImpl::advance_dim_iters_for_next_round(
       ret = OB_ERR_UNEXPECTED;
     }
   } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
-    LOG_WARN("failed to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
   }

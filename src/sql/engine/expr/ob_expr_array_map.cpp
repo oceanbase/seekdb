@@ -58,7 +58,6 @@ OB_DEF_DESERIALIZE(ObExprArrayMapInfo)
       param_idx_ = static_cast<uint32_t*>(allocator_.alloc(len));
       if (OB_ISNULL(param_idx_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory", K(ret), K(len));
       } else {
         MEMCPY(param_idx_, buf + pos, len);
         pos += len;
@@ -88,7 +87,6 @@ int ObExprArrayMapInfo::deep_copy(common::ObIAllocator &allocator,
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
   } else if (OB_ISNULL(copied_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra_info should not be nullptr", K(ret));
   } else if (param_num_ == 0) {
     // do nothing
   } else {
@@ -97,7 +95,6 @@ int ObExprArrayMapInfo::deep_copy(common::ObIAllocator &allocator,
     char *buf = static_cast<char *>(allocator.alloc(alloc_size));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret), K(alloc_size));
     } else {
       other->param_exprs_ = reinterpret_cast<ObExpr **>(buf);
       other->param_idx_ = reinterpret_cast<uint32_t *>(buf + (param_num_ * sizeof(ObExpr*)));
@@ -171,7 +168,6 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
       uint16_t elem_subid = lambda_expr->obj_meta_.get_subschema_id();
       if (OB_UNLIKELY(OB_ISNULL(nested_arr))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("nested array is null", K(ret), K(i));
       } else if (datum->is_null()) {
         if (OB_FAIL(lambda_arr->push_null())) {
         }
@@ -183,7 +179,6 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
       const ObCollectionBasicType *elem_type = dynamic_cast<const ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(lambda_arr->get_array_type())->element_type_);
       if (OB_UNLIKELY(OB_ISNULL(elem_type))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("filter array collection element type is null", K(ret));
       } else if (OB_FAIL(ObArrayUtil::append(*lambda_arr, elem_type->basic_meta_.get_obj_type(), datum))) {
       }
     }
@@ -208,10 +203,8 @@ int ObExprArrayMapCommon::set_lambda_para(ObIAllocator &alloc,
       // do nothing
     } else if (para_idx >= arr_obj_size) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid para idx", K(ret), K(j), K(para_idx), K(arr_obj_size));
     } else if (idx >= arr_obj[para_idx]->size()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid idx", K(ret), K(j), K(idx), K(arr_obj[para_idx]->size()));
     } else if (OB_FALSE_IT(is_set = true)) {
     } else if (arr_obj[para_idx]->get_format() != ArrayFormat::Vector && arr_obj[para_idx]->is_null(idx)) {
       lambda_para->locate_datum_for_write(ctx).set_null();
@@ -300,7 +293,6 @@ int ObExprArrayMapCommon::set_lambda_para(ObIAllocator &alloc,
         }
         default: {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unsupported element type", K(ret), K(lambda_para->obj_meta_.get_type()));
         }
       } // end switch
     }
@@ -319,14 +311,12 @@ int ObExprArrayMapCommon::get_array_map_lambda_params(const ObRawExpr *raw_expr,
     bool found = false;
     if (OB_ISNULL(get_rt_expr(*raw_expr))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("expr is null", K(ret));
     }
     for (uint32_t i = 0; i < param_idx.count() && found && OB_SUCC(ret); i++) {
       if (idx == param_idx[i] && get_rt_expr(*raw_expr) == param_exprs[i]) {
         found = true;
       } else if (get_rt_expr(*raw_expr) == param_exprs[i]) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param idx mismatch", K(ret), K(idx), K(param_idx[i]));
       }
     }
     if (OB_SUCC(ret) && !found) {
@@ -339,7 +329,6 @@ int ObExprArrayMapCommon::get_array_map_lambda_params(const ObRawExpr *raw_expr,
       const ObRawExpr *child_expr = NULL;
       if (OB_ISNULL(child_expr = raw_expr->get_param_expr(i))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret));
       } else if (IS_ARRAY_MAP_OP(raw_expr->get_expr_type()) &&
                  ((depth > 0 && i == 0) || // inner array_map shouldn't handle lambda func para
                   ( depth == 0 && i > 0))) { // array_map shouldn't handle para other than lambda func para
@@ -363,10 +352,8 @@ int ObExprArrayMapCommon::get_lambda_subschema_id(ObExecContext *exec_ctx,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_ISNULL(lambda_expr = raw_expr.get_param_expr(0))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ObDataType elem_type;
     const ObExprResType &lambda_type = lambda_expr->get_result_type();
@@ -391,7 +378,6 @@ int ObExprArrayMapCommon::construct_extra_info(ObExprCGCtx &expr_cg_ctx,
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(*expr_cg_ctx.allocator_, rt_expr.type_, extra_info))) {
   } else if (OB_ISNULL(extra_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra_info should not be nullptr", K(ret));
   } else {
     ObExprArrayMapInfo *var_params_info = static_cast<ObExprArrayMapInfo *>(extra_info);
     ObArray<ObExpr *> param_exprs;
@@ -406,7 +392,6 @@ int ObExprArrayMapCommon::construct_extra_info(ObExprCGCtx &expr_cg_ctx,
       char *buf = static_cast<char *>(expr_cg_ctx.allocator_->alloc(alloc_size));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory", K(ret), K(alloc_size));
       } else {
         var_params_info->param_exprs_ = reinterpret_cast<ObExpr **>(buf);
         var_params_info->param_idx_ = reinterpret_cast<uint32_t *>(buf + (param_exprs.count() * sizeof(ObExpr*)));
@@ -453,7 +438,6 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   }
   for (int64_t i = 1; i < param_num && OB_SUCC(ret); i++) {
     ObCollectionTypeBase *coll_type = NULL;
@@ -461,11 +445,9 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
       is_null_res = true;
     } else if (!ob_is_collection_sql_type(types_stack[i].get_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, types_stack[i].get_subschema_id(), coll_type))) {
     } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
     }
   }
   
@@ -496,11 +478,9 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
       }
     } else if (!ob_is_array_supported_type(elem_type.get_obj_type())) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("unsupported element type", K(ret), K(elem_type.get_obj_type()));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element type");
     } else if (ob_is_varbinary_or_binary(elem_type.get_obj_type(), elem_type.get_collation_type())) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported binary", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element in binary type");
     } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_ARRAY_TYPE,
                                                                           elem_type, subschema_id))) {
@@ -526,7 +506,6 @@ int ObExprArrayMap::eval_array_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     is_null_res = true;
   } else if (OB_UNLIKELY(OB_ISNULL(info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr extra info is null", K(ret));
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
   } else if (is_null_res) {
     // do nothing

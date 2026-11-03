@@ -38,17 +38,14 @@ int ObPartGetter::get_part_ids(const common::ObString &part_name,
   bool find = false;
   if (part_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid part_name", K(ret), K(part_name));
   } else if (PARTITION_LEVEL_MAX == part_level) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected part level", K(ret), K(part_level));
   } else {
     const ObCheckPartitionMode mode = CHECK_PARTITION_MODE_NORMAL;
     ObPartIterator iter(table_, mode);
     while (OB_SUCC(ret) && !find && OB_SUCC(iter.next(part))) {
       if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null partition", K(ret));
       } else {
         cmp_part_name = part->get_part_name();
         if (ObCharset::case_insensitive_equal(part_name, cmp_part_name)) {
@@ -60,7 +57,6 @@ int ObPartGetter::get_part_ids(const common::ObString &part_name,
             while (OB_SUCC(ret) && OB_SUCC(sub_iter.next(subpart))) {
               if (OB_ISNULL(subpart)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get null subpartition", K(ret));
               } else if (OB_FAIL(part_ids.push_back(subpart->get_sub_part_id()))) {
               }
             }
@@ -72,7 +68,6 @@ int ObPartGetter::get_part_ids(const common::ObString &part_name,
           }
         } else if (PARTITION_LEVEL_TWO == part_level &&
                    OB_FAIL(get_subpart_ids_in_partition(part_name, *part, part_ids, find))) {
-          LOG_WARN("failed to get subpart ids in partition", K(ret));
         }
       }
     }
@@ -92,21 +87,17 @@ int ObPartGetter::get_subpart_ids(const common::ObString &part_name,
   bool find = false;
   if (part_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid part_name", K(ret), K(part_name));
   } else if (PARTITION_LEVEL_ZERO == part_level) {
     ret = OB_ERR_NOT_PARTITIONED;
-    LOG_WARN("table is not partitioned", K(ret));
   } else if (PARTITION_LEVEL_ONE == part_level) {
     // Use subpartition() on the primary partition table to report "specified subpartition does not exist".
     ret = OB_UNKNOWN_SUBPARTITION;
-    LOG_WARN("subpartition no exists", K(ret));
   } else if (PARTITION_LEVEL_TWO == part_level) {
     const ObCheckPartitionMode mode = CHECK_PARTITION_MODE_NORMAL;
     ObPartIterator iter(table_, mode);
     while (OB_SUCC(ret) && !find && OB_SUCC(iter.next(part))) {
       if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null partition", K(ret));
       } else if (OB_FAIL(get_subpart_ids_in_partition(part_name, *part, part_ids, find))) {
       }
     }
@@ -115,7 +106,6 @@ int ObPartGetter::get_subpart_ids(const common::ObString &part_name,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected part level", K(ret), K(part_level));
   }
   return ret;
 }
@@ -134,7 +124,6 @@ int ObPartGetter::get_subpart_ids_in_partition(const common::ObString &part_name
   while (OB_SUCC(ret) && !find && OB_SUCC(sub_iter.next(subpart))) {
     if (OB_ISNULL(subpart)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null subpartition", K(ret));
     } else {
       cmp_part_name = subpart->get_part_name();
       if (ObCharset::case_insensitive_equal(part_name, cmp_part_name)) {

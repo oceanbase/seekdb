@@ -70,13 +70,11 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
     if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
     } else if (datum->is_null()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", K(ret), K(*datum));
     } else {
       similarity_type = static_cast<ObVecSimilarityType>(datum->get_int());
     }
   }
   if (FAILEDx(calc_similarity(expr, ctx, res_datum, similarity_type))) {
-    LOG_WARN("failed to calc similarity", K(ret), K(similarity_type));
   }
   return ret;
 }
@@ -92,26 +90,20 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
   double similarity = 0.0;
   if (similarity_type < ObVecSimilarityType::COSINE || similarity_type >= ObVecSimilarityType::MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect similarity type", K(ret), K(similarity_type));
   } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(expr.args_[0]), ctx, tmp_allocator, arr_l, contain_null))) {
   } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(expr.args_[1]), ctx, tmp_allocator, arr_r, contain_null))) {
   } else if (contain_null) {
     res_datum.set_null();
   } else if (OB_ISNULL(arr_l) || OB_ISNULL(arr_r)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(arr_l), K(arr_r));
   } else if ((arr_l->get_array_type()->is_sparse_vector_type() || arr_r->get_array_type()->is_sparse_vector_type())) {
-    LOG_WARN("calc similarity for sparse vector is not supported", K(ret));
   } else {
     if (OB_UNLIKELY(arr_l->size() != arr_r->size())) {
       ret = OB_ERR_INVALID_VECTOR_DIM;
-      LOG_WARN("check array validty failed", K(ret), K(arr_l->size()), K(arr_r->size()));
     } else if (arr_l->contain_null() || arr_r->contain_null()) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("array with null can't calculate vector similarity", K(ret));
     } else if (SimilarityFunc<float>::similarity_funcs[similarity_type] == nullptr) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support", K(ret), K(similarity_type));
     } else {
       float *data_l = reinterpret_cast<float*>(arr_l->get_data());
       float *data_r = reinterpret_cast<float*>(arr_r->get_data()); 
@@ -122,13 +114,10 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
         float *data_norm_r = nullptr;
         if (OB_ISNULL(data_norm_l = static_cast<float *>(tmp_allocator.alloc(size * sizeof(float))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory", K(ret));
         } else if (OB_ISNULL(data_norm_r = static_cast<float *>(tmp_allocator.alloc(size * sizeof(float))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory", K(ret));
         } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_l, data_norm_l)) || 
             OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_r, data_norm_r))) {
-          LOG_WARN("fail to normalize vectors", K(ret));
         } else {
           data_l = data_norm_l;
           data_r = data_norm_r;
@@ -141,7 +130,6 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
           res_datum.set_null();
           ret = OB_SUCCESS; // ignore
         } else {
-          LOG_WARN("failed to calc similarity", K(ret), K(similarity_type));
         }
       } else {
         res_datum.set_double(similarity);

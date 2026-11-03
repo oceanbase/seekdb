@@ -48,7 +48,6 @@ int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator,
   data_length = max(data_length, 1);
   if (fpp <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to init px bloom filter", K(ret), K(data_length), K(fpp));
   } else {
     data_length_ = data_length;
     fpp_ = fpp;
@@ -63,7 +62,6 @@ int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator,
     if (OB_ISNULL(bits_array_buf = allocator.alloc(
                                        (CACHE_LINE_SIZE + bits_array_length_) * sizeof(int64_t)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc px bloom filter bits_array_", K(ret), K(bits_count_));
     } else {
       // cache line aligned address.
       int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
@@ -93,7 +91,6 @@ int ObPxBloomFilter::assign(const ObPxBloomFilter &filter)
   void *bits_array_buf = NULL;
   if (OB_ISNULL(bits_array_buf = allocator_.alloc((bits_array_length_ + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(bits_array_length_), K(ret));
   } else {
     int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
                           + CACHE_LINE_SIZE - 1) >> LOG_CACHE_LINE_SIZE) << LOG_CACHE_LINE_SIZE;
@@ -172,7 +169,6 @@ int ObPxBloomFilter::put(uint64_t hash)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the px bloom filter is not inited", K(ret));
   } else {
     uint64_t block_begin = (hash & block_mask_) << LOG_HASH_COUNT;
     uint32_t hash_high = ((uint32_t)(hash >> 32) & BLOCK_FILTER_HASH_MASK);
@@ -191,7 +187,6 @@ int ObPxBloomFilter::put_batch(uint64_t *batch_hash_values, const EvalBound &bou
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the px bloom filter is not inited", K(ret));
   } else if (bound.get_all_rows_active()) {
     uint32_t hash_high = 0;
     uint8_t *block_hash_vals = (uint8_t *)&hash_high;
@@ -264,11 +259,8 @@ int ObPxBloomFilter::merge_filter(ObPxBloomFilter *filter)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(filter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("filer is null", K(ret));
   } else if (OB_UNLIKELY(bits_array_length_ != filter->bits_array_length_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("bloom filter length mismatch", K(ret), K(bits_array_length_),
-             "other_length", filter->bits_array_length_);
   } else {
     int64_t old_v = 0, new_v = 0;
     for (int i = 0; i < filter->bits_array_length_; ++i) {
@@ -322,7 +314,6 @@ OB_DEF_DESERIALIZE(ObPxBloomFilter)
   void *bits_array_buf = NULL;
   if (OB_ISNULL(bits_array_buf = allocator_.alloc((real_len + CACHE_LINE_SIZE)* sizeof(int64_t)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc filter", K(real_len), K(ret));
   } else {
     // cache line aligned address.
     int64_t align_addr = ((reinterpret_cast<int64_t>(bits_array_buf)
@@ -370,7 +361,6 @@ int ObPxBFStaticInfo::init(int64_t filter_id, bool is_shared,
   int ret = OB_SUCCESS;
   if (is_inited_){
     ret = OB_INIT_TWICE;
-    LOG_WARN("twice init bf static info", K(ret));
   } else {
     
     filter_id_ = filter_id;

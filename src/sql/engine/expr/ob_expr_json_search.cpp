@@ -90,7 +90,6 @@ int ObExprJsonSearch::find_matches(common::ObIAllocator *allocator,
 
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("allocator is null", K(ret));
   } else if (one_match && hits.size() > 0) {
     // do nothing
   } else {
@@ -105,7 +104,6 @@ int ObExprJsonSearch::find_matches(common::ObIAllocator *allocator,
           void *buf = allocator->alloc(sizeof(ObJsonBuffer));
           if (OB_ISNULL(buf)){
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("falied to alloc new path buffer.", K(ret));
           } else {
             ObJsonBuffer *temp = new (buf) ObJsonBuffer(allocator);
             if (OB_FAIL(temp->append(path.ptr(), path.length()))) {
@@ -128,7 +126,6 @@ int ObExprJsonSearch::find_matches(common::ObIAllocator *allocator,
             ret = j_base->get_object_value(i, child);
             if (OB_ISNULL(child)) {
               ret = OB_ERR_NULL_VALUE;
-              LOG_WARN("fail to get child_dom",K(ret), K(i));
             } else {
               ObString key;
               if (OB_FAIL(j_base->get_key(i, key))) {
@@ -158,7 +155,6 @@ int ObExprJsonSearch::find_matches(common::ObIAllocator *allocator,
             ret = j_base->get_array_element(i, child);
             if (OB_ISNULL(child)) {
               ret = OB_ERR_NULL_VALUE;
-              LOG_WARN("fail to get child_dom",K(ret), K(i));
             } else {
               uint64_t reserve_len = i == 0 ? 3 : static_cast<uint64_t>(std::log10(i)) + 3;
               char temp_buf[reserve_len + 1];
@@ -207,7 +203,6 @@ int ObExprJsonSearch::calc_result_typeN(ObExprResType& type,
 
   if (OB_UNLIKELY(param_num < 3)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid param number", K(ret), K(param_num));
   } else {
     type.set_json();
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
@@ -245,7 +240,6 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
       j_base, is_null, false))) {
   }
@@ -270,7 +264,6 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                                 &temp_allocator,
                                                                 target_str,
                                                                 target_str))) {
-        LOG_WARN("fail to convert string", K(ret));
       } else if (0 == target_str.case_compare("one")) {
         one_flag = true;
       } else if (0 == target_str.case_compare("all")) {
@@ -303,16 +296,12 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                                 &temp_allocator,
                                                                 escape,
                                                                 escape))) {
-        LOG_WARN("fail to convert string", K(ret));
       } else if (escape.length() > 0) {
         const ObCollationType escape_coll = json_arg->datum_meta_.cs_type_;
         size_t length = ObCharset::strlen_char(escape_coll, escape.ptr(), escape.length());
         if (length != 1) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument to ESCAPE", K(escape), K(length), K(ret));
         } else if (OB_FAIL(ObCharset::mb_wc(escape_coll, escape, escape_wc))) {
-          LOG_WARN("failed to convert escape to wc", K(ret), K(escape),
-                  K(escape_coll), K(escape_wc));
           ret = OB_INVALID_ARGUMENT;
         }
       }
@@ -337,7 +326,6 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                               &temp_allocator,
                                                               target,
                                                               target))) {
-      LOG_WARN("fail to convert string", K(ret));
     }
   }
 
@@ -379,7 +367,6 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                                     &temp_allocator,
                                                                     j_path_text,
                                                                     j_path_text))) {
-            LOG_WARN("fail to convert string", K(ret));
           } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path,
               j_path_text, i, true))) {
           } else if (OB_FAIL(json_paths.push_back(j_path))) {
@@ -440,7 +427,6 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     void *buf = temp_allocator.alloc(sizeof(ObJsonString));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("json_search alloc ObJsonString failed", K(ret));
     } else {
       ObJsonString *j_str = new (buf) ObJsonString(hits[0]->ptr(), hits[0]->length());
       j_res = j_str;
@@ -449,14 +435,12 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     void *buf = temp_allocator.alloc(sizeof(ObJsonArray));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("json_search alloc ObJsonArray failed", K(ret));
     } else {
       ObJsonArray *j_arr = new (buf) ObJsonArray(&temp_allocator);
       for (int32_t i = 0; OB_SUCC(ret) && i < hits.size(); i++) {
         buf = temp_allocator.alloc(sizeof(ObJsonString));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("json_search alloc jsonString failed", K(ret));
         } else {
           ObJsonString *j_str = new (buf) ObJsonString(hits[i]->ptr(), hits[i]->length());
           if (OB_FAIL(j_arr->append(j_str))) {

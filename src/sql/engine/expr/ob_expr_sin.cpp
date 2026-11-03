@@ -55,7 +55,6 @@ int ObExprSin::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   if (ObDoubleType != rt_expr.args_[0]->datum_meta_.type_
       && ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg type", K(rt_expr.args_[0]->datum_meta_.type_), K(ret));
   }
   return ret;
 }

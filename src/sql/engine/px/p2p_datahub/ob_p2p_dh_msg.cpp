@@ -79,11 +79,9 @@ int ObP2PDatahubMsgBase::fill_empty_query_range(const ObPxQueryRangeInfo &query_
   if (OB_ISNULL(start = static_cast<ObObj *>(
                     allocator.alloc(sizeof(ObObj) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory for start_obj failed", K(ret));
   } else if (OB_ISNULL(end = static_cast<ObObj *>(
                            allocator.alloc(sizeof(ObObj) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory for end_obj failed", K(ret));
   } else {
     // fill all columns with (max, min)
     for (int64_t i = 0; i < range_column_cnt; ++i) {

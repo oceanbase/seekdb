@@ -1,3 +1,0 @@
-seekdb_apply_unity_inventory(ob_rootserver SEEKDB_ROOTSERVER_UNITY)
-seekdb_apply_standalone_inventory(ob_rootserver SEEKDB_ROOTSERVER_STANDALONE)
-ob_server_add_target(ob_rootserver)

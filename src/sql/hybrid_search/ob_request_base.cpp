@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_request_base.h"
+#include "lib/utility/utility.h"
 #define IS_LOGICAL_OPERATOR(type) ((type) == T_OP_AND || (type) == T_OP_OR || (type) == T_OP_XOR)
 #define IS_SIMPLIFIABLE_OPERATOR(type) (IS_LOGICAL_OPERATOR(type) || \
                                         (type) == T_OP_ADD || \
@@ -141,7 +142,6 @@ int ObReqOpExpr::need_parentheses_by_associativity(ObItemType parent_type, ObIte
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected op type", K(ret), K(parent_type), K(child_type));
     need_parentheses = true;
   }
   return ret;
@@ -310,7 +310,6 @@ int ObReqExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int64
     }
   }
   if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-    LOG_WARN("fail to translate expr alias", K(ret));
   }
   return ret;
 }
@@ -329,7 +328,6 @@ int ObReqColumnExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_,
     DATA_PRINTF("^%.15g", weight_);
   }
   if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-    LOG_WARN("fail to translate expr alias", K(ret));
   }
   return ret;
 }
@@ -342,12 +340,16 @@ int ObReqConstExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, 
   } else if (var_type_ == ObNullType) {
     PRINT_IDENT("NULL");
   } else {
-    DATA_PRINTF("'");
-    PRINT_IDENT(expr_name);
-    DATA_PRINTF("'");
+    // JSON strings are UTF-8 text. Keep a character literal (including JSON
+    // object keys), with normal literal coercibility, while hex encoding makes
+    // quotes, backslashes and NUL independent of NO_BACKSLASH_ESCAPES.
+    ObSqlString literal;
+    if (OB_FAIL(sql_append_hex_escape_str(expr_name, literal))) {
+    } else {
+      DATA_PRINTF("_utf8mb4 %.*s", literal.string().length(), literal.string().ptr());
+    }
   }
   if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-    LOG_WARN("fail to translate expr alias", K(ret));
   }
   return ret;
 }
@@ -387,7 +389,6 @@ int ObReqMatchExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, 
     }
   }
   if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-    LOG_WARN("fail to translate expr alias", K(ret));
   }
   return ret;
 }
@@ -414,7 +415,6 @@ int ObReqWindowFunExpr::translate_expr(ObObjPrintParams &print_params_, char *bu
     }
   }
   if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-    LOG_WARN("fail to translate expr alias", K(ret));
   }
   return ret;
 }
@@ -424,10 +424,8 @@ int ObReqWindowFunExpr::construct_window_fun_expr(ObIAllocator &alloc, OrderInfo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(order_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("field_expr or query_expr is null", K(ret));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqWindowFunExpr, &alloc, expr_name, alias))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create match expr", K(ret));
   } else if (OB_FAIL(expr->order_items_.push_back(order_info))) {
   }
   return ret;
@@ -503,7 +501,6 @@ int ObReqOpExpr::get_op_string(ObString &op_str)
       break;
     default:
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported op type", K(ret), K(op_type_));
   }
   return ret;
 }
@@ -532,7 +529,6 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
         if (OB_SUCC(need_parentheses_for_child(*child_op_expr, i, need_parentheses))) {
           child_op_expr->need_parentheses_ = need_parentheses;
         } else {
-          LOG_WARN("fail to get need parentheses", K(ret));
           break;
         }
       }
@@ -554,7 +550,6 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
       DATA_PRINTF(")");
     }
     if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-      LOG_WARN("fail to translate expr alias", K(ret));
     }
   }
   return ret;
@@ -583,13 +578,11 @@ int ObReqOpExpr::translate_in_expr(ObObjPrintParams &print_params_, char *buf_, 
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("IN expr must have at least two values", K(ret));
   }
   if (OB_SUCC(ret) && need_parentheses_) {
     DATA_PRINTF(")");
   }
   if (OB_SUCC(ret) && need_alias && translate_alias(print_params_, buf_, buf_len_, pos_)) {
-    LOG_WARN("fail to translate expr alias", K(ret));
   }
   return ret;
 }
@@ -667,7 +660,6 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqExpr, &alloc, expr_name, alias_name))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create expr", K(ret));
   }
   return ret;
 }
@@ -677,7 +669,6 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqExpr, &alloc, expr_name, alias_name))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param))) {
   }
   return ret;
@@ -688,7 +679,6 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqExpr, &alloc, expr_name, alias_name))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param1))) {
   } else if (OB_FAIL(expr->params.push_back(param2))) {
   }
@@ -700,7 +690,6 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqExpr, &alloc, expr_name, alias_name))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create expr", K(ret));
   } else {
     for (uint64_t i = 0; OB_SUCC(ret) && i < params.count(); i++) {
       if (OB_FAIL(expr->params.push_back(params.at(i)))) {
@@ -715,7 +704,6 @@ int ObReqColumnExpr::construct_column_expr(ObReqColumnExpr *&expr, ObIAllocator 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqColumnExpr, &alloc, expr_name, ObString(), weight, print_weight))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create column expr", K(ret));
   }
   return ret;
 }
@@ -725,7 +713,6 @@ int ObReqColumnExpr::construct_column_expr(ObReqColumnExpr *&expr, ObIAllocator 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqColumnExpr, &alloc, expr_name, table_name, weight, print_weight))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create column expr", K(ret));
   }
   return ret;
 }
@@ -735,7 +722,6 @@ int ObReqConstExpr::construct_const_expr(ObReqConstExpr *&expr, ObIAllocator &al
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqConstExpr, &alloc, var_type, expr_name))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create const expr", K(ret));
   } else {
     expr->set_numeric();
   }
@@ -747,7 +733,6 @@ int ObReqConstExpr::construct_const_numeric_expr(ObReqConstExpr *&expr, ObIAlloc
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr = OB_NEWx(ObReqConstExpr, &alloc, var_type, ObString()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create const expr", K(ret));
   } else if (OB_FAIL(expr->set_numeric(alloc, num_value, var_type))) {
   }
   return ret;
@@ -758,7 +743,6 @@ int ObReqConstExpr::set_numeric(ObIAllocator &alloc, double numeric_value, ObObj
   int ret = OB_SUCCESS;
   if (!ob_is_numeric_type(var_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("var_type is not numeric type", K(ret), K(var_type));
   } else {
     char buf[32];
     int64_t len = 0;
@@ -789,7 +773,6 @@ int ObReqConstExpr::set_numeric(ObIAllocator &alloc, double numeric_value, ObObj
     char *num_str = static_cast<char *>(alloc.alloc(len)); 
     if (OB_ISNULL(num_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory for numeric string", K(ret), K(len));
     } else {
       MEMCPY(num_str, buf, len);
       expr_name.assign_ptr(num_str, static_cast<int32_t>(len));
@@ -806,10 +789,8 @@ int ObReqMatchExpr::construct_match_expr(ObReqMatchExpr *&expr, ObIAllocator &al
   int ret = OB_SUCCESS;
   if (OB_ISNULL(field_expr) || OB_ISNULL(query_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("field_expr or query_expr is null", K(ret));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqMatchExpr, &alloc, score_type))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create match expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(field_expr))) {
   } else if (OB_FAIL(expr->params.push_back(query_expr))) {
   }
@@ -828,7 +809,6 @@ int ObReqCaseWhenExpr::construct_case_when_expr(ObReqCaseWhenExpr *&expr, ObIAll
     LOG_WARN("when_exprs and then_exprs count mismatch", K(ret), K(when_exprs.count()), K(then_exprs.count()));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqCaseWhenExpr, &alloc, arg_expr, when_exprs, then_exprs, default_expr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create case when expr", K(ret));
   }
   return ret;
 }
@@ -842,10 +822,8 @@ int ObReqCaseWhenExpr::construct_case_when_expr(ObReqCaseWhenExpr *&expr, ObIAll
   int ret = OB_SUCCESS;
   if (OB_ISNULL(when_expr) || OB_ISNULL(then_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("when_expr or then_expr is null", K(ret));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqCaseWhenExpr, &alloc, default_expr, when_expr, then_expr, arg_expr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create case when expr", K(ret));
   }
   return ret;
 }
@@ -855,10 +833,8 @@ int ObReqOpExpr::construct_binary_op_expr(ObReqOpExpr *&expr, ObIAllocator &allo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(l_param) || OB_ISNULL(r_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param is null", K(ret), K(l_param), K(r_param));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqOpExpr, &alloc, type))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(expr->init(l_param, r_param, type))) {
   } else if (!alias_name.empty()) {
     expr->set_alias(alias_name);
@@ -871,10 +847,8 @@ int ObReqOpExpr::construct_unary_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param is null", K(ret), K(param));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqOpExpr, &alloc, type))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create unary op expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param))) {
   } else if (OB_FAIL(expr->set_op_name())) {
   }
@@ -886,17 +860,14 @@ int ObReqOpExpr::construct_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObIt
   int ret = OB_SUCCESS;
   if (params.count() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params array is empty", K(ret));
   } else if (OB_ISNULL(expr = OB_NEWx(ObReqOpExpr, &alloc, type))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create op expr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); i++) {
       if (OB_FAIL(expr->params.push_back(params.at(i)))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(expr->set_op_name())) {
-      LOG_WARN("fail to set op name", K(ret));
     }
   }
   return ret;
@@ -907,19 +878,15 @@ int ObReqOpExpr::construct_in_expr(ObIAllocator &alloc, ObReqExpr *key_expr, com
   int ret = OB_SUCCESS;
   if (OB_ISNULL(key_expr) || value_exprs.count() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_ISNULL(in_expr = OB_NEWx(ObReqOpExpr, &alloc, T_OP_IN))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create in expr", K(ret));
   } else if (OB_ISNULL(key_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpectd null ptr", K(ret));
   } else if (OB_FAIL(in_expr->params.push_back(key_expr))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs.count(); i++) {
       if (OB_ISNULL(value_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpectd null ptr", K(ret));
       } else if (OB_FAIL(in_expr->params.push_back(value_exprs.at(i)))) {
       }
     }

@@ -65,11 +65,9 @@ int ObLimitOp::inner_open()
   bool is_null_value = false;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("limit operator has no child", K(ret));
   } else if (OB_FAIL(get_int_val(MY_SPEC.limit_expr_, eval_ctx_, limit_, is_null_value))) {
   } else if (!is_null_value && OB_FAIL(get_int_val(MY_SPEC.offset_expr_, eval_ctx_,
                                                    offset_, is_null_value))) {
-    LOG_WARN("get offset values failed", K(ret));
   } else if (is_null_value) {
     offset_ = 0;
     limit_ = 0;
@@ -135,10 +133,8 @@ int ObLimitOp::inner_get_next_row()
   while (OB_SUCC(ret) && input_cnt_ < offset_) {
     if (OB_FAIL(child_->get_next_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("child_op failed to get next row", K(input_cnt_), K(offset_), K(ret));
       }
     } else if (is_percent_first_ && OB_FAIL(convert_limit_percent())) {
-      LOG_WARN("failed to convert limit percent", K(ret));
     } else {
       ++input_cnt_;
     }
@@ -166,11 +162,8 @@ int ObLimitOp::inner_get_next_row()
     if (is_percent_first_ || output_cnt_ < limit_ || limit_ < 0) {
       if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("child_op failed to get next row",
-                   K(ret), K_(limit), K_(offset), K_(input_cnt), K_(output_cnt));
         }
       } else if (is_percent_first_ && OB_FAIL(convert_limit_percent())) {
-        LOG_WARN("failed to convert limit percent", K(ret));
       } else if (limit_ == 0) {
         ret = OB_ITER_END;
       } else {
@@ -179,7 +172,6 @@ int ObLimitOp::inner_get_next_row()
         // If need to support fetch with ties feature, need to copy the last row taken out by limit for subsequent use
         if (MY_SPEC.is_fetch_with_ties_ && output_cnt_ == limit_ &&
             OB_FAIL(pre_sort_columns_.save_store_row(MY_SPEC.sort_columns_, eval_ctx_))) {
-          LOG_WARN("failed to deep copy limit last rows", K(ret));
         }
       }
     // Explanation needs to continue judging if input rows can be output as equal values according to order by items
@@ -187,8 +179,6 @@ int ObLimitOp::inner_get_next_row()
       bool is_equal = false;
       if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("child_op failed to get next row",
-                   K(ret), K_(limit), K_(offset), K_(input_cnt), K_(output_cnt));
         }
       } else if (OB_FAIL(is_row_order_by_item_value_equal(is_equal))) {
       } else if (is_equal) {
@@ -205,7 +195,6 @@ int ObLimitOp::inner_get_next_row()
           ++left_count;
         }
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next row from child", K(ret));
         }
       }
     }
@@ -241,7 +230,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
     }
     if (OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
     } else if (is_percent_first_ && OB_FAIL(convert_limit_percent())) {
-      LOG_WARN("failed to convert limit percent", K(ret));
     } else {
       input_cnt_ += (child_brs->size_ - child_brs->skip_->accumulate_bit_cnt(child_brs->size_));
     }
@@ -291,9 +279,7 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
       }
 
       if (!skip_fetch_rows && OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
-        LOG_WARN("child_op failed to get next row", K(ret), K(limit_), K(batch_cnt));
       } else if (is_percent_first_ && OB_FAIL(convert_limit_percent())) {
-        LOG_WARN("failed to convert limit percent", K(ret));
       } else if (limit_ == 0) {
         brs_.size_ = 0;
         brs_.end_ = true;
@@ -477,16 +463,12 @@ int ObLimitOp::convert_limit_percent()
         OB_UNLIKELY(child_->get_spec().get_type() != PHY_MATERIAL &&
                     child_->get_spec().get_type() != PHY_SORT)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(limit_), K(child_));
     } else if (child_->get_spec().get_type() == PHY_MATERIAL &&
                OB_FAIL(static_cast<ObMaterialOp *>(child_)->get_material_row_count(tot_count))) {
-      LOG_WARN("failed to get op row count", K(ret));
     } else if (child_->get_spec().get_type() == PHY_SORT &&
                FALSE_IT(tot_count = static_cast<ObSortOp *>(child_)->get_sort_row_count())) {
-      LOG_WARN("failed to get op row count", K(ret));
     } else if (OB_UNLIKELY(tot_count < 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid child op row count", K(tot_count), K(ret));
     } else if (percent < 100) {
       // Round up fractional percentage results.
       int64_t percent_int64 = static_cast<int64_t>(percent);

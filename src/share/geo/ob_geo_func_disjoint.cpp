@@ -95,7 +95,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncDisjointImpl, ObWkbGeogMultiPoint, ObWkbG
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     result = true;
     const ObWkbGeogMultiPoint *geo1 = reinterpret_cast<const ObWkbGeogMultiPoint *>(g1->val());
@@ -124,7 +123,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncDisjointImpl, ObWkbGeogMultiPoint, ObWkbG
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     result = true;
     const ObWkbGeogMultiPoint *geo1 = reinterpret_cast<const ObWkbGeogMultiPoint *>(g1->val());

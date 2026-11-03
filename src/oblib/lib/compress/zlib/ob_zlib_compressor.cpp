@@ -133,7 +133,6 @@ int ObZlibCompressor::compress(const char *src_buffer,
     LIB_LOG(WARN, "invalid compress argument, ",
         K(ret), KP(src_buffer), K(src_data_size), KP(dst_buffer), K(dst_buffer_size));
   } else if (OB_FAIL(get_max_overflow_size(src_data_size, max_overflow_size))) {
-    LIB_LOG(WARN, "fail to get max_overflow_size, ", K(ret), K(src_data_size));
   } else if ((src_data_size + max_overflow_size) > dst_buffer_size) {
     ret = OB_BUF_NOT_ENOUGH;
     LIB_LOG(WARN, "dst buffer not enough, ",

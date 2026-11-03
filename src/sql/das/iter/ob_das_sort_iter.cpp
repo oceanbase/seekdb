@@ -29,7 +29,6 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (param.type_ != ObDASIterType::DAS_ITER_SORT) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
   } else {
     lib::ContextParam context_param;
     context_param.set_mem_attr("DASSortIter", ObCtxIds::DEFAULT_CTX_ID)
@@ -45,7 +44,6 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
       if ((nullptr != sort_ctdef_->limit_expr_ || nullptr != sort_ctdef_->offset_expr_)
           && sort_param.limit_param_.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected both limit offset expr and limit param", K(ret));
       } else if (sort_param.limit_param_.is_valid()) {
         limit_param_ = sort_param.limit_param_;
       } else {
@@ -84,14 +82,12 @@ int ObDASSortIter::init_sort_impl()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sort_memctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null sort memctx", K(ret));
   } else {
     ObIAllocator &allocator = sort_memctx_->get_arena_allocator();
     void *buf = nullptr;
     if (!need_distinct_) {
       if (OB_ISNULL(buf = allocator.alloc(sizeof(ObSortOpImpl)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate ObSortOpImpl memory", K(ret), KP(buf));
       } else {
         ObSortOpImpl *sort_impl = new (buf) ObSortOpImpl();
         sort_impl_ = static_cast<ObSortOpImpl *>(sort_impl);
@@ -99,7 +95,6 @@ int ObDASSortIter::init_sort_impl()
     } else {
       if (OB_ISNULL(buf = allocator.alloc(sizeof(ObUniqueSortImpl)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate ObUniqueSortImpl memory", K(ret), KP(buf));
       } else {
         ObUniqueSortImpl *sort_impl = new (buf) ObUniqueSortImpl();
         sort_impl_ = static_cast<ObSortOpImpl *>(sort_impl);  
@@ -194,13 +189,11 @@ int ObDASSortIter::inner_get_next_row()
   if (limit_param_.limit_ >= 0 && output_row_cnt_ >= limit_param_.limit_) {
     ret = OB_ITER_END;
   } else if (!sort_finished_ && OB_FAIL(do_sort(false))) {
-    LOG_WARN("failed to do sort", K(ret));
   } else {
     bool got_row = false;
     while (OB_SUCC(ret) && !got_row) {
       if (OB_FAIL(sort_impl_->get_next_row(sort_row_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next row from sort impl", K(ret));
         }
       } else {
         ++input_row_cnt_;
@@ -220,7 +213,6 @@ int ObDASSortIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   if (limit_param_.limit_ >= 0 && output_row_cnt_ >= limit_param_.limit_) {
     ret = OB_ITER_END;
   } else if (!sort_finished_ && OB_FAIL(do_sort(true))) {
-    LOG_WARN("failed to do sort", K(ret));
   } else {
     if (input_row_cnt_ == 0 && limit_param_.limit_ > 0 && limit_param_.offset_ > 0)  {
       int64_t need_offset_count = limit_param_.offset_;
@@ -228,7 +220,6 @@ int ObDASSortIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         int64_t got_count = 0;
         if (OB_FAIL(sort_impl_->get_next_batch(sort_row_, OB_MIN(need_offset_count, capacity), got_count))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
-            LOG_WARN("failed to get next row from token merge", K(ret));
           }
         }
         input_row_cnt_ += got_count;
@@ -239,7 +230,6 @@ int ObDASSortIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         if (OB_LIKELY(need_offset_count == 0) && OB_LIKELY(input_row_cnt_ == limit_param_.offset_)) {
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected need filter count", K(ret), K(need_offset_count), K(input_row_cnt_), K(limit_param_.offset_));
         }
       }
       output_row_cnt_ += count;
@@ -252,7 +242,6 @@ int ObDASSortIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       int64_t min_capacity = limit_param_.limit_ > 0 ? OB_MIN(capacity, limit_param_.limit_ - output_row_cnt_) : capacity;
       if (OB_FAIL(sort_impl_->get_next_batch(sort_row_, min_capacity, count))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next row from token merge", K(ret));
         }
       }
       output_row_cnt_ += count;
@@ -276,7 +265,6 @@ int ObDASSortIter::do_sort(bool is_vectorized)
       read_size = 0;
       if (OB_FAIL(child_->get_next_rows(read_size, max_size_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed ro get next rows from child iter", K(ret));
         } else if (read_size != 0) {
           if (OB_FAIL(sort_impl_->add_batch(sort_row_, *fake_skip_, read_size, 0, nullptr))) {
           } else {
@@ -290,7 +278,6 @@ int ObDASSortIter::do_sort(bool is_vectorized)
     while (OB_SUCC(ret)) {
       if (OB_FAIL(child_->get_next_row())) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed ro get next rows from child iter", K(ret));
         }
       } else if (OB_FAIL(sort_impl_->add_row(sort_row_))) {
       }

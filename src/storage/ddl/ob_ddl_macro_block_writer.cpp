@@ -62,15 +62,12 @@ int ObDDLMacroBlockWriter::init(
       table_key.tablet_id_ != param.tablet_id_ ? param.lob_meta_tablet_param_ : param.tablet_param_;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("initialized twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!param.is_valid()
         || !start_sequence.is_valid()
         || row_offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("there are invalid argument", K(ret), K(param), K(start_sequence), K(row_offset));
   } else if (OB_ISNULL(tablet_param.storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema is null", K(ret), K(table_key), K(param));
   } else {
     share::SCN mock_start_scn;
     IGNORE_RETURN mock_start_scn.convert_for_tx(DDL_START_SCN_VAL);
@@ -148,7 +145,6 @@ int ObDDLMacroBlockWriter::append_row(const ObDatumRow &curr_row)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.append_row(curr_row))) {
   }
   return ret;
@@ -159,7 +155,6 @@ int ObDDLMacroBlockWriter::append_batch(const blocksstable::ObBatchDatumRows &cu
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.append_batch(curr_rows))) {
   }
   return ret;
@@ -170,7 +165,6 @@ int ObDDLMacroBlockWriter::close()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.close())) {
   }
   return ret;

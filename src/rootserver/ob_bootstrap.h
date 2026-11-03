@@ -29,7 +29,6 @@ namespace common
 class ObDataBuffer;
 class ObMySQLProxy;
 class ObAddr;
-class ObServerConfig;
 class ObISQLClient;
 }
 
@@ -57,7 +56,7 @@ class ObSystemBootstrapService;
 class ObBaseBootstrap
 {
 public:
-  explicit ObBaseBootstrap(common::ObServerConfig &config);
+  ObBaseBootstrap();
   virtual ~ObBaseBootstrap() {}
 
 
@@ -65,8 +64,6 @@ protected:
   virtual int check_inner_stat() const;
 public:
   int64_t step_id_;
-protected:
-  common::ObServerConfig &config_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBaseBootstrap);
 };
@@ -74,7 +71,7 @@ private:
 class ObPreBootstrap : public ObBaseBootstrap
 {
 public:
-  explicit ObPreBootstrap(common::ObServerConfig &config);
+  ObPreBootstrap();
   virtual ~ObPreBootstrap() {}
   virtual int prepare_bootstrap(common::ObAddr &master_rs);
 
@@ -107,8 +104,7 @@ private:
     int ret_;
   };
   explicit ObBootstrap(ObDDLService &ddl_service,
-                       ObRuntimeDDLService &runtime_ddl_service,
-                       common::ObServerConfig &config);
+                       ObRuntimeDDLService &runtime_ddl_service);
 
   virtual ~ObBootstrap() {}
   virtual int execute_bootstrap();
@@ -171,11 +167,9 @@ private:
       int64_t cost = end_ts - begin_ts_; \
       begin_ts_ = end_ts ; \
       if (OB_SUCC(ret)) { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(INFO, "STEP_%ld.%ld:%s execute success, cost=%ld", \
                        major_step, step_id_, function_name, cost); \
       } else { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(WARN, "STEP_%ld.%ld:%s execute fail, ret=%d, cost=%ld", \
                        major_step, step_id_, function_name, ret, cost); \
       }\
@@ -194,11 +188,9 @@ private:
       int64_t cost = end_ts - begin_ts_; \
       begin_ts_ = end_ts ; \
       if (OB_SUCC(ret)) { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(INFO, "STEP_%ld.%ld:%s execute success, cost=%ld", \
                        major_step, step_id_, __FUNCTION__, cost); \
       } else { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(WARN, "STEP_%ld.%ld:%s execute fail, ret=%d, cost=%ld", \
                        major_step, step_id_, __FUNCTION__, ret, cost); \
       }\

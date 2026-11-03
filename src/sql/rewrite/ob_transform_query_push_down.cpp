@@ -85,7 +85,6 @@ int ObTransformQueryPushDown::transform_one_stmt(common::ObIArray<ObParentDMLStm
   ObSEArray<SelectItem, 4> const_select_items;//record const select item, used to adjust set-op stmt output postition
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (!stmt->is_select_stmt()) {
     // do nothing
     OPT_TRACE("not select stmt, can not transform");
@@ -98,13 +97,11 @@ int ObTransformQueryPushDown::transform_one_stmt(common::ObIArray<ObParentDMLStm
     const TableItem *view_table_item = NULL;
     if (OB_ISNULL(view_table_item = select_stmt->get_table_item_by_id(cur_from.table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get table item", K(ret), K(cur_from));
     } else if (!view_table_item->is_generated_table()) {
       // do nothing
       OPT_TRACE("table item is not view, can not pushdown query");
     } else if (OB_ISNULL(view_stmt = view_table_item->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("view stmt is null", K(ret));
     } else if (OB_FAIL(check_transform_validity(select_stmt,
                                                 view_stmt,
                                                 can_transform,
@@ -124,7 +121,6 @@ int ObTransformQueryPushDown::transform_one_stmt(common::ObIArray<ObParentDMLStm
                                     const_select_items))) {
     } else if (OB_ISNULL(stmt = view_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("view stmt is null", K(ret), K(view_stmt));
     } else if (OB_FAIL(add_transform_hint(*stmt))) {
     } else {
       trans_happened = true;
@@ -156,18 +152,15 @@ int ObTransformQueryPushDown::need_transform(const common::ObIArray<ObParentDMLS
     need_trans = false;
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (stmt.get_table_size() == 1) {
     const TableItem *table = NULL;
     const ObViewMergeHint *myhint = NULL;
     if (OB_ISNULL(table = stmt.get_table_item(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret));
     } else if (!table->is_generated_table()) {
       /*do nothing*/
     } else if (OB_ISNULL(table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(*table));
     } else if (!query_hint->has_outline_data()) {
       if (OB_FAIL(check_hint_allowed_query_push_down(stmt, *table->ref_query_, need_trans))) {
       } else if (!need_trans) {
@@ -199,7 +192,6 @@ int ObTransformQueryPushDown::check_hint_allowed_query_push_down(const ObDMLStmt
   const ObHint *no_rewrite2 = ref_query.get_stmt_hint().get_no_rewrite_hint();
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_));
   } else if (NULL != myhint && myhint->enable_query_push_down(ctx_->src_qb_name_)) {
     // enable transform hint added after transform in construct_transform_hint()
     allowed = true;
@@ -209,7 +201,6 @@ int ObTransformQueryPushDown::check_hint_allowed_query_push_down(const ObDMLStmt
     if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite1))) {
     } else if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite2))) {
     } else if (is_disable && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-      LOG_WARN("failed to add used trans hint", K(ret));
     }
   }
   return ret;
@@ -243,7 +234,6 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
   if (OB_ISNULL(ctx_) || OB_ISNULL(select_stmt) || OB_ISNULL(view_stmt) ||
       OB_ISNULL(select_stmt->get_query_ctx())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(select_stmt), K(view_stmt), K(ret));
   } else if (select_stmt->is_recursive_union() ||
              (view_stmt->is_recursive_union() && !select_stmt->is_spj()) ||
              select_stmt->is_set_stmt() ||
@@ -263,7 +253,6 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
                                                      view_stmt,
                                                      transform_having,
                                                      check_status))) {//judge 5
-    LOG_WARN("check where condition push down failed", K(check_status), K(ret));
   } else if (!check_status) {
     can_transform = false;
     OPT_TRACE("can not pushdown where condition");
@@ -273,13 +262,11 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
     OPT_TRACE("stmt has group by, but view is not spj");
   } else if (select_stmt->has_window_function() &&
              OB_FAIL(check_window_function_push_down(view_stmt, check_status))) {//judge 7
-    LOG_WARN("check window function push down failed", K(check_status), K(ret));
   } else if (!check_status) {
     can_transform = false;
     OPT_TRACE("can not pushdown windown function");
   } else if (select_stmt->has_distinct() &&
              OB_FAIL(check_distinct_push_down(view_stmt, need_distinct, check_status))) {//judge 8
-    LOG_WARN("check distinct push down failed", K(check_status), K(ret));
   } else if (!check_status) {
     can_transform = false;
     OPT_TRACE("can not pushdown distinct");
@@ -327,7 +314,6 @@ int ObTransformQueryPushDown::do_limit_merge(ObSelectStmt &upper_stmt,
     /*do nothing*/
   } else if (!can_limit_merge(upper_stmt, view_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt input", K(ret), K(upper_stmt), K(view_stmt));
   } else if (!view_stmt.has_limit()) {
     view_stmt.set_limit_offset(upper_stmt.get_limit_expr(), upper_stmt.get_offset_expr());
     view_stmt.set_limit_percent_expr(upper_stmt.get_limit_percent_expr());
@@ -355,7 +341,6 @@ int ObTransformQueryPushDown::is_select_item_same(ObSelectStmt *select_stmt,
   is_same = false;
   if (OB_ISNULL(select_stmt)|| OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(select_stmt), K(view_stmt), K(ret));
   } else if (select_stmt->get_select_item_size() < view_stmt->get_select_item_size()) {
     is_same = false;
   } else {
@@ -368,7 +353,6 @@ int ObTransformQueryPushDown::is_select_item_same(ObSelectStmt *select_stmt,
       const ObColumnRefRawExpr *column_expr = NULL;
       if (OB_ISNULL(sel_expr = select_stmt->get_select_item(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("select expr is null", K(ret), K(sel_expr));
       } else if (sel_expr->is_const_expr()) {
         if (OB_FAIL(const_select_items.push_back(select_stmt->get_select_item(i)))) {
         } else if (OB_FAIL(select_offset.push_back(-1))) {
@@ -406,7 +390,6 @@ int ObTransformQueryPushDown::is_select_item_same(ObSelectStmt *select_stmt,
           ObRawExpr *select_expr = NULL;
           if (OB_ISNULL(select_expr = view_stmt->get_select_item(i).expr_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("select expr is null", K(ret), K(select_expr));
           } else if (select_expr->is_set_op_expr()) {
             if (OB_FAIL(check_set_op_is_const_expr(view_stmt, select_expr, is_same))) {
             }
@@ -435,7 +418,6 @@ int ObTransformQueryPushDown::check_set_op_expr_reference(ObSelectStmt *select_s
   is_valid = true;
   if (OB_ISNULL(select_stmt)|| OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(select_stmt), K(view_stmt), K(ret));
   } else if (!view_stmt->is_set_stmt()) {
     // do nothing
   } else {
@@ -463,7 +445,6 @@ int ObTransformQueryPushDown::check_set_op_expr_reference(ObSelectStmt *select_s
       ObSetOpRawExpr *expr = static_cast<ObSetOpRawExpr*>(set_op_exprs.at(i));
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret), KPC(set_op_exprs.at(i)));
       } else if (!selected_set_op_idx.has_member(expr->get_idx())) {
         is_valid = false;
       }
@@ -472,7 +453,6 @@ int ObTransformQueryPushDown::check_set_op_expr_reference(ObSelectStmt *select_s
       ObColumnRefRawExpr *expr = static_cast<ObColumnRefRawExpr*>(column_exprs.at(i));
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret), KPC(column_exprs.at(i)));
       } else if (!selected_set_op_idx.has_member(expr->get_column_id() - OB_APP_MIN_COLUMN_ID)) {
         is_valid = false;
       }
@@ -503,7 +483,6 @@ int ObTransformQueryPushDown::check_select_item_push_down(ObSelectStmt *select_s
   bool has_assign = false;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(select_stmt), K(view_stmt), K(ret));
   } else if (select_stmt->has_rollup()) {
     can_be = false;
     OPT_TRACE("outer stmt has rollup, can not merge");
@@ -556,12 +535,10 @@ int ObTransformQueryPushDown::check_select_item_subquery(ObSelectStmt &select_st
   if (OB_UNLIKELY(1 != select_stmt.get_table_items().count())
       || OB_ISNULL(table = select_stmt.get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect select stmt", K(ret), K(select_stmt.get_from_item_size()), K(table));
   }
   for (int64_t i = 0; OB_SUCC(ret) && can_be && i < view.get_select_item_size(); ++i) {
     if (OB_ISNULL(expr = view.get_select_item(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (!expr->has_flag(CNT_SUB_QUERY)) {
       /* do nothing */
     } else if (expr->has_flag(IS_WITH_ANY) || expr->has_flag(IS_WITH_ALL) || 
@@ -591,7 +568,6 @@ int ObTransformQueryPushDown::check_select_item_subquery(ObSelectStmt &select_st
       ObQueryRefRawExpr* query_ref = NULL;
       if (OB_ISNULL(query_ref = query_ref_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null pointer", K(ret));
       } else if (query_ref->is_set() || query_ref->get_output_column() != 1) {
         can_be = false;
       }
@@ -634,7 +610,6 @@ int ObTransformQueryPushDown::check_where_condition_push_down(ObSelectStmt *sele
   transform_having = false;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(view_stmt), K(ret));
   } else if (view_stmt->is_set_stmt() ||
              view_stmt->has_limit() ||
              view_stmt->has_window_function()) {
@@ -650,7 +625,6 @@ int ObTransformQueryPushDown::check_where_condition_push_down(ObSelectStmt *sele
       const ObRawExpr *cond_expr = NULL;
       if (OB_ISNULL(cond_expr = select_stmt->get_condition_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid argument", K(ret));
       } else if (cond_expr->has_flag(CNT_SUB_QUERY)) {
         is_invalid = true;
         can_be = false;
@@ -681,7 +655,6 @@ int ObTransformQueryPushDown::check_window_function_push_down(ObSelectStmt *view
   can_be = false;
   if (OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(view_stmt), K(ret));
   } else if (view_stmt->has_window_function() ||
              view_stmt->has_distinct() || 
              view_stmt->is_set_stmt() || 
@@ -705,7 +678,6 @@ int ObTransformQueryPushDown::check_distinct_push_down(ObSelectStmt *view_stmt,
   can_be = false;
   if (OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(view_stmt), K(ret));
   } else if (view_stmt->has_limit()) {
     can_be = false;
   } else if (view_stmt->is_set_stmt()) {
@@ -729,8 +701,6 @@ int ObTransformQueryPushDown::do_transform(ObSelectStmt *select_stmt,
   if (OB_ISNULL(select_stmt) || OB_ISNULL(view_stmt) ||
       OB_ISNULL(view_table_item) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(select_stmt), K(view_stmt),
-                                 K(view_table_item), K(ctx_), K(ret));
     // adjsut hint, replace name after merge stmt hint.
   } else if (OB_FAIL(view_stmt->get_stmt_hint().merge_stmt_hint(select_stmt->get_stmt_hint(),
                                                                 LEFT_HINT_DOMINATED))) {
@@ -762,16 +732,12 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(view_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(select_stmt), K(view_stmt), K(ret));
   } else if (OB_ISNULL(select_stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null query ctx", K(ret));
   } else if (!transform_having && OB_FAIL(append(view_stmt->get_condition_exprs(),
                                                  select_stmt->get_condition_exprs()))) {
-    LOG_WARN("append select_stmt condition exprs to view stmt failed", K(ret));
   } else if (transform_having && OB_FAIL(append(view_stmt->get_having_exprs(),
                                                 select_stmt->get_condition_exprs()))) {
-    LOG_WARN("append select_stmt condition exprs to view stmt having expr failed", K(ret));
   } else if (OB_FAIL(append(view_stmt->get_group_exprs(),
                             select_stmt->get_group_exprs()))) {
   } else if (OB_FAIL(append(view_stmt->get_rollup_exprs(),
@@ -802,7 +768,6 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
     }
     if (OB_FAIL(ret)) {
     } else if (select_stmt->has_limit() && OB_FAIL(do_limit_merge(*select_stmt, *view_stmt))) {
-      LOG_WARN("failed to merge limit", K(ret));
     } else if (view_stmt->is_set_stmt()) {
       if (select_offset.empty()){
         /*do nothing*/
@@ -817,7 +782,6 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
         ObRawExpr *expr = NULL;
         if (OB_ISNULL(expr = view_stmt->get_select_item(i).expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null expr", K(ret));
         } else {
           expr->set_alias_column_name(ObString::make_empty_string());
         }
@@ -853,7 +817,6 @@ int ObTransformQueryPushDown::replace_stmt_exprs(ObDMLStmt *parent_stmt,
   ObSEArray<ObColumnRefRawExpr *, 16> temp_exprs;
   if (OB_ISNULL(parent_stmt) || OB_ISNULL(child_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(parent_stmt->get_column_exprs(table_id, temp_exprs))) {
   } else if (OB_FAIL(append(old_column_exprs, temp_exprs))) {
   } else if (OB_FAIL(ObTransformUtils::convert_column_expr_to_select_expr(
@@ -874,11 +837,9 @@ int ObTransformQueryPushDown::recursive_adjust_select_item(ObSelectStmt *select_
   bool is_stack_overflow = false;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(select_stmt), K(ctx_), K(ctx_->expr_factory_), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(is_stack_overflow), K(ret));
   } else if (select_stmt->is_set_stmt()) {
     ObIArray<ObSelectStmt*> &child_stmts = static_cast<ObSelectStmt*>(select_stmt)->get_set_query();
     for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
@@ -904,7 +865,6 @@ int ObTransformQueryPushDown::recursive_adjust_select_item(ObSelectStmt *select_
         if (select_offset.at(i) == -1) {//-1 meanings upper stmt has const select item
           if (OB_UNLIKELY(k >= new_const_select_items.count())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(k), K(new_const_select_items.count()));
           } else if (OB_FAIL(new_select_item.push_back(new_const_select_items.at(k)))) {
           } else {
             ++ k;
@@ -912,8 +872,6 @@ int ObTransformQueryPushDown::recursive_adjust_select_item(ObSelectStmt *select_
         } else if (OB_UNLIKELY(select_offset.at(i) < 0 ||
                                select_offset.at(i) >= old_select_item.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(select_offset.at(i)),
-                                           K(old_select_item.count()), K(ret));
         } else if (OB_FAIL(new_select_item.push_back(old_select_item.at(select_offset.at(i))))) {
         } else {/*do nothing*/}
       }
@@ -937,7 +895,6 @@ int ObTransformQueryPushDown::reset_set_stmt_select_list(ObSelectStmt *select_st
   ObSEArray<ObRawExpr*, 4> adjust_new_select_exprs;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(select_stmt), K(ctx_), K(ret));
   } else if (!select_stmt->is_set_stmt()) {
     /*do nothing*/
   } else if (OB_FAIL(select_stmt->get_select_exprs(old_select_exprs))) {
@@ -956,11 +913,8 @@ int ObTransformQueryPushDown::reset_set_stmt_select_list(ObSelectStmt *select_st
                                select_offset.at(i) >= old_select_exprs.count() ||
                                i >= new_select_exprs.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(select_offset.at(i)), K(old_select_exprs.count()),
-                                           K(new_select_exprs.count()), K(i), K(ret));
         } else if (OB_FAIL(adjust_old_select_exprs.push_back(old_select_exprs.at(select_offset.at(i)))) ||
                    OB_FAIL(adjust_new_select_exprs.push_back(new_select_exprs.at(i)))) {
-          LOG_WARN("failed to push back expr", K(ret));
         } else {/*do nothing*/}
       }
       if (OB_SUCC(ret) && adjust_old_select_exprs.count() > 0) {
@@ -982,7 +936,6 @@ int ObTransformQueryPushDown::check_set_op_is_const_expr(ObSelectStmt *select_st
       OB_UNLIKELY(!expr->is_set_op_expr() || !select_stmt->is_set_stmt() ||
                   select_stmt->get_set_query().empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(expr), K(select_stmt));
   } else if (!is_const) {
     /*do nothing*/
   } else if (select_stmt->is_set_distinct()) {
@@ -995,8 +948,6 @@ int ObTransformQueryPushDown::check_set_op_is_const_expr(ObSelectStmt *select_st
           OB_UNLIKELY(idx < 0 || idx >= select_stmt->get_set_query(i)->get_select_item_size()) ||
           OB_ISNULL(select_expr = select_stmt->get_set_query(i)->get_select_item(idx).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(i), K(select_stmt->get_set_query(i)),
-                                        K(idx), K(select_expr), K(ret));
       } else if (select_expr->is_set_op_expr()) {
         if (OB_FAIL(SMART_CALL(check_set_op_is_const_expr(select_stmt->get_set_query(i),
                                                           select_expr,
@@ -1020,14 +971,12 @@ int ObTransformQueryPushDown::construct_transform_hint(ObDMLStmt &stmt, void *tr
   const ObViewMergeHint *myhint = static_cast<const ObViewMergeHint*>(get_hint(stmt.get_stmt_hint()));
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, get_hint_type(), hint))) {
   } else if (OB_FAIL(stmt.get_qb_name(qb_name))) {
   } else if (OB_FAIL(ctx_->add_src_hash_val(qb_name))) {
   } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
   } else if (NULL != myhint && myhint->enable_query_push_down(ctx_->src_qb_name_) &&
              OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-    LOG_WARN("failed to add used trans hint", K(ret));
   } else if (OB_FAIL(stmt.adjust_qb_name(ctx_->allocator_,
                                          ctx_->src_qb_name_,
                                          ctx_->src_hash_val_))) {

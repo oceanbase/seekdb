@@ -119,13 +119,10 @@ int ObLSRuntimeAdapter::create_vector_index_scheduler(
   SchedulerImpl *scheduler_impl = nullptr;
   if (OB_NOT_NULL(scheduler)) {
     ret = common::OB_INIT_TWICE;
-    LOG_WARN("vector index scheduler already exists", KR(ret), KP(scheduler));
   } else if (OB_ISNULL(
                  scheduler_impl = OB_NEW(SchedulerImpl, ObMemAttr("VecIdxScheduler")))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate vector index scheduler", KR(ret));
   } else if (OB_FAIL(scheduler_impl->init(&ls, timer))) {
-    LOG_WARN("fail to init vector index scheduler", KR(ret), KP(&ls));
     scheduler_impl->destroy();
     OB_DELETE(SchedulerImpl, "VecIdxScheduler", scheduler_impl);
   } else {

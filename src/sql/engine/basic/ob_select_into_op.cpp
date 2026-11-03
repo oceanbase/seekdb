@@ -47,7 +47,6 @@ int ObSelectIntoOp::inner_open()
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get session failed", K(ret));
   } else {
     // since we call get_next_row in inner_open, we have to set opened_ first in avoid to a infinite loop.
     opened_ = true;
@@ -87,7 +86,6 @@ int ObSelectIntoOp::init_csv_env()
   set_csv_format_options();
   if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get session failed", K(ret));
   } else if (OB_FAIL(init_env_common())) {
   } else if (OB_FAIL(prepare_escape_printer())) {
   } else {
@@ -107,7 +105,6 @@ int ObSelectIntoOp::init_csv_env()
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to set csv binary output format", K(ret));
     }
     print_params_.tz_info_ = session->get_timezone_info();
     print_params_.use_memcpy_ = true;
@@ -115,7 +112,6 @@ int ObSelectIntoOp::init_csv_env()
   }
   //create buffer
   if (OB_SUCC(ret) && T_INTO_OUTFILE == MY_SPEC.into_type_ && OB_FAIL(create_shared_buffer_for_data_writer())) {
-    LOG_WARN("failed to create buffer for data writer", K(ret));
   }
   return ret;
 }
@@ -163,7 +159,6 @@ int ObSelectIntoOp::init_env_common()
   file_name_ = MY_SPEC.outfile_name_;
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get phy_plan_ctx failed", K(ret));
   } else if (OB_FAIL(ObSQLUtils::get_param_value(MY_SPEC.outfile_name_,
                                                  phy_plan_ctx->get_param_store(),
                                                  file_name_,
@@ -184,12 +179,10 @@ int ObSelectIntoOp::calc_outfile_path()
   const ObItemType into_type = MY_SPEC.into_type_;
   ObString path = file_name_.get_varchar().trim();
   if (T_INTO_OUTFILE == into_type && !MY_SPEC.is_single_ && OB_FAIL(calc_first_file_path(path))) {
-    LOG_WARN("failed to calc first file path", K(ret));
   } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, basic_url_, true))) {
   }
   if (OB_SUCC(ret) && (T_INTO_OUTFILE == into_type || T_INTO_DUMPFILE == into_type)
       && OB_FAIL(check_secure_file_path(basic_url_))) {
-    LOG_WARN("failed to check secure file path", K(ret));
   }
   return ret;
 }
@@ -202,19 +195,16 @@ int ObSelectIntoOp::inner_get_next_row()
   ObExternalFileWriter *data_writer = NULL;
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get phy_plan_ctx failed", K(ret));
   }
   if (OB_SUCC(ret) && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
       && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
-    LOG_WARN("failed to create the only data writer", K(ret));
   }
   while (OB_SUCC(ret) && row_count < top_limit_cnt_) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_row())) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
       } else {
-        LOG_WARN("get next row failed", K(ret));
       }
     } else {
       ++row_count;
@@ -232,7 +222,6 @@ int ObSelectIntoOp::inner_get_next_row()
     if (OB_SUCC(ret) || OB_ITER_END == ret) { // if into user variables or into dumpfile, must be one row
       if ((T_INTO_VARIABLES == into_type || T_INTO_DUMPFILE == into_type) && row_count > 1) {
         ret = OB_ERR_TOO_MANY_ROWS;
-        LOG_WARN("more than one row for into variables or into dumpfile", K(ret), K(row_count));
       }
     }
   } //end while
@@ -258,14 +247,12 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
   bool is_iter_end = false;
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get phy_plan_ctx failed", K(ret));
   }
   if (OB_SUCC(ret) && T_INTO_VARIABLES != into_type
       && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
     } else if (OB_ISNULL(data_writer)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     }
   }
 
@@ -291,7 +278,6 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
             }
           } else {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support to write into outfile format.", K(ret), K(format_type_));
           }
         } else {
           ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
@@ -318,7 +304,6 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_SUCC(ret) || is_iter_end) { // if into user variables or into dumpfile, must be one row
       if ((T_INTO_VARIABLES == into_type || T_INTO_DUMPFILE == into_type) && row_count > 1) {
         ret = OB_ERR_TOO_MANY_ROWS;
-        LOG_WARN("more than one row for into variables or into dumpfile", K(ret), K(row_count));
       }
     }
   } //end while
@@ -341,7 +326,6 @@ int ObSelectIntoOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
-    LOG_WARN("failed to close data writer", K(ret));
   }
   return ret;
 }
@@ -397,11 +381,9 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
   ObString input_file_name = path;
   if (OB_ISNULL(input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("op input is null", K(ret));
   } else if (input_file_name.length() == 0 || path.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "invalid outfile path");
-    LOG_WARN("invalid outfile path", K(ret));
   } else {
     if (input_file_name.ptr()[input_file_name.length() - 1] == '/'){
       OZ(file_name_with_suffix.append_fmt("%.*sdata", input_file_name.length(), input_file_name.ptr()));
@@ -422,7 +404,6 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
       OZ(file_name_with_suffix.append(compression_algorithm_to_suffix(external_properties_.csv_format_.compression_algorithm_)));
     }
     if (OB_SUCC(ret) && OB_FAIL(ob_write_string(ctx_.get_allocator(), file_name_with_suffix.string(), path))) {
-      LOG_WARN("failed to write string", K(ret));
     }
   }
   return ret;
@@ -436,10 +417,8 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
   data_writer.split_file_id_++;
   if (data_writer.split_file_id_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected split file id", K(ret));
   } else if (MY_SPEC.is_single_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected single value", K(ret));
   } else {
     file_path = data_writer.url_.split_on(data_writer.url_.reverse_find('_'));
     if (OB_FAIL(url_with_suffix.assign(file_path))) {
@@ -457,7 +436,6 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
     if (OB_SUCC(ret) && OB_FAIL(ob_write_string(ctx_.get_allocator(),
                                                 url_with_suffix.string(),
                                                 data_writer.url_, true))) {
-      LOG_WARN("failed to write string", K(ret));
     }
   }
   return ret;
@@ -470,13 +448,10 @@ int ObSelectIntoOp::split_file(ObExternalFileWriter &data_writer)
     ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter*>(&data_writer);
     if (OB_ISNULL(csv_data_writer)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null data writer", K(ret));
     } else if (!use_shared_buf_ && OB_FAIL(csv_data_writer->flush_buf())) {
-      LOG_WARN("failed to flush buffer", K(ret));
     } else if (has_lob_ && use_shared_buf_ && OB_FAIL(csv_data_writer->flush_shared_buf(shared_buf_))) {
       // To ensure the integrity of each line in the file, when there is a lob, the shared buffer may not contain a complete line
       // Therefore the remaining content in the shared buffer also needs to be flushed to the current file, in this case, the max_file_size limit cannot be strictly enforced
-      LOG_WARN("failed to flush shared buffer", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -496,7 +471,6 @@ int ObSelectIntoOp::check_csv_file_size(ObCsvFileWriter &data_writer)
   bool has_use_shared_buf = use_shared_buf_;
   if (has_compress_ && OB_ISNULL(data_writer.get_compress_stream_writer())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null compress stream writer", K(ret));
   } else if (!(has_lob_ && has_use_shared_buf) && curr_bytes_exclude_curr_line == 0) {
   } else if (file_need_split(curr_bytes)) {
     if (OB_FAIL(split_file(data_writer))) {
@@ -530,10 +504,8 @@ int ObSelectIntoOp::get_buf(char* &buf, int64_t &buf_len, int64_t &pos, ObCsvFil
   buf_len = use_shared_buf_ ? get_shared_buf_len() : data_writer.get_buf_len();
   pos = data_writer.get_curr_pos();
   if (OB_ISNULL(buf) && !use_shared_buf_ && OB_FAIL(use_shared_buf(data_writer, buf, buf_len, pos))) {
-    LOG_WARN("failed to use shared buffer", K(ret));
   } else if (OB_ISNULL(buf)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buf should not be null", K(ret));
   }
   return ret;
 }
@@ -555,7 +527,6 @@ int ObSelectIntoOp::use_shared_buf(ObCsvFileWriter &data_writer,
     pos = curr_pos;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("last line should be flushed before this line copied", K(ret));
   }
   return ret;
 }
@@ -571,7 +542,6 @@ int ObSelectIntoOp::resize_buf(char* &buf,
   char* new_buf = NULL;
   if (OB_ISNULL(new_buf = static_cast<char*>(ctx_.get_allocator().alloc(new_buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate buffer", K(ret), K(new_buf_len));
   } else if (!is_json) {
     if (curr_pos > 0) {
       MEMCPY(new_buf, shared_buf_, curr_pos);
@@ -598,7 +568,6 @@ int ObSelectIntoOp::resize_or_flush_shared_buf(ObCsvFileWriter &data_writer,
   int ret = OB_SUCCESS;
   if (!use_shared_buf_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid argument", K(use_shared_buf_), K(ret));
   } else if (has_lob_ && data_writer.get_curr_pos() > 0) {
     if (OB_FAIL(data_writer.flush_shared_buf(shared_buf_, true))) {
     } else {
@@ -664,11 +633,9 @@ int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWri
     ObObj inrow_obj = obj;
     if (obj.is_lob_storage()
         && OB_FAIL(get_exec_ctx().get_lob_read_options(lob_read_options))) {
-      LOG_WARN("failed to get LOB read options", K(ret));
     } else if (obj.is_lob_storage()
         && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
                        obj, inrow_obj, lob_read_options, &temp_allocator))) {
-      LOG_WARN("failed to convert outrow lobs", K(ret), K(obj));
     } else if (obj.is_collection_sql_type()) {
       ObSubSchemaValue sub_meta;
       if (OB_FAIL((get_exec_ctx().get_sqludt_meta_by_subschema_id(obj.get_meta().get_subschema_id(), sub_meta)))) {
@@ -690,7 +657,6 @@ int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWri
                                                                        escape_printer_.buf_len_,
                                                                        escape_printer_.pos_,
                                                                        str_to_escape.length()))) {
-    LOG_WARN("failed to check if buf is sufficient", K(ret));
   }
   if (OB_SUCC(ret) && !use_shared_buf_) {
     if (OB_FAIL(ObFastStringScanner::foreach_char(str_to_escape,
@@ -699,7 +665,6 @@ int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWri
                                                   escape_printer_.do_encode_,
                                                   escape_printer_.ignore_convert_failed_))) {
       if (OB_SIZE_OVERFLOW != ret) {
-        LOG_WARN("failed to print plain str", K(ret), K(src_type), K(escape_printer_.do_encode_));
       } else if (OB_FAIL(data_writer.flush_buf())) {
       } else if (OB_FALSE_IT(escape_printer_.pos_ = data_writer.get_curr_pos())) {
       } else if (OB_FAIL(ObFastStringScanner::foreach_char(str_to_escape,
@@ -708,7 +673,6 @@ int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWri
                                                            escape_printer_.do_encode_,
                                                            escape_printer_.ignore_convert_failed_))) {
         if (OB_SIZE_OVERFLOW != ret) {
-          LOG_WARN("failed to print plain str", K(ret), K(src_type), K(escape_printer_.do_encode_));
         } else if (OB_FAIL(use_shared_buf(data_writer,
                                           escape_printer_.buf_,
                                           escape_printer_.buf_len_,
@@ -749,12 +713,10 @@ int ObSelectIntoOp::print_normal_obj_without_escape(const ObObj &obj, ObCsvFileW
   if (OB_SUCC(ret) && !use_shared_buf_) {
     if (OB_FAIL(obj.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
       if (OB_SIZE_OVERFLOW != ret) {
-        LOG_WARN("failed to print obj", K(ret));
       } else if (OB_FAIL(data_writer.flush_buf())) {
       } else if (OB_FALSE_IT(pos = data_writer.get_curr_pos())) {
       } else if (OB_FAIL(obj.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
         if (OB_SIZE_OVERFLOW != ret) {
-          LOG_WARN("failed to print obj", K(ret));
         } else if (OB_FAIL(use_shared_buf(data_writer, buf, buf_len, pos))) {
         }
       }
@@ -832,7 +794,6 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
                                                          escape_printer_.buf_len_,
                                                          escape_printer_.pos_,
                                                          src_block_data.length()))) {
-      LOG_WARN("failed to check if buf is sufficient", K(ret));
     }
     if (OB_SUCC(ret) && !use_shared_buf_) {
       if (OB_FAIL(ObFastStringScanner::foreach_char(src_block_data,
@@ -846,7 +807,6 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
           lob_iter.set_reserved_byte_len(truncated_len);
           ret = OB_SUCCESS;
         } else if (OB_SIZE_OVERFLOW != ret) {
-          LOG_WARN("failed to print lob", K(ret));
         } else if (OB_FAIL(data_writer.flush_buf())) {
         } else if (OB_FALSE_IT(escape_printer_.pos_ = data_writer.get_curr_pos())) {
         } else if (OB_FAIL(ObFastStringScanner::foreach_char(src_block_data,
@@ -860,7 +820,6 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
             lob_iter.set_reserved_byte_len(truncated_len);
             ret = OB_SUCCESS;
           } else if (OB_SIZE_OVERFLOW != ret) {
-            LOG_WARN("failed to print lob", K(ret));
           } else if (OB_FAIL(use_shared_buf(data_writer,
                                             escape_printer_.buf_,
                                             escape_printer_.buf_len_,
@@ -881,7 +840,6 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
           lob_iter.set_reserved_byte_len(truncated_len);
           ret = OB_SUCCESS;
         } else if (OB_SIZE_OVERFLOW != ret) {
-          LOG_WARN("failed to print lob", K(ret));
         } else if (OB_FAIL(data_writer.flush_shared_buf(shared_buf_, true))) {
         } else if (OB_FALSE_IT(escape_printer_.pos_ = 0)) {
         } else if (OB_FAIL(ObFastStringScanner::foreach_char(src_block_data,
@@ -895,8 +853,6 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
             lob_iter.set_reserved_byte_len(truncated_len);
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("failed to print lob", K(ret), K(src_block_data.length()), K(shared_buf_len_),
-            K(data_writer.get_curr_pos()), K(escape_printer_.buf_len_), K(escape_printer_.pos_));
           }
         }
       }
@@ -907,7 +863,6 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
   } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
     ret = (lob_iter.get_inner_ret() != OB_SUCCESS) ?
           lob_iter.get_inner_ret() : OB_INVALID_DATA;
-    LOG_WARN("iter state invalid", K(ret), K(state), K(lob_iter));
   }
   return ret;
 }
@@ -941,7 +896,6 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
       data_writer.set_curr_pos(pos + 1);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret));
     }
   }
   return ret;
@@ -998,16 +952,13 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
   ObCsvFileWriter *csv_data_writer = NULL;
   if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null data writer", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_ISNULL(select_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("select expr is unexpected null", K(ret));
     } else if (OB_FAIL(select_exprs.at(i)->eval(eval_ctx_, datum))) {
     } else if (OB_ISNULL(datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("datum is unexpected null", K(ret));
     } else if (OB_FAIL(datum->to_obj(obj,
                                      select_exprs.at(i)->obj_meta_,
                                      select_exprs.at(i)->obj_datum_map_))) {
@@ -1051,17 +1002,14 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
       // do nothing
     } else if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null data writer", K(ret));
     } else if (has_compress_ && OB_ISNULL(csv_data_writer->get_compress_stream_writer())
                && OB_FAIL(csv_data_writer->init_compress_writer(ctx_.get_allocator(),
                                                                 external_properties_.csv_format_.compression_algorithm_,
                                                                 MY_SPEC.buffer_size_))) {
-      LOG_WARN("failed to init compress stream writer", K(ret));
     } else {
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < select_exprs.count(); ++col_idx) {
         if (OB_ISNULL(datum = datum_vectors.at(col_idx).at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("datum is unexpected null", K(ret));
         } else if (OB_FAIL(datum->to_obj(obj,
                                          select_exprs.at(col_idx)->obj_meta_,
                                          select_exprs.at(col_idx)->obj_datum_map_))) {
@@ -1103,7 +1051,6 @@ int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
   int64_t pos = 0;
   if (OB_ISNULL(data_writer)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(get_row_str(buf_len, is_first_, buf, pos))) {
   } else if (is_first_) { // create file
     if (OB_FAIL(data_writer->file_appender_.create(file_name_.get_varchar(), true))) {
@@ -1129,8 +1076,6 @@ int ObSelectIntoOp::into_varlist()
   const common::ObLobReadOptions *lob_read_options = nullptr;
   if (select_exprs.count() != user_vars.count()) {
     ret = OB_ERR_COLUMN_SIZE;
-    LOG_WARN("user vars count should be equal to select exprs count" , K(ret),
-            K(select_exprs.count()), K(user_vars.count()));
   } else {
     for (int i = 0 ; i < user_vars.count(); ++i) {
       const ObString &var_name = user_vars.at(i);
@@ -1140,14 +1085,12 @@ int ObSelectIntoOp::into_varlist()
       } else if (OB_FAIL(datum->to_obj(obj, select_exprs.at(i)->obj_meta_))) {
       } else if (obj.is_lob_storage()
           && OB_FAIL(ctx_.get_lob_read_options(lob_read_options))) {
-        LOG_WARN("failed to get LOB read options", K(ret));
       } else if (obj.is_lob_storage()
           // outrow lob can not be assigned to user var, so convert outrow to inrow lob
           // user var has independent memory, so using temporary memory here is fine
           && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
                          obj, obj, lob_read_options, &lob_tmp_allocator,
                          true/*allow_persist_inrow*/))) {
-        LOG_WARN("convert outrow to inrow lob failed", K(ret), K(obj));
       } else if (OB_FAIL(ObVariableSetExecutor::set_user_variable(obj, var_name,
                   ctx_.get_my_session()))) {
       }
@@ -1205,7 +1148,6 @@ int ObSelectIntoOp::prepare_escape_printer()
   // wc->mb
   if (OB_ISNULL(buf = static_cast<char*>(ctx_.get_allocator().alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate buffer", K(ret), K(buf_len));
   }
   if (has_enclose_) {
     OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_enclose, escape_printer_.enclose_, cs_type_));
@@ -1229,7 +1171,6 @@ int ObSelectIntoOp::check_has_lob_or_json()
   for (int64_t i = 0; OB_SUCC(ret) && (!has_lob_ || !has_json_ || !has_coll_) && i < select_exprs.count(); ++i) {
     if (OB_ISNULL(select_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("select expr is unexpected null", K(ret));
     } else if (ob_is_text_tc(select_exprs.at(i)->obj_meta_.get_type())) {
       has_lob_ = true;
     } else if (ob_is_json_tc(select_exprs.at(i)->obj_meta_.get_type())) {
@@ -1247,13 +1188,11 @@ int ObSelectIntoOp::create_shared_buffer_for_data_writer()
   shared_buf_len_ = has_lob_ ? (5 * SHARED_BUFFER_SIZE) : SHARED_BUFFER_SIZE;
   if (OB_ISNULL(shared_buf_ = static_cast<char*>(ctx_.get_allocator().alloc(shared_buf_len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate buffer", K(ret), K(shared_buf_len_));
   }
   if (OB_SUCC(ret) && (has_json_ || has_coll_) && has_escape_) {
     json_buf_len_ = OB_MALLOC_MIDDLE_BLOCK_SIZE;
     if (OB_ISNULL(json_buf_ = static_cast<char*>(ctx_.get_allocator().alloc(json_buf_len_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate buffer", K(ret), K(json_buf_len_));
     }
   }
   return ret;
@@ -1269,20 +1208,17 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
   ObString secure_file_priv;
   
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
-    LOG_WARN("failed to append string", K(ret));
 #ifdef _WIN32
   } else if (OB_ISNULL(actual_path = _fullpath(full_path_buf, sql_str.ptr(), PATH_MAX))) {
 #else
   } else if (OB_ISNULL(actual_path = realpath(sql_str.ptr(), full_path_buf))) {
 #endif
     ret = OB_FILE_NOT_EXIST;
-    LOG_WARN("file not exist", K(ret), K(sql_str));
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
                                                                 SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
-    LOG_WARN("failed to check secure path", K(ret), K(secure_file_priv));
     if (OB_ERR_NO_PRIVILEGE == ret) {
       ret = OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
       LOG_ERROR("failed to check secure path", K(ret), K(secure_file_priv));
@@ -1298,7 +1234,6 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
   if (OB_FAIL(new_data_writer(data_writer))) {
   } else if (OB_ISNULL(data_writer)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     data_writer->url_ = basic_url_;
     data_writer_ = data_writer;
@@ -1306,7 +1241,6 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
   if (OB_FAIL(ret)) {
   } else if (T_INTO_OUTFILE == MY_SPEC.into_type_ && MY_SPEC.is_single_
              && OB_FAIL(data_writer->open_file())) {
-    LOG_WARN("failed to open file", K(ret));
   } else if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_ && MY_SPEC.buffer_size_ > 0) {
     csv_data_writer = static_cast<ObCsvFileWriter*>(data_writer);
     if (OB_FAIL(csv_data_writer->alloc_buf(ctx_.get_allocator(), MY_SPEC.buffer_size_))) {
@@ -1325,7 +1259,6 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
     {
       if (OB_ISNULL(ptr = ctx_.get_allocator().alloc(sizeof(ObCsvFileWriter)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate data writer", K(ret), K(sizeof(ObCsvFileWriter)));
       } else {
         data_writer = new(ptr) ObCsvFileWriter(use_shared_buf_, has_compress_, has_lob_);
       }

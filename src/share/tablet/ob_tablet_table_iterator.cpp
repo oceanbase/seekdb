@@ -44,7 +44,6 @@ int ObTabletMetaIterator::inner_init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("tablet metadata iterator init twice", KR(ret));
   } else {
     prefetch_tablet_idx_ = 0;
     prefetched_tablets_.reset();
@@ -57,7 +56,6 @@ int ObTabletMetaIterator::next(ObTabletRuntimeInfo &tablet_info)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (prefetch_tablet_idx_ == -1) {
     ret = OB_ITER_END;
   } else {
@@ -73,7 +71,6 @@ int ObTabletMetaIterator::next(ObTabletRuntimeInfo &tablet_info)
         ++prefetch_tablet_idx_;
       } else if (OB_FAIL(prefetch())) { // need to prefetch a batch of tablet_info
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to prefetch", KR(ret), K_(prefetch_tablet_idx));
         }
         prefetch_tablet_idx_ = -1;
       } else {
@@ -94,7 +91,7 @@ ObCompactionTabletMetaIterator::ObCompactionTabletMetaIterator(
     compaction_scn_(compaction_scn),
     batch_size_(TABLET_META_TABLE_RANGE_GET_SIZE),
     end_tablet_id_(),
-    meta_db_pool_(nullptr)
+    local_store_(nullptr)
   {}
 
 void ObCompactionTabletMetaIterator::reset()
@@ -104,7 +101,7 @@ void ObCompactionTabletMetaIterator::reset()
   compaction_scn_ = 0;
   end_tablet_id_.reset();
   batch_size_ = 0;
-  meta_db_pool_ = nullptr;
+  local_store_ = nullptr;
 }
 
 int ObCompactionTabletMetaIterator::next(ObTabletRuntimeInfo &tablet_info)
@@ -113,28 +110,25 @@ int ObCompactionTabletMetaIterator::next(ObTabletRuntimeInfo &tablet_info)
   do {
     if (OB_FAIL(ObTabletMetaIterator::next(tablet_info))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next tablet info", KR(ret));
       }
     } else if (!tablet_info.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet_info is invalid", KR(ret), K(tablet_info));
     }
   } while (OB_SUCC(ret) && !tablet_info.is_valid());
   return ret;
 }
 
 int ObCompactionTabletMetaIterator::init(
-    ObSQLiteConnectionPool &meta_db_pool,
+    LocalStore &store,
     const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(batch_size));
   } else if (OB_FAIL(ObTabletMetaIterator::inner_init())) {
   } else {
     batch_size_ = batch_size;
-    meta_db_pool_ = &meta_db_pool;
+    local_store_ = &store;
     is_inited_ = true;
   }
   return ret;
@@ -145,7 +139,7 @@ int ObCompactionTabletMetaIterator::prefetch()
   int ret = OB_SUCCESS;
   if (prefetch_tablet_idx_ >= prefetched_tablets_.count()) {
     ObTabletID tmp_last_tablet_id;
-    if (OB_FAIL(ObTabletMetaTableCompactionOperator::range_scan_for_compaction(meta_db_pool_,
+    if (OB_FAIL(ObTabletMetaTableCompactionOperator::range_scan_for_compaction(local_store_,
         compaction_scn_,
         end_tablet_id_,
         batch_size_,
@@ -153,8 +147,6 @@ int ObCompactionTabletMetaIterator::prefetch()
         tmp_last_tablet_id,
         prefetched_tablets_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to range get by operator", KR(ret),
-            K_(end_tablet_id), K_(batch_size), K_(prefetched_tablets));
       } else {
         prefetch_tablet_idx_ = -1;
       }

@@ -66,7 +66,6 @@ int ObJoinFilterNdv::gather_piece_ndv(const ObJoinFilterNdv &piece_ndv, ObJoinFi
 
   // 2.gather infomation which used to estimate ndv of *bloom filter*
   if (total_ndv.use_hllc_estimate_ndv_ && OB_FAIL(total_ndv.hllc_.merge(piece_ndv.hllc_))) {
-    LOG_WARN("fail to merge hyperloglog", K(ret));
   }
   return ret;
 }
@@ -78,7 +77,6 @@ int ObJoinFilterCountRowPieceMsgListener::on_message(ObJoinFilterCountRowPieceMs
   int ret = OB_SUCCESS;
   if (pkt.op_id_ != piece_ctx.op_id_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected piece msg", K(ret), K(pkt), K(piece_ctx));
   } else if (piece_ctx.received_ >= piece_ctx.task_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("receive too much piece msg", K(pkt), K(piece_ctx.received_), K(piece_ctx.task_cnt_));
@@ -197,14 +195,12 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg(ObIArray<ObPxSqcMeta> &sqcs)
     dtl::ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg, timeout_ts_))) {
     } else if (OB_FAIL(ch->flush(true, false))) {
     } else {
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
-    LOG_WARN("failed to wait response", K(ret));
   }
   return ret;
 }
@@ -229,7 +225,6 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg_to_one_sqc(ObPxSqcMeta *sqc,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null expected", K(ret));
   } else if (OB_FAIL(ch->send(whole_msg, timeout_ts_))) {
   } else if (OB_FAIL(ch->flush(true, false))) {
   } else {

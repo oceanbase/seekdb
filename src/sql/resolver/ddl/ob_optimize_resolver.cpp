@@ -27,11 +27,9 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
   ObOptimizeTableStmt *stmt = nullptr;
   if (OB_ISNULL(session_info_) || T_OPTIMIZE_TABLE != parser_tree.type_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(parser_tree.type_));
   } else {
     if (OB_ISNULL(stmt = create_stmt<ObOptimizeTableStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to create optimize table stmt", K(ret));
     } else {
       stmt_ = stmt;
     }
@@ -45,7 +43,6 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
     ObPlacementHashSet<obcall::ObTableItem> *table_item_set = nullptr;
     if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObPlacementHashSet<obcall::ObTableItem>)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
     } else {
       table_item_set = new(buf)ObPlacementHashSet<obcall::ObTableItem>();
       ObString database_name;
@@ -55,7 +52,6 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
       int64_t max_table_num = 1;
       if (OB_UNLIKELY(!parser_tree.children_[TABLE_LIST_NODE])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to parse node", K(ret));
       } else {
         max_table_num = parser_tree.children_[TABLE_LIST_NODE]->num_child_;
       }
@@ -63,7 +59,6 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
         table_node = parser_tree.children_[TABLE_LIST_NODE]->children_[i];
         if (nullptr == table_node) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("error unexpected, table node must not be NULL", K(ret));
         } else {
           database_name.reset();
           table_name.reset();

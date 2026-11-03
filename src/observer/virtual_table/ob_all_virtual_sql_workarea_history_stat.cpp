@@ -46,7 +46,6 @@ int ObSqlWorkareaHistoryStatIterator::init()
   if (OB_ISNULL(
           ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null of omt", KR(ret));
   }
   return ret;
 }
@@ -64,7 +63,6 @@ int ObSqlWorkareaHistoryStatIterator::get_next_batch_wa_stats()
     SERVER_MODULE_SCOPE {
       sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_stat(wa_stats_))) {
-        LOG_WARN("failed to get workarea stat", K(ret));
       }
     }
     done_ = true;
@@ -78,7 +76,6 @@ int ObSqlWorkareaHistoryStatIterator::get_next_wa_stat(
   int ret = OB_SUCCESS;
   if (0 > cur_nth_wa_ || cur_nth_wa_ > wa_stats_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: current wa exceeds total wa stats", K(ret));
   } else {
     while (OB_SUCC(ret) && cur_nth_wa_ >= wa_stats_.count()) {
       if (OB_FAIL(get_next_batch_wa_stats())) {
@@ -263,7 +260,6 @@ int ObSqlWorkareaHistoryStat::inner_get_next_row(common::ObNewRow *&row)
     // do nothing
   } else if (OB_FAIL(iter_.get_next_wa_stat(wa_stat))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next channel", K(ret));
     }
   } else if (OB_FAIL(fill_row(*wa_stat, row))) {
   }

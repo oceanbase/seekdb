@@ -79,7 +79,6 @@ OB_DEF_DESERIALIZE(ObPxNewRow)
   } else if (OB_LIKELY(row_cell_count_ > 0)) {
     if (OB_UNLIKELY(pos >= data_len)) {
       ret = OB_SERIALIZE_ERROR;
-      LOG_WARN("invalid serialization data", K(pos), K(data_len), K_(row_cell_count), K(ret));
     } else {
       // Delay reading row's cells until the get_row stage
       des_row_buf_ = (char*)buf + pos;
@@ -100,20 +99,17 @@ int ObReceiveRowReader::add_buffer(dtl::ObDtlLinkedBuffer &buf, bool &transferre
   transferred = false;
   if (!buf.is_data_msg()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not data message", K(ret));
   } else if (buf.msg_type() < 0) {
     // for interm result iterator.
     dtl::ObDtlMsgType msg_type = static_cast<dtl::ObDtlMsgType>(-buf.msg_type());
     if (dtl::PX_DATUM_ROW == msg_type) {
       if (NULL != datum_iter_ && datum_iter_->is_valid() && datum_iter_->has_next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("rows must be all iterated before new iterate added", K(ret));
       } else {
         datum_iter_ = reinterpret_cast<ObChunkDatumStore::Iterator *>(buf.buf());
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected msg_type", K(ret), K(msg_type));
     }
   } else {
     // add buffer to receive list.
@@ -122,7 +118,6 @@ int ObReceiveRowReader::add_buffer(dtl::ObDtlLinkedBuffer &buf, bool &transferre
       auto block = reinterpret_cast<ObChunkDatumStore::Block *>(buf.buf());
       rows = block->rows_;
       if (rows > 0 && OB_FAIL(block->swizzling(NULL))) {
-        LOG_WARN("block swizzling failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -224,10 +219,8 @@ int ObReceiveRowReader::to_expr(const ObChunkDatumStore::StoredRow *srow,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(srow)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid rows", K(ret));
   } else if (srow->cnt_ != exprs.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unmatch rows", K(ret), K(exprs.count()), K(srow->cnt_));
   } else {
     for (uint32_t i = 0; i < srow->cnt_; ++i) {
       if (exprs.at(i)->is_static_const_) {
@@ -243,7 +236,6 @@ int ObReceiveRowReader::to_expr(const ObChunkDatumStore::StoredRow *srow,
         ObExpr *expr = dynamic_const_exprs.at(i);
         // Fixed-width datums do not reserve an external result buffer.
         if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
-          LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
     }
@@ -263,7 +255,6 @@ int ObReceiveRowReader::get_next_row(const ObIArray<ObExpr*> &exprs,
       ret = OB_ITER_END;
     } else if (OB_FAIL(datum_iter_->get_next_row(srow))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next stored row failed", K(ret));
       }
     } else {
       ret = to_expr(srow, dynamic_const_exprs, exprs, eval_ctx);
@@ -291,7 +282,6 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(srows)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     for (int64_t col_idx = 0; col_idx < exprs.count(); col_idx++) {
       if (exprs.at(col_idx)->is_static_const_) {
@@ -322,7 +312,6 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
         OB_ASSERT(!expr->is_batch_result());
         // Fixed-width datums do not reserve an external result buffer.
         if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
-          LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
     }
@@ -342,17 +331,14 @@ int ObReceiveRowReader::get_next_batch(const ObIArray<ObExpr*> &exprs,
   typedef ObChunkDatumStore Store;
   if (NULL == srows) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("NULL store rows", K(ret));
   } else if (NULL != datum_iter_) {
     if (max_rows > eval_ctx.max_batch_size_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(max_rows), K(eval_ctx.max_batch_size_));
     } else if (!datum_iter_->is_valid()) {
       // If invalid , it is a mocked empty buffer.
       ret = OB_ITER_END;
     } else if (OB_FAIL(datum_iter_->get_next_batch(srows, max_rows, read_rows))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next batch failed", K(ret), K(max_rows));
       } else {
         read_rows = 0;
       }

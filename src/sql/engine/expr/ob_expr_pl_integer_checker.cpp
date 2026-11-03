@@ -39,7 +39,6 @@ int ObExprPLIntegerChecker::ExtraInfo::deep_copy(common::ObIAllocator &allocator
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
   } else if (OB_ISNULL(copied_cursor_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   } else {
     copied_cursor_info->pl_integer_type_ = pl_integer_type_;
     copied_cursor_info->pl_integer_range_ = pl_integer_range_;
@@ -70,7 +69,6 @@ int ObExprPLIntegerChecker::assign(const ObExprOperator &other)
   const ObExprPLIntegerChecker *tmp = dynamic_cast<const ObExprPLIntegerChecker *>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -184,7 +182,6 @@ int ObExprPLIntegerChecker::calc(ObObj &result,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected pl integer type", K(pls_type), K(pls_range), K(ret));
     }
   }
   return ret;
@@ -236,7 +233,6 @@ int ObExprPLIntegerChecker::calc(ObDatum &res_datum,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected pl integer type", K(pls_type), K(pls_range), K(ret));
     }
   }
   return ret;
@@ -251,10 +247,8 @@ int ObExprPLIntegerChecker::cg_expr(ObExprCGCtx &op_cg_ctx,
   ExtraInfo *info = OB_NEWx(ExtraInfo, (&alloc), alloc, T_FUN_PL_INTEGER_CHECKER);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     const ObPLIntegerCheckerRawExpr &pl_expr =
     static_cast<const ObPLIntegerCheckerRawExpr&>(raw_expr);
@@ -283,10 +277,8 @@ int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
       && PL_SIMPLE_INTEGER != info->pl_integer_type_
       && type != ObInt32Type) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong result type", K(info->pl_integer_type_), K(type), K(ret));
   } else if (info->pl_integer_range_.get_lower() > info->pl_integer_range_.get_upper()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong pls integer range", K(ret), K(info->pl_integer_range_.range_));
   } else {
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     OZ (calc(expr_datum, type, *param, info->pl_integer_type_,

@@ -43,10 +43,8 @@ int ObMdsMinorFilter::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(last_major_snapshot < 0 || multi_version_start < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(last_major_snapshot), K(multi_version_start));
   } else if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("is inited", K(ret), K(last_major_snapshot), K(multi_version_start));
   } else {
     last_major_snapshot_ = last_major_snapshot;
     truncate_filter_snapshot_ = MIN(multi_version_start, last_major_snapshot);
@@ -69,7 +67,6 @@ int ObMdsMinorFilter::filter(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(kv_adapter.convert_from_mds_multi_version_row(row))) {
   } else if (medium_info_mds_unit_id == kv_adapter.get_type()) {
     ret = filter_medium_info(row, kv_adapter, filter_ret);

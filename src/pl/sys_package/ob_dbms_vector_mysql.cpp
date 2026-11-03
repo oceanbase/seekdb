@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_dbms_vector_mysql.h"
+#include "lib/utility/utility.h"
 #include "src/pl/ob_pl.h"
 #include "sql/engine/cmd/ob_vector_refresh_index_executor.h"
 
@@ -47,7 +48,6 @@ int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
       || !(!params.at(3).is_null() && params.at(3).is_int32())
       || (!params.at(4).is_null() && !params.at(4).is_varchar())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument for refresh index", KR(ret));
   }
   if (OB_SUCC(ret)) {
       ObVectorRefreshIndexArg refresh_arg;
@@ -89,7 +89,6 @@ int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
       || (!params.at(6).is_null() && !params.at(6).is_text())
       || !(!params.at(7).is_null() && params.at(7).is_int32())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument for rebuild index", KR(ret));
   }
   if (OB_SUCC(ret)) {
       ObVectorRebuildIndexArg rebuild_arg;
@@ -104,7 +103,6 @@ int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
 
       rebuild_arg.idx_parameters_ = NULL;
       if (params.at(6).is_text() && OB_FAIL(params.at(6).get_string(rebuild_arg.idx_parameters_))) {
-          LOG_WARN("fail to get string", K(ret));
       } else if (OB_FAIL(rebuild_executor.execute_rebuild(ctx.exec_ctx_, ctx.allocator_, rebuild_arg))) {
       }
   }
@@ -153,7 +151,6 @@ int ObDBMSVectorMySql::rebuild_index_inner(ObPLExecCtx &ctx, ParamStore &params,
 
     rebuild_arg.idx_parameters_ = NULL;
     if (params.at(4).is_text() && OB_FAIL(params.at(4).get_string(rebuild_arg.idx_parameters_))) {
-        LOG_WARN("fail to get string", K(ret));
     } else if (OB_FAIL(rebuild_executor.execute_rebuild_inner(ctx.exec_ctx_, ctx.allocator_, rebuild_arg))) {
     }
   }
@@ -182,7 +179,6 @@ int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore 
              || (!params.at(4).is_text() && !params.at(4).is_null())
              || !params.at(5).is_uint64()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     ObIAllocator *allocator = &ctx.exec_ctx_->get_allocator();
     ObString idx_type_str = params.at(0).get_varchar();
@@ -198,17 +194,13 @@ int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore 
 
     if (max_tablet_vectors > num_vectors) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("invalid max_tablet_vectors", KR(ret), K(max_tablet_vectors), K(num_vectors));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "max_tablet_vectors large than num_vectors");
     } else if (dim_type_str.case_compare("FLOAT32") != 0) { // for future use
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support vector index dim type", K(ret), K(dim_type_str));
     } else if (params.at(4).is_text() && OB_FAIL(params.at(4).get_string(idx_param_str))) {
-      LOG_WARN("failed to get index param string", K(ret));
     } else if (OB_FAIL(parse_idx_param(idx_type_str, idx_param_str, dim_count, index_param))) {
     } else if (OB_ISNULL(allocator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is null", K(ret));
     } else {
       ObStringBuffer res_buf(allocator);
       if (OB_FAIL(get_estimate_memory_str(index_param, num_vectors, max_tablet_vectors, res_buf))) {
@@ -239,7 +231,6 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
              || !params.at(2).is_varchar()
              || (!params.at(3).is_text() && !params.at(4).is_null())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     ObIAllocator *allocator = &ctx.exec_ctx_->get_allocator();
     sql::ObSQLSessionInfo *session_info;
@@ -265,16 +256,12 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     // resolve table name and column name, 
     if (OB_ISNULL(allocator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is null", K(ret));
     } else if (OB_ISNULL(exec_ctx = ctx.exec_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec context is null", KR(ret));
     } else if (OB_ISNULL(session_info = exec_ctx->get_my_session())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info is null", KR(ret));
     } else if (OB_ISNULL(schema_guard = exec_ctx->get_virtual_table_ctx().schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is null", KR(ret));
     } else if (OB_FAIL(session_info->get_name_case_mode(case_mode))) {
     } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
@@ -283,7 +270,6 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     } else if (database_name.empty() && FALSE_IT(database_name = session_info->get_database_name())) {
     } else if (OB_UNLIKELY(database_name.empty())) {
       ret = OB_ERR_NO_DB_SELECTED;
-      LOG_WARN("No database selected", KR(ret));
     } else if (OB_FAIL(schema_guard->get_table_id(
                   database_name,
                   table_name,
@@ -300,7 +286,6 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
                    col_schema))) {
     } else if (OB_ISNULL(col_schema)) {
       ret = OB_ERR_COLUMN_NOT_FOUND;
-      LOG_WARN("column not found", K(ret));
     } else if (OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(col_schema->get_extended_type_info(), dim_count))) {
     } else {
       // get row count of the target table
@@ -308,23 +293,23 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       const int64_t max_pos = 1;
       ObObj sum_result_obj;
       ObObj max_result_obj;
-      
+
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
-                database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
+        if (OB_FAIL(query_string.assign("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema="))) {
+        } else if (OB_FAIL(sql_append_hex_escape_str(database_name, query_string))) {
+        } else if (OB_FAIL(query_string.append(" and table_name="))) {
+        } else if (OB_FAIL(sql_append_hex_escape_str(table_name, query_string))) {
         } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get sql result", K(ret), K(query_string));
         } else if (OB_FAIL(result->next())) {
         } else if (OB_FAIL(result->get_obj(sum_pos, sum_result_obj))) {
         } else if (OB_FAIL(result->get_obj(max_pos, max_result_obj))) {
         } else if ((!sum_result_obj.is_null() && OB_UNLIKELY(!sum_result_obj.is_integer_type())) ||
                    (!max_result_obj.is_null() && OB_UNLIKELY(!max_result_obj.is_integer_type()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected obj type", K(ret), K(sum_result_obj.get_type()), K(max_result_obj.get_type()));
         } else if (!sum_result_obj.is_null() && OB_FALSE_IT(num_vectors = sum_result_obj.get_int())) {
         } else if (!max_result_obj.is_null() && OB_FALSE_IT(tablet_max_num_vectors = max_result_obj.get_int())) {
         }
@@ -333,14 +318,11 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
 
     if (OB_FAIL(ret)) {
     } else if (params.at(3).is_text() && OB_FAIL(params.at(3).get_string(idx_param_str))) {
-      LOG_WARN("fail to get index param string", K(ret));
     } else if (idx_param_str.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid params", K(ret), K(idx_param_str));
     } else if (OB_FAIL(parse_idx_param(idx_type_str, idx_param_str, dim_count, index_param))) {
     } else if (OB_ISNULL(allocator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is null", K(ret));
     } else {
       ObStringBuffer res_buf(allocator);
       if (OB_FAIL(get_estimate_memory_str(index_param, num_vectors, tablet_max_num_vectors, res_buf))) {
@@ -377,14 +359,12 @@ int ObDBMSVectorMySql::parse_idx_param(const ObString &idx_type_str,
     idx_type = ObVectorIndexType::VIT_IVF_INDEX;
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support vector index type", K(ret), K(idx_type_str));
   }
 
   // parse idx_param
   if (OB_FAIL(ret)) {
   } else if (idx_param_str.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid params", K(ret), K(idx_param_str));
   } else if (OB_FAIL(param_str_buf.append(idx_param_str))) {
   } else if (OB_FAIL(param_str_buf.append(",TYPE="))) {
   } else if (OB_FAIL(param_str_buf.append(idx_type_str))) {
@@ -393,8 +373,6 @@ int ObDBMSVectorMySql::parse_idx_param(const ObString &idx_type_str,
   } else if (OB_FAIL(ObVectorIndexUtil::parser_params_from_string(param_str, idx_type, index_param))) {
   } else if (index_param.dist_algorithm_ == VIDA_MAX) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unexpected setting of vector index param, distance has not been set", 
-      K(ret), K(index_param.dist_algorithm_));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "the vector index params of distance not set is");
   } else {
     index_param.dim_ = dim_count;
@@ -477,7 +455,6 @@ int ObDBMSVectorMySql::get_estimate_memory_str(share::ObVectorIndexParam index_p
     }
     default: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid ivf algorithm type", K(ret), K(index_param));
     }
   }
   return ret;

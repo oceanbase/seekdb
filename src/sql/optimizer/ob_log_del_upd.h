@@ -30,7 +30,7 @@ public:
   typedef common::ObSEArray<common::ObTableID, 4, common::ModulePageAllocator, true> TableIDArray;
   IndexDMLInfo() :
     table_id_(common::OB_INVALID_ID),
-    loc_table_id_(common::OB_INVALID_ID),
+    target_table_ref_id_(common::OB_INVALID_ID),
     ref_table_id_(common::OB_INVALID_ID),
     rowkey_cnt_(0),
     spk_cnt_(0),
@@ -56,7 +56,7 @@ public:
   inline void reset()
   {
     table_id_ = common::OB_INVALID_ID;
-    loc_table_id_ = common::OB_INVALID_ID;
+    target_table_ref_id_ = common::OB_INVALID_ID;
     ref_table_id_ = common::OB_INVALID_ID;
     index_name_.reset();
     spk_cnt_ = 0;
@@ -95,7 +95,7 @@ public:
   uint64_t hash(uint64_t seed) const
   {
     seed = do_hash(table_id_, seed);
-    seed = do_hash(loc_table_id_, seed);
+    seed = do_hash(target_table_ref_id_, seed);
     seed = do_hash(ref_table_id_, seed);
     seed = do_hash(rowkey_cnt_, seed);
     seed = do_hash(spk_cnt_, seed);
@@ -131,12 +131,12 @@ public:
   //   update V set ...;
   //
   //   table_id_: table_id_ of V table item
-  //   loc_table_id_: table_id_ of T table item
+  //   target_table_ref_id_: table_id_ of T table item
   //   ref_table_id: ref_id_ of T table item
   //
   //
   uint64_t table_id_; // table id for the view table item
-  uint64_t loc_table_id_; // table id for the updated table
+  uint64_t target_table_ref_id_; // table id for the updated table
   uint64_t ref_table_id_; // refer table id for the updated table
   common::ObString index_name_;
   int64_t rowkey_cnt_;
@@ -184,7 +184,7 @@ public:
 
   TO_STRING_KV(K_(table_id),
                K_(ref_table_id),
-               K_(loc_table_id),
+               K_(target_table_ref_id),
                K_(index_name),
                K_(rowkey_cnt),
                K_(spk_cnt),
@@ -217,15 +217,15 @@ public:
 
   const IndexDMLInfo *get_primary_dml_info() const;
 
-  IndexDMLInfo *get_primary_dml_info(uint64_t loc_table_id);
-  const IndexDMLInfo *get_primary_dml_info(uint64_t loc_table_id) const;
+  IndexDMLInfo *get_primary_dml_info(uint64_t target_table_ref_id);
+  const IndexDMLInfo *get_primary_dml_info(uint64_t target_table_ref_id) const;
 
   common::ObIArray<IndexDMLInfo *> &get_index_dml_infos()
   { return index_dml_infos_; }
   const common::ObIArray<IndexDMLInfo *> &get_index_dml_infos() const
   { return index_dml_infos_; }
 
-  int get_index_dml_infos(uint64_t loc_table_id,
+  int get_index_dml_infos(uint64_t target_table_ref_id,
                           ObIArray<IndexDMLInfo *> &index_infos);
 
   const ObIArray<uint64_t>& get_table_list() const;
@@ -273,14 +273,13 @@ public:
   void set_index_maintenance(bool is_index_maintenance)
   { is_index_maintenance_ = is_index_maintenance; }
   bool is_index_maintenance() const { return is_index_maintenance_; }
-  // update split into del+ins, ins's table location is uncertain, need full table update
-  // 
-  void set_table_location_uncertain(bool uncertain) { table_location_uncertain_ = uncertain; }
-  bool is_table_location_uncertain() const { return table_location_uncertain_; }
+  // PDML row movement or upsert can write to tablets outside the source access set.
+  void set_has_dynamic_tablets(bool uncertain) { has_dynamic_tablets_ = uncertain; }
+  bool has_dynamic_tablets() const { return has_dynamic_tablets_; }
   void set_pdml_update_split(bool is_pdml_update_split) { is_pdml_update_split_ = is_pdml_update_split; }
   bool is_pdml_update_split() const { return is_pdml_update_split_; }
   // Returns the id corresponding to the base table
-  uint64_t get_loc_table_id() const;
+  uint64_t get_target_table_ref_id() const;
   // Returns the index id, the real id of the data table or index table
   uint64_t get_index_tid() const;
   // Returns the logical id corresponding to the main table
@@ -300,7 +299,7 @@ public:
   {
     return table_partition_info_;
   }
-  int get_table_location_type(ObTableLocationType &type);
+  int get_table_access_shape(TableAccessShape &type);
   inline void set_need_allocate_partition_id_expr(bool need_alloc_part_id_expr) {
     need_alloc_part_id_expr_ = need_alloc_part_id_expr;
   }
@@ -387,7 +386,7 @@ protected:
   // The pseudo partition_id for PDML may be produced by repart exchange or TSC.
   // set %producer to NULL if not found
   static int find_pdml_part_id_producer(ObLogicalOperator *op,
-                                        const uint64_t loc_tid,
+                                        const uint64_t target_table_ref_id,
                                         const uint64_t ref_tid,
                                         ObLogExchange *&producer,
                                         ObLogTableScan *&src_tsc);
@@ -403,7 +402,7 @@ protected:
   ObDelUpdLogPlan &my_dml_plan_;
 
   common::ObSEArray<IndexDMLInfo *, 1, common::ModulePageAllocator, true> index_dml_infos_;
-  common::ObSEArray<uint64_t, 1, common::ModulePageAllocator, true> loc_table_list_;
+  common::ObSEArray<uint64_t, 1, common::ModulePageAllocator, true> target_table_ref_ids_;
 
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> view_check_exprs_;
   // Used to save the partition information of the current DML operator
@@ -417,9 +416,8 @@ protected:
   bool is_index_maintenance_; // Enabled PDML, and the current operator is responsible for index table maintenance
   bool need_barrier_; // row movement scenario to avoid insert, delete operating on the same row at the same time, need to add barrier
   bool is_first_dml_op_; // The first dml op can form a partition wise structure with tsc, which can save one exchange
-  // update split into del+ins, ins's table location is uncertain, need full table update
-  // 
-  bool table_location_uncertain_;
+  // Prepare all possible target tablets for PDML row movement or upsert.
+  bool has_dynamic_tablets_;
   bool is_pdml_update_split_; // Mark whether delete, insert op are split from update
   int64_t das_dop_; // zero marks not use parallel_das_dml
 private:

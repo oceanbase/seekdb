@@ -73,7 +73,6 @@ int ObRuntimeStatusCache::inner_refresh_restore_status()
     } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
     } else if (OB_ISNULL(runtime_schema)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("runtime schema is null", K(ret));
     } else if (runtime_schema->is_restore()) {
       ATOMIC_SET(&during_restore_, true);
     } else {

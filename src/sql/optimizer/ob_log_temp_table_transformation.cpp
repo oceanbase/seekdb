@@ -39,7 +39,6 @@ int ObLogTempTableTransformation::compute_op_ordering()
   ObLogicalOperator *last_child = NULL;
   if (OB_ISNULL(last_child = get_child(get_num_of_child() - 1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("last_child is null", K(ret));
   } else if (OB_FAIL(set_op_ordering(last_child->get_op_ordering()))) {
   } else {
     is_local_order_ = last_child->get_is_local_order();
@@ -53,7 +52,6 @@ int ObLogTempTableTransformation::compute_fd_item_set()
   ObLogicalOperator *last_child = NULL;
   if (OB_ISNULL(last_child = get_child(get_num_of_child() - 1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     set_fd_item_set(&last_child->get_fd_item_set());
   }
@@ -69,7 +67,6 @@ int ObLogTempTableTransformation::est_cost()
   for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); i++) {
     if (OB_ISNULL(get_child(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       child_cost += get_child(i)->get_cost();
       card = get_child(i)->get_card();
@@ -89,7 +86,6 @@ int ObLogTempTableTransformation::est_width()
   ObLogicalOperator *last_child = get_child(get_num_of_child() - 1);
   if (OB_ISNULL(last_child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(last_child), K(ret));
   } else {
     set_width(last_child->get_width());
   }
@@ -111,7 +107,6 @@ int ObLogTempTableTransformation::compute_op_parallel_info()
   ObLogicalOperator *last_child = get_child(get_num_of_child() - 1);
   if (OB_ISNULL(last_child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(last_child), K(ret));
   } else {
     set_parallel(last_child->get_parallel());
     set_available_parallel(last_child->get_available_parallel());
@@ -144,7 +139,6 @@ int ObLogTempTableTransformation::do_re_est_cost(EstimateCostInfo &param, double
     child_param.need_row_count_ = (get_num_of_child() - 1 ) == i ? param.need_row_count_ : -1;
     if (OB_ISNULL(child = get_child(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(child->re_est_cost(child_param, card, child_cost))) {
     } else {
       cost += child_cost;

@@ -43,7 +43,6 @@ int ObAiService::server_module_init(ObAiService* &ai_service)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ai_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("AI service is null", KR(ret));
   } else if (OB_FAIL(ai_service->init())) {
   }
   return ret;
@@ -54,7 +53,6 @@ int ObAiService::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObAiService already initialized", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -95,7 +93,6 @@ int ObAiServiceGuard::check_access_privilege()
     share::schema::ObSchemaGetterGuard *schema_guard = session->get_cur_exec_ctx()->get_sql_ctx()->schema_guard_;
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is null", K(ret));
     } else {
       sql::ObAIServiceEndpointPrivUtil priv_util(*schema_guard);
       share::schema::ObSessionPrivInfo session_priv;
@@ -127,7 +124,6 @@ int ObAiServiceGuard::get_ai_endpoint(const common::ObString &name, const share:
   if (OB_FAIL(check_access_privilege())) {
   } else if (OB_ISNULL(tmp_endpoint_info = OB_NEWx(ObAiModelEndpointInfo, &local_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc endpoint info", KR(ret));
   } else if (OB_FAIL(ObAiServiceExecutor::read_ai_endpoint(local_allocator_, name, *tmp_endpoint_info))) {
   } else {
     endpoint_info = tmp_endpoint_info;
@@ -144,7 +140,6 @@ int ObAiServiceGuard::get_ai_endpoint_by_ai_model_name(const common::ObString &a
     LOG_WARN("failed to check access privilege", K(ret));
   } else if (OB_ISNULL(tmp_endpoint_info = OB_NEWx(ObAiModelEndpointInfo, &local_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc endpoint info", KR(ret));
   } else if (OB_FAIL(ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(local_allocator_, ai_model_name, *tmp_endpoint_info))) {
   } else {
     endpoint_info = tmp_endpoint_info;

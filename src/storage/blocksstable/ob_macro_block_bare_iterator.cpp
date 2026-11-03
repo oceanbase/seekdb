@@ -83,7 +83,6 @@ int ObMicroBlockBareIterator::open(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (OB_ISNULL(macro_block_buf) || OB_UNLIKELY(macro_block_buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid macro block buf", KP(macro_block_buf), K(macro_block_buf_size));
@@ -93,10 +92,8 @@ int ObMicroBlockBareIterator::open(
       && !common_header_.is_sstable_index_block()
       && !common_header_.is_sstable_macro_meta_block())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Macro block type not supported for data iterator", K(ret), K(common_header_));
   } else if (need_check_data_integrity && OB_FAIL(check_macro_block_data_integrity(
       macro_block_buf + read_pos_, common_header_.get_payload_size()))) {
-    LOG_WARN("Invalid macro block payload data", K(ret));
   } else if (OB_FAIL(macro_block_header_.deserialize(macro_block_buf, macro_block_buf_size, read_pos_))) {
   } else if (FALSE_IT(index_rowkey_cnt_ = macro_block_header_.fixed_header_.rowkey_column_count_ == 0 ?
       1 : macro_block_header_.fixed_header_.rowkey_column_count_)) { // for cg
@@ -121,7 +118,6 @@ int ObMicroBlockBareIterator::open_for_whole_range(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (OB_ISNULL(macro_block_buf) || OB_UNLIKELY(macro_block_buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid macro block buf", KP(macro_block_buf), K(macro_block_buf_size));
@@ -130,7 +126,6 @@ int ObMicroBlockBareIterator::open_for_whole_range(
   } else if (OB_UNLIKELY(!common_header_.is_sstable_data_block()
       && !common_header_.is_sstable_index_block())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Macro block type not supported for data iterator", K(ret), K(common_header_));
   } else if (OB_FAIL(macro_block_header_.deserialize(macro_block_buf, macro_block_buf_size, read_pos_))) {
   } else if (FALSE_IT(index_rowkey_cnt_ = macro_block_header_.fixed_header_.rowkey_column_count_ == 0 ?
       1 : macro_block_header_.fixed_header_.rowkey_column_count_)) { // for cg
@@ -151,7 +146,6 @@ int ObMicroBlockBareIterator::open_for_whole_range(
         macro_block_header_.fixed_header_.row_store_type_)))) {
     } else if (OB_ISNULL(reader_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null micro reader", K(ret));
     } else if (OB_FAIL(reader_->init(index_block, nullptr))) {
     } else {
       is_inited_ = true;
@@ -172,7 +166,6 @@ int ObMicroBlockBareIterator::open(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (OB_ISNULL(macro_block_buf)
       || OB_UNLIKELY(macro_block_buf_size <= 0 || !range.is_valid() || !rowkey_read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -182,7 +175,6 @@ int ObMicroBlockBareIterator::open(
   } else if (OB_UNLIKELY(!common_header_.is_sstable_data_block()
       && !common_header_.is_sstable_index_block())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Macro block type not supported for data iterator", K(ret), K(common_header_));
   } else if (OB_FAIL(macro_block_header_.deserialize(macro_block_buf, macro_block_buf_size, read_pos_))) {
   } else if (FALSE_IT(index_rowkey_cnt_ = macro_block_header_.fixed_header_.rowkey_column_count_ == 0 ?
       1 : macro_block_header_.fixed_header_.rowkey_column_count_)) { // for cg
@@ -202,7 +194,6 @@ int ObMicroBlockBareIterator::open(
         macro_block_header_.fixed_header_.row_store_type_)))) {
     } else if (OB_ISNULL(reader_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null micro reader", K(ret));
     } else if (OB_FAIL(reader_->init(index_block, &(rowkey_read_info.get_datum_utils())))) {
     } else {
       begin_idx_ = 0;
@@ -222,7 +213,6 @@ int ObMicroBlockBareIterator::get_next_micro_block_data_and_offset(ObMicroBlockD
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (iter_idx_ > end_idx_) {
     ret = OB_ITER_END;
   } else {
@@ -276,7 +266,6 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Macro block header not inited", K(ret), K_(macro_block_header), K_(is_inited));
   } else if (iter_idx_ > end_idx_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(index_row.init(index_rowkey_cnt_ + 1))) {
@@ -288,7 +277,6 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
   } else if (OB_FAIL(get_next_micro_block_data(micro_block))) {
   } else if (OB_UNLIKELY(!micro_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected invalid micro block", K(ret), K(micro_block));
   } else if (OB_FAIL(rowkey.assign(index_row.storage_datums_, index_rowkey_cnt_))) {
   } else if (OB_FAIL(rowkey.deep_copy(micro_block_desc.last_rowkey_, rowkey_allocator))) {
   } else if (OB_FAIL(get_micro_block_header(micro_block.get_buf(), micro_block.get_buf_size(), header))) {
@@ -324,7 +312,6 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (iter_idx_ > end_idx_) {
     ret = OB_ITER_END;
   } else {
@@ -425,7 +412,6 @@ int ObMicroBlockBareIterator::generate_uncompressed_micro_block(
     micro_block_desc.data_size_ = micro_block_desc.buf_size_;
     if (OB_UNLIKELY(!micro_block_desc.header_->is_valid())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid micro block header", K(ret), KPC(micro_block_desc.header_));
     }
   }
   return ret;
@@ -482,7 +468,6 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (iter_idx_ > end_idx_) {
     ret = OB_ITER_END;
   } else {
@@ -540,7 +525,6 @@ int ObMicroBlockBareIterator::get_macro_block_header(ObSSTableMacroBlockHeader &
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     macro_header = macro_block_header_;
   }
@@ -555,7 +539,6 @@ int ObMicroBlockBareIterator::get_micro_block_header(const char *buf,
   char *micro_block_buf = nullptr;
   if (OB_ISNULL(buf) || buf_len < ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid micro block buf", K(ret), KP(buf), K(buf_len));
   } else if (FALSE_IT(micro_block_buf = const_cast<char *>(buf))) {
   } else {
     header = reinterpret_cast<ObMicroBlockHeader *>(micro_block_buf);
@@ -573,7 +556,6 @@ int ObMicroBlockBareIterator::get_micro_block_count(int64_t &micro_block_count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     micro_block_count = macro_block_header_.fixed_header_.micro_block_count_;
   }
@@ -587,10 +569,8 @@ int ObMicroBlockBareIterator::get_index_block(ObMicroBlockData &micro_block,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!macro_block_header_.is_valid())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Macro block header not inited", K(ret), K_(macro_block_header), K_(is_inited));
   } else if (OB_UNLIKELY(0 == macro_block_header_.fixed_header_.idx_block_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null index block", K(ret), K_(macro_block_header));
   } else {
     ObMicroBlockHeader header;
     const int64_t index_block_offset = is_macro_meta_block ? macro_block_header_.fixed_header_.meta_block_offset_
@@ -630,7 +610,6 @@ int ObMicroBlockBareIterator::set_end_iter_idx(const bool is_reverse)
   iter_idx_ = is_reverse ? begin_idx_ : end_idx_;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Macro block header not inited", K(ret), K_(macro_block_header), K_(is_inited));
     // for cg
   } else if (FALSE_IT(rowkey_count = macro_block_header_.fixed_header_.rowkey_column_count_ == 0 ?
                                      1 : macro_block_header_.fixed_header_.rowkey_column_count_)) {
@@ -640,7 +619,6 @@ int ObMicroBlockBareIterator::set_end_iter_idx(const bool is_reverse)
   } else if (OB_FAIL(row_parser.get_header(header))) {
   } else if (OB_ISNULL(header)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null header", K(ret));
   } else {
     read_pos_ = header->block_offset_;
   }
@@ -656,13 +634,10 @@ int ObMicroBlockBareIterator::get_curr_start_row_offset(int64_t &row_offset)
   const ObIndexBlockRowHeader *header = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Macro block header not inited", K(ret), K_(macro_block_header), K_(is_inited));
   } else if (OB_UNLIKELY(0 == macro_block_header_.fixed_header_.idx_block_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null index block", K(ret), K_(macro_block_header));
   } else if (OB_ISNULL(reader_) || OB_UNLIKELY(!reader_->is_inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected reader", K(ret), KP_(reader), K_(macro_block_header));
   } else if (iter_idx_ > end_idx_) {
     ret = OB_ITER_END;
     // for cg
@@ -703,12 +678,10 @@ int ObMicroBlockBareIterator::locate_range(
       macro_block_header_.fixed_header_.row_store_type_)))) {
   } else if (OB_ISNULL(reader_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null micro reader", K(ret));
   } else if (OB_FAIL(reader_->init(index_block, &(rowkey_read_info.get_datum_utils())))) {
   } else if (OB_FAIL(reader_->locate_range(
       range, is_left_border, is_right_border, begin_idx_, end_idx_, true))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Fail to locate range with leaf index block", K(ret));
     } else {
       iter_idx_ = end_idx_ + 1;
       ret = OB_SUCCESS;
@@ -734,7 +707,6 @@ int ObMicroBlockBareIterator::set_reader(const ObRowStoreType store_type)
 {
   int ret = OB_SUCCESS;
   if (!micro_reader_helper_.is_inited() && OB_FAIL(micro_reader_helper_.init(allocator_))) {
-    LOG_WARN("Fail to init micro reader helper", K(ret));
   } else if (OB_FAIL(micro_reader_helper_.get_reader(store_type, reader_))) {
   }
   return ret;
@@ -782,16 +754,13 @@ int ObMacroBlockRowBareIterator::open(
   ObSSTableMacroBlockHeader macro_header;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (OB_ISNULL(macro_block_buf) || OB_UNLIKELY(macro_block_buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid macro block buf", K(ret), KP(macro_block_buf), K(macro_block_buf_size));
   } else if (OB_FAIL(micro_iter_.open(
       macro_block_buf, macro_block_buf_size, need_check_integrity))) {
   } else if (OB_FAIL(micro_iter_.get_macro_block_header(macro_header))) {
   } else if (OB_UNLIKELY(!macro_header.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid macro header", K(ret), K(macro_header));
   } else if (OB_FAIL(row_.init(*allocator_, macro_header.fixed_header_.column_count_))) {
   } else {
     column_types_ = macro_header.column_types_;
@@ -828,10 +797,8 @@ int ObMacroBlockRowBareIterator::get_next_row(const ObDatumRow *&row)
   row_.reuse();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iterator not inited", K(ret));
   } else if (curr_block_row_idx_ >= curr_block_row_cnt_ && OB_FAIL(open_next_micro_block())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("Fail to get next row", K(ret));
     }
   }
 
@@ -852,19 +819,14 @@ int ObMacroBlockRowBareIterator::open_leaf_index_micro_block(const bool is_macro
   int64_t pos = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iterator not inited", K(ret));
   } else if (OB_UNLIKELY(curr_block_row_idx_ != curr_block_row_cnt_)) {
     ret = OB_ITER_STOP;
-    LOG_WARN("Previous block iterate not finished",
-        K(ret), K_(curr_block_row_idx), K_(curr_block_row_cnt));
   } else if (OB_FAIL(micro_iter_.get_index_block(curr_micro_block_data_, false, is_macro_meta))) {
   } else if (OB_UNLIKELY(!curr_micro_block_data_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Read an invalid micro block data", K(ret));
   } else if (OB_FAIL(header.deserialize(curr_micro_block_data_.get_buf(), curr_micro_block_data_.get_buf_size(), pos))) {
   } else if (OB_UNLIKELY(!header.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Read an invalid micro block header", K(ret));
   } else if (OB_FAIL(row_.reserve(header.column_count_))) {
   } else if (OB_FAIL(micro_reader_->init(curr_micro_block_data_, nullptr))) {
   } else if (OB_FAIL(micro_reader_->get_row_count(curr_block_row_cnt_))) {
@@ -879,14 +841,11 @@ int ObMacroBlockRowBareIterator::open_next_micro_block()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iterator not inited", K(ret));
   } else if (OB_FAIL(micro_iter_.get_next_micro_block_data(curr_micro_block_data_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("Fail to get next micro block data", K(ret));
     }
   } else if (OB_UNLIKELY(!curr_micro_block_data_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Read an invalid micro block data", K(ret));
   } else if (OB_FAIL(micro_reader_->init(curr_micro_block_data_, nullptr))) {
   } else if (OB_FAIL(micro_reader_->get_row_count(curr_block_row_cnt_))) {
   } else {
@@ -900,7 +859,6 @@ int ObMacroBlockRowBareIterator::get_curr_micro_block_data(const ObMicroBlockDat
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iterator not intied", K(ret));
   } else {
     block_data = &curr_micro_block_data_;
   }
@@ -912,7 +870,6 @@ int ObMacroBlockRowBareIterator::get_curr_micro_block_row_cnt(int64_t &row_count
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iterator not inited", K(ret));
   } else {
     row_count = curr_block_row_cnt_;
   }
@@ -934,13 +891,11 @@ int ObMacroBlockRowBareIterator::init_micro_reader(const ObRowStoreType store_ty
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(micro_reader_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Micro block reader should be null before init", K(ret));
   } else {
     switch (store_type) {
     case FLAT_ROW_STORE: {
       if (OB_ISNULL(micro_reader_ = OB_NEWx(ObMicroBlockReader, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to new flat micro block reader", K(ret));
       }
       break;
     }
@@ -948,13 +903,11 @@ int ObMacroBlockRowBareIterator::init_micro_reader(const ObRowStoreType store_ty
     case SELECTIVE_ENCODING_ROW_STORE: {
       if (OB_ISNULL(micro_reader_ = OB_NEWx(ObMicroBlockDecoder, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to new micro block decoder", K(ret));
       }
       break;
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("Not supported row store type", K(ret), K(store_type));
     }
     }
   }

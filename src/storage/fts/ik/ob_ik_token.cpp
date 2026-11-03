@@ -156,7 +156,6 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
 
   if (OB_ISNULL(other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("other is null", K(ret));
   } else {
     min_offset_ = other->min_offset_;
     max_offset_ = other->max_offset_;
@@ -196,7 +195,6 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   int ret = OB_SUCCESS;
   if (list_.tokens().empty()) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("Token list is empty", K(ret));
   } else if (FALSE_IT(token = list_.tokens().get_last())) {
   } else if (OB_FAIL(list_.tokens().pop_back())) {
   } else if (list_.tokens().empty()) {

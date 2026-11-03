@@ -57,14 +57,11 @@ int ObBlockBatchedRowStore::init(const ObTableAccessParam &param, common::hash::
   if (OB_FAIL(ObBlockRowStore::init(param))) {
   } else if (OB_ISNULL(buf = context_.stmt_allocator_->alloc(sizeof(char *) * batch_size_))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc cell data ptr", K(ret), K(batch_size_));
   } else if (FALSE_IT(cell_data_ptrs_ = reinterpret_cast<const char **>(buf))) {
   } else if (OB_ISNULL(buf = context_.stmt_allocator_->alloc(sizeof(int32_t) * batch_size_))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc row_ids", K(ret), K(batch_size_));
   } else if (OB_ISNULL(len_array_buf = context_.stmt_allocator_->alloc(sizeof(uint32_t) * batch_size_))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc len_array_buf", K(ret), K_(batch_size));
   } else {
     row_ids_ = reinterpret_cast<int32_t *>(buf);
     len_array_ = reinterpret_cast<uint32_t *>(len_array_buf);
@@ -99,7 +96,6 @@ int ObBlockBatchedRowStore::reuse_capacity(const int64_t capacity)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(capacity <= 0 || capacity > batch_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(capacity), K(batch_size_));
   } else {
     iter_end_flag_ = IterEndState::PROCESSING;
     row_capacity_ = capacity;

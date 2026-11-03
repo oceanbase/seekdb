@@ -63,9 +63,7 @@ int ObMemoryPrinter::print_memory_usage()
     ret = OB_SUCCESS;
   } else {
     if (OB_FAIL(databuff_printf(print_buf, BUF_LEN, pos,
-                                "=== MEMORY INFO ===\n"
-                                "unmanaged_memory_size=% '15ld\n",
-                                lib::get_unmanaged_memory_size()))) {
+                                "=== MEMORY INFO ===\n"))) {
     } else if (OB_SUCCESS != (tmp_ret = print_memory_usage_(print_buf,
                                                             BUF_LEN,
                                                             pos))) {
@@ -96,7 +94,6 @@ int ObMemoryPrinter::print_memory_usage_(
     storage::ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
     if (OB_ISNULL(freezer)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("freezer is null", K(ret));
     } else if (OB_FAIL(freezer->print_memory_usage(print_buf,
                                                    buf_len,
                                                    pos))) {

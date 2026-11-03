@@ -44,11 +44,9 @@ int ObSyncTabletSeqReplayExecutor::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(autoinc_seq == 0)
           || OB_UNLIKELY(!replay_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(autoinc_seq), K(replay_scn), K(ret));
   } else {
     seq_ = autoinc_seq;
     is_tablet_creating_ = is_tablet_creating;
@@ -65,7 +63,6 @@ int ObSyncTabletSeqReplayExecutor::do_replay_(ObTabletHandle &handle)
   ObTablet *tablet = handle.get_obj();
   if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is null", K(ret), K(handle));
   } else {
     // replay to mds table
     ObArenaAllocator allocator;
@@ -134,7 +131,6 @@ int ObTabletAutoincSeqService::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("tablet autoinc sequence service init twice", K(ret));
   } else if (OB_FAIL(bucket_lock_.init(BUCKET_LOCK_BUCKET_CNT))) {
   } else {
     is_inited_ = true;
@@ -155,7 +151,6 @@ static int get_local_ls(ObLS *&ls)
   ls = nullptr;
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -178,10 +173,8 @@ int ObTabletAutoincSeqService::fetch_tablet_autoinc_seq_cache(
   SCN trans_version;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || 0 == cache_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(cache_size));
   } else if (OB_FAIL(get_local_ls(ls))) {
   } else {
     ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
@@ -211,10 +204,8 @@ int ObTabletAutoincSeqService::batch_get_tablet_autoinc_seq(
   ObLS *ls = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(params.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty tablet autoinc request", K(ret));
   } else if (OB_FAIL(get_local_ls(ls))) {
   } else {
     for (int64_t i = 0; i < params.count(); ++i) {
@@ -248,10 +239,8 @@ int ObTabletAutoincSeqService::batch_set_tablet_autoinc_seq(
   ObLS *ls = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(params.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty tablet autoinc request", K(ret));
   } else if (OB_FAIL(get_local_ls(ls))) {
   } else {
     for (int64_t i = 0; i < params.count(); ++i) {
@@ -289,7 +278,6 @@ int ObTabletAutoincSeqService::replay_update_tablet_autoinc_seq(
       || 0 == autoinc_seq
       || !replay_scn.is_valid_and_not_min())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(autoinc_seq), K(replay_scn));
   } else {
     ObBucketHashWLockGuard guard(bucket_lock_, tablet_id.hash());
     ObSyncTabletSeqReplayExecutor replay_executor;
@@ -318,7 +306,6 @@ int ObTabletAutoincSeqService::batch_set_tablet_autoinc_seq_in_trans(
   ObArenaAllocator allocator(common::ObMemAttr("SetAutoSeq"));
   if (OB_UNLIKELY(params.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty tablet autoinc request", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     allocator.reuse();
@@ -350,11 +337,9 @@ int ObTabletAutoincSeqService::set_tablet_autoinc_seq_in_trans(
     ObTablet *tablet = nullptr;
     mds::MdsCtx &user_ctx = static_cast<mds::MdsCtx &>(ctx);
     if (CLICK_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, tablet_handle))) {
-      LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
     } else if (OB_FALSE_IT(tablet = tablet_handle.get_obj())) {
     } else if (CLICK_FAIL(tablet->ObITabletMdsInterface::set(
         data, user_ctx, 0 /* lock_timeout_us */))) {
-      LOG_WARN("failed to set tablet autoinc MDS data", K(ret), K(tablet_id));
     }
   } else {
     ObTabletAutoincSeqReplayExecutor replay_executor;

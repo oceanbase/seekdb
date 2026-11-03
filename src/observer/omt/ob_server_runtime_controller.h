@@ -63,15 +63,11 @@ public:
   int create_bootstrap_runtime();
   int refresh_runtime_resources();
   int activate_runtime(const share::ObServerRuntimeConfig &runtime_config);
-  int create_runtime(const ObServerRuntimeMeta &meta, bool write_slog) override;
+  int create_runtime(const ObServerRuntimeMeta &meta) override;
   int update_server_resources(const share::ObServerRuntimeConfig &runtime_config);
 
   int get_server_resources(share::ObServerRuntimeConfig &runtime_config);
   int get_server_log_disk_size(int64_t &log_disk_size) override;
-  int get_runtime_meta_for_ckpt(ObServerRuntimeMeta &meta, bool &exist) override;
-  storage::ObServerRuntimeSuperBlock get_super_block() override;
-  void set_server_super_block(
-      const storage::ObServerRuntimeSuperBlock &super_block) override;
   bool is_hidden() override;
   int update_server_memory(const share::ObServerRuntimeConfig &runtime_config);
   int update_server_log_disk_size(const int64_t old_log_disk_size,
@@ -133,7 +129,7 @@ protected:
 private:
   int update_freezer_config_();
   int update_throttle_config_();
-  // Single server-runtime resource configuration sourced from GCONF.
+  // Single server-runtime resource configuration sourced from Rust instance parameters.
   int build_server_resource_config_(share::ObServerRuntimeConfig &runtime_config);
   int apply_server_resource_config_(const share::ObServerRuntimeConfig &runtime_config);
   int bring_up_runtime_();
@@ -143,7 +139,6 @@ private:
 protected:
       enum class ObRuntimeCreateStep {
         STEP_BEGIN = 0,
-        STEP_CTX_MEM_CONFIG_SETTED,
         STEP_CREATION_PREPARED,
         STEP_RUNTIME_CREATED,
         STEP_FINISH,

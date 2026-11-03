@@ -40,7 +40,6 @@ int ObPxMultiPartDeleteSpec::register_to_datahub(ObExecContext &ctx) const
   if (with_barrier_) {
     if (OB_ISNULL(ctx.get_sqc_handler())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null unexpected", K(ret));
     } else {
       void *buf = ctx.get_allocator().alloc(sizeof(ObBarrierWholeMsg::WholeMsgProvider));
       if (OB_ISNULL(buf)) {
@@ -67,7 +66,6 @@ int ObPxMultiPartDeleteOp::inner_open()
   } else if (MY_SPEC.with_barrier_) {
     if (OB_ISNULL(input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the input is null", K(ret));
     } else if (OB_FAIL(data_driver_.set_dh_barrier_param(
                 MY_SPEC.get_id(),
                 static_cast<const ObPxMultiPartModifyOpInput *>(input_)))) {
@@ -81,11 +79,9 @@ int ObPxMultiPartDeleteOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the child op is null", K(ret));
   } else if (MY_SPEC.is_returning_) {
     if (OB_FAIL(data_driver_.get_next_row(ctx_, child_->get_spec().output_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed get next row from data driver", K(ret));
       } else {
       }
     } else {
@@ -97,7 +93,6 @@ int ObPxMultiPartDeleteOp::inner_get_next_row()
     do {
       if (OB_FAIL(data_driver_.get_next_row(ctx_, child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed get next row from data driver", K(ret));
         } else {
         }
       } else {
@@ -131,10 +126,8 @@ int ObPxMultiPartDeleteOp::read_row(ObExecContext &ctx,
   // Read data from child, data is stored in child's output exprs
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child op is null", K(ret));
   } else if (OB_FAIL(child_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail get next row from child", K(ret));
     }
   } else {
     op_monitor_info_.otherstat_2_value_++;
@@ -148,12 +141,11 @@ int ObPxMultiPartDeleteOp::read_row(ObExecContext &ctx,
       row = &child_->get_spec().output_;
       if (NO_PARTITION_ID_FLAG == part_id_idx) {
         // If row does not contain the cell corresponding to partition id expr, default partition id is 0
-        ObDASTableLoc *table_loc = del_rtdef_.das_rtdef_.table_loc_;
-        if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
+        DASRuntimeTableAccess *table_access = del_rtdef_.das_rtdef_.table_access_;
+        if (OB_ISNULL(table_access) || table_access->get_tablet_accesses().size() != 1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("insert table location is invalid", K(ret), KPC(table_loc));
         } else {
-          tablet_id = table_loc->get_first_tablet_loc()->tablet_id_;
+          tablet_id = table_access->get_first_tablet_access()->tablet_id_;
         }
       } else if (child_->get_spec().output_.count() > part_id_idx) {
         ObExpr *expr = child_->get_spec().output_.at(part_id_idx);
@@ -170,7 +162,7 @@ int ObPxMultiPartDeleteOp::read_row(ObExecContext &ctx,
 
 
 int ObPxMultiPartDeleteOp::write_rows(ObExecContext &ctx,
-                                      const ObDASTabletLoc *tablet_loc,
+                                      const DASRuntimeTabletAccess *tablet_access,
                                       ObPDMLOpRowIterator &dml_row_iter)
 {
   int ret = OB_SUCCESS;
@@ -178,7 +170,6 @@ int ObPxMultiPartDeleteOp::write_rows(ObExecContext &ctx,
   ObPhysicalPlanCtx *plan_ctx = NULL;
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get physical plan context failed", K(ret));
   } else {
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
@@ -186,11 +177,10 @@ int ObPxMultiPartDeleteOp::write_rows(ObExecContext &ctx,
       if (OB_FAIL(try_check_status())) {
       } else if (OB_FAIL(dml_row_iter.get_next_row(child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next row", K(ret));
         } else {
           iter_end_ = true;
         }
-      } else if (OB_FAIL(ObDMLService::delete_row(MY_SPEC.del_ctdef_, del_rtdef_, tablet_loc, dml_rtctx_, stored_row))) {
+      } else if (OB_FAIL(ObDMLService::delete_row(MY_SPEC.del_ctdef_, del_rtdef_, tablet_access, dml_rtctx_, stored_row))) {
       } else if (OB_FAIL(discharge_das_write_buffer())) {
       } else {
         op_monitor_info_.otherstat_3_value_++;

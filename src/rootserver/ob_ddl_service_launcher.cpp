@@ -43,7 +43,6 @@ int ObDDLServiceLauncher::server_module_init(ObDDLServiceLauncher *&ddl_service_
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin server_module_init for ddl_service_launcher");
   if (OB_NOT_NULL(ddl_service_launcher)) {
     if (OB_FAIL(ddl_service_launcher->init())) {
-      LOG_WARN("failed to init ddl_service_launcher", KR(ret));
     }
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
@@ -59,7 +58,6 @@ int ObDDLServiceLauncher::init()
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin init for ddl_service_launcher");
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     inited_ = true;
   }
@@ -89,9 +87,7 @@ int ObDDLServiceLauncher::activate()
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin switch_to_leader for ddl_service_launcher");
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl service launcher is not inited", KR(ret), K_(inited));
   } else if (OB_FAIL(inner_start_ddl_service_with_lock_())) {
-    LOG_WARN("fail to inner start ddl service with lock", KR(ret));
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish switch_to_leader for ddl_service_launcher", KR(ret),
@@ -121,20 +117,15 @@ int ObDDLServiceLauncher::init_sequence_id_(const int64_t proposal_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_ID == proposal_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("proposal id not valid", KR(ret), K(proposal_id));
   } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
   } else {
     ObRefreshSchemaInfo schema_info;
     ObSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(schema_service));
     } else if (OB_FAIL(schema_service->init_sequence_id_by_sys_leader_epoch(proposal_id))) {
-      LOG_WARN("fail to init sequence id by sys leader epoch", KR(ret), K(proposal_id));
     } else if (OB_FAIL(schema_service->set_refresh_schema_info(schema_info))) {
-      LOG_WARN("fail to set refresh schema info", K(ret), K(schema_info));
     }
   }
   return ret;
@@ -147,16 +138,11 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_()
   int64_t proposal_id = 0;
   SpinWLockGuard guard(rw_lock_);
   if (OB_FAIL(get_sys_palf_role_and_epoch(role, proposal_id))) {
-    LOG_WARN("fail to get role and proposal id", KR(ret));
   } else if (!is_leader_like(role)) {
     // DO NOT use is_strong_leader(), because standby cluster's role is STANDBY_LEADER
     ret = OB_LS_NOT_LEADER;
-    LOG_WARN("local is not sys leader", KR(ret), K(role));
   } else if (OB_FAIL(init_sequence_id_(proposal_id))) {
-    LOG_WARN("fail to init sequence id", KR(ret), K(proposal_id));
-  // Reset the local DDL epoch so the next DDL transaction persists a fresh epoch.
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
-    LOG_WARN("fail to remove ddl epoch", KR(ret));
   } else {
     ATOMIC_SET(&is_ddl_service_started_, true);
   }

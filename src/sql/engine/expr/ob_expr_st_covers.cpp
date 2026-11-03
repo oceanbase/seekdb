@@ -48,11 +48,9 @@ int ObExprPrivSTCovers::calc_result_type2(ObExprResType &type,
   INIT_SUCC(ret);
   if (!ob_is_geometry(type1.get_type()) && !ob_is_string_type(type1.get_type()) && type1.get_type() != ObNullType) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid type", K(ret), K(type1.get_type()));
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_COVERS);
   } else if (!ob_is_geometry(type2.get_type()) && !ob_is_string_type(type2.get_type()) && type2.get_type() != ObNullType) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid type", K(ret), K(type2.get_type()));
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_COVERS);
   }
   if (OB_SUCC(ret)) {
@@ -113,35 +111,27 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
     LOG_USER_ERROR(OB_ERR_GIS_DIFFERENT_SRIDS, N_PRIV_ST_COVERS, srid1, srid2);
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get session", K(ret));
   } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, srid1, srs))) {
-    LOG_WARN("fail to get srs item", K(ret), K(srid1));
   } else if (ObGeoTypeUtil::is_geo1_dimension_higher_than_geo2(type2, type1)) {
     res.set_bool(false);
   } else if (!is_geo1_cached && OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb1, geo1, nullptr, N_PRIV_ST_COVERS,
                                                     ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | ObGeoBuildFlag::GEO_CHECK_RING))) {
-    LOG_WARN("get first geo by wkb failed", K(ret));
   } else if (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb2, geo2, nullptr, N_PRIV_ST_COVERS,
                                                     ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | ObGeoBuildFlag::GEO_CHECK_RING))) {
-    LOG_WARN("get second geo by wkb failed", K(ret));
   } else if ((!is_geo1_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty)))
           || (!is_geo2_cached && OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty)))) {
-    LOG_WARN("check geo empty failed", K(ret));
   } else if (is_geo1_empty || is_geo2_empty) {
     res.set_null();
   } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2, is_geo1_cached, is_geo2_cached))) {
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     if (OB_NOT_NULL(const_param_cache)) {
       if (gis_arg1->is_static_const_ && !is_geo1_cached &&
           OB_FAIL(const_param_cache->add_const_param_cache(0, *geo1))) {
-        LOG_WARN("add geo1 to const cache failed", K(ret));
       } else if (gis_arg2->is_static_const_ && !is_geo2_cached &&
           OB_FAIL(const_param_cache->add_const_param_cache(1, *geo2))) {
-        LOG_WARN("add geo2 to const cache failed", K(ret));
       }
     }
 
@@ -152,7 +142,6 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
       ObGeoEvalCtx gis_context(*mem_ctx);
       bool result = false;
       if (OB_FAIL(gis_context.append_geo_arg(geo2)) || OB_FAIL(gis_context.append_geo_arg(geo1))) {
-        LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
       } else {
         ObCachedGeom *cache_geo = NULL;
         ObGeometry *geo;
@@ -165,7 +154,6 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
                                                                 const_param_cache->get_const_param_cache(0),
                                                                 srs,
                                                                 cache_geo))) {
-              LOG_WARN("add geo2 to const cache failed", K(ret));
             } else {
               geo = geo2;
               const_param_cache->add_cached_geo(0, cache_geo);
@@ -186,7 +174,6 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
             res.set_bool(result);
           }
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::CoveredBy>::geo_func::eval(gis_context, result))) {
-          LOG_WARN("eval st coveredBy failed", K(ret));
           ObGeoExprUtils::geo_func_error_handle(ret, N_PRIV_ST_COVERS);
         } else {
           res.set_bool(result);
@@ -212,7 +199,6 @@ int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
-    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     res.set_null();
   } else if (FALSE_IT(wkb1 = gis_datum1->get_string())) {

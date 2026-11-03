@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 
+#include "rust/config.h"
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::share;
@@ -48,58 +49,55 @@ int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILib
   return ret;
 }
 
-int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
-                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
+int TableAccessTargetBuilder::collect_access_targets(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
+                                           ObIArray<TableAccessTargets> &table_targets)
 {
   int ret = OB_SUCCESS;
-  //ObDASTableLoc table_loc;
   int64_t N = partition_infos.count();
-  if (OB_FAIL(candi_table_locs.reserve(N))) {
+  if (OB_FAIL(table_targets.reserve(N))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     if (OB_ISNULL(partition_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid partition info", K(ret));
-    } else if (OB_FAIL(candi_table_locs.push_back(
-                   partition_infos.at(i)->get_phy_tbl_location_info()))) {
+    } else if (OB_FAIL(table_targets.push_back(
+                   partition_infos.at(i)->get_access_targets()))) {
     } else { /* do nothing */ }
   }
   return ret;
 }
-int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+int TableAccessTargetBuilder::collect_access_targets(const ObIArray<TableAccessPlan> &table_access_plans,
                                            const ObPlanCacheCtx &pc_ctx,
-                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
+                                           ObIArray<TableAccessTargets> &table_targets)
 {
   int ret = OB_SUCCESS;
   ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(pc_ctx.sql_ctx_.session_info_);
   ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
-  int64_t N = table_locations.count();
+  int64_t N = table_access_plans.count();
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid executor ctx!", K(ret), K(plan_ctx));
   } else {
-    ObSEArray<const ObTableLocation *, 2> table_location_ptrs;
-    ObSEArray<ObCandiTableLoc *, 2> phy_location_info_ptrs;
+    ObSEArray<const TableAccessPlan *, 2> table_access_plan_ptrs;
+    ObSEArray<TableAccessTargets *, 2> target_ptrs;
     const ParamStore &params = plan_ctx->get_param_store();
-    if (OB_FAIL(candi_table_locs.prepare_allocate(N))) {
+    if (OB_FAIL(table_targets.prepare_allocate(N))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
-        const ObTableLocation &table_location = table_locations.at(i);
-        ObCandiTableLoc &candi_table_loc = candi_table_locs.at(i);
-        NG_TRACE(calc_partition_location_begin);
-        if (OB_FAIL(table_location.calculate_candi_tablet_locations(exec_ctx,
-                                                                    params,
-                                                                    candi_table_loc.get_phy_part_loc_info_list_for_update(),
-                                                                    dtc_params))) {
+        const TableAccessPlan &table_access_plan = table_access_plans.at(i);
+        TableAccessTargets &targets = table_targets.at(i);
+        NG_TRACE(calculate_partition_targets_begin);
+        if (OB_FAIL(table_access_plan.calculate_tablet_targets(exec_ctx,
+                                                          params,
+                                                          targets.get_tablets_for_update(),
+                                                          dtc_params))) {
         } else {
-          NG_TRACE(calc_partition_location_end);
-          candi_table_loc.set_table_location_key(
-              table_location.get_table_id(), table_location.get_ref_table_id());
+          NG_TRACE(calculate_partition_targets_end);
+          targets.set_table_identity(
+              table_access_plan.get_table_id(), table_access_plan.get_ref_table_id());
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(table_location_ptrs.push_back(&table_location))) {
-          } else if (OB_FAIL(phy_location_info_ptrs.push_back(&candi_table_loc))) {
+          if (OB_FAIL(table_access_plan_ptrs.push_back(&table_access_plan))) {
+          } else if (OB_FAIL(target_ptrs.push_back(&targets))) {
           }
         }
       } // for end
@@ -107,8 +105,8 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
 
     if (OB_SUCC(ret) && N!=0 ) {
       if (OB_FAIL(ObLogPlan::validate_local_tablets(exec_ctx,
-                                                    table_location_ptrs,
-                                                    phy_location_info_ptrs))) {
+                                                    table_access_plan_ptrs,
+                                                    target_ptrs))) {
       }
     }
   }
@@ -116,18 +114,18 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
   return ret;
 }
 
-int ObPhyLocationGetter::build_table_locs(ObDASCtx &das_ctx,
-                                          const ObIArray<ObTableLocation> &table_locations,
-                                          const ObIArray<ObCandiTableLoc> &candi_table_locs)
+int TableAccessTargetBuilder::build_runtime_accesses(ObDASCtx &das_ctx,
+                                          const ObIArray<TableAccessPlan> &table_access_plans,
+                                          const ObIArray<TableAccessTargets> &table_targets)
 {
   int ret = OB_SUCCESS;
-  CK(table_locations.count() == candi_table_locs.count());
-  for (int64_t i = 0; OB_SUCC(ret) && i < table_locations.count(); i++) {
-    if (OB_FAIL(das_ctx.add_candi_table_loc(table_locations.at(i).get_loc_meta(), candi_table_locs.at(i)))) {
+  CK(table_access_plans.count() == table_targets.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < table_access_plans.count(); i++) {
+    if (OB_FAIL(das_ctx.add_table_access_targets(table_access_plans.at(i).get_access_meta(), table_targets.at(i)))) {
     }
   }
   if (OB_FAIL(ret)) {
-    das_ctx.clear_all_location_info();
+    das_ctx.clear_table_accesses();
   }
 
   return ret;
@@ -135,7 +133,7 @@ int ObPhyLocationGetter::build_table_locs(ObDASCtx &das_ctx,
 
 
 //this function will rewrite the related tablet map info in DASCtx
-int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_location,
+int TableAccessTargetBuilder::build_related_tablet_info(const TableAccessPlan &table_access_plan,
                                                    ObExecContext &exec_ctx,
                                                    DASRelatedTabletMap *&related_map)
 {
@@ -146,7 +144,7 @@ int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_
   ObArray<ObObjectID> first_level_part_ids;
   ObArray<ObTabletID> tablet_ids;
 
-  if (OB_FAIL(table_location.calculate_tablet_ids(exec_ctx,
+  if (OB_FAIL(table_access_plan.calculate_tablet_ids(exec_ctx,
                                                   plan_ctx->get_param_store(),
                                                   tablet_ids,
                                                   partition_ids,
@@ -155,7 +153,7 @@ int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_
   } else {
     related_map = &exec_ctx.get_das_ctx().get_related_tablet_map();
     LOG_DEBUG("build_related tablet info", K(tablet_ids), K(partition_ids),
-             K(table_location.get_loc_meta()), KPC(related_map));
+             K(table_access_plan.get_access_meta()), KPC(related_map));
   }
   return ret;
 }
@@ -169,34 +167,36 @@ int ObConfigInfoInPC::load_influence_plan_config()
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.
-  enable_px_ordered_coord_ = GCONF._enable_px_ordered_coord;
-  enable_newsort_ = GCONF._enable_newsort;
-  is_strict_defensive_check_ = GCONF.enable_strict_defensive_check();
-  bloom_filter_ratio_ = GCONF._bloom_filter_ratio;
-  realistic_runtime_bloom_filter_size_ = !GCONF._preset_runtime_bloom_filter_size;
-  ndv_runtime_bloom_filter_size_ = GCONF._ndv_runtime_bloom_filter_size;
+  enable_px_ordered_coord_ = config::_enable_px_ordered_coord();
+  enable_newsort_ = config::_enable_newsort();
+  is_strict_defensive_check_ = (config::_enable_defensive_check() == 2);
+  bloom_filter_ratio_ = config::_bloom_filter_ratio();
+  realistic_runtime_bloom_filter_size_ = !config::_preset_runtime_bloom_filter_size();
+  ndv_runtime_bloom_filter_size_ = config::_ndv_runtime_bloom_filter_size();
 
   // Runtime configuration dependencies.
   // Use the runtime configuration to read the current settings.
 
-  pushdown_storage_level_ = GCONF._pushdown_storage_level;
-  enable_px_batch_rescan_ = GCONF._enable_px_batch_rescan;
-  bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
-  px_join_skew_handling_ = GCONF._px_join_skew_handling;
-  px_join_skew_minfreq_ = static_cast<int8_t>(GCONF._px_join_skew_minfreq);
-  enable_spf_batch_rescan_ = GCONF._enable_spf_batch_rescan;
-  enable_var_assign_use_das_ = GCONF._enable_var_assign_use_das;
-  enable_das_keep_order_ = GCONF._enable_das_keep_order;
-  enable_index_merge_ = GCONF._enable_index_merge;
-  enable_parallel_das_dml_ = GCONF._enable_parallel_das_dml;
-  hash_rollup_policy_ = GCONF._use_hash_rollup.case_compare("auto") == 0 ?
+  pushdown_storage_level_ = config::_pushdown_storage_level();
+  enable_px_batch_rescan_ = config::_enable_px_batch_rescan();
+  bloom_filter_enabled_ = config::_bloom_filter_enabled();
+  px_join_skew_handling_ = config::_px_join_skew_handling();
+  px_join_skew_minfreq_ = static_cast<int8_t>(config::_px_join_skew_minfreq());
+  enable_spf_batch_rescan_ = config::_enable_spf_batch_rescan();
+  enable_var_assign_use_das_ = config::_enable_var_assign_use_das();
+  enable_das_keep_order_ = config::_enable_das_keep_order();
+  enable_index_merge_ = config::_enable_index_merge();
+  enable_parallel_das_dml_ = config::_enable_parallel_das_dml();
+  const rust::String rollup_value = config::_use_hash_rollup();
+  const ObString rollup_policy(static_cast<int32_t>(rollup_value.size()), rollup_value.data());
+  hash_rollup_policy_ = rollup_policy.case_compare("auto") == 0 ?
                           0 :
-                          (GCONF._use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
-  enable_distributed_das_scan_ = GCONF._enable_distributed_das_scan;
-  enable_das_batch_rescan_flag_ = GCONF._enable_das_batch_rescan_flag;
-  enable_topn_runtime_filter_ = GCONF._enable_topn_runtime_filter;
-  min_const_integer_precision_ = static_cast<int8_t>(GCONF._min_const_integer_precision);
-  enable_px_task_rebalance_ = GCONF._enable_px_task_rebalance;
+                          (rollup_policy.case_compare("forced") == 0 ? 1 : 2);
+  enable_distributed_das_scan_ = config::_enable_distributed_das_scan();
+  enable_das_batch_rescan_flag_ = config::_enable_das_batch_rescan_flag();
+  enable_topn_runtime_filter_ = config::_enable_topn_runtime_filter();
+  min_const_integer_precision_ = static_cast<int8_t>(config::_min_const_integer_precision());
+  enable_px_task_rebalance_ = config::_enable_px_task_rebalance();
 
 
   return ret;

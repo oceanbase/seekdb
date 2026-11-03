@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_STORAGE_OB_TABLET_LOCAL_CHECKSUM_TABLE_STORAGE_H_
 #define OCEANBASE_SHARE_STORAGE_OB_TABLET_LOCAL_CHECKSUM_TABLE_STORAGE_H_
 
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include "share/inner_table/local_table_schema.h"
 #include "lib/container/ob_iarray.h"
 #include "share/scn.h"
 #include "share/ob_tablet_local_checksum_operator.h"
@@ -34,10 +34,10 @@ public:
   ObTabletLocalChecksumTableStorage();
   virtual ~ObTabletLocalChecksumTableStorage();
 
-  // Initialize with shared connection pool instance
-  int init(ObSQLiteConnectionPool *pool);
+  // Initialize with the shared local store
+  int init(LocalStore *store);
 
-  bool is_inited() const { return nullptr != pool_; }
+  bool is_inited() const { return nullptr != store_; }
 
   // Get checksum items for local tablets.
   int batch_get(
@@ -51,9 +51,7 @@ public:
       int64_t &row_count);
 
 private:
-  int create_table_if_not_exists();
-
-  ObSQLiteConnectionPool *pool_;
+  LocalStore *store_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletLocalChecksumTableStorage);
 };
 

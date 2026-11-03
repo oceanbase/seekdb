@@ -53,10 +53,8 @@ int ObLobDiskLocatorWrapper::init(char *ptr, const int64_t len)
   if (OB_FAIL(check_disk_locator_length(len))) {
   } else if (OB_ISNULL(lob_common_ = reinterpret_cast<ObLobCommon*>(ptr))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lob common is null", K(ret), K(len), KP(ptr));
   } else  if (lob_common_->in_row_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("can not be inrow", K(ret), KPC_(lob_common), K(len), KP(ptr));
   } else {
     lob_data_ = reinterpret_cast<ObLobData*>(lob_common_->buffer_);
     outrow_ctx_ = reinterpret_cast<ObLobDataOutRowCtx*>(lob_data_->buffer_);
@@ -100,25 +98,19 @@ int ObLobDiskLocatorWrapper::check_for_dml(ObLobDiskLocatorWrapper &other) const
   int ret = OB_SUCCESS;
   if (! is_valid() || ! other.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid state", K(ret), K(other), KPC(this));
   } else if (lob_common_->in_row_ || ! lob_common_->is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_common is not outrow", K(ret), K(other), KPC(this));
   } else if (get_lob_id() != other.get_lob_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob id is not match", K(ret), K(other), KPC(this));
   } else if (get_byte_size() != other.get_byte_size()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob byte size is not match", K(ret), K(other), KPC(this));
   } else if (get_char_len() != other.get_char_len()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob char len is not match", K(ret), K(other), KPC(this));
   // if op is sql, means not register ext info log callback
   // so seq no shuold be same
   } else if (ObLobDataOutRowCtx::OpType::SQL == outrow_ctx_->op_ && outrow_ctx_->op_ == other.outrow_ctx_->op_ && 
       (outrow_ctx_->seq_no_st_ != other.outrow_ctx_->seq_no_st_ || outrow_ctx_->seq_no_cnt_ != other.outrow_ctx_->seq_no_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("seq no is not match", K(ret), K(other), KPC(this));
   }
   return ret;
 }
@@ -130,7 +122,6 @@ int ObLobDiskLocatorBuilder::init(ObIAllocator &allocator)
   char *ptr = nullptr;
   if (OB_ISNULL(ptr = static_cast<char*>(allocator.alloc(locator_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc buf fail", K(ret), K(locator_len));
   } else {
     ptr_ = ptr;
     len_ = locator_len;
@@ -158,7 +149,6 @@ int ObLobDiskLocatorBuilder::set_byte_len(const uint64_t &byte_len)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lob_data_) || 0 == byte_len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob data is invalid", K(ret), K(byte_len), KPC(this));
   } else {
     lob_data_->byte_size_ = byte_len;
   }
@@ -199,7 +189,6 @@ int ObLobDiskLocatorBuilder::to_locator(ObLobLocatorV2 &locator) const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ptr_) || 0 == len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer is empty", K(ret), KPC(this));
   } else {
     locator.assign_buffer(ptr_, len_);
   }

@@ -99,7 +99,6 @@ int ObExprFormatPicoTime::eval_format_pico_time_util(const ObExpr &expr, ObDatum
     char *res_buf = NULL;
     if (OB_ISNULL(res_buf = expr.get_str_res_mem(ctx, VALUE_BUF_LEN, index))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       if (time_abs >= day) {
         divisor = day;

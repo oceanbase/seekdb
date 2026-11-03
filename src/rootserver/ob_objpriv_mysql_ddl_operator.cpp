@@ -44,11 +44,8 @@ int ObObjPrivMysqlDDLOperator::grant_object(
   ObSchemaService *schema_sql_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_sql_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schama service_impl and schema manage must not null",
-        "schema_service_impl", schema_sql_service, K(ret));
   } else if (!object_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("object_priv_key is invalid", K(object_priv_key), K(ret));
   } else if (0 == priv_set) {
     //do nothing
   } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
@@ -72,11 +69,9 @@ int ObObjPrivMysqlDDLOperator::grant_object(
         if (OB_FAIL(schema_guard.get_user_info(object_priv_key.user_id_, user_info))) {
         } else if (OB_ISNULL(user_info)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("user not exist", K(object_priv_key), K(ret));
         } else if (gen_ddl_stmt == true && OB_FAIL(ObDDLSqlGenerator::gen_object_priv_sql(
             obcall::ObAccountArg(user_info->get_user_name_str(), user_info->get_host_name_str()),
             need_priv, true, /*is_grant*/ ddl_stmt_str))) {
-          LOG_WARN("gen_object_priv_sql failed", K(ret), K(need_priv));
         } else if (FALSE_IT(ddl_sql = ddl_stmt_str.string())) {
         } else {
           int64_t new_schema_version = OB_INVALID_VERSION;
@@ -113,7 +108,6 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
         K(ret));
   } else if (!object_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("db_priv_key is invalid", K(object_priv_key), K(ret));
   } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
   } else {
     ObPrivSet object_priv_set = OB_PRIV_SET_EMPTY;
@@ -121,7 +115,6 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
     } else if (OB_PRIV_SET_EMPTY == object_priv_set) {
       if (report_error) {
         ret = OB_ERR_CANNOT_REVOKE_PRIVILEGES_YOU_DID_NOT_GRANT;
-        LOG_WARN("No such grant to revoke", K(object_priv_key), K(object_priv_set), K(ret));
       }
     } else if (0 == priv_set) {
       // do-nothing
@@ -142,13 +135,11 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
         if (OB_FAIL(schema_guard.get_user_info(object_priv_key.user_id_, user_info))) {
         } else if (OB_ISNULL(user_info)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("user not exist", K(object_priv_key), K(ret));
         } else if (gen_ddl_stmt == true && OB_FAIL(ObDDLSqlGenerator::gen_object_priv_sql(
                    obcall::ObAccountArg(user_info->get_user_name_str(), user_info->get_host_name_str()),
                                        need_priv,
                                        false, /*is_grant*/
                                        ddl_stmt_str))) {
-          LOG_WARN("gen_object_priv_sql failed", K(ret), K(need_priv));
         } else if (FALSE_IT(ddl_sql = ddl_stmt_str.string())) {
         } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
         } else if (OB_FAIL(schema_sql_service->get_priv_sql_service().revoke_object(
@@ -191,7 +182,6 @@ int ObObjPrivMysqlDDLOperator::drop_obj_mysql_privs(const ObString &obj_name,
 
     if (OB_ISNULL(obj_priv)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("obj_priv priv is NULL", K(ret), K(obj_priv));
     } else {
       OZ (schema_service.gen_new_schema_version(new_schema_version));
       OZ (schema_sql_service->get_priv_sql_service().delete_obj_mysql_priv(

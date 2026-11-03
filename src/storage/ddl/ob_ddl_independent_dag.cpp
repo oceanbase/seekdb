@@ -85,7 +85,6 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
   const  ObDDLIndependentDagInitParam *init_param = static_cast<const ObDDLIndependentDagInitParam *>(param);
   if (OB_UNLIKELY(nullptr == init_param || !init_param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(init_param));
   } else if (OB_FAIL(tablet_ids_.assign(init_param->tablet_ids_))) {
   } else {
     direct_load_type_ = init_param->direct_load_type_;
@@ -119,10 +118,8 @@ int ObDDLIndependentDag::init_tablet_context_map()
     ObDDLTabletContext *tablet_context = nullptr;
     if (OB_ISNULL(tablet_context = OB_NEWx(ObDDLTabletContext, &arena_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory for tablet context failed", K(ret));
     } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>())) {
       ret = OB_NOT_INIT;
-      LOG_WARN("LOB read service is unavailable", K(ret), K(tablet_id));
     } else if (OB_FAIL(tablet_context->init(
                    tablet_id,
                    ddl_thread_count_,
@@ -132,7 +129,6 @@ int ObDDLIndependentDag::init_tablet_context_map()
                    *::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>()))) {
     } else if (use_tablet_mode() && OB_FAIL(alloc_task(tablet_context->scan_task_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc tablet scan task failed", K(ret), K(tablet_id));
     } else if (OB_FAIL(tablet_context_map_.set_refactored(tablet_id, tablet_context))) {
     } else {
       FLOG_INFO("init ddl tablet context", K(tablet_id), KPC(tablet_context));
@@ -151,7 +147,6 @@ int ObDDLIndependentDag::get_tablet_context(const ObTabletID &tablet_id, ObDDLTa
   tablet_context = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_FAIL(tablet_context_map_.get_refactored(tablet_id, tablet_context))) {
   }
   return ret;
@@ -162,7 +157,6 @@ int ObDDLIndependentDag::schedule_tablet_merge_task()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); ++i) {
       share::SCN mock_start_scn;
@@ -214,10 +208,8 @@ int ObDDLIndependentDag::add_scan_chunk(ObDDLChunk &ddl_chunk, const int64_t tim
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!ddl_chunk.is_valid() || timeout_us < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_chunk), K(timeout_us));
   } else {
     ObDDLTabletContext *tablet_context = nullptr;
     ObDDLSlice *ddl_slice = nullptr;
@@ -228,22 +220,18 @@ int ObDDLIndependentDag::add_scan_chunk(ObDDLChunk &ddl_chunk, const int64_t tim
     if (OB_UNLIKELY(nullptr != ddl_chunk.chunk_data_ &&
                     !(ddl_chunk.chunk_data_->is_ddl_row_tmp_files_type() || ddl_chunk.chunk_data_->is_end_chunk()))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid chunk data", K(ret), KPC(ddl_chunk.chunk_data_));
     } else if (OB_FAIL(get_tablet_context(ddl_chunk.tablet_id_, tablet_context))) {
     } else if (OB_FAIL(tablet_context->get_or_create_slice(ddl_chunk.slice_idx_, ddl_slice, is_new_slice))) {
     } else if (nullptr != ddl_chunk.chunk_data_ &&
                OB_FAIL(push_chunk(ddl_slice, ddl_chunk.chunk_data_))) {
-      LOG_WARN("push chunk failed", K(ret), KPC(ddl_slice));
     } else if (FALSE_IT(ddl_chunk.chunk_data_ = nullptr)) {
     } else if (need_end_chunk) {
       ObChunk *end_chunk = OB_NEW(ObChunk, ObMemAttr("ddl_end_chunk"));
       if (OB_ISNULL(end_chunk)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         end_chunk->set_end_chunk();
         if (OB_FAIL(push_chunk(ddl_slice, end_chunk))) {
-          LOG_WARN("push end chunk failed", K(ret), KPC(ddl_slice));
           int tmp_ret = OB_SUCCESS;
           // ignore ret
           (void)finish_chunk(end_chunk);
@@ -269,16 +257,13 @@ int ObDDLIndependentDag::push_chunk(ObDDLSlice *ddl_slice, ObChunk *&chunk_data)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == ddl_slice || nullptr == chunk_data)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(ddl_slice), KP(chunk_data));
   } else {
     while (OB_SUCC(ret)) {
       if (OB_UNLIKELY(is_final_status())) {
         ret = get_dag_ret();
         ret = COVER_SUCC(OB_CANCELED);
-        LOG_WARN("dag is stoped", K(ret));
       } else if (OB_FAIL(ddl_slice->push_chunk(chunk_data))) {
         if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-          LOG_WARN("push chunk failed", K(ret), KPC(chunk_data));
         } else {
           ret = OB_SUCCESS;
         }
@@ -390,16 +375,13 @@ int ObDDLIndependentDag::add_pipeline(ObDDLTabletContext *tablet_context, ObDDLS
   pipeline = nullptr;
   if (OB_UNLIKELY(nullptr == tablet_context || nullptr == ddl_slice)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(tablet_context), KP(ddl_slice));
   } else if (OB_FAIL(alloc_task(pipeline))) {
   } else if (OB_FAIL(pipeline->init(ddl_slice))) {
   } else if (nullptr != tablet_context->scan_task_ &&
              OB_FAIL(pipeline->add_child(*tablet_context->scan_task_))) {
-    LOG_WARN("fail to add child", K(ret));
   } else {
     inc_pipeline_count();
     if (OB_FAIL(add_task(*pipeline))) {
-      LOG_WARN("add pipeline failed", K(ret));
       dec_pipeline_count();
     }
   }
@@ -419,7 +401,6 @@ int ObDDLIndependentDag::generate_start_tasks(ObIArray<ObITask *> &start_tasks)
   start_tasks.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLIndependentDag not init", KR(ret), KP(this));
   }
   return ret;
 }
@@ -453,8 +434,6 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
                          (!lob_merge_tasks.empty() &&
                           data_merge_tasks.count() != lob_merge_tasks.count()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected merge tasks", KR(ret), K(data_merge_tasks.count()),
-             K(lob_merge_tasks.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < data_merge_tasks.count(); ++i) {
       ObITask *data_merge_task = data_merge_tasks.at(i);
@@ -462,7 +441,6 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
       if (OB_FAIL(write_macro_block_tasks.push_back(data_merge_task))) {
       } else if (nullptr != lob_merge_task &&
                  OB_FAIL(write_macro_block_tasks.push_back(lob_merge_task))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -473,11 +451,9 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
       ObITask *lob_merge_task = lob_merge_tasks.empty() ? nullptr : lob_merge_tasks.at(i);
       if (OB_FAIL(scan_task->add_child(*data_merge_task))) {
       } else if (nullptr != lob_merge_task && OB_FAIL(scan_task->add_child(*lob_merge_task))) {
-        LOG_WARN("fail to add child", K(ret));
       } else if (nullptr != next_task) {
         if (OB_FAIL(data_merge_task->add_child(*next_task))) {
         } else if (nullptr != lob_merge_task && OB_FAIL(lob_merge_task->add_child(*next_task))) {
-          LOG_WARN("fail to add child", K(ret));
         }
       }
     }
@@ -493,11 +469,9 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
       if (OB_FAIL(scan_task->add_child(*vector_index_task))) {
       } else if (OB_FAIL(vector_index_task->add_child(*data_merge_task))) {
       } else if (nullptr != lob_merge_task && OB_FAIL(vector_index_task->add_child(*lob_merge_task))) {
-        LOG_WARN("fail to add child", KR(ret));
       } else if (nullptr != next_task) {
         if (OB_FAIL(data_merge_task->add_child(*next_task))) {
         } else if (nullptr != lob_merge_task && OB_FAIL(lob_merge_task->add_child(*next_task))) {
-          LOG_WARN("fail to add child", K(ret));
         }
       }
     }
@@ -511,10 +485,8 @@ int ObDDLIndependentDag::generate_write_macro_block_tasks(ObIArray<ObITask *> &w
   write_macro_block_tasks.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLIndependentDag not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(use_tablet_mode())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected mode", KR(ret), KPC(this));
   } else if (OB_FAIL(full_generate_write_macro_block_tasks(write_macro_block_tasks, next_task))) {
   }
   return ret;
@@ -531,14 +503,11 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
   ObDDLTabletScanTask *scan_task = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLIndependentDag not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(!use_tablet_mode())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected mode", KR(ret), KPC(this));
   } else if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
   } else if (OB_ISNULL(scan_task = tablet_context->scan_task_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected scan task is null", K(ret), K(tablet_id), KPC(tablet_context));
   } else if (FALSE_IT(tablet_context->scan_task_ = nullptr)) {
   } else if (OB_FAIL(write_macro_block_tasks.push_back(scan_task))) {
   } else {
@@ -550,16 +519,13 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
     } else if (OB_FAIL(write_macro_block_tasks.push_back(data_merge_task))) {
     } else if (nullptr != lob_merge_task &&
                OB_FAIL(write_macro_block_tasks.push_back(lob_merge_task))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
     // 依赖关系
     else if (OB_FAIL(scan_task->add_child(*data_merge_task))) {
     } else if (nullptr != next_task && OB_FAIL(data_merge_task->add_child(*next_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (nullptr != lob_merge_task) {
       if (OB_FAIL(scan_task->add_child(*lob_merge_task))) {
       } else if (nullptr != next_task && OB_FAIL(lob_merge_task->add_child(*next_task))) {
-        LOG_WARN("fail to add child", KR(ret));
       }
     }
   }
@@ -635,10 +601,8 @@ int ObDDLIndependentDag::init_merge_tasks(bool for_major, ObArray<ObITask*> &dat
     if (OB_FAIL(init_tablet_merge_task(tablet_id, for_major, data_merge_task, lob_merge_task))) {
     } else if (OB_ISNULL(data_merge_task)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected data merge task is null", KR(ret));
     } else if (OB_FAIL(data_merge_tasks.push_back(data_merge_task))) {
     } else if (nullptr != lob_merge_task && OB_FAIL(lob_merge_tasks.push_back(lob_merge_task))) {
-      LOG_WARN("failed to push back merge task", K(ret));
     }
   }
   return ret;

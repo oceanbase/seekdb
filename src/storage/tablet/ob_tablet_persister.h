@@ -160,17 +160,15 @@ struct ObTabletPersisterParam final
 {
 public:
   ObTabletPersisterParam(
-      const int64_t ls_epoch,
       const ObTabletID tablet_id)
-    : ls_epoch_(ls_epoch), tablet_id_(tablet_id)
+    : tablet_id_(tablet_id)
     {}
   ObTabletPersisterParam() = delete;
 
   bool is_valid() const;
 
-  TO_STRING_KV(K_(ls_epoch), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 
-  int64_t ls_epoch_;
   ObTabletID tablet_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ObTabletPersisterParam);

@@ -90,12 +90,10 @@ int ObExprSTIsValid::eval_st_isvalid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       if (OB_FAIL(gis_context.append_geo_arg(geo))) {
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::IsValid>::geo_func::eval(gis_context, isvalid_res))) {
-        LOG_WARN("eval geo func isvalid failed", K(ret));
         ObGeoExprUtils::geo_func_error_handle(ret, N_ST_ISVALID);
       } else {
         res.set_bool(isvalid_res);

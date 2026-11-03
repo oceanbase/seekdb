@@ -89,7 +89,6 @@ int ObHexUtilsBase::hex(ObString &text, ObIAllocator &alloc, const char *binary_
   int64_t text_len = binary_len << 1;
   if (OB_ISNULL(binary_buf) || binary_len < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_ISNULL(text_buf = static_cast<char *>(alloc.alloc(text_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc memory failed", K(ret), K(text_len));

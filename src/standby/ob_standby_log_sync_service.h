@@ -73,7 +73,6 @@ private:
   int load_source_snapshot_(
       common::ObIAllocator &allocator,
       common::ObString &source,
-      int64_t &version,
       common::ObAddr &source_addr) const;
   int query_source_promotion_boundary_(
       const common::ObAddr &source_addr,

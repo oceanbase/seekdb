@@ -42,7 +42,6 @@ int ObDeleteStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   const ObDeleteStmt &other = static_cast<const ObDeleteStmt &>(input);
   if (OB_UNLIKELY(get_stmt_type() != input.get_stmt_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt type does not match", K(ret));
   } else if (OB_FAIL(ObDelUpdStmt::deep_copy_stmt_struct(allocator,
                                                          expr_copier,
                                                          other))) {
@@ -83,7 +82,6 @@ int ObDeleteStmt::remove_delete_table_info(int64_t table_id)
   for (int64_t i = table_info_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
     if (OB_ISNULL(table_info_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (table_id == table_info_.at(i)->table_id_) {
       if (OB_FAIL(table_info_.remove(i))) {
       } else {
@@ -148,7 +146,6 @@ int ObDeleteStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
     ObDeleteTableInfo* table_info = table_info_.at(i);
     if (OB_ISNULL(table_info))  {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null table info", K(ret));
     } else if (OB_FAIL(append(view_check_exprs, table_info->view_check_exprs_))) {
     }
   }
@@ -161,12 +158,10 @@ int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)
   int64_t idx = 0;
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (; idx < table_info_.count(); ++idx) {
       if (OB_ISNULL(table_info_.at(idx))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (table_info_.at(idx)->table_id_ == table->table_id_) {
         break;
       }
@@ -175,7 +170,6 @@ int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)
       // not find, do nothing
     } else if (table_info_.count() == 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("can not remove all dml table", K(ret));
     } else if (OB_FAIL(table_info_.remove(idx))) {
     }
   }

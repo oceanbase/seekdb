@@ -42,7 +42,6 @@ int ObExprAtan2::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == types || type_num <= 0 || type_num > 2)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("Invalid argument.", K(ret), K(types), K(type_num));
   } else {
     if (1 == type_num) {
       ret = calc_trig_function_result_type1(type, types[0], type_ctx);
@@ -85,7 +84,6 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       number::ObNumber x_nmb(x->get_number());
       if (y_nmb.is_zero() && x_nmb.is_zero()) {
         ret = OB_NUMERIC_OVERFLOW;
-        LOG_WARN("calc atan2(0,0) failed", K(ret));
       } else {
         number::ObNumber res_nmb;
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
@@ -112,7 +110,6 @@ int ObExprAtan2::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_atan2_expr;
   }

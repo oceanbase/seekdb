@@ -34,6 +34,7 @@
 #include "observer/ob_inner_sql_connection.h"
 #include "sql/executor/ob_worker_session_guard.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "sql/ob_sql.h"
 
 namespace oceanbase
@@ -54,11 +55,9 @@ int ObDBMSSchedJobExecutor::init(
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("job scheduler executor already init", K(inited_), K(ret));
   } else if (OB_ISNULL(sql_proxy_ = sql_proxy)
           || OB_ISNULL(schema_service_ = schema_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql proxy or schema service is null", K(sql_proxy), K(ret));
   } else if (OB_FAIL(table_operator_.init(sql_proxy_))) {
   } else {
     inited_ = true;
@@ -171,11 +170,9 @@ int ObDBMSSchedJobExecutor::create_session(
   ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
   if (OB_FAIL(session_mgr.create_sessid(sid))) {
   } else if (OB_FAIL(session_mgr.create_session(sid, session_info))) {
-    LOG_WARN("create session failed", K(ret), K(sid));
     session_info = NULL;
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session info is null", K(ret));
   } else {
     free_session_ctx.sessid_ = sid;
   }
@@ -189,7 +186,6 @@ int ObDBMSSchedJobExecutor::destroy_session(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session_info is null", KR(ret));
   } else {
     session_info->set_session_sleep();
     ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(session_info);
@@ -199,7 +195,7 @@ int ObDBMSSchedJobExecutor::destroy_session(
 }
 
 int ObDBMSSchedJobExecutor::run_dbms_sched_job(
-  ObDBMSSchedJobInfo &job_info)
+  ObDBMSSchedJobInfo &job_info, const bool update_scheduler_state)
 {
   int ret = OB_SUCCESS;
   ObSqlString what;
@@ -243,7 +239,6 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
             LOG_INFO("program not exists, may delete alreay!", K(ret), K(job_info.get_program_name().ptr()), K(job_info.get_program_name().ptr()));
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("failed to get next", K(ret), K(job_info.get_job_name().ptr()), K(job_info.get_program_name().ptr()));
           }
         }
       }
@@ -290,13 +285,11 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
                     } else if (OB_ITER_END == ret) {
                       LOG_ERROR("program default argument not exists", K(sql.ptr()), K(job_info.get_program_name().ptr()));
                     } else {
-                      LOG_WARN("failed to get next", K(ret), K(job_info.get_job_name().ptr()));
                     }
                   }
                 }
                 ret = OB_SUCCESS;
               } else {
-                LOG_WARN("failed to get next", K(ret), K(job_info.get_job_name().ptr()));
               }
             }
           }
@@ -315,8 +308,10 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       ObWorkerSessionGuard worker_session_guard(session_info);
       OZ (ObDBMSSchedJobExecutor::init_env(job_info, *session_info));
       OX (session_info->set_job_info(&job_info));
-      OZ (table_operator_.update_for_start_execute(job_info));
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
+      if (update_scheduler_state) {
+        OZ (table_operator_.update_for_start_execute(job_info));
+        rootserver::ObDBMSSchedService::wakeup_scheduler();
+      }
       OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
           session_info, conn_guard));
       OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
@@ -362,7 +357,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       OZ(table_operator_.update_for_kill(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
     } else {
-      OZ (run_dbms_sched_job(job_info));
+      OZ (run_dbms_sched_job(job_info, true));
       bool job_is_user_stop = false;
       if (OB_ERR_SESSION_INTERRUPTED == ret) { //It may have been the user interrupted, need to check.
         int tmp_user_stop_ret = OB_SUCCESS;
@@ -389,6 +384,30 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       }
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
     }
+  }
+  return ret;
+}
+
+int ObDBMSSchedJobExecutor::run_timer_driven_dbms_sched_job(const ObString &job_name)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("TimerSchedJob");
+  ObDBMSSchedJobInfo job_info;
+  THIS_WORKER.set_timeout_ts(INT64_MAX);
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("job scheduler executor is not initialized", K(ret));
+  } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(
+      *sql_proxy_, job_name, allocator, job_info))) {
+    LOG_WARN("failed to get timer-driven scheduler job", K(ret), K(job_name));
+  } else if (!job_info.is_timer_driven()
+             && !ObDbmsStatsMaintenanceWindow::is_async_gather_stats_job(job_info.job_name_)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("job is not timer-driven", K(ret), K(job_info));
+  } else if (job_info.is_disabled()) {
+    LOG_INFO("timer-driven scheduler job is disabled", K(job_name));
+  } else if (OB_FAIL(run_dbms_sched_job(job_info, false))) {
+    LOG_WARN("failed to run timer-driven scheduler job", K(ret), K(job_info));
   }
   return ret;
 }

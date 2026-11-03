@@ -24,30 +24,30 @@ use crate::{
     NIO_MYSQL_COMMAND_LAYOUT_U16, NIO_MYSQL_COMMAND_LAYOUT_U32, NIO_MYSQL_COMMAND_LAYOUT_U8,
 };
 
-pub const COM_QUIT: u8 = 0x01;
+pub(crate) const COM_QUIT: u8 = 0x01;
 
-pub const COM_INIT_DB: u8 = 0x02;
+pub(crate) const COM_INIT_DB: u8 = 0x02;
 
-pub const COM_QUERY: u8 = 0x03;
+pub(crate) const COM_QUERY: u8 = 0x03;
 
-pub const COM_FIELD_LIST: u8 = 0x04;
-pub const COM_REFRESH: u8 = 0x07;
-pub const COM_STATISTICS: u8 = 0x09;
-pub const COM_PROCESS_INFO: u8 = 0x0a;
-pub const COM_PROCESS_KILL: u8 = 0x0c;
-pub const COM_DEBUG: u8 = 0x0d;
-pub const COM_PING: u8 = 0x0e;
+pub(crate) const COM_FIELD_LIST: u8 = 0x04;
+pub(crate) const COM_REFRESH: u8 = 0x07;
+pub(crate) const COM_STATISTICS: u8 = 0x09;
+pub(crate) const COM_PROCESS_INFO: u8 = 0x0a;
+pub(crate) const COM_PROCESS_KILL: u8 = 0x0c;
+pub(crate) const COM_DEBUG: u8 = 0x0d;
+pub(crate) const COM_PING: u8 = 0x0e;
 
-pub const COM_CHANGE_USER: u8 = 0x11;
+pub(crate) const COM_CHANGE_USER: u8 = 0x11;
 
-pub const COM_STMT_PREPARE: u8 = 0x16;
-pub const COM_STMT_EXECUTE: u8 = 0x17;
-pub const COM_STMT_SEND_LONG_DATA: u8 = 0x18;
-pub const COM_STMT_CLOSE: u8 = 0x19;
-pub const COM_STMT_RESET: u8 = 0x1a;
-pub const COM_SET_OPTION: u8 = 0x1b;
-pub const COM_STMT_FETCH: u8 = 0x1c;
-pub const COM_RESET_CONNECTION: u8 = 0x1f;
+pub(crate) const COM_STMT_PREPARE: u8 = 0x16;
+pub(crate) const COM_STMT_EXECUTE: u8 = 0x17;
+pub(crate) const COM_STMT_SEND_LONG_DATA: u8 = 0x18;
+pub(crate) const COM_STMT_CLOSE: u8 = 0x19;
+pub(crate) const COM_STMT_RESET: u8 = 0x1a;
+pub(crate) const COM_SET_OPTION: u8 = 0x1b;
+pub(crate) const COM_STMT_FETCH: u8 = 0x1c;
+pub(crate) const COM_RESET_CONNECTION: u8 = 0x1f;
 
 const COM_END: u8 = 0x20;
 

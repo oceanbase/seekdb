@@ -51,7 +51,6 @@ int ObExprJsonLength::calc_result_typeN(ObExprResType& type,
   // 0 position is json doc
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_LENGTH))) {
   } else if (param_num > 1 && OB_FAIL(ObJsonExprHelper::is_valid_for_path(types_stack, 1))) {
-    LOG_WARN("wrong type for json path.", K(ret), K(types_stack[1].get_type()));
   }
 
   return ret;
@@ -104,7 +103,6 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, *allocator, *data2, meta2, has_lob_header2, j_path_text))) {
         } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, 1, true))) {
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
-          LOG_WARN("fail to parse json path", K(ret), K(type2), K(j_path_text));
         } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt(), true, false, hit))) {
         } else if (hit.size() == 0) { // not found node by path, display "NULL"
           is_null = true;

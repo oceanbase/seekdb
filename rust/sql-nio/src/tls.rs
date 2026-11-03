@@ -201,10 +201,10 @@ pub(crate) fn promote_to_tls(conn: &Arc<Conn>, packet: &DecodedPacket) -> bool {
     true
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 pub(crate) fn read_socket_raw(g: &mut ConnInner, buf: &mut [u8]) -> std::io::Result<usize> {
     let fd = raw_fd(&g.sock);
-    let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut c_void, buf.len()) };
+    let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len()) };
     if n < 0 {
         Err(std::io::Error::last_os_error())
     } else {
@@ -212,7 +212,7 @@ pub(crate) fn read_socket_raw(g: &mut ConnInner, buf: &mut [u8]) -> std::io::Res
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), feature = "memory-transport"))]
 pub(crate) fn read_socket_raw(g: &mut ConnInner, buf: &mut [u8]) -> std::io::Result<usize> {
     g.sock.read(buf)
 }

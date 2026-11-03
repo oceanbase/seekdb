@@ -85,7 +85,6 @@ ObRTDatumArith::Item ObRTDatumArith::ref(const int64_t input_idx)
     item.arith_ = this;
   } else {
     ret = OB_INVALID_INDEX;
-    LOG_WARN("invalid ref index", K(ret), K(input_idx), K(raw_cols_.count()));
   }
   return item;
 }
@@ -112,7 +111,6 @@ int ObRTDatumArith::generate(const ObRTDatumArith::Item item)
   int ret = OB_SUCCESS;
   if (NULL == item.expr_ || NULL == item.arith_) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("invalid ref index or build arith raw expr failed", K(ret));
   } else {
     CK(exec_ctx_.get_physical_plan_ctx());
     OZ(item.expr_->formalize(&session_));

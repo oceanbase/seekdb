@@ -67,7 +67,6 @@ int ObHybridHistEstimator::estimate(const ObOptStatGatherParam &param,
     //do nothing
   } else if (OB_UNLIKELY(hybrid_col_params.count() != hybrid_col_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(hybrid_col_params.count()), K(hybrid_col_stats.count()));
   } else if (OB_FAIL(compute_estimate_percent(total_row_count,
                                               micro_block_num,
                                               sstable_rows_more,
@@ -79,7 +78,6 @@ int ObHybridHistEstimator::estimate(const ObOptStatGatherParam &param,
   } else if (need_sample && OB_FAIL(fill_sample_info(allocator,
                                                      est_percent,
                                                      is_block_sample))) {
-    LOG_WARN("failed to fill sample info", K(ret));
   } else if (OB_FAIL(add_hybrid_hist_stat_items(hybrid_col_params,
                                                 hybrid_col_stats,
                                                 opt_stat.table_stat_->get_row_count(),
@@ -100,19 +98,16 @@ int ObHybridHistEstimator::estimate(const ObOptStatGatherParam &param,
              OB_FAIL(fill_partition_info(allocator, 
                                          param, 
                                          param.partition_infos_.at(0)))) {
-    LOG_WARN("failed to add partition info", K(ret));
   } else if (OB_FAIL(fill_specify_scn_info(allocator, param.sepcify_scn_))) {
   } else if (OB_FAIL(pack(raw_sql))) {
   } else if (OB_FAIL(tmp_opt_stats.push_back(opt_stat))) {
   } else if (get_item_size() > 0 &&
              OB_FAIL(do_estimate(param, raw_sql.string(), false,
                                  opt_stat, tmp_opt_stats))) {
-    LOG_WARN("failed to do estimate", K(ret));
   } else if (!no_sample_idx.empty() &&
              OB_FAIL(estimate_no_sample_col_hydrid_hist(allocator, param, opt_stat,
                                                         hybrid_col_params, hybrid_col_stats,
                                                         no_sample_idx))) {
-    LOG_WARN("failed to estimate no sample col hydrid_hist", K(ret));
   } else {
   }
   return ret;
@@ -128,7 +123,6 @@ int ObHybridHistEstimator::extract_hybrid_hist_col_info(const ObOptStatGatherPar
   max_num_buckets = 0;
   if (OB_UNLIKELY(param.column_params_.count() != opt_stat.column_stats_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param.column_params_), K(opt_stat.column_stats_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < opt_stat.column_stats_.count(); ++i) {
       bool is_done = false;
@@ -136,8 +130,6 @@ int ObHybridHistEstimator::extract_hybrid_hist_col_info(const ObOptStatGatherPar
           OB_ISNULL(opt_stat.column_stats_.at(i)) ||
           OB_UNLIKELY(opt_stat.column_stats_.at(i)->get_column_id() != param.column_params_.at(i).column_id_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(opt_stat.column_stats_.at(i)),
-                                         K(opt_stat.table_stat_), K(param.column_params_.at(i)));
       } else if (opt_stat.table_stat_->get_row_count() <=0 ||
                  !opt_stat.column_stats_.at(i)->get_histogram().is_hybrid()) {
         //do nothing
@@ -169,13 +161,11 @@ int ObHybridHistEstimator::add_hybrid_hist_stat_items(ObIArray<const ObColumnSta
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(hybrid_col_params.count() != hybrid_col_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(hybrid_col_params), K(hybrid_col_stats));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < hybrid_col_stats.count(); ++i) {
       if (OB_ISNULL(hybrid_col_params.at(i)) || OB_ISNULL(hybrid_col_stats.at(i)) ||
           OB_UNLIKELY(hybrid_col_params.at(i)->column_id_ != hybrid_col_stats.at(i)->get_column_id())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(hybrid_col_stats.at(i)), KPC(hybrid_col_params.at(i)));
       } else if (!need_sample || hybrid_col_stats.at(i)->get_num_not_null() > table_row_cnt * est_percent / 100) {
         if (OB_FAIL(add_stat_item(ObStatHybridHist(hybrid_col_params.at(i),
                                                    hybrid_col_stats.at(i))))) {
@@ -232,7 +222,6 @@ int ObHybridHistEstimator::add_no_sample_hybrid_hist_stat_items(ObIArray<const O
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(no_sample_idx.empty() || hybrid_col_params.count() != hybrid_col_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(no_sample_idx), K(hybrid_col_params), K(hybrid_col_stats));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < no_sample_idx.count(); ++i) {
       int64_t idx = no_sample_idx.at(i);
@@ -240,7 +229,6 @@ int ObHybridHistEstimator::add_no_sample_hybrid_hist_stat_items(ObIArray<const O
           OB_ISNULL(hybrid_col_params.at(idx)) || OB_ISNULL(hybrid_col_stats.at(idx)) ||
           OB_UNLIKELY(hybrid_col_params.at(idx)->column_id_ != hybrid_col_stats.at(idx)->get_column_id())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(idx), K(hybrid_col_stats), K(hybrid_col_params));
       } else if (OB_FAIL(add_stat_item(ObStatHybridHist(hybrid_col_params.at(idx),
                                                         hybrid_col_stats.at(idx))))) {
       }
@@ -346,7 +334,6 @@ int ObHybridHistEstimator::compute_estimate_percent(int64_t total_row_count,
       est_percent = (sample_info.sample_value_ * 1.0);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid sample type", K(ret));
     }
     if (OB_SUCC(ret) && need_sample) {
       if (total_row_count * est_percent / 100 >= MAGIC_MIN_SAMPLE_SIZE) {
@@ -407,7 +394,6 @@ int ObHybridHistograms::read_result(const ObObj &result_obj)
     // do nothing
   } else if (OB_UNLIKELY(!result_obj.is_lob())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob is expected", K(ret));
   } else if (OB_FAIL(result_obj.get_string(result_str))) {
   } else if (OB_FAIL(deserialize(result_str.ptr(), result_str.length(), pos))) {
   }
@@ -504,7 +490,6 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
   const ObChunkDatumStore::StoredRow *row = nullptr;
   if (OB_ISNULL(extra) || OB_ISNULL(alloc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(extra), K(alloc));
   } else if (num_distinct == 0) {
     // do nothing
   } else {
@@ -512,7 +497,6 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
     if (OB_FAIL(extra->get_next_row_from_material(row))) {
     } else if (OB_ISNULL(row) || OB_UNLIKELY(row->cnt_ != 1)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null stored row", K(row)); 
     } else if (num_distinct <= bucket_num + 2) {
       bucket_size = 1;
     } else if (bucket_num <= pop_count) {
@@ -538,7 +522,6 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
       do {
         if (OB_ISNULL(row) || OB_UNLIKELY(row->cnt_ != 1)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null stored row", K(row));
         } else {
           BucketDesc *desc = reinterpret_cast<BucketDesc*>(row->get_extra_payload());
           int64_t ep_count = desc->ep_count_;
@@ -558,7 +541,6 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
                                                        obj_meta, row->cells()[0],
                                                        new_datum,
                                                        datum_access_ctx))) {
-              LOG_WARN("failed to build prefix str datum for lob", K(ret));
             } else if (OB_FAIL(new_datum.to_obj(ep_val, obj_meta))) {
             } else if (OB_FAIL(ob_write_obj(*alloc, ep_val, ep_val))) {
             } else {
@@ -610,7 +592,6 @@ int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   if (!obj_meta.is_lob_storage()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(obj_meta));
   } else {
     ObObj obj;
     ObString str;
@@ -622,7 +603,6 @@ int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
     } else if (OB_ISNULL(datum_access_ctx) ||
                OB_ISNULL(datum_access_ctx->lob_read_options_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("LOB datum access context is not initialized", K(ret));
     } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
                    *datum_access_ctx->lob_read_options_,
                    &allocator,

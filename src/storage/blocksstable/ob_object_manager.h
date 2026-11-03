@@ -17,10 +17,9 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_OBJECT_MANAGER_H_
 #define OCEANBASE_BLOCKSSTABLE_OB_OBJECT_MANAGER_H_
 
+#include "lib/lock/mutex.h"
 #include "storage/blocksstable/ob_storage_object_rw_info.h"
 #include "storage/blocksstable/ob_storage_object_handle.h"
-#include "storage/blocksstable/ob_super_block_buffer_holder.h"
-#include "storage/ob_super_block_struct.h"
 
 namespace oceanbase
 {
@@ -84,10 +83,6 @@ public:
       const ObStorageObjectOpt &opt,
       const ObStorageObjectWriteInfo &write_info,
       ObStorageObjectHandle &object_handle);
-  int get_object_size(
-      const MacroBlockId &object_id,
-      const int64_t ls_epoch,
-      int64_t &object_size) const;
   int64_t get_macro_object_size() const { return macro_object_size_; }
   int inc_ref(const MacroBlockId &object_id) const;
   int dec_ref(const MacroBlockId &object_id) const;
@@ -97,35 +92,17 @@ public:
       const int64_t new_device_disk_percentage,
       const int64_t reserved_size);
   int check_disk_space_available();
-  int update_super_block(const common::ObLogCursor &replay_start_point,
-                         const blocksstable::MacroBlockId &runtime_meta_entry);
 
   static ObObjectManager &get_instance();
 
-  const storage::ObServerSuperBlock &get_server_super_block() const
-  {
-    return super_block_;
-  }
-
-  void get_server_super_block_by_copy(storage::ObServerSuperBlock &other) const
-  {
-    SpinRLockGuard guard(lock_);
-    other = super_block_;
-  }
-
   int64_t get_macro_block_size() const
   {
-    return super_block_.get_macro_block_size();
+    return macro_object_size_;
   }
   int64_t get_max_macro_block_count(int64_t reserved_size) const;
   int64_t get_used_macro_block_count() const;
   int64_t get_free_macro_block_count() const;
-  int64_t get_total_macro_block_count() const
-  {
-    return super_block_.get_total_macro_block_count();
-  }
-  int read_or_format_super_block_(const bool need_format);
-
+  int64_t get_total_macro_block_count() const;
 
 private:
   ObObjectManager();
@@ -135,9 +112,6 @@ private:
   bool is_inited_;
   int64_t macro_object_size_;
 
-  common::SpinRWLock lock_;
-  storage::ObServerSuperBlock super_block_; // read only memory cache
-  ObSuperBlockBufferHolder super_block_buf_holder_;
   lib::ObMutex resize_file_lock_;
 
   DISALLOW_COPY_AND_ASSIGN(ObObjectManager);

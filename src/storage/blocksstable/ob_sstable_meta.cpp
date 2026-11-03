@@ -184,10 +184,8 @@ DEFINE_SERIALIZE(ObSSTableBasicMeta)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data block meta value is invalid", K(ret), KPC(this));
   } else {
     int64_t start_pos = pos;
     const_cast<ObSSTableBasicMeta *>(this)->length_ = get_serialize_size();
@@ -229,7 +227,6 @@ DEFINE_SERIALIZE(ObSSTableBasicMeta)
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(length_ != pos - start_pos)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, serialize may have bug", K(ret), K(pos), K(start_pos), KPC(this));
       }
     }
   }
@@ -241,22 +238,18 @@ DEFINE_DESERIALIZE(ObSSTableBasicMeta)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(data_len), K(pos));
   } else {
     int64_t start_pos = pos;
     if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &version_))) {
     } else if (OB_UNLIKELY(version_ != SSTABLE_BASIC_META_VERSION)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("object version mismatch", K(ret), K(version_));
     } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &length_))) {
     } else {
       if (OB_FAIL(decode_fields(buf, start_pos + length_, pos))) {
       } else if (OB_UNLIKELY(length_ != pos - start_pos)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, deserialize may has bug", K(ret), K(pos), K(start_pos), KPC(this));
       } else if (OB_UNLIKELY(!is_valid())) {
         ret = OB_DESERIALIZE_ERROR;
-        LOG_WARN("invalid sstable basic meta", K(ret), KPC(this));
       }
     }
   }
@@ -395,7 +388,6 @@ int ObTxContext::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(pos - tmp_pos != len_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected len_", K(ret), K(len_), K(tmp_pos), K(pos));
   }
   return ret;
 }
@@ -423,7 +415,6 @@ int ObTxContext::deserialize(
   } else if (count_ > 0) {
     if (OB_ISNULL(tx_descs_ = static_cast<ObTxDesc *>(allocator.alloc(sizeof(ObTxDesc) * count_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate tx context", K(ret), K(count_));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count_; i ++) {
@@ -435,7 +426,6 @@ int ObTxContext::deserialize(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(pos - tmp_pos != len_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected len_", K(ret), K(len_), K(tmp_pos), K(pos));
   }
   return ret;
 }
@@ -450,10 +440,8 @@ int ObTxContext::deep_copy(
   const int64_t variable_size = get_variable_size();
   if (this == &dest) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("can't deep copy self", K(ret), K(*this));
   } else if (pos + variable_size > buf_len) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("buf not enough", K(ret), K(pos), K(buf_len), K(*this));
   } else {
     dest.len_ = len_;
     dest.count_ = count_;
@@ -476,15 +464,12 @@ int ObTxContext::init(const common::ObIArray<ObTxDesc> &tx_descs, common::ObAren
   const int64_t cnt = tx_descs.count();
   if (nullptr != tx_descs_ || count_ > 0) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(*this));
   } else if (OB_UNLIKELY(MAX_TX_IDS_COUNT < cnt)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too many tx desc", K(ret), K(cnt));
   } else if (0 == cnt) {
     reset();
   } else if (OB_ISNULL(tx_descs_ = static_cast<ObTxContext::ObTxDesc *>(allocator.alloc(sizeof(ObTxContext::ObTxDesc) * cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate tx context", K(ret), KP(tx_descs_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt; i++) {
       if (OB_FAIL(push_back(tx_descs.at(i)))) {
@@ -505,10 +490,8 @@ int ObTxContext::push_back(const ObTxDesc &desc)
   int ret = OB_SUCCESS;
   if (count_ >= MAX_TX_IDS_COUNT) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("tx desc array overflow", K(ret), K(count_));
   } else if (OB_ISNULL(tx_descs_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tx desc array is null", K(ret), K(count_), KP(tx_descs_));
   } else {
     tx_descs_[count_++] = desc;
   }
@@ -542,7 +525,6 @@ int ObSSTableMeta::load_root_block_data(common::ObArenaAllocator &allocator)
   ObMicroBlockDesMeta des_meta(basic_meta_.compressor_type_, basic_meta_.root_row_store_type_);
   if (OB_UNLIKELY(SSTABLE_WRITE_BUILDING != basic_meta_.status_)) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("state is not match.", K(ret), K_(basic_meta_.status));
   } else if (OB_FAIL(data_root_info_.load_root_block_data(allocator, des_meta))) {
   } else if (OB_FAIL(macro_info_.load_root_block_data(allocator, des_meta))) {
   }
@@ -566,7 +548,6 @@ int ObSSTableMeta::init_base_meta(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else {
     basic_meta_.status_ = SSTABLE_INIT;
     basic_meta_.row_count_ = param.row_count_;
@@ -614,7 +595,6 @@ int ObSSTableMeta::init_data_index_tree_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), K(param));
   } else if (OB_FAIL(data_root_info_.init_root_block_info(allocator, param.root_block_addr_,
       param.root_block_data_, param.root_row_store_type_))) {
   } else {
@@ -649,21 +629,17 @@ int ObSSTableMeta::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot initialize twice", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(param));
   } else if (OB_FAIL(init_base_meta(param, allocator))) {
   } else if (OB_FAIL(init_data_index_tree_info(param, allocator))) {
   } else if (OB_UNLIKELY(SSTABLE_WRITE_BUILDING != basic_meta_.status_)) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("sstable state is not match.", K(ret), K(basic_meta_.status_));
   } else if (OB_FAIL(macro_info_.init_macro_info(allocator, param))) {
   } else if (OB_FAIL(fsync_block(param))) {
   } else if (OB_FAIL(load_root_block_data(allocator))) {
   } else if (OB_UNLIKELY(!check_meta())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to check meta", K(ret), K(*this));
   }
 
   if (OB_SUCC(ret)) {
@@ -683,7 +659,6 @@ int ObSSTableMeta::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is invalid", K(ret), KP(buf), K(buf_len));
   } else {
     int64_t tmp_pos = 0;
     const int64_t len = get_serialize_size_();
@@ -693,7 +668,6 @@ int ObSSTableMeta::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
     } else if (OB_FAIL(serialize_(buf + pos, buf_len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, serialize may have bug", K(ret), K(len), K(tmp_pos), KPC(this));
     } else {
       pos += tmp_pos;
     }
@@ -725,21 +699,17 @@ int ObSSTableMeta::deserialize(
   int64_t version = 0;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot deserialize inited sstable meta", K(ret), K_(is_inited));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(data_len), K(pos));
   } else {
     OB_UNIS_DECODE(version);
     OB_UNIS_DECODE(len);
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(version != SSTABLE_META_VERSION)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("object version mismatch", K(ret), K(version));
     } else if (OB_FAIL(deserialize_(allocator, buf + pos, len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, serialize may have bug", K(ret), K(len), K(tmp_pos), KPC(this));
     } else {
       pos += tmp_pos;
       is_inited_ = true;
@@ -811,7 +781,6 @@ int ObSSTableMeta::deep_copy(
   const int64_t deep_size = get_deep_copy_size();
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < deep_size + pos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(deep_size), K(pos));
   } else {
     char *meta_buf = buf + pos;
     dest = new (meta_buf) ObSSTableMeta();
@@ -872,10 +841,8 @@ int ObSSTableMetaChecker::check_sstable_meta_strict_equality(
   const ObSSTableBasicMeta &new_basic_meta = new_sstable_meta.get_basic_meta();
   if (!old_sstable_meta.is_valid() || !new_sstable_meta.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("old or new sstable meta is invalid", K(ret));
   } else if (OB_UNLIKELY(!old_basic_meta.check_basic_meta_equality(new_basic_meta))) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("new sstable basic meta differs after defragmentation", K(ret));
   } else if (OB_UNLIKELY(old_sstable_meta.get_col_checksum_cnt()
       != new_sstable_meta.get_col_checksum_cnt())) {
     ret = OB_INVALID_DATA;
@@ -898,7 +865,6 @@ int ObSSTableMetaChecker::check_sstable_meta(
 
   if (!old_sstable_meta.is_valid() || !new_sstable_meta.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("old sstable meta or new sstable meta is invalid", K(ret), K(old_sstable_meta), K(new_sstable_meta));
   } else if (OB_FAIL(check_sstable_basic_meta(old_sstable_meta.get_basic_meta(), new_sstable_meta.get_basic_meta()))) {
   } else if (OB_FAIL(check_sstable_column_checksum_(old_sstable_meta.get_col_checksum(), old_sstable_meta.get_col_checksum_cnt(),
       new_sstable_meta.get_col_checksum(), new_sstable_meta.get_col_checksum_cnt()))) {
@@ -914,28 +880,21 @@ int ObSSTableMetaChecker::check_sstable_basic_meta(
 
   if (!old_sstable_basic_meta.is_valid() || !new_sstable_basic_meta.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("check sstable meta get invalid argument", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.row_count_ != old_sstable_basic_meta.row_count_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("row_count_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.occupy_size_ != old_sstable_basic_meta.occupy_size_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("occupy_size_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.data_checksum_ != old_sstable_basic_meta.data_checksum_) {
     ret = OB_INVALID_DATA;
     LOG_WARN("data checksum not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.rowkey_column_count_ != old_sstable_basic_meta.rowkey_column_count_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("rowkey_column_count_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.index_type_ != old_sstable_basic_meta.index_type_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("index_type_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.data_macro_block_count_ != old_sstable_basic_meta.data_macro_block_count_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("macro_block_count_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.column_cnt_ != old_sstable_basic_meta.column_cnt_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("column_cnt_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   }
   return ret;
 }

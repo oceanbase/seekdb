@@ -23,7 +23,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/queue/ob_link.h" // lock free double linked list
-#include "lib/resource/ob_resource_mgr.h"
+#include "lib/resource/ob_cache_washer.h"
 #include "lib/allocator/ob_lf_fifo_allocator.h"
 #include "lib/metrics/ob_counter.h"
 
@@ -188,13 +188,13 @@ public:
   const ObKVCacheConfig *config_;
   ObPCNonAtomicCounter total_put_cnt_;
   ObPCNonAtomicCounter total_hit_cnt_;
+  ObPCNonAtomicCounter total_miss_cnt_;
   int64_t kv_cnt_;
   int64_t store_size_;
   int64_t retired_size_;
   int64_t lru_mb_cnt_;
   int64_t lfu_mb_cnt_;
   int64_t last_hit_cnt_;
-  int64_t total_miss_cnt_;
   double base_mb_score_;
 };
 

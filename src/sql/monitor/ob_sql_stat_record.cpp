@@ -297,14 +297,12 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
               plan_cache, access_service, key, guard))) {
           }
         } else {
-          LOG_WARN("failed to get cache obj", K(ret));
         }
       }
       
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(guard.get_cache_obj())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("cache obj is NULL", KR(ret));
         } else {
           ObSqlStatRecordObj *cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj());
           ObExecutedSqlStatRecord *sql_stat_value = cache_obj->get_record_value();
@@ -323,7 +321,6 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
       ObExecutedSqlStatRecord *sql_stat_value = const_cast<ObExecutedSqlStatRecord *>(&(plan->sql_stat_record_value_));
       if (OB_ISNULL(sql_stat_value)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sql_stat_value is NULL", KR(ret));
       } else {
         if (!sql_stat_value->get_key().is_valid()) {
           if (OB_FAIL(sql_stat_value->get_sql_stat_info().init(key, session_info, cur_sql, plan))) {
@@ -331,12 +328,10 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
         }
 
         if (OB_SUCC(ret) && OB_FAIL(sql_stat_value->sum_stat_value(*this))) {
-          LOG_WARN("sql_stat_value sum value failed", KR(ret));
         }
       } 
     }
   } else {
-    LOG_WARN("the key is not valid which at plan cache mgr", KR(ret));
   }
   return ret;
 }
@@ -503,7 +498,6 @@ int ObSqlStatRecordNode::inner_get_cache_obj(ObILibCacheCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cache_obj_)) {
     ret = OB_SQL_PC_NOT_EXIST;
-    LOG_WARN("fail to get cache obj", K(ret));
   } else {
     cache_obj = cache_obj_;
   }
@@ -519,7 +513,6 @@ int ObSqlStatRecordNode::inner_add_cache_obj(ObILibCacheCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cache_obj)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cache obj is null", K(ret));
   } else {
     cache_obj_ = cache_obj;
   }
@@ -539,7 +532,6 @@ int ObSqlStatRecordUtil::get_cache_obj(
     if (ret == OB_SQL_PC_NOT_EXIST) {
       LOG_INFO("sql stat record not found",K(ret), K(key));
     } else {
-      LOG_WARN("fail to get cache obj", K(ret), K(key));
     }
   }
   return ret;
@@ -559,7 +551,6 @@ int ObSqlStatRecordUtil::create_cache_obj(
       plan_cache, guard, ObLibCacheNameSpace::NS_SQLSTAT))) {
   } else if (OB_ISNULL(cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get cache obj", K(ret));
   } else if (OB_FAIL(plan_cache.add_cache_obj(cache_ctx, &key, cache_obj))) {
   }
   return ret;

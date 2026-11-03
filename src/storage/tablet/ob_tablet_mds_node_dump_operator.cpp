@@ -74,7 +74,6 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletCreateDeleteMdsUser
         break;
       case mds::TwoPhaseCommitState::STATE_END:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid state", K(ret), K(table_id), K(unit_id), K(state));
         break;
     }
 
@@ -127,7 +126,6 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletBindingMdsUserData>
         break;
       case mds::TwoPhaseCommitState::STATE_END:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid state", K(ret), K(table_id), K(unit_id), K(state));
         break;
     }
 
@@ -155,7 +153,6 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletAutoincSeq>(const m
     int64_t pos = 0;
     if (OB_UNLIKELY(state != mds::TwoPhaseCommitState::ON_COMMIT)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid state", K(ret), K(state));
     } else if (!auto_inc_seq.is_memory_object()) {
       if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, auto_inc_seq.ptr_))) {
       }
@@ -185,7 +182,6 @@ int ObTabletDumpMdsNodeOperator::dump<compaction::ObMediumCompactionInfoKey, com
     const mds::TwoPhaseCommitState &state = node.status_.get_state();
     if (OB_UNLIKELY(state != mds::TwoPhaseCommitState::ON_COMMIT)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid state", K(ret), K(state));
     } else if (!medium_info_list.is_memory_object()) {
       if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, medium_info_list.ptr_))) {
       } else if (OB_FAIL(medium_info_list.ptr_->init_for_first_creation(allocator_))) {

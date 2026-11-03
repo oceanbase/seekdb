@@ -32,7 +32,6 @@ int ObJsonWrapper::get_raw_binary(ObIJsonBase *j_base, ObString &result, ObIAllo
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator) || OB_ISNULL(j_base)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator or j_base is null", K(ret), KP(allocator), KP(j_base));
   } else if (OB_FAIL(SMART_CALL(j_base->get_raw_binary(result, allocator)))) {
   }
   return ret;

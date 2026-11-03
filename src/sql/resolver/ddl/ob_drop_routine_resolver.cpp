@@ -38,10 +38,8 @@ int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
              K_(parse_tree.children), K_(parse_tree.num_child), K(name_node));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is null");
   } else if (OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema checker is null");
   } else if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, sp_name))) {
   } else if (OB_ISNULL(proc_stmt = create_stmt<ObDropRoutineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -75,7 +73,6 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
              K_(parse_tree.children), K_(parse_tree.num_child), K(name_node));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is null");
   } else {
     if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, sp_name))) {
       // MySQL allows DROP FUNCTION to reach the executor without a selected
@@ -83,7 +80,6 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
       if (OB_ERR_NO_DB_SELECTED == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("resolve stored function name failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

@@ -86,7 +86,6 @@ int ObExprHash::calc_hash_value_expr_batch(
       ObDatum *datums = expr.args_[i]->locate_batch_datums(ctx);
       if (OB_ISNULL(datums)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to locate batch datums", K(ret));
       } else {
         ObBatchDatumHashFunc hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_batch_;
         hash_func(batch_hash_vals, datums, expr.args_[i]->is_batch_result(), skip, batch_size,
@@ -119,7 +118,6 @@ int ObExprHash::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(expr_cg_ctx);
   if (0 == rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument number, param should be more than one", K(ret));
   } else {
     rt_expr.eval_func_ = &calc_hash_value_expr;
     rt_expr.eval_batch_func_ = &calc_hash_value_expr_batch;

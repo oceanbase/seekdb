@@ -43,7 +43,6 @@ namespace common
 class ObInnerTableBackupGuard;
 class ObMySQLTransactionaction;
 class ObMySQLProxy;
-class ObCommonConfig;
 class ObKVCacheHandle;
 class ObTimeoutCtx;
 }
@@ -297,7 +296,6 @@ class ObSchemaGetterGuard;
 class ObServerSchemaService
 {
 public:
-  #define ALLOW_NEXT_LOG() share::ObTaskController::get().allow_next_syslog();
   #define SCHEMA_KEY_FUNC(SCHEMA)   \
     struct SCHEMA##_key_hash_func   \
     {                               \
@@ -666,7 +664,6 @@ public:
 
 public:
   int init(common::ObMySQLProxy *sql_proxy,
-           const common::ObCommonConfig *config,
            ObSchemaStatusProxy &schema_status_proxy,
            const ObServiceStatus &service_status,
            bool &in_bootstrap,
@@ -958,7 +955,6 @@ protected:
   common::SpinRWLock schema_manager_rwlock_;
   ObSchemaService *schema_service_;
   common::ObMySQLProxy *sql_proxy_;
-  const common::ObCommonConfig *config_;
   ObSchemaStatusProxy *schema_status_proxy_;
   const ObServiceStatus *service_status_;
   bool *in_bootstrap_;

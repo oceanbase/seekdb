@@ -72,11 +72,9 @@ int ObVirtualTableIterator::free_convert_ctx()
   if (!need_convert_) {
   } else if (OB_UNLIKELY(convert_row_.count_ < 0 || NULL == convert_row_.cells_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("convert row is not init", K(ret), K(convert_row_));
   } else {
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is NULL", K(ret));
     } else {
       key_ranges_.reset();
       if (OB_FAIL(key_ranges_.assign(saved_key_ranges_))) {
@@ -103,13 +101,10 @@ int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, comm
     tmp_ptr = allocator_->alloc(src.get_obj_cnt() * sizeof(ObObj));
     if (OB_ISNULL(tmp_ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc new obj", K(ret));
     } else if (OB_ISNULL(new_key_obj = new (tmp_ptr) ObObj[src.get_obj_cnt()])) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc new obj", K(ret));
     } else if (src.get_obj_cnt() > key_cols.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("keys are not match with columns", K(ret));
     }
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
     ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
@@ -145,7 +140,6 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
   if (need_convert_ && !key_ranges_.empty()) {
     if (index_schema_->get_rowkey_info().is_valid()
         && index_schema_->get_rowkey_info().get_column_ids(column_ids)) {
-      LOG_WARN("get key column ids failed", K(ret));
     }
     if (OB_SUCC(ret)) {
       common::ObArray<const ObString*> column_names;
@@ -153,32 +147,27 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
         const ObColumnSchemaV2 * col_schema = table_schema_->get_column_schema(column_ids.at(i));
         if (OB_ISNULL(col_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column schema is null", K(ret));
         } else if (OB_FAIL(column_names.push_back(&col_schema->get_column_name_str()))) {
         }
       }
       if (OB_SUCC(ret) && column_ids.count() != column_names.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column infos are not match ", K(ret));
       }
       // get origin key type by column name
       if (OB_SUCC(ret)) {
         const ObTableSchema *org_table_schema = table_schema_;
         if (OB_ISNULL(org_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table schema is null", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
             const ObString *column_name = column_names.at(i);
             const ObColumnSchemaV2 *col_schema = org_table_schema->get_column_schema(*column_name);
             if (OB_ISNULL(col_schema)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("column schema is null", K(ret), K(*column_name));
             } else if (OB_FAIL(key_cols.push_back(col_schema))) {
             }
           }
           if (OB_SUCC(ret) && key_cols.count() != column_names.count()) {
-            LOG_WARN("column infos are not match ", K(ret));
           }
         }
       }
@@ -194,7 +183,6 @@ int ObVirtualTableIterator::convert_key_ranges()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema is NULL", K(ret));
   } else if (!key_ranges_.empty()) {
     common::ObSEArray<common::ObNewRange, 16> tmp_range;
     common::ObArray<const ObColumnSchemaV2*> key_cols;
@@ -240,13 +228,11 @@ int ObVirtualTableIterator::init_convert_ctx()
     void *tmp_ptr = NULL;
     if (OB_UNLIKELY(NULL == allocator_ || NULL == table_schema_ || NULL == session_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("data member is not init", K(ret), K(allocator_));
     } else if (OB_ISNULL(tmp_ptr = allocator_->alloc(reserved_column_cnt_ <= 0 ? 1 * sizeof(ObObj): reserved_column_cnt_ * sizeof(ObObj)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       COMMON_LOG(ERROR, "fail to alloc cells", K(ret), K(reserved_column_cnt_));
     } else if (OB_ISNULL(cells = new (tmp_ptr) ObObj[reserved_column_cnt_ <= 0 ? 1 : reserved_column_cnt_])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to new cell array", K(ret), K(reserved_column_cnt_));
     } else {
       convert_row_.cells_ = cells;
       convert_row_.count_ = reserved_column_cnt_;
@@ -264,17 +250,14 @@ int ObVirtualTableIterator::open()
   ObObj *cells = NULL;
   if (OB_UNLIKELY(NULL == allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member is not init", K(ret), K(allocator_));
   } else if (OB_ISNULL(scan_param_)
              || (NULL != scan_param_->output_exprs_ && NULL == scan_param_->op_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_ISNULL(tmp_ptr = allocator_->alloc( (reserved_column_cnt_ > 0 ? reserved_column_cnt_ : 1) * sizeof(ObObj)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     COMMON_LOG(ERROR, "fail to alloc cells", K(ret), K(reserved_column_cnt_));
   } else if (OB_ISNULL(cells = new (tmp_ptr) ObObj[(reserved_column_cnt_ > 0 ? reserved_column_cnt_ : 1)])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to new cell array", K(ret), K(reserved_column_cnt_));
   } else if (OB_FAIL(init_sql_schema_guard_())) {
   } else {
     cur_row_.cells_ = cells;
@@ -306,13 +289,11 @@ int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current row is NULL", K(ret));
   } else if (!need_convert_) {
     // don't convert
   } else {
     convert_alloc_.reuse();
     if (cols_schema_.empty() && OB_FAIL(get_all_columns_schema())) {
-      LOG_WARN("failed to get columns schema", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
@@ -346,11 +327,9 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
   } else if (OB_FAIL(THIS_WORKER.check_status())) {
   } else if (OB_FAIL(inner_get_next_row(cur_row))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to inner get next row", K(ret), KPC(scan_param_));
     }
   } else if (OB_ISNULL(cur_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("succ to inner get next row, but row is NULL", K(ret));
   } else if (OB_UNLIKELY(cur_row->count_ < output_column_ids_.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("row count is less than output column count", K(ret),
@@ -424,7 +403,6 @@ int ObVirtualTableIterator::get_next_rows(int64_t &count, int64_t capacity)
   if (OB_UNLIKELY(capacity < 1)) {
   } else if (OB_ISNULL(scan_param_) || OB_ISNULL(scan_param_->op_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null arguments", K(ret));
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(scan_param_->op_->get_eval_ctx());
     guard.set_batch_size(1);
@@ -445,22 +423,17 @@ int ObVirtualTableIterator::get_next_row()
       || OB_ISNULL(scan_param_->output_exprs_)
       || OB_ISNULL(scan_param_->op_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (EMPTY_VIRTUAL_TABLE_TABLET_ID == scan_param_->tablet_id_.id()) {
     row = NULL;
     ret = OB_ITER_END;
   } else if (OB_FAIL(get_next_row(row))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next row failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(row)) {
-    LOG_WARN("NULL row returned", K(ret));
   } else if (scan_param_->output_exprs_->count() > row->count_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row count less than output exprs", K(ret), K(*row),
-             "output_exprs_cnt", scan_param_->output_exprs_->count());
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < scan_param_->output_exprs_->count(); i++) {
       ObExpr *expr = scan_param_->output_exprs_->at(i);
@@ -470,7 +443,6 @@ int ObVirtualTableIterator::get_next_row()
                  OB_FAIL(ob_adjust_lob_datum(scan_param_->op_->get_eval_ctx().exec_ctx_,
                                              row->cells_[i], expr->obj_meta_,
                                              expr->obj_datum_map_, *allocator_, datum))) {
-        LOG_WARN("adjust lob datum failed", K(ret), K(i), K(row->cells_[i].get_meta()), K(expr->obj_meta_));
       }
     }
   }
@@ -482,13 +454,11 @@ int ObVirtualTableIterator::close()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cur_row_.count_ > 0 && NULL == cur_row_.cells_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("cur_row is not init", K(ret), K(cur_row_));
   } else if (OB_FAIL(inner_close())) {
   } else if (OB_FAIL(free_convert_ctx())) {
   } else {
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is NULL", K(ret));
     } else {
       //Since ObObj's destructor does not do meaningful operations, in order to save performance, ObObj's destructor call is omitted, and the cells_memory is directly released.
       if (cur_row_.cells_ != NULL) {
@@ -525,7 +495,6 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Check priv level error", K(ret));
     }
   }
   return ret;

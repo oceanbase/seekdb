@@ -56,7 +56,6 @@ int ObInsertStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   const ObInsertStmt &other = static_cast<const ObInsertStmt &>(input);
   if (OB_UNLIKELY(get_stmt_type() != input.get_stmt_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt type does not match", K(ret));
   } else if (OB_FAIL(ObDelUpdStmt::deep_copy_stmt_struct(allocator,
                                                          expr_copier,
                                                          input))) {
@@ -85,7 +84,6 @@ int ObInsertStmt::get_all_assignment_exprs(common::ObIArray<ObRawExpr*> &assignm
   for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); i++) {
     if (OB_ISNULL(assignments.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(ret));
     } else if (OB_FAIL(assignment_exprs.push_back(assignments.at(i).expr_))) {
     }
   }
@@ -136,13 +134,11 @@ int ObInsertStmt::part_key_has_rand_value(bool &has) const
     ObColumnRefRawExpr *col_expr = table_info_.values_desc_.at(i);
     if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column expr is null", K(ret));
     } else if (IS_SHADOW_COLUMN(col_expr->get_column_id())) {
       // do nothing
     } else if (OB_FAIL(ObTransformUtils::get_base_column(this, col_expr))) {
     } else if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (col_expr->is_table_part_key_column()
               || col_expr->is_table_part_key_org_column()) {
       for (int64_t j = i; OB_SUCC(ret) && !has && j < table_info_.values_vector_.count(); j += value_desc_cnt) {
@@ -167,7 +163,6 @@ int ObInsertStmt::part_key_has_auto_inc(bool &has) const
     } else if (OB_FAIL(ObTransformUtils::get_base_column(this, col_expr))) {
     } else if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if ((col_expr->is_table_part_key_column() || col_expr->is_table_part_key_org_column()) &&
                col_expr->is_auto_increment()) {
       has = true;
@@ -186,13 +181,11 @@ int ObInsertStmt::part_key_has_subquery(bool &has) const
     ObColumnRefRawExpr *column_expr = NULL;
     if (OB_ISNULL(column_expr = table_info_.values_desc_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (IS_SHADOW_COLUMN(column_expr->get_column_id())) {
       // do nothing
     } else if (OB_FAIL(ObTransformUtils::get_base_column(this, column_expr))) {
     } else if (OB_ISNULL(column_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (column_expr->is_table_part_key_column() || column_expr->is_table_part_key_org_column()) {
       for (int64_t j = i; OB_SUCC(ret) && !has && j < table_info_.values_vector_.count();
            j += table_info_.values_desc_.count()) {
@@ -220,7 +213,6 @@ int ObInsertStmt::get_value_exprs(ObIArray<ObRawExpr *> &value_exprs) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(table_info_.column_exprs_.count() != table_info_.column_conv_exprs_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected column count", K(table_info_), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < table_info_.column_conv_exprs_.count(); ++i) {
     ObRawExpr *param = NULL;
@@ -228,14 +220,12 @@ int ObInsertStmt::get_value_exprs(ObIArray<ObRawExpr *> &value_exprs) const
     ObRawExpr *column_conv_expr = table_info_.column_conv_exprs_.at(i);
     if (OB_ISNULL(column_expr) || OB_ISNULL(column_conv_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (column_conv_expr->get_expr_type() != T_FUN_COLUMN_CONV) {
       param = column_conv_expr;
     } else {
       param = column_conv_expr->get_param_expr(4);
       if (OB_ISNULL(param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param expr is null", K(ret));
       } else if (ObRawExprUtils::need_column_conv(column_expr->get_result_type(), *param, false)) {
         param = column_conv_expr;
       }
@@ -243,7 +233,6 @@ int ObInsertStmt::get_value_exprs(ObIArray<ObRawExpr *> &value_exprs) const
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param expr is null", K(ret));
       } else if (OB_FAIL(value_exprs.push_back(param))) {
       } else { /*do nothing*/ }
     }
@@ -267,10 +256,8 @@ int ObInsertStmt::get_ddl_sort_keys(common::ObIArray<OrderItem> &sort_keys) cons
     if (OB_FAIL(get_child_stmts(c_stmts))) {
     } else if (1 != c_stmts.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt count is unexpected", K(ret));
     } else if (c_stmts.at(0)->get_order_items().count() < 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("assign sort keys failed", K(ret));
     } else if (OB_FAIL(sort_keys.assign(c_stmts.at(0)->get_order_items()))) {
     } else if (OB_FAIL(get_ddl_view_output(*table_item, view_column_list))) {
     } else if (OB_FAIL(c_stmts.at(0)->get_select_exprs(column_list))) {
@@ -283,7 +270,6 @@ int ObInsertStmt::get_ddl_sort_keys(common::ObIArray<OrderItem> &sort_keys) cons
           if (sort_keys.at(i).expr_ == column_list.at(j)) {
             if (j >= view_column_list.count()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("error unexpected, view column list is not as expected", K(ret), K(j), K(view_column_list));
             } else if (OB_FAIL(column_ids.push_back(j))) {
             } else {
               sort_keys.at(i).expr_ = view_column_list.at(j);
@@ -293,7 +279,6 @@ int ObInsertStmt::get_ddl_sort_keys(common::ObIArray<OrderItem> &sort_keys) cons
         }
         if (OB_SUCC(ret) && j == column_list.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sort key must be prefix of select list", K(ret), K(sort_keys), K(column_list), K(view_column_list));
         }
       }
       if (OB_SUCC(ret)) {
@@ -311,7 +296,6 @@ int ObInsertStmt::get_ddl_sort_keys(common::ObIArray<OrderItem> &sort_keys) cons
             for (int64_t j = 0; OB_SUCC(ret) && !found && j < column_exprs.count(); j++) {
               if (OB_ISNULL(column_exprs.at(j))) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("column exprs is null", K(ret));
               } else if (column_exprs.at(j)->get_column_id() == column_id) {
                 sort_keys.at(i).expr_ = column_conv_exprs.at(j);
                 found = true;
@@ -319,7 +303,6 @@ int ObInsertStmt::get_ddl_sort_keys(common::ObIArray<OrderItem> &sort_keys) cons
             }
             if (OB_SUCC(ret) && !found) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("can't found column conv expr", K(ret));
             }
           }
         }
@@ -378,15 +361,12 @@ int ObInsertStmt::check_pdml_disabled(const bool is_online_ddl,
     const common::ObIArray<ObColumnRefRawExpr*> &column_exprs = table_info_.column_exprs_;
     if (OB_UNLIKELY(column_exprs.count() != column_conv_exprs.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected column count", K(ret),
-               K(column_exprs.count()), K(column_conv_exprs.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && !disable_pdml && i < column_conv_exprs.count(); ++i) {
         const ObColumnRefRawExpr *column_expr = column_exprs.at(i);
         const ObRawExpr *column_conv_expr = column_conv_exprs.at(i);
         if (OB_ISNULL(column_expr) || OB_ISNULL(column_conv_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null expr", K(ret));
         } else if (column_expr->is_rowkey_column() || column_expr->is_table_part_key_column()) {
           const ObRawExpr *auto_inc_expr = NULL;
           if (OB_FAIL(find_first_auto_inc_expr(column_conv_expr, auto_inc_expr))) {
@@ -408,7 +388,6 @@ int ObInsertStmt::find_first_auto_inc_expr(const ObRawExpr *expr, const ObRawExp
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (T_FUN_SYS_AUTOINC_NEXTVAL == expr->get_expr_type()) {
     auto_inc = expr;
   } else {

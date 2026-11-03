@@ -850,8 +850,7 @@ inline int ObHashPartInfrastructure<HashCol, HashRowStore>::init_mem_context()
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
       .set_mem_attr("HashPartInfra",
-                    common::ObCtxIds::WORK_AREA)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+                    common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1679,7 +1678,7 @@ set_item_ptrs(const ObIArray<ObExpr *> &exprs,
   } else {
     for (int64_t i = 0; i < selector_size; ++i) {
       ObHashPartCols *new_part_cols = items_[selector[i]];
-      //new_part_cols->use_expr_ = false;
+      new_part_cols->use_expr_ = false;
       new_part_cols->store_row_ = static_cast<HashRowStore *> (store_row_buffer_[i]);
       new_part_cols->store_row_->set_hash_value(hash_values[selector[i]]);
       new_part_cols->store_row_->set_is_match(false);
@@ -2009,7 +2008,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
           SQL_ENG_LOG(WARN, "failed to allocate memory", K(ret));
         } else {
           HashCol *new_part_cols = new (buf) HashCol;
-          //new_part_cols->use_expr_ = false;
+          new_part_cols->use_expr_ = false;
           new_part_cols->store_row_ = static_cast<HashRowStore*>(sr);
           new_part_cols->set_hash_value(hash_value);
           new_part_cols->store_row_->set_is_match(false);
@@ -2078,7 +2077,7 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
                 SQL_ENG_LOG(WARN, "failed to allocate memory", K(ret));
               } else {
                 HashCol *new_part_cols = new (buf) HashCol;
-                //new_part_cols->use_expr_ = false;
+                new_part_cols->use_expr_ = false;
                 new_part_cols->store_row_ = static_cast<HashRowStore*>(sr);
                 new_part_cols->set_hash_value(hash_value);
                 new_part_cols->store_row_->set_is_match(false);
@@ -2558,7 +2557,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_left_next_batch(
     if (OB_ISNULL(store_rows_ = static_cast<ObChunkDatumStore::StoredRow **>
         (alloc_->alloc(max_row_cnt * sizeof(ObChunkDatumStore::StoredRow *))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc store rows", K(ret));
     } else {
       store_rows_size_ = max_row_cnt;
     }
@@ -2747,7 +2745,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::rewind()
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(ERROR, "unexpected status: part it not match", K(ret), K(part), K(tmp_part));
       } else if (OB_FAIL(left_part_map_.set_refactored(tmp_part->part_key_, tmp_part))) {
-        SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(tmp_part->part_key_));
       } else {
         left_part_list_.add_last(tmp_part);
       }

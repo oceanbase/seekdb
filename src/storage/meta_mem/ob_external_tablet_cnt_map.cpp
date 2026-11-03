@@ -37,10 +37,8 @@ int ObExternalTabletCntMap::init(const int64_t bucket_num)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (bucket_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(bucket_num));
   } else if (OB_FAIL(ex_tablet_map_.create(bucket_num, "ExTabletCntMap", "ExTabletCntMap"))) {
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("ExTabletMapLk")))) {
   } else {
@@ -55,10 +53,8 @@ int ObExternalTabletCntMap::check_exist(const ObDieingTabletMapKey &key, bool &e
   exist = false;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("did not inited", K(ret));
   } else if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else {
     int64_t curr_cnt = 0;
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
@@ -69,7 +65,6 @@ int ObExternalTabletCntMap::check_exist(const ObDieingTabletMapKey &key, bool &e
       }
     } else if (curr_cnt <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status, ex_tablet_cnt should not le 0", K(ret), K(key));
     } else if (curr_cnt > 0) {
       exist = true;
     }
@@ -82,10 +77,8 @@ int ObExternalTabletCntMap::reg_tablet(const ObDieingTabletMapKey &key)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("did not inited", K(ret));
   } else if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else {
     int64_t curr_cnt = 0;
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
@@ -97,7 +90,6 @@ int ObExternalTabletCntMap::reg_tablet(const ObDieingTabletMapKey &key)
       }
     } else if (curr_cnt <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status, ex_tablet_cnt should not le 0", K(ret), K(key));
     } else if (OB_FAIL(ex_tablet_map_.set_refactored(key, curr_cnt + 1, 1/*overwrite*/))) {
     }
   }
@@ -109,17 +101,14 @@ int ObExternalTabletCntMap::unreg_tablet(const ObDieingTabletMapKey &key)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("did not inited", K(ret));
   } else if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else {
     int64_t curr_cnt = 0;
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
     if (OB_FAIL(ex_tablet_map_.get_refactored(key, curr_cnt))) {
     } else if (curr_cnt <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status, ex_tablet_cnt should not le 0", K(ret), K(key));
     } else if (0 == curr_cnt - 1) {
       if (OB_FAIL(ex_tablet_map_.erase_refactored(key))) {
       }

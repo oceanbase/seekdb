@@ -36,8 +36,6 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg = stmt.get_purge_recyclebin_arg();
 
-//  int64_t current_time = ObTimeUtility::current_time();
-//  obcall::Int64 expire_time = current_time - GCONF.schema_history_expire_time;
   obcall::Int64 affected_rows = 0;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
@@ -64,7 +62,6 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
                    return ctx.root_command_service().purge_expire_recycle_objects(
                        purge_recyclebin_arg, affected_rows);
                  }))) {
-        LOG_WARN("purge reyclebin objects failed", K(ret), K(affected_rows), K(purge_recyclebin_arg));
         // If failure occurs, there is no need to continue
         is_finished = false;
       } else {

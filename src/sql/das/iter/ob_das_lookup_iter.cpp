@@ -29,7 +29,6 @@ int ObDASLookupIter::inner_init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (!IS_LOOKUP_ITER(param.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
   } else {
     ObDASLookupIterParam &lookup_param = static_cast<ObDASLookupIterParam&>(param);
     state_ = LookupState::INDEX_SCAN;
@@ -107,7 +106,6 @@ int ObDASLookupIter::inner_get_next_row()
           index_table_iter_->clear_evaluated_flag();
           if (OB_FAIL(index_table_iter_->get_next_row())) {
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
-              LOG_WARN("failed to get next row from index table", K(ret));
             } else {
               index_end_ = true;
               ret = OB_SUCCESS;
@@ -146,7 +144,6 @@ int ObDASLookupIter::inner_get_next_row()
               state_ = INDEX_SCAN;
             }
           } else {
-            LOG_WARN("failed to get next row from data table", K(ret));
           }
         } else {
           got_next_row = true;
@@ -188,7 +185,6 @@ int ObDASLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           index_table_iter_->clear_evaluated_flag();
           if (OB_FAIL(index_table_iter_->get_next_rows(storage_count, index_capacity))) {
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
-              LOG_WARN("failed to get next rows from index table", K(ret));
             } else {
               if (storage_count == 0) {
                 index_end_ = true;
@@ -238,7 +234,6 @@ int ObDASLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
               }
             }
           } else {
-            LOG_WARN("failed to get next rows from data table", K(ret));
           }
         } else {
           lookup_row_cnt_ += count;
@@ -262,7 +257,6 @@ int ObDASLookupIter::build_lookup_range(ObNewRange &range)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx_) || OB_UNLIKELY(rowkey_exprs_.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid eval ctx or rowkey exprs", K_(eval_ctx), K_(rowkey_exprs), K(ret));
   } else {
     ObObj *obj_ptr = nullptr;
     void *buf = nullptr;
@@ -270,7 +264,6 @@ int ObDASLookupIter::build_lookup_range(ObNewRange &range)
     common::ObArenaAllocator& lookup_alloc = lookup_memctx_->get_arena_allocator();
     if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(ObObj) * rowkey_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate enough memory", K(rowkey_cnt), K(ret));
     } else {
       obj_ptr = new (buf) ObObj[rowkey_cnt];
     }
@@ -302,7 +295,6 @@ int ObDASLookupIter::build_trans_info_datum(const ObExpr *trans_info_expr, ObDat
   datum_ptr = nullptr;
   if (OB_ISNULL(trans_info_expr) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(trans_info_expr), K(eval_ctx_));
   } else {
     void *buf = nullptr;
     ObDatum &col_datum = trans_info_expr->locate_expr_datum(*eval_ctx_);
@@ -310,7 +302,6 @@ int ObDASLookupIter::build_trans_info_datum(const ObExpr *trans_info_expr, ObDat
     int64_t len = sizeof(ObDatum) + col_datum.len_;
     if (OB_ISNULL(buf = lookup_memctx_->get_arena_allocator().alloc(len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate enough memory", K(ret));
     } else if (FALSE_IT(datum_ptr = new (buf) ObDatum)) {
     } else if (OB_FAIL(datum_ptr->deep_copy(col_datum, static_cast<char*>(buf), len, pos))) {
     }

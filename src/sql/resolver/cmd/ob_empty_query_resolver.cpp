@@ -38,7 +38,6 @@ int ObEmptyQueryResolver::resolve(const ParseNode &parse_tree)
 
   } else if (OB_ISNULL(empty_query_stmt = create_stmt<ObEmptyQueryStmt>())) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
-    LOG_WARN("failed to create empty query stmt", K(ret));
   } else {}
   return ret;
 }

@@ -18,8 +18,7 @@
 
 #include "share/ob_column_checksum_error_operator.h"
 #include "share/storage/ob_column_checksum_error_info_table_storage.h"
-#include "share/storage/ob_sqlite_connection.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include "share/storage/local_store.h"
 
 namespace oceanbase
 {
@@ -30,14 +29,14 @@ using namespace oceanbase::common::sqlclient;
 
 // Static storage instance
 ObColumnChecksumErrorInfoTableStorage ObColumnChecksumErrorOperator::storage_;
-ObSQLiteConnectionPool *ObColumnChecksumErrorOperator::meta_db_pool_ = nullptr;
+LocalStore *ObColumnChecksumErrorOperator::local_store_ = nullptr;
 
-int ObColumnChecksumErrorOperator::init(ObSQLiteConnectionPool &meta_db_pool)
+int ObColumnChecksumErrorOperator::init(LocalStore &store)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(storage_.init(&meta_db_pool))) {
+  if (OB_FAIL(storage_.init(&store))) {
   } else {
-    meta_db_pool_ = &meta_db_pool;
+    local_store_ = &store;
   }
   return ret;
 }
@@ -50,7 +49,6 @@ bool ObColumnChecksumErrorInfo::is_valid() const
          && (data_table_id_ != OB_INVALID_ID) && (index_table_id_ != OB_INVALID_ID);
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 
 int ObColumnChecksumErrorOperator::insert_column_checksum_err_info(
@@ -60,7 +58,6 @@ int ObColumnChecksumErrorOperator::insert_column_checksum_err_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     ret = storage_.insert(info);
     if (OB_FAIL(ret)) {
@@ -76,10 +73,8 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else if (OB_UNLIKELY(!min_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(min_frozen_scn));
   } else {
     ret = storage_.delete_expired(min_frozen_scn, INT64_MAX);
     if (OB_FAIL(ret)) {
@@ -95,27 +90,15 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else if (OB_UNLIKELY(compaction_scn <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(compaction_scn));
   } else {
-    // Use SQLite storage - delete by exact frozen_scn
-    const char *delete_sql =
-      "DELETE FROM __all_column_checksum_error_info "
-      "WHERE frozen_scn = ?;";
+    // Use local storage - delete by exact frozen_scn
 
-    auto binder = [&](ObSQLiteBinder &b) -> int {
-      b.bind_int64(compaction_scn);
-      return OB_SUCCESS;
-    };
+    const auto delete_request = LocalRequest::erase(checksum_error::schema())
+        .eq(checksum_error::FrozenScn, compaction_scn);
 
-    ObSQLiteConnectionGuard guard(meta_db_pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
-    } else if (OB_FAIL(guard->execute(delete_sql, binder))) {
-    }
+    ret = local_store_->execute(delete_request);
   }
   return ret;
 }
@@ -126,31 +109,20 @@ int ObColumnChecksumErrorOperator::check_exist_ckm_error_table(const int64_t com
   exist = false;
   if (OB_UNLIKELY(compaction_scn <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(compaction_scn));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
-    const char *select_sql =
-      "SELECT COUNT(*) as cnt FROM __all_column_checksum_error_info "
-      "WHERE frozen_scn = ?;";
-
-    auto binder = [&](ObSQLiteBinder &b) -> int {
-      b.bind_int64(compaction_scn);
-      return OB_SUCCESS;
-    };
+    const auto select_request = LocalRequest::select(checksum_error::schema(), {})
+        .aggregate(local::Aggregate::Count)
+        .eq(checksum_error::FrozenScn, compaction_scn);
 
     int64_t count = 0;
-    auto row_processor = [&](ObSQLiteRowReader &reader) -> int {
+    auto row_processor = [&](LocalRowReader &reader) -> int {
       count = reader.get_int64();
       return OB_SUCCESS;
     };
 
-    ObSQLiteConnectionGuard guard(meta_db_pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
-    } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
+    if (OB_FAIL(local_store_->query(select_request, row_processor))) {
     } else if (count > 0) {
       exist = true;
       LOG_INFO("exist ckm error info", K(count), K(compaction_scn));

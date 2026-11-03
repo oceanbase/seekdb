@@ -43,7 +43,6 @@ int ObViewTableResolver::do_resolve_set_query(const ParseNode &parse_tree,
   } else if (OB_FAIL(child_resolver.resolve_child_stmt(parse_tree))) {
   } else if (OB_ISNULL(child_stmt = child_resolver.get_child_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null child stmt", K(ret));
   }
   return ret;
 }
@@ -53,7 +52,6 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is null");
   } else if (OB_FAIL(check_view_circular_reference(view_item))) {
   } else {
     // expand view as subquery which use view name as alias
@@ -65,7 +63,6 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
     if (OB_ISNULL(schema_checker_)
         || OB_ISNULL(schema_guard = schema_checker_->get_schema_guard())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(schema_guard->get_database_id(view_item.database_name_,
                                                      database_id))) {
     } else if (OB_FAIL(schema_checker_->get_table_schema(
@@ -156,7 +153,6 @@ int ObViewTableResolver::set_select_item(SelectItem &select_item, bool is_auto_g
 
   if (OB_ISNULL(select_stmt) || OB_ISNULL(session_info_) || OB_ISNULL(select_item.expr_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("select stmt is null", K_(session_info), K(select_stmt), K_(select_item.expr));
   } else if (is_create_view_ && !select_item.is_real_alias_) {
     if (OB_FAIL(ObSelectResolver::set_select_item(select_item, is_auto_gen))) {
     }
@@ -165,7 +161,6 @@ int ObViewTableResolver::set_select_item(SelectItem &select_item, bool is_auto_g
              && OB_FAIL(ObSQLUtils::check_column_name(cs_type, select_item.alias_name_, true))) {
     // Only check real alias here,
     // auto generated alias will be checked in ObSelectResolver::check_auto_gen_column_names().
-    LOG_WARN("fail to make field name", K(ret));
   } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
   }
   return ret;
@@ -176,7 +171,6 @@ int ObViewTableResolver::resolve_subquery_info(const ObIArray<ObSubQueryInfo> &s
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is null");
   } else if (current_level_ + 1 >= OB_MAX_SUBQUERY_LAYER_NUM && subquery_info.count() > 0) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "too many levels of subqueries");
@@ -197,7 +191,6 @@ int ObViewTableResolver::resolve_subquery_info(const ObIArray<ObSubQueryInfo> &s
           current_level_ : parent_aggr_level_);
     }
     if (OB_SUCC(ret) && OB_FAIL(do_resolve_subquery_info(info, subquery_resolver))) {
-      LOG_WARN("do resolve subquery info failed", K(ret));
     }
     set_query_ref_exec_params(NULL);
   }

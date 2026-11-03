@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "share/ob_server_struct.h"
 #include "ob_trans_define_v4.h"
 #include "ob_trans_functor.h"
 #include "lib/allocator/ob_malloc.h"
@@ -583,7 +584,6 @@ void ObTxDesc::dump_and_print_trace()
   int ret = OB_SUCCESS;
   if (OB_FAIL(lock_.trylock())) {
   } else {
-    share::ObTaskController::get().allow_next_syslog();
     TRANS_LOG(INFO, "[tx desc dump]", KPC(this));
     print_trace_();
     lock_.unlock();
@@ -623,7 +623,7 @@ bool ObTxDesc::in_tx_for_free_route()
 
 bool ObTxDesc::in_tx_for_free_route_()
 {
-  return (addr_.is_valid() && (addr_ != GCONF.self_addr_)) // txn free route temporary node
+  return (addr_.is_valid() && (addr_ != GCTX.self_addr())) // txn free route temporary node
     || in_tx_or_has_extra_state_();
 }
 

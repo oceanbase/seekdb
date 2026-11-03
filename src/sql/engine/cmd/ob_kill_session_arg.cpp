@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_kill_session_arg.h"
+#include "share/schema/ob_schema_getter_guard.h"
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -36,15 +37,36 @@ OB_SERIALIZE_MEMBER(ObKillSessionArg,
 int ObKillSessionArg::init(ObExecContext &ctx, const ObKillStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = NULL;
-  if (OB_ISNULL(session = ctx.get_my_session())) {
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  share::schema::ObSchemaGetterGuard *guard = NULL;
+  share::schema::ObSessionPrivInfo session_priv;
+  share::schema::ObStmtNeedPrivs required(ctx.get_allocator());
+  share::schema::ObNeedPriv need_priv;
+  need_priv.priv_level_ = share::schema::OB_PRIV_USER_LEVEL;
+  need_priv.priv_set_ = OB_PRIV_SUPER;
+  if (OB_ISNULL(session) || OB_ISNULL(ctx.get_sql_ctx())
+      || OB_ISNULL(guard = ctx.get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret), K(ctx));
   } else if (OB_FAIL(calculate_sessid(ctx, stmt))) {
+  } else if (OB_FAIL(guard->get_session_priv_info(
+                        session->get_priv_user_id(), ObString(), session_priv))) {
+  } else if (OB_FAIL(required.need_privs_.init(1))) {
+  } else if (OB_FAIL(required.need_privs_.push_back(need_priv))) {
   } else {
-    user_id_ = session->get_user_id();
-    is_query_ = stmt.is_query();
-    has_user_super_privilege_ = session->has_user_super_privilege();
+    // Use the current authorization identity and enabled roles, including SUPER
+    // granted through a role. Connection ownership still uses the login user.
+    const int priv_ret = guard->check_priv(session_priv, session->get_enable_role_array(), required);
+    if (OB_SUCCESS == priv_ret) {
+      has_user_super_privilege_ = true;
+    } else if (OB_ERR_NO_PRIVILEGE == priv_ret) {
+      has_user_super_privilege_ = false;
+    } else {
+      ret = priv_ret;
+    }
+    if (OB_SUCC(ret)) {
+      user_id_ = session->get_user_id();
+      is_query_ = stmt.is_query();
+    }
   }
   return ret;
 }
@@ -66,7 +88,6 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(my_session) || OB_ISNULL(plan_ctx) || OB_ISNULL(ctx.get_sql_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data member from ObExecContext is Null", K(ret), K(my_session), K(plan_ctx));
     } else {
       ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC,
                                  OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -88,13 +109,11 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
         ObTempExpr *temp_expr = NULL;
         if (OB_ISNULL(value_expr = stmt.get_value_expr())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get value expr", K(ret), K(value_expr));
         } else if (OB_FAIL(ObStaticEngineExprCG::gen_expr_with_row_desc(value_expr,
              row_desc, ctx.get_allocator(), ctx.get_my_session(),
              ctx.get_sql_ctx()->schema_guard_, temp_expr))) {
         } else if (OB_ISNULL(temp_expr)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("fail to gen temp expr", K(ret));
         } else if (OB_FAIL(temp_expr->eval(ctx, tmp_row, value_obj))) {
         } else {
           const ObObj *res_obj = NULL;
@@ -112,7 +131,6 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(res_obj)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to cast expr", "orig type", value_obj.get_type(), "dest type", "ObUint32type", K(ret), K(res_obj));
           } else {
             sess_id_ = static_cast<uint32_t>(res_obj->get_int());
           }
@@ -125,9 +143,11 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
 
 int ObKillSessionArg::check_auth_for_kill(uint64_t kill_tid, uint64_t kill_uid) const {
   int ret = OB_SUCCESS;
-  if (!(true)) {
+  UNUSED(kill_tid);
+  if (OB_INVALID_ID == user_id_ || OB_INVALID_ID == kill_uid
+      || (user_id_ != kill_uid && !has_user_super_privilege_)) {
     ret = OB_ERR_KILL_DENIED;
- }
+  }
   return ret;
 }
 

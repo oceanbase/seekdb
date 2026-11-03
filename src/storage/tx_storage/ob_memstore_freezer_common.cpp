@@ -246,13 +246,6 @@ ObMemstoreFreezeGuard::~ObMemstoreFreezeGuard()
     if (!(retired_mem_frozen || has_no_active_memtable)) {
       ret = OB_ERR_UNEXPECTED;
       if (memstore_info_.is_freeze_slowed()) {
-        LOG_WARN("[FREEZE_CHECKER]there may be frequent global freeze, but slowed",
-                 KR(ret),
-                 K(curr_frozen_pos),
-                 K_(pre_retire_pos),
-                 K(retired_mem_frozen),
-                 K(has_no_active_memtable),
-                 K_(memstore_info));
       } else {
         LOG_ERROR("[FREEZE_CHECKER]there may be frequent global freeze",
                   KR(ret),

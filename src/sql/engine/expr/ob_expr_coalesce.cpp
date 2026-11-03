@@ -41,10 +41,8 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types", K(ret));
   } else if (OB_UNLIKELY(param_num < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("no enough param", K(ret), K(param_num));
   } else if (OB_FAIL(aggregate_result_type_for_case(
                        type,
                        types,
@@ -58,7 +56,6 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
       dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cast basic session to sql session info failed", K(ret));
     } else {
       ObExprOperator::calc_result_flagN(type, types, param_num);
       bool is_expr_integer_type = (ob_is_int_tc(type.get_type()) ||
@@ -137,7 +134,6 @@ int ObExprCoalesce::calc_batch_coalesce_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr results frame is not inited", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObBitVector &my_skip = expr.get_pvt_skip(ctx);

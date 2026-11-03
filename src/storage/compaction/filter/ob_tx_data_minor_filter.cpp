@@ -33,10 +33,8 @@ int ObTxDataMinorFilter::init(const SCN &filter_val, const int64_t filter_col_id
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!filter_val.is_valid() || filter_val.is_min() || filter_col_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(filter_val), K(filter_col_idx));
   } else if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("is inited", K(ret), K(filter_val), K(filter_col_idx));
   } else {
     filter_val_ = filter_val;
     filter_col_idx_ = filter_col_idx;
@@ -54,7 +52,6 @@ int ObTxDataMinorFilter::filter(
   filter_ret = FILTER_RET_MAX;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (row.is_uncommitted_row()
       || !row.is_last_multi_version_row()
       || !row.is_first_multi_version_row()

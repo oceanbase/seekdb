@@ -49,14 +49,10 @@ int ObExprReplace::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (3 != param_num) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Replace() should have three arguments in MySql Mode", K(ret), K(param_num));
   } else if (2 != param_num && 3 != param_num) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Replace() should have two or three arguments", K(ret), K(param_num));
   } else if (OB_ISNULL(types_array) || OB_ISNULL(type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error. types_array or session null",
-             K(ret), KP(types_array), KP(type_ctx.get_session()));
   } else {
     if (types_array[0].is_lob()) {
       type.set_type(ObLongTextType);
@@ -117,14 +113,12 @@ int ObExprReplace::replace(ObString &ret_str,
     ret_str = text;
   } else if (OB_ISNULL(from.ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error. nullpointer(s)", K(ret), K(from), K(to));
   } else if (OB_UNLIKELY(text.length() < from.length()) ||
              OB_UNLIKELY(from == to)) {
     ret_str = text;
   } else if (OB_FAIL(ObSQLUtils::check_well_formed_str(text, cs_type, dst_str, is_null, false, false))
             || OB_FAIL(ObSQLUtils::check_well_formed_str(from, cs_type, dst_str, is_null, false, false))
             || OB_FAIL(ObSQLUtils::check_well_formed_str(to, cs_type, dst_str, is_null, false, false))) {
-    LOG_WARN("check well formed str failed", K(ret));
   } else {
     ObSEArray<uint32_t, 4> locations(common::ObModIds::OB_SQL_EXPR_REPLACE,
                                      common::OB_MALLOC_NORMAL_BLOCK_SIZE);

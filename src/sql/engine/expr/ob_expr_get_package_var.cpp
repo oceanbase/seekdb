@@ -42,23 +42,17 @@ int ObExprGetPackageVar::calc(ObObj &result,
   share::schema::ObSchemaGetterGuard *schema_guard = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("global schema service is null", K(ret));
   } else if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", K(ret));
   } else if (OB_ISNULL(sql_proxy = exec_ctx->get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_ISNULL(pl_engine = exec_ctx->get_pl_engine())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pl engine is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_package_guard(package_guard))) {
   } else if (OB_ISNULL(package_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("package guard is null", K(ret));
   } else if (OB_NOT_NULL(exec_ctx->get_sql_ctx())
              && OB_NOT_NULL(exec_ctx->get_sql_ctx()->schema_guard_)) {
     schema_guard = exec_ctx->get_sql_ctx()->schema_guard_;
@@ -146,7 +140,6 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
     if (OB_SUCC(ret)) {
       if (!res_obj.is_null() && res_obj.get_type() != expr.obj_meta_.get_type()) { // todo: need collect pkg basic type var dependency info
         ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-        LOG_WARN("result type no match with result type", K(ret), K(res_obj), K(expr.obj_meta_));
       } else if (ob_is_string_tc(res_obj.get_type())) {
         ObString res_str;
         ObExprStrResAlloc res_alloc(expr, ctx);
@@ -156,7 +149,6 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
       } else if (ob_is_text_tc(res_obj.get_type())) {
         if (res_obj.has_lob_header() != expr.obj_meta_.has_lob_header()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid lob header", K(ret), K(res_obj.has_lob_header()), K(expr.obj_meta_.has_lob_header()));
         } else {
           ObString res_str;
           ObExprStrResAlloc res_alloc(expr, ctx);

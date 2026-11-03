@@ -87,16 +87,13 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObDatum *gis_unit = NULL;
   double factor = 0.0;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
-    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     res.set_null();
   } else if (input_type1 == ObDoubleType || input_type2 == ObDoubleType) {
     // bugfix 53283098, should allow double type in calc_result_type2
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_DISTANCE);
-    LOG_WARN("invalid type", K(ret), K(input_type1), K(input_type2));
   } else if (expr.arg_cnt_ == max_arg_num && OB_FAIL(temp_allocator.eval_arg(expr.args_[max_arg_num - 1], ctx, gis_unit))) {
-    LOG_WARN("eval geo unit arg failed", K(ret));
   } else if (OB_NOT_NULL(gis_unit) && gis_unit->is_null()) {
     res.set_null();
   } else {
@@ -129,27 +126,28 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       ret = OB_ERR_GIS_DIFFERENT_SRIDS;
     } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty))
         || OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty))) {
-      LOG_WARN("check geo empty failed", K(ret));
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_null();
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       double result = 0.0;
       if (OB_FAIL(gis_context.append_geo_arg(geo1)) || OB_FAIL(gis_context.append_geo_arg(geo2))) {
-        LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Distance>::geo_func::eval(gis_context, result))) {
-        LOG_WARN("eval st distance failed", K(ret));
         if (OB_ERR_GIS_INVALID_DATA == ret) {
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_DISTANCE);
         } else {
           ObGeoExprUtils::geo_func_error_handle(ret, N_ST_DISTANCE);
         }
       } else if (expr.arg_cnt_ == max_arg_num) {
-        if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(gis_unit->get_string(), srs, result, result))) {
+        ObString unit_str;
+        const ObExpr *unit_arg = expr.args_[max_arg_num - 1];
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+                ctx.exec_ctx_, temp_allocator, *gis_unit, unit_arg->datum_meta_,
+                unit_arg->obj_meta_.has_lob_header(), unit_str))) {
+        } else if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(unit_str, srs, result, result))) {
         } else if (std::isinf(result)) {
           ret = OB_ERR_GIS_INVALID_DATA;
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_DISTANCE);

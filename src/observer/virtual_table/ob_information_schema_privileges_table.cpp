@@ -81,7 +81,6 @@ int ObInfoSchemaSchemaPrivilegesTable::inner_get_next_row(common::ObNewRow *&row
           const ObDBPriv *db_priv = db_priv_array.at(dp_id);
           if (OB_ISNULL(db_priv)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("db_priv is null", K(ret), K(dp_id));
           } else if (ObString(OB_RECYCLEBIN_SCHEMA_NAME) == db_priv->get_database_name_str()
                      || ObString(OB_PUBLIC_SCHEMA_NAME) == db_priv->get_database_name_str()
                      || ObString(OB_EXTENDED_SYS_SCHEMA_NAME) == db_priv->get_database_name_str()) {

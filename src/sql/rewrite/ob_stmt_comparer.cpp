@@ -124,7 +124,6 @@ int ObStmtCompareContext::get_table_map_idx(uint64_t l_table_id, uint64_t r_tabl
     } else if (OB_ISNULL(inner_table = inner_->get_table_items().at(inner_idx)) ||
                OB_ISNULL(outer_table = outer_->get_table_items().at(outer_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table items are null", K(ret));
     } else if ((inner_table->table_id_ == l_table_id && outer_table->table_id_ == r_table_id) ||
               (inner_table->table_id_ == r_table_id && outer_table->table_id_ == l_table_id)) {
       ret_idx = inner_idx;          
@@ -194,13 +193,11 @@ int ObStmtComparer::get_map_column(const ObStmtMapInfo& map_info,
   inner_column_id = OB_INVALID_ID;
   if (OB_ISNULL(outer_stmt) || OB_ISNULL(inner_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !find && i < outer_stmt->get_table_size(); ++i) {
     const TableItem *table = outer_stmt->get_table_item(i);
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else if (outer_table_id == table->table_id_) {
       find =  true;
       outer_table_idx = i;
@@ -208,7 +205,6 @@ int ObStmtComparer::get_map_column(const ObStmtMapInfo& map_info,
   }
   if (OB_SUCC(ret) && (!find || OB_INVALID_ID == outer_table_idx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table shoud be found in subquery" ,K(outer_table_idx), K(ret));
   }
   find = false;
   for (int64_t i = 0; OB_SUCC(ret) && !find && i < map_info.table_map_.count(); ++i) {
@@ -220,13 +216,11 @@ int ObStmtComparer::get_map_column(const ObStmtMapInfo& map_info,
   if (OB_SUCC(ret) && (!find || OB_INVALID_ID == inner_table_idx ||  inner_table_idx < 0 ||
                        inner_table_idx >= inner_stmt->get_table_size())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("incorrect table idx" , K(inner_table_idx), K(ret));
   }
   if (OB_SUCC(ret)) {
     const TableItem *inner_table = inner_stmt->get_table_item(inner_table_idx);
     if (OB_ISNULL(inner_table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else {
       inner_table_id = inner_table->table_id_;
     }
@@ -236,7 +230,6 @@ int ObStmtComparer::get_map_column(const ObStmtMapInfo& map_info,
       inner_column_id = outer_column_id;
     } else if (OB_UNLIKELY(inner_table_idx >= map_info.view_select_item_map_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("incorrect id" , K(inner_table_idx), K(ret));
     } else if (!inner_table->is_generated_table()) {
       inner_column_id = outer_column_id;
     } else {
@@ -251,7 +244,6 @@ int ObStmtComparer::get_map_column(const ObStmtMapInfo& map_info,
       }
       if (OB_SUCC(ret) && (!find || OB_INVALID_ID == inner_column_id)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column shoud be found in subquery" ,K(outer_pos), K(inner_table_idx), K(select_item_map), K(ret));
       }
     }
   }
@@ -277,7 +269,6 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         } else if (OB_FAIL(get_calc_expr(right.get_value().get_unknown(), right_param))) {
         } else if (OB_ISNULL(left_param) || OB_ISNULL(right_param)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("param exprs are null", K(ret), K(left_param), K(right_param));
         } else {
           bret = left_param->same_as(*right_param, this);
         }
@@ -293,7 +284,6 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         bret = true;
         if (info.first_param_idx_ != info.second_param_idx_ &&
             OB_FAIL(equal_param_info_.push_back(info))) {
-          LOG_WARN("failed to push back equal param info", K(ret));
         }
       }
     } else if (left.is_param_expr() || right.is_param_expr()) {
@@ -350,8 +340,6 @@ int ObStmtCompareContext::is_pre_calc_item(const ObConstRawExpr &const_expr, boo
   if (OB_ISNULL(calculable_items_) || OB_UNLIKELY((calc_count = calculable_items_->count()) < 0
       || const_expr.get_expr_type() != T_QUESTIONMARK)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(calculable_items_), K(const_expr.get_expr_type()),
-                                     K(calc_count));
   } else if (const_expr.has_flag(IS_DYNAMIC_PARAM)) {
     is_calc = true;
   } else if (calc_count > 0) {
@@ -359,7 +347,6 @@ int ObStmtCompareContext::is_pre_calc_item(const ObConstRawExpr &const_expr, boo
     int64_t min_calc_index = calculable_items_->at(0).hidden_idx_;
     if (OB_UNLIKELY(q_idx < 0 || min_calc_index < 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid argument", K(q_idx), K(min_calc_index));
     } else if (q_idx - min_calc_index >= 0 && q_idx - min_calc_index < calc_count) {
       is_calc = true;
     } else {/*do nothing*/}
@@ -388,12 +375,10 @@ bool ObStmtCompareContext::compare_query(const ObQueryRefRawExpr &first,
                                                             relation,
                                                             true,
                                                             is_in_same_stmt_))) {
-    LOG_WARN("failed to compute stmt relationship", K(ret));
     err_code_ = ret;
   } else if (stmt_map_info.is_select_item_equal_ && QueryRelation::QUERY_EQUAL == relation) {
     bret = true;
     if (OB_FAIL(append(equal_param_info_, stmt_map_info.equal_param_map_))) {
-      LOG_WARN("failed to append equal param", K(ret));
       err_code_ = ret;
     }
   }
@@ -405,13 +390,11 @@ int ObStmtCompareContext::get_calc_expr(const int64_t param_idx, const ObRawExpr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(calculable_items_) || calculable_items_->count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("query context is null", K(ret));
   } else {
     int64_t offset = param_idx - calculable_items_->at(0).hidden_idx_;
     if (offset < 0 || offset >= calculable_items_->count() ||
         param_idx != calculable_items_->at(offset).hidden_idx_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid param index", K(ret), K(param_idx), K(offset));
     } else {
       expr = calculable_items_->at(offset).expr_;
     }
@@ -441,7 +424,6 @@ int ObStmtComparer::compute_stmt_overlap(const ObDMLStmt *first,
   map_info.reset();
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmts are null", K(ret), K(first), K(second));
   } else if (OB_FAIL(compute_from_items_map(first,
                                             second,
                                             true,
@@ -478,7 +460,6 @@ int ObStmtComparer::is_same_from(const ObDMLStmt *first,
   is_same = false;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmts have null", K(ret), K(first), K(second));
   } else if (first_from.is_joined_ && second_from.is_joined_) {
     QueryRelation relation = QueryRelation::QUERY_UNCOMPARABLE;
     if (OB_FAIL(compare_joined_table_item(first,
@@ -527,7 +508,6 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first), K(second), K(ret));
   } else if (!first->is_select_stmt() || !second->is_select_stmt()) {
     LOG_TRACE("failed to compare, not a select item", K(first->is_select_stmt()), K(second->is_select_stmt()));
   } else if (FALSE_IT(first_sel = const_cast<ObSelectStmt*>(static_cast<const ObSelectStmt*>(first)))) {
@@ -811,7 +791,6 @@ int ObStmtComparer::compute_from_items_map(const ObDMLStmt *first,
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first), K(second), K(ret));
   } else if (OB_FAIL(map_info.table_map_.prepare_allocate(first->get_table_size()))) {
   } else if (OB_FAIL(map_info.from_map_.prepare_allocate(first->get_from_item_size()))) {
   } else if (OB_FAIL(map_info.view_select_item_map_.prepare_allocate(first->get_table_size()))) {
@@ -874,7 +853,6 @@ int ObStmtComparer::compute_conditions_map(const ObDMLStmt *first,
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first) || OB_ISNULL(second) || OB_ISNULL(first->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first), K(second), K(ret));
   } else if (OB_FAIL(condition_map.prepare_allocate(first_exprs.count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < first_exprs.count(); ++i) {
@@ -957,7 +935,6 @@ int ObStmtComparer::inner_compute_expr(const ObRawExpr *target_expr,
   is_match = false;
   if (OB_ISNULL(target_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected NULL", K(ret), K(target_expr));
   } else if (target_expr->is_const_expr()) {
     // Do not need match
     is_match = true;
@@ -1014,11 +991,9 @@ int ObStmtComparer::compute_unmatched_item(const ObIArray<int64_t> &item_map,
   for (int64_t i = 0; OB_SUCC(ret) && i < first_size; ++i) {
     if (OB_UNLIKELY(i >= item_map.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("item map size overflow", K(ret), K(i), K(first_size), K(item_map));
     } else if (item_map.at(i) != OB_INVALID_ID) {
       if (OB_UNLIKELY(item_map.at(i) < 0 || item_map.at(i) >= second_size)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected map value", K(ret), K(i), K(item_map.at(i)));
       } else if (OB_FAIL(first_matched_set.add_member(i))) {
       } else if (OB_FAIL(second_matched_set.add_member(item_map.at(i)))) {
       }
@@ -1027,13 +1002,11 @@ int ObStmtComparer::compute_unmatched_item(const ObIArray<int64_t> &item_map,
   for (int64_t i = 0; OB_SUCC(ret) && i < first_size; ++i) {
     if (!first_matched_set.has_member(i)
         && (OB_FAIL(first_unmatched_items.push_back(i)))) {
-      LOG_WARN("failed to push back", K(ret), K(i));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < second_size; ++i) {
     if (!second_matched_set.has_member(i)
         && (OB_FAIL(second_unmatched_items.push_back(i)))) {
-      LOG_WARN("failed to push back", K(ret), K(i));
     }
   }
   return ret;
@@ -1052,7 +1025,6 @@ int ObStmtComparer::compute_orderby_map(const ObDMLStmt *first,
   bool first_match_all = true;
   if (OB_ISNULL(first) || OB_ISNULL(second) || OB_ISNULL(first->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first), K(second), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && first_match_all && i < first_orders.count() && i < second_orders.count(); ++i) {
       bool is_match = false;
@@ -1085,7 +1057,6 @@ int ObStmtComparer::is_same_condition(const ObRawExpr *left,
   context.const_param_info_.reset();
   if (OB_ISNULL(left) || OB_ISNULL(right)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (!(is_same = left->same_as(*right, &context))) {
     context.equal_param_info_.reset();
     context.const_param_info_.reset();
@@ -1097,7 +1068,6 @@ int ObStmtComparer::is_same_condition(const ObRawExpr *left,
                OB_ISNULL(right->get_param_expr(0)) ||
                OB_ISNULL(right->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param exprs are null", K(ret));
     } else if (!left->get_param_expr(0)->same_as(*right->get_param_expr(1), &context)) {
       // do nothing
     } else if (!left->get_param_expr(1)->same_as(*right->get_param_expr(0), &context)) {
@@ -1120,7 +1090,6 @@ int ObStmtComparer::compute_semi_infos_map(const ObDMLStmt *first,
   match_count = 0;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first), K(second), K(ret));
   } else if (OB_FAIL(map_info.semi_info_map_.prepare_allocate(first->get_semi_info_size()))) {
   } else {
     const ObIArray<SemiInfo*> &first_semi_infos = first->get_semi_infos();
@@ -1164,7 +1133,6 @@ int ObStmtComparer::is_same_semi_info(const ObDMLStmt *first,
   if (OB_ISNULL(first) || OB_ISNULL(first_semi_info) ||
       OB_ISNULL(second) || OB_ISNULL(second_semi_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (first_semi_info->join_type_ != second_semi_info->join_type_) {
     //do nothing
   } else {
@@ -1238,7 +1206,6 @@ int ObStmtComparer::compute_tables_map(const ObDMLStmt *first,
   match_count = 0;
   if (OB_ISNULL(first) || OB_ISNULL(second) || OB_ISNULL(first->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first), K(second), K(ret));
   } else if (OB_FAIL(table_map.prepare_allocate(first_table_ids.count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < first_table_ids.count(); ++i) {
@@ -1269,7 +1236,6 @@ int ObStmtComparer::compare_basic_table_item(const TableItem *first_table,
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param has null", K(first_table), K(second_table));
   } else if ((first_table->is_basic_table())
              && (second_table->is_basic_table()) 
              && first_table->ref_id_ == second_table->ref_id_
@@ -1324,7 +1290,6 @@ int ObStmtComparer::compare_joined_table_item(const ObDMLStmt *first,
   if (OB_ISNULL(first) || OB_ISNULL(first_table)
      || OB_ISNULL(second) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param has null", K(first), K(first_table), K(second), K(second_table));
   } else if (first_table->is_joined_table() && second_table->is_joined_table()) {
     const JoinedTable *first_joined_table = static_cast<const JoinedTable *>(first_table);
     const JoinedTable *second_joined_table = static_cast<const JoinedTable *>(second_table);
@@ -1411,13 +1376,10 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
   if (OB_ISNULL(first) || OB_ISNULL(second) ||
       OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmts have null", K(ret), K(first), K(second));
   } else if (map_info.table_map_.count() < first->get_table_size() &&
              OB_FAIL(map_info.table_map_.prepare_allocate(first->get_table_size()))) {
-    LOG_WARN("failed to pre-allocate table map", K(ret));
   } else if (map_info.view_select_item_map_.count() < first->get_table_size() &&
              OB_FAIL(map_info.view_select_item_map_.prepare_allocate(first->get_table_size()))) {
-    LOG_WARN("failed to pre-allocate generated table map", K(ret));
   } else if (first_table->for_update_ || second_table->for_update_) {
     relation = QueryRelation::QUERY_UNCOMPARABLE;
   } else if (first_table->is_temp_table() && second_table->is_temp_table()) {
@@ -1427,7 +1389,6 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
       const int32_t second_table_index = second->get_table_bit_index(second_table->table_id_);
       if (first_table_index < 1 || first_table_index > first->get_table_size()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect table bit index", K(ret));
       } else {
         map_info.table_map_.at(first_table_index - 1) = second_table_index - 1;
       }
@@ -1444,7 +1405,6 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
       const int32_t second_table_index = second->get_table_bit_index(second_table->table_id_);
       if (first_table_index < 1 || first_table_index > first->get_table_size()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect table bit index", K(ret));
       } else {
         map_info.table_map_.at(first_table_index - 1) = second_table_index - 1;
       }
@@ -1459,7 +1419,6 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
     const int32_t second_table_index = second->get_table_bit_index(second_table->table_id_);
     if (first_table_index < 1 || first_table_index > first->get_table_size()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect table bit index", K(ret));
     } else if (OB_FAIL(SMART_CALL(check_stmt_containment(first_table->ref_query_,
                                                          second_table->ref_query_,
                                                          ref_query_map_info,
@@ -1498,7 +1457,6 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
       const int32_t second_table_index = second->get_table_bit_index(second_table->table_id_);
       if (first_table_index < 1 || first_table_index > first->get_table_size()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect table bit index", K(ret), K(first_table_index), K(first->get_table_size()));
       } else {
         map_info.table_map_.at(first_table_index - 1) = second_table_index - 1;
       }
@@ -1517,10 +1475,8 @@ int ObStmtComparer::compare_set_stmt(const ObSelectStmt *first,
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmts have null", K(ret), K(first), K(second));
   } else if (!first->is_set_stmt() || !second->is_set_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect set stmt", KPC(first), KPC(second), K(ret));
   } else if (first->is_recursive_union() || second->is_recursive_union()) {
     //do nothing
   } else if (first->get_set_query().count() != second->get_set_query().count()) {
@@ -1643,8 +1599,6 @@ int ObStmtComparer::compare_values_table_item(const ObDMLStmt *first,
       OB_ISNULL(first_def = first_table->values_table_def_) ||
       OB_ISNULL(second_def = second_table->values_table_def_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param has null", K(ret), KP(first), KP(first_table), KP(second), KP(second_table),
-             KP(first_def), KP(second_def));
   } else if (first_def == second_def) {
     relation = QueryRelation::QUERY_EQUAL;
   }

@@ -41,7 +41,6 @@ int ObLogMonitoringDump::est_cost()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else {
     set_op_cost(0.0);
     set_cost(op_cost_ + child->get_cost());

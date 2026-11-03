@@ -34,10 +34,8 @@ int ObDDLBuildCtx::init(
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (!param.is_valid() || tablet_idx < 0 || tablet_idx >= param.source_tablet_ids_.count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param), K(tablet_idx));
   } else if (OB_INVALID_ID == param.source_table_ids_.at(tablet_idx) ||
              OB_INVALID_ID == param.dest_table_ids_.at(tablet_idx) ||
              0 == param.source_schema_versions_.at(tablet_idx) ||
@@ -45,7 +43,6 @@ int ObDDLBuildCtx::init(
              !param.source_tablet_ids_.at(tablet_idx).is_valid() ||
              !param.dest_tablet_ids_.at(tablet_idx).is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet build item", K(ret), K(param), K(tablet_idx));
   } else {
     ddl_type_ = param.ddl_type_;
     src_table_id_ = param.source_table_ids_.at(tablet_idx);
@@ -86,7 +83,6 @@ int ObDDLBuildCtx::check_need_schedule(bool &need_schedule) const
   need_schedule = false;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     const int64_t elapsed_time = ObTimeUtility::current_time() - heart_beat_time_;
     const bool timeout = (elapsed_time > BUILD_HEART_BEAT_TIME);
@@ -104,7 +100,6 @@ int ObDDLLocalBuildExecutor::build(const ObDDLLocalBuildExecutorParam &param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(param));
   } else if (OB_FAIL(DDL_SIM(param.task_id_, LOCAL_BUILD_EXECUTOR_BUILD_FAILED))) {
   } else {
     ObSpinLockGuard guard(lock_);
@@ -144,11 +139,9 @@ int ObDDLLocalBuildExecutor::schedule_task()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("build executor not init", K(ret));
   } else if (OB_FAIL(DDL_SIM(ddl_task_id_, LOCAL_BUILD_EXECUTOR_SCHEDULE_TASK_FAILED))) {
   } else if (OB_ISNULL(rootserver_local_runtime())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rootserver local runtime is null", K(ret));
   } else {
     ObArray<obcall::ObDDLLocalBuildArg> args;
     ObArray<ObTabletID> tablet_ids;
@@ -176,7 +169,6 @@ int ObDDLLocalBuildExecutor::schedule_task()
       if (OB_FAIL(get_build_ctx(tablet_ids.at(i), build_ctx, is_found))) {
       } else if (!is_found) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("local build context is missing", K(ret), K(tablet_ids.at(i)));
       } else if (ObDDLBuildStat::BUILD_SUCCEED != build_ctx->stat_ &&
                  OB_FAIL(update_build_ctx_status(*build_ctx, call_ret,
                      result.row_scanned_, result.row_inserted_, result.physical_row_count_, true))) {
@@ -200,7 +192,6 @@ int ObDDLLocalBuildExecutor::check_build_end(const bool need_checksum, bool &is_
   int64_t dest_table_id = OB_INVALID_ID;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("build executor not init", K(ret));
   }
   {
     ObSpinLockGuard guard(lock_);
@@ -264,12 +255,10 @@ int ObDDLLocalBuildExecutor::update_build_progress(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id));
   } else {
     ObSpinLockGuard guard(lock_);
     if (!is_inited_) {
       ret = OB_NOT_INIT;
-      LOG_WARN("build executor not init", K(ret));
     } else {
       bool is_found = false;
       ObDDLBuildCtx *build_ctx = nullptr;
@@ -298,7 +287,6 @@ int ObDDLLocalBuildExecutor::get_progress(int64_t &row_inserted, int64_t &physic
   ObSpinLockGuard guard(lock_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("build executor not init", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < build_ctxs_.count(); ++i) {
     row_inserted += build_ctxs_.at(i).row_inserted_;
@@ -326,10 +314,8 @@ int ObDDLLocalBuildExecutor::construct_request_arg(
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("build executor not init", K(ret));
   } else if (!build_ctx.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(build_ctx));
   } else {
     arg.source_tablet_id_ = build_ctx.src_tablet_id_;
     arg.dest_tablet_id_ = build_ctx.dest_tablet_id_;
@@ -358,7 +344,6 @@ int ObDDLLocalBuildExecutor::construct_build_ctxs(
   build_ctxs.reuse();
   if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.source_tablet_ids_.count(); ++i) {
       ObDDLBuildCtx build_ctx;
@@ -380,10 +365,8 @@ int ObDDLLocalBuildExecutor::get_build_ctx(
   is_found = false;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("build executor not init", K(ret));
   } else if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !is_found && i < build_ctxs_.count(); ++i) {
     if (build_ctxs_.at(i).src_tablet_id_ == tablet_id) {
@@ -405,7 +388,6 @@ int ObDDLLocalBuildExecutor::update_build_ctx_status(
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("build executor not init", K(ret));
   } else if (ret_code == OB_SUCCESS) {
     build_ctx.ret_code_ = OB_SUCCESS;
     if (is_schedule_result) {

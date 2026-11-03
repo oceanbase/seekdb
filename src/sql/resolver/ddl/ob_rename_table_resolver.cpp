@@ -41,7 +41,6 @@ int ObRenameTableResolver::resolve(const ParseNode &parser_tree)
   ObRenameTableStmt *rename_table_stmt = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_) || OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info or schema_checker is null", K(ret), K(schema_checker_), K(session_info_), K(node));
   } else if (T_RENAME_TABLE != node->type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree",  K(node->type_));
@@ -65,7 +64,6 @@ int ObRenameTableResolver::resolve(const ParseNode &parser_tree)
       ParseNode *rename_node = node->children_[i];
       if (OB_ISNULL(rename_node)) {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("node should not be null!", K(ret));
       } else if (OB_FAIL(resolve_rename_action(*rename_node))) {
       }
     }
@@ -87,7 +85,6 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
   if (OB_ISNULL(rename_table_stmt) || NAME_NODE_COUNT != rename_action_node.num_child_
       || OB_ISNULL(rename_action_node.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rename_table_stmt is null or parser error", K(ret));
   }
   if (OB_SUCC(ret)) {
     // Above judged rename_action_node.children_ pointer
@@ -96,8 +93,6 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
     const share::schema::ObTableSchema *table_schema = NULL;
     if (OB_ISNULL(origin_node) || OB_ISNULL(new_node)) {
       ret = OB_ERR_PARSE_SQL;
-      LOG_WARN("origin_node or new node is null",
-                   K(origin_node), K(new_node), K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(origin_node,
                                                    origin_table_name,
                                                    origin_db_name))) {

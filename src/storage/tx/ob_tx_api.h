@@ -48,10 +48,12 @@ int abort_tx(ObTxDesc &tx, int cause);
  * rollback_tx - rollback transaction
  *
  * @tx:          the target transaction's descriptor
+ * @expire_ts:   microseconds after which timeouted while waiting for
+ *               rollback decision
  *
  * Return: OB_SUCCESS - OK
  */
-int rollback_tx(ObTxDesc &tx);
+int rollback_tx(ObTxDesc &tx, const int64_t expire_ts = INT64_MAX);
 
 /**
  * commit_tx - commit transaction

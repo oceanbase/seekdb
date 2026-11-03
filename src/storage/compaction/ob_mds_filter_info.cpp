@@ -60,11 +60,9 @@ int ObMdsFilterInfo::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(is_empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should not serialize empty mds filter info", KR(ret), KPC(this));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE, info_);
     if (FAILEDx((truncate_info_keys_.serialize(buf, buf_len, pos)))) {
-      LOG_WARN("failed to serialize truncate info keys", KR(ret), K_(truncate_info_keys));
     }
   }
   return ret;
@@ -82,7 +80,6 @@ int ObMdsFilterInfo::deserialize(
   } else {
     LST_DO_CODE(OB_UNIS_DECODE, info_);
     if (FAILEDx(truncate_info_keys_.deserialize(allocator, buf, data_len, pos))) {
-      LOG_WARN("failed to deserialize truncate info keys", KR(ret), K_(truncate_info_keys));
     }
   }
   return ret;

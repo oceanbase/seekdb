@@ -120,7 +120,7 @@ public:
   static int64_t default_max_cache_size() { return MAX_CACHE_SIZE; }
   int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,
            const int64_t max_cache_size = MAX_CACHE_SIZE,
-           const int64_t block_size = lib::ACHUNK_SIZE,
+           const int64_t block_size = ObKVCacheStore::DEFAULT_BLOCK_SIZE,
            const int64_t cache_wash_interval = 0,
            const ObKVCacheRuntimeOptions &runtime_options = ObKVCacheRuntimeOptions());
   void stop();
@@ -458,7 +458,7 @@ int64_t ObKVCache<Key, Value>::get_miss_cnt() const
     ObKVCacheInstHandle inst_handle;
     if (OB_SUCC(ObKVGlobalCache::get_instance().insts_.get_cache_inst(inst_key, inst_handle))) {
       if (NULL != inst_handle.get_inst()) {
-        miss_cnt = inst_handle.get_inst()->status_.total_miss_cnt_;
+        miss_cnt = inst_handle.get_inst()->status_.total_miss_cnt_.value();
       }
     }
   }

@@ -17,6 +17,9 @@
 #ifdef __linux__
 #include <linux/falloc.h> // FALLOC_FL_ZERO_RANGE for linux kernel 3.15
 #endif
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef _WIN32
@@ -129,6 +132,7 @@ static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
 #define fstatat64 fstatat
 #endif
 #include "log_io_utils.h"
+#include "share/ob_errno.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 namespace oceanbase
@@ -376,6 +380,63 @@ int fsync_with_retry(const int dir_fd)
 
 }
 
+int check_log_directory_entry(const char *dir_name, const char *entry_name, bool &exists)
+{
+  int ret = OB_SUCCESS;
+  exists = false;
+  if (OB_ISNULL(dir_name) || OB_ISNULL(entry_name) || '\0' == entry_name[0]) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+#ifdef _WIN32
+    char entry_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+    const size_t entry_length = strlen(entry_name);
+    const DWORD parent_attributes = GetFileAttributesA(dir_name);
+    const int length = snprintf(entry_path, sizeof(entry_path), "%s/%s", dir_name, entry_name);
+    if (INVALID_FILE_ATTRIBUTES == parent_attributes
+        || 0 == (parent_attributes & FILE_ATTRIBUTE_DIRECTORY)
+        || 0 != (parent_attributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        || length <= 0 || length >= static_cast<int>(sizeof(entry_path))
+        || NULL != strpbrk(entry_name, "*?\\/:")
+        // Win32 normalizes these suffixes; absence could hide a real NTFS leaf.
+        || '.' == entry_name[entry_length - 1] || ' ' == entry_name[entry_length - 1]
+        || 0 == strcmp(entry_name, ".") || 0 == strcmp(entry_name, "..")) {
+      ret = OB_IO_ERROR;
+    } else {
+      WIN32_FIND_DATAA exact_entry;
+      HANDLE find = FindFirstFileA(entry_path, &exact_entry);
+      if (INVALID_HANDLE_VALUE == find) {
+        const DWORD error = GetLastError();
+        // Only an exact missing leaf is absent. In particular, missing parents,
+        // access denial and I/O errors must fail closed, not skip an entry.
+        if (ERROR_FILE_NOT_FOUND != error) {
+          ret = OB_IO_ERROR;
+        } else {
+          const DWORD attributes_after = GetFileAttributesA(dir_name);
+          if (INVALID_FILE_ATTRIBUTES == attributes_after
+              || 0 == (attributes_after & FILE_ATTRIBUTE_DIRECTORY)
+              || 0 != (attributes_after & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            ret = OB_IO_ERROR;
+          }
+        }
+      } else {
+        if (0 != (exact_entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+          ret = OB_IO_ERROR;
+        } else {
+          exists = true;
+        }
+        if (!FindClose(find)) {
+          exists = false;
+          ret = OB_IO_ERROR;
+        }
+      }
+    }
+#else
+    exists = true;
+#endif
+  }
+  return ret;
+}
+
 int scan_dir(const char *dir_name, ObBaseDirFunctor &functor)
 {
   int ret = OB_SUCCESS;
@@ -395,8 +456,11 @@ int scan_dir(const char *dir_name, ObBaseDirFunctor &functor)
     }
   } else {
     while ((NULL != (result = ::readdir(open_dir))) && OB_SUCC(ret)) {
-      if (0 != STRCMP(result->d_name, ".") && 0 != STRCMP(result->d_name, "..")
-          && OB_FAIL((functor.func)(result))) {
+      bool exists = false;
+      if (0 == STRCMP(result->d_name, ".") || 0 == STRCMP(result->d_name, "..")) {
+      } else if (OB_FAIL(check_log_directory_entry(dir_name, result->d_name, exists))) {
+        PALF_LOG(WARN, "fail to check log directory entry", K(ret), K(dir_name), K(result->d_name));
+      } else if (exists && OB_FAIL((functor.func)(result))) {
         PALF_LOG(WARN, "fail to operate dir entry", K(ret), K(dir_name));
       }
     }
@@ -457,7 +521,13 @@ int reuse_block_at(const int dir_fd, const char *block_path)
   if (-1 == (fd = ::openat(dir_fd, block_path, LOG_WRITE_FLAG))) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::openat failed", K(ret), K(block_path));
-#ifdef __APPLE__
+#if defined(__EMSCRIPTEN__)
+  } else if (-1 == common::wasm::zero_file_range(fd, 0, PALF_PHY_BLOCK_SIZE)) {
+    ret = convert_sys_errno();
+    PALF_LOG(ERROR, "zeroing reused log block failed", K(ret), K(block_path));
+  } else {
+    PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
+#elif defined(__APPLE__)
   } else if (-1 == ftruncate(fd, PALF_PHY_BLOCK_SIZE)) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), K(block_path));

@@ -36,7 +36,6 @@ int ObGetAllSqlStatCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID,
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(key_array_) || OB_ISNULL(entry.second)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (entry.second->get_ns() == ObLibCacheNameSpace::NS_SQLSTAT ||
              entry.second->get_ns() == ObLibCacheNameSpace::NS_CRSR) {
     if (!entry.second->added_lc()) {
@@ -74,7 +73,6 @@ int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", KR(ret));
   } else {
     const int64_t default_bucket_num  = 64;
     if (OB_FAIL(tmp_sql_stat_map_.create(default_bucket_num, ObMemAttr("TmpSqlStatMgr")))) {
@@ -104,7 +102,6 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
         if (OB_FAIL(plan_cache->foreach_cache_obj(op))) {
         }
       } else {
-        LOG_WARN("failed to get library cache", K(ret));
       }
 
       if (OB_SUCC(ret)) {
@@ -123,7 +120,6 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null sess", K(ret));
   } else if (false == sess_info->is_valid()) {
     // do nothing
   } else if (ObSQLSessionState::QUERY_ACTIVE != sess_info->get_session_state()) {
@@ -143,7 +139,6 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
         // do nothing
       } else if (OB_ISNULL(get_observer_sql_engine())) {
         ret = OB_NOT_INIT;
-        LOG_WARN("query runtime environment is not bound", K(ret));
       } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value(
                      get_observer_sql_engine()->get_query_runtime_environment()))) {
       } else if (OB_SUCC(tmp_sql_stat_map_.get_refactored(key, value))) {
@@ -160,17 +155,14 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
 
         if (OB_ISNULL(allocator_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("alloc is null", K(ret));
         } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObExecutedSqlStatRecord), ObMemAttr("TmpSqlStatMgr")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc failed", K(ret));
         } else if (FALSE_IT(value = new(buf) ObExecutedSqlStatRecord())) {
         } else if (OB_FAIL(value->get_sql_stat_info().init(key, *sess_info, sql, nullptr /*phy_plan*/))) {
         } else if (OB_FAIL(value->sum_stat_value(executing_sql_stat_record))) {
         } else if (OB_FAIL(tmp_sql_stat_map_.set_refactored(key, value))) {
         }
       } else {
-        LOG_WARN("get_refactored fail", KR(ret), K(key));
       }
     }
   }
@@ -184,7 +176,6 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
   while (OB_SUCC(ret) && sql_stat_cache_id_array_idx_ >= sql_stat_cache_id_array_.count() && tmp_sql_stat_map_.empty()) {
     if (OB_FAIL(get_next_batch_sql_stat())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next SQL stat batch", K(ret));
       }
     } else {
       sql_stat_cache_id_array_idx_ = 0;
@@ -209,7 +200,6 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
             ret = tmp_ret;
           } else if (OB_ISNULL(guard.get_cache_obj())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("cache object is NULL", K(ret));
           } else {
             bool is_succ_get_stat_value = false;
             const ObExecutedSqlStatRecord *tmp_sql_stat_value = nullptr;
@@ -254,12 +244,10 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
       } else if (!tmp_sql_stat_map_.empty()) {
         if (OB_ISNULL(tmp_sql_stat_map_.begin()->second)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to get sql stat from map", K(ret));
         } else {
           const ObExecutedSqlStatRecord *tmp_sql_stat_value = tmp_sql_stat_map_.begin()->second;
           if (!tmp_sql_stat_value->get_key().is_valid()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to get sql stat from map", K(ret));
           } else if (OB_FAIL(sql_stat_value.assign(*(tmp_sql_stat_value)))) {
           } else if (OB_FAIL(tmp_sql_stat_map_.erase_refactored(sql_stat_value.get_key()))) {
           }
@@ -617,7 +605,6 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("alloc is null", K(ret));
     } else if (OB_ISNULL(last_sql_stat_record_)) {
       // is nullptr , do nothing
     } else {
@@ -631,16 +618,13 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
     void *buf = nullptr;
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("alloc is null", K(ret));
     } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObExecutedSqlStatRecord), ObMemAttr("TmpSqlStat")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret));
     } else if (FALSE_IT(sql_stat_record = new(buf) ObExecutedSqlStatRecord())) {
     } else {
       while (OB_SUCC(ret) && !sql_stat_record->get_key().is_valid()) {
         if (OB_FAIL(iter_.get_next_sql_stat(*sql_stat_record))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("failed to get next sql_stat_record", K(ret));
           }
         }
       } // end while
@@ -653,7 +637,6 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to get row from sql_stat_record", K(ret));
         }
       }
     }

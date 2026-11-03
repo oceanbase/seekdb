@@ -59,7 +59,6 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
         if (OB_FAIL(session->get_sys_variable_by_name(var_name, sys_var_ptr))) {
         } else if (OB_ISNULL(sys_var_ptr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sys var is NULL", K(var_name), K(ret));
         } else if (sys_var_ptr->is_enum_type()) {
           // User selects the system variable of enum type, ObBasicSysVar records it as ObIntType
           // But for convenience of display, everything will eventually be returned in string form, this behavior is also compatible with MySQL
@@ -108,11 +107,9 @@ int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_
   // First retrieve from session (session contains all system variables, including only global ones)
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session->get_sys_variable_by_name(var_name, sys_var_ptr))) {
   } else if (OB_ISNULL(sys_var_ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys var is NULL", K(var_name), K(ret));
   } else if (ObSetVar::SET_SCOPE_NEXT_TRANS == static_cast<ObSetVar::SetScopeType>(var_scope)) {
     // If scope is not specified, if it's a session variable, directly get from session, if it's only global, then get from internal table
     if (sys_var_ptr->is_session_scope()) {
@@ -166,7 +163,6 @@ int ObExprGetSysVar::get_session_var(ObObj &result,
   bool is_exist = false;
   if (OB_ISNULL(session) || OB_ISNULL(exec_ctx)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session or exec_ctx is NULL", K(ret), KP(session), KP(exec_ctx));
   } else if (OB_FAIL(session->sys_variable_exists(var_name, is_exist))) {
   } else if (!is_exist) {
     ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
@@ -175,7 +171,6 @@ int ObExprGetSysVar::get_session_var(ObObj &result,
     if (0 == (var_name.compare(OB_SV_TIMESTAMP))) {
       if (OB_ISNULL(exec_ctx->get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("exec_ctx->get_physical_plan_ctx is NULL()", K(ret));
       } else {
         int64_t ts_value = exec_ctx->get_physical_plan_ctx()->get_cur_time().get_timestamp();
         number::ObNumber nmb;
@@ -195,7 +190,6 @@ int ObExprGetSysVar::get_session_var(ObObj &result,
       if (OB_FAIL(session->get_sys_variable_by_name(var_name, sys_var))) {
       } else if (OB_ISNULL(sys_var)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sys var is NULL", K(var_name), K(ret));
       } else if (OB_FAIL(sys_var->to_select_obj(alloc, *session, result))) {
       }
     }
@@ -220,7 +214,6 @@ int ObExprGetSysVar::get_sys_var_disp_obj(common::ObIAllocator &allocator,
     } else if (OB_FAIL(sysvar_fac.create_sys_var(sys_var_id, sys_var))) {
     } else if (OB_ISNULL(sys_var)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("system variable is null");
     } else {
       sys_var->set_value(value);
       if (OB_FAIL(sys_var->to_select_obj(allocator, session, disp_obj))) {
@@ -239,11 +232,9 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *scope = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, name, scope))) {
   } else if (OB_ISNULL(name) || OB_ISNULL(scope)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL name or scope", K(ret), KPC(name), KPC(scope), K(expr));
   } else {
     const ObString &var_name = name->get_string();
     int64_t var_scope = OB_INVALID_COUNT;
@@ -280,14 +271,10 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected decimalint bytes",
-                 K(ret), K(int_bytes), KPC(scope));
       }
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected scope type",
-               K(ret), K(scope_type), KPC(scope), K(expr), K(lbt()));
     }
 
     if (OB_FAIL(ret)) {
@@ -301,7 +288,6 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
         // Ensure that the compile-time result type is consistent with the actual result type, otherwise the memory space of datum may be corrupted due to type
         // Inconsistency causes issues
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("compile type and calc res type is different", K(ret), K(obj_type), K(res_type));
       } else if (ob_is_string_type(obj_type)) {
         ObString res_str;
         ObExprStrResAlloc str_alloc(expr, ctx);

@@ -26,6 +26,7 @@
 #include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "lib/utility/alloc_assist.h"
+#include "lib/utility/utility.h"
 #include "share/ob_table_access_helper.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
@@ -58,7 +59,6 @@ int ObLockContext::init(ObExecContext &ctx,
 
   if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session_info is null in ObExecContext", K(ret));
   } else {
     // use smaller timeout if we specified the lock timeout us.
     if (timeout_us > 0
@@ -107,7 +107,6 @@ int ObLockContext::destroy(ObExecContext &ctx,
 
   if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session_info is null in ObExecContext", K(ret));
   } else {
     if (has_inner_tx_) {
       if (OB_TMP_FAIL(implicit_end_trans_(*session_info, ctx, is_rollback))) {
@@ -219,13 +218,10 @@ int ObLockContext::open_inner_conn_()
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
   } else if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session in ObExecContext is NULL", K(ret), KP(session));
   } else if (OB_NOT_NULL(inner_conn_) || OB_NOT_NULL(store_inner_conn_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner_conn_ or store_inner_conn_ should be null", K(ret), KP(inner_conn_), KP(store_inner_conn_));
   } else if (FALSE_IT(store_inner_conn_ = session->get_inner_conn())) {
   } else if (FALSE_IT(session->set_inner_conn(nullptr))) {
   } else if (OB_FAIL(
@@ -234,7 +230,6 @@ int ObLockContext::open_inner_conn_()
                          session, inner_conn_guard_))) {
   } else if (OB_ISNULL(inner_conn = inner_conn_guard_.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner connection is still null", KPC(session));
   } else {
     /**
      * session is the only data struct which can pass through multi layer nested sql,
@@ -253,15 +248,12 @@ int ObLockContext::close_inner_conn_()
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
   } else {
     if (OB_ISNULL(inner_conn_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("inner_conn of session is NULL", K(ret), KP(session), KP(inner_conn_));
     }
     if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
       ret = OB_NOT_INIT;
-      LOG_WARN("session is NULL", K(ret), KP(session));
     } else if (OB_NOT_NULL(inner_conn_) || OB_NOT_NULL(store_inner_conn_)) {
       // 1. if inner_conn_ is not null, means that we have created inner_conn successfully before, so we must have already
       // set store_inner_conn_ successfully, just restore it to the session.
@@ -285,7 +277,6 @@ int ObLockContext::execute_write(const ObSqlString &sql,
 
   if (OB_ISNULL(inner_conn_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_write(sql.ptr(), affected_rows))) {
   }
   return ret;
@@ -298,7 +289,6 @@ int ObLockContext::execute_read(const ObSqlString &sql,
 
   if (OB_ISNULL(inner_conn_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_read(sql.ptr(), res))) {
   }
   return ret;
@@ -331,23 +321,22 @@ int ObLockExecutor::query_lock_id_(ObISQLClient &sql_client,
   
   ObStringHolder query_lock_handle;
   // 1. check if there's a lock with the same lock name
-  char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
+  ObSqlString where_cond;
   char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
   // generate corresponding lock handle for the lock name,
   // and insert them into the inner table DBMS_LOCK_ALLOCATED
 
   lock_id = OB_INVALID_OBJECT_ID;
 
-  ObCStringHelper helper;
-  OZ (databuff_printf(where_cond, WHERE_CONDITION_BUFFER_SIZE,
-                      "WHERE name = '%s'", helper.convert(lock_name)));
+  OZ (where_cond.append("WHERE name = "));
+  OZ (sql_append_hex_escape_str(lock_name, where_cond));
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, share::OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
   OZ (ObTableAccessHelper::read_single_row(
                                            sql_client,
                                            { "lockhandle" },
                                            table_name,
-                                           where_cond,
+                                           where_cond.string(),
                                            query_lock_handle));
   if (OB_EMPTY_RESULT == ret) {
     // there is no lock name.
@@ -366,21 +355,20 @@ int ObLockExecutor::query_lock_id_and_lock_handle_(ObISQLClient &sql_client,
   
   ObStringHolder query_lock_handle;
   // 1. check if there's a lock with the same lock name
-  char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
+  ObSqlString where_cond;
   char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
   int64_t lock_handle_len = 0;
   // generate corresponding lock handle for the lock name,
   // and insert them into the inner table DBMS_LOCK_ALLOCATED
-  ObCStringHelper helper;
-  OZ (databuff_printf(where_cond, WHERE_CONDITION_BUFFER_SIZE,
-                      "WHERE name = '%s'", helper.convert(lock_name)));
+  OZ (where_cond.append("WHERE name = "));
+  OZ (sql_append_hex_escape_str(lock_name, where_cond));
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, share::OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
   OZ (ObTableAccessHelper::read_single_row(
                                            sql_client,
                                            { "lockhandle" },
                                            table_name,
-                                           where_cond,
+                                           where_cond.string(),
                                            query_lock_handle));
   if (OB_EMPTY_RESULT == ret) {
     // there is no lock name.

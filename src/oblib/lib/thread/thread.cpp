@@ -77,10 +77,14 @@ int Thread::start()
   if (count >= get_max_thread_num() - OB_RESERVED_THREAD_NUM) {
     ret = OB_SIZE_OVERFLOW;
     LOG_ERROR("thread count reach limit", K(ret), "current count", count);
-  } else if (stack_size_ <= 0) {
+  } else if (stack_size_ <= 0
+#ifdef __EMSCRIPTEN__
+             || static_cast<uint64_t>(stack_size_) > SIZE_MAX
+#endif
+            ) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
-#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
+#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
   } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(stack_size_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
@@ -112,14 +116,14 @@ int Thread::start()
         pthread_attr_getstacksize(&attr, &actual_stack_size);
         LOG_INFO("successfully set stack size", K_(stack_size), K(actual_stack_size));
       }
-#elif defined(_WIN32)
+#elif defined(_WIN32) || defined(__EMSCRIPTEN__)
       pret = pthread_attr_setstacksize(&attr, stack_size_);
 #else
       pret = pthread_attr_setstack(&attr, stack_addr_, stack_size_);
 #endif
     }
     if (pret == 0) {
-      stop_ = false;
+      ATOMIC_STORE(&stop_, false);
       pret = pthread_create(&pth_, &attr, __th_start, this);
       if (pret != 0) {
         LOG_ERROR("pthread create failed", K(pret), K(errno));
@@ -141,7 +145,7 @@ int Thread::start()
     }
     if (0 != pret) {
       ret = OB_ERR_SYS;
-      stop_ = true;
+      ATOMIC_STORE(&stop_, true);
     }
     if (need_destroy) {
       pthread_attr_destroy(&attr);
@@ -157,8 +161,8 @@ int Thread::start()
 void Thread::stop()
 {
   bool stack_addr_flag = (stack_addr_ != NULL);
-#if defined(ERRSIM) && !defined(_WIN32)
-  if (!stop_
+#if defined(ERRSIM) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+  if (!ATOMIC_LOAD(&stop_)
       && stack_addr_flag
       && 0 != (OB_E(EventTable::EN_THREAD_HANG) 0)) {
     int tid_offset = 720;
@@ -167,8 +171,8 @@ void Thread::stop()
     return;
   }
 #endif
-#if !defined(_WIN32)
-  if (!stop_ && stack_addr_ != NULL) {
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+  if (!ATOMIC_LOAD(&stop_) && stack_addr_ != NULL) {
     int tid_offset = 720;
     int pid_offset = 724;
     int len = (char*)stack_addr_ + stack_size_ - (char*)pth_;
@@ -178,7 +182,7 @@ void Thread::stop()
     }
   }
 #endif
-  stop_ = true;
+  ATOMIC_STORE(&stop_, true);
 }
 
 
@@ -203,7 +207,9 @@ void Thread::run()
 
 void Thread::dump_pth() // for debug pthread join faileds
 {
-#if !defined(_WIN32)
+#ifdef __EMSCRIPTEN__
+  LOG_WARN_RET(OB_NOT_SUPPORTED, "native pthread memory dumps are unavailable in WebAssembly");
+#elif !defined(_WIN32)
   int ret = OB_SUCCESS;
   int fd = 0;
   int64_t len = 0;
@@ -223,22 +229,16 @@ void Thread::dump_pth() // for debug pthread join faileds
   } else if ((fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC,
                           S_IRUSR  | S_IWUSR | S_IRGRP)) < 0) {
     ret = OB_IO_ERROR;
-    LOG_WARN("fail to create file", KERRMSG, K(ret));
   } else if (len != (size = write(fd, (char*)(pth_), len))) {
     ret = OB_IO_ERROR;
-    LOG_WARN("dump pth fail", K(errno), KERRMSG, K(len), K(size), K(ret));
     if (0 != close(fd)) {
-      LOG_WARN("fail to close file fd", K(fd), K(errno), KERRMSG, K(ret));
     }
   } else if (::fsync(fd) != 0) {
     ret = OB_IO_ERROR;
-    LOG_WARN("sync pth fail", K(errno), KERRMSG, K(len), K(size), K(ret));
     if (0 != close(fd)) {
-      LOG_WARN("fail to close file fd", K(fd), K(errno), KERRMSG, K(ret));
     }
   } else if (0 != close(fd)) {
     ret = OB_IO_ERROR;
-    LOG_WARN("fail to close file fd", K(fd), KERRMSG, K(ret));
   } else {
     LOG_WARN("dump pth done", K(path), K(pth_), K(size));
   }
@@ -297,10 +297,12 @@ int Thread::try_wait()
         ret = OB_EAGAIN;
       }
     }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__EMSCRIPTEN__)
     if (0 != (pret = pthread_tryjoin_np(pth_, nullptr))) {
       ret = OB_EAGAIN;
-      LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
+      if (EBUSY != pret) {
+        LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
+      }
     } else {
       destroy_stack();
     }
@@ -352,7 +354,7 @@ void* Thread::__th_start(void *arg)
   current_thread_ = th;
   th->tid_ = gettid();
 
-#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
   ObStackHeader *stack_header = nullptr;
   if (th->stack_addr_ != nullptr) {
     stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
@@ -369,29 +371,23 @@ void* Thread::__th_start(void *arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
-    ObPageManager pm;
-    ret = pm.set_ctx(common::ObCtxIds::GLIBC);
-    if (OB_FAIL(ret)) {
+    MemoryContext *mem_context = GET_TSI0(MemoryContext);
+    if (OB_ISNULL(mem_context)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("null ptr", K(ret));
+    } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(*mem_context,
+                       ContextParam().set_properties(RETURN_MALLOC_DEFAULT)
+                                     .set_label("ThreadRoot")))) {
     } else {
-      ObPageManager::set_thread_local_instance(pm);
-      MemoryContext *mem_context = GET_TSI0(MemoryContext);
-      if (OB_ISNULL(mem_context)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("null ptr", K(ret));
-      } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(*mem_context,
-                         ContextParam().set_properties(RETURN_MALLOC_DEFAULT)
-                                       .set_label("ThreadRoot")))) {
-      } else {
-        WITH_CONTEXT(*mem_context) {
+      WITH_CONTEXT(*mem_context) {
 #if !defined(__APPLE__)
-          ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
+        ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
 #endif
-          th->run();
-        }
+        th->run();
       }
-      if (mem_context != nullptr && *mem_context != nullptr) {
-        DESTROY_CONTEXT(*mem_context);
-      }
+    }
+    if (mem_context != nullptr && *mem_context != nullptr) {
+      DESTROY_CONTEXT(*mem_context);
     }
   }
   if (OB_FAIL(ret)) {
@@ -414,14 +410,15 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
   int64_t cpu_time = 0;
   cpu_time_inc = 0;
 
-#ifdef __APPLE__
+#ifdef __EMSCRIPTEN__
+  return OB_NOT_SUPPORTED;
+#elif defined(__APPLE__)
   // macOS doesn't have /proc, use mach APIs
   thread_port_t mach_thread = pthread_mach_thread_np(pth_);
   thread_basic_info_data_t basic_info;
   mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
   if (KERN_SUCCESS != thread_info(mach_thread, THREAD_BASIC_INFO, (thread_info_t)&basic_info, &count)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("thread_info failed", K(ret), K(tid));
   } else {
     cpu_time = (int64_t)basic_info.user_time.seconds * 1000000 + basic_info.user_time.microseconds
              + (int64_t)basic_info.system_time.seconds * 1000000 + basic_info.system_time.microseconds;
@@ -439,12 +436,10 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
       cpu_time = (int64_t)((utime.QuadPart + ktime.QuadPart) / 10);
     } else {
       ret = OB_ERR_SYS;
-      LOG_WARN("GetThreadTimes failed", K(ret), K(tid));
     }
     CloseHandle(hThread);
   } else {
     ret = OB_ERR_SYS;
-    LOG_WARN("OpenThread failed", K(ret), K(tid));
   }
 #else
   int fd = -1;
@@ -461,16 +456,8 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
     snprintf(stat_path, PATH_BUFSIZE, "/proc/%d/task/%ld/stat", pid, tid);
     if ((fd = ::open(stat_path, O_RDONLY)) < 0) {
       ret = OB_IO_ERROR;
-      LOG_WARN("open file error", K((const char *)stat_path), K(errno), KERRMSG, K(ret));
     } else if ((read_size = read(fd, stat_content, MAX_LINE_LENGTH)) < 0) {
       ret = OB_IO_ERROR;
-      LOG_WARN("read file error",
-          K((const char *)stat_path),
-          K((const char *)stat_content),
-          K(ret),
-          K(errno),
-          KERRMSG,
-          K(ret));
     } else {
       // do nothing
     }

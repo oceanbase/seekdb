@@ -76,7 +76,6 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
 
   if (OB_ISNULL(tx_desc)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tx_desc is null", K(ret));
   } else {
     if (is_rollback) {
       if (OB_SUCCESS != (tmp_ret = txs->rollback_tx(*tx_desc))) {
@@ -91,7 +90,6 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
     }
     if (OB_SUCCESS != (tmp_ret = txs->release_tx(*tx_desc))) {
       ret = tmp_ret;
-      LOG_WARN("release tx failed", K(ret), KPC(tx_desc));
     }
   }
   return ret;
@@ -115,7 +113,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
   ObTxReadSnapshot snapshot;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get lob manager handle.", K(ret));
   } else {
     ObString data = datum.get_string();
     // datum with null ptr and zero len should treat as no lob header
@@ -130,7 +127,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         void *buf = allocator.alloc(data.length() + sizeof(ObLobCommon));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc buffer failed", K(ret), K(data.length()));
         } else {
           ObLobCommon *lob_comm = new(buf)ObLobCommon();
           MEMCPY(lob_comm->buffer_, data.ptr(), data.length());
@@ -162,7 +158,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         if (OB_FAIL(ret)) {
         } else if (!src.is_valid()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid src lob locator.", K(ret));
         } else if (OB_FAIL(lob_mngr->append(lob_param, src))) {
         } else {
           datum.set_lob_data(*lob_param.lob_common_, lob_param.handle_size_);
@@ -198,7 +193,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
   ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get lob manager handle.", K(ret));
   } else {
     ObString data = datum.get_string();
     // datum with null ptr and zero len should treat as no lob header
@@ -214,7 +208,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         ObLobCommon *lob_comm = new (buf) ObLobCommon();
         if (lob_comm->buffer_ != buf + sizeof(ObLobCommon)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("lob common buffer ptr is invalid", K(ret), KPC(lob_comm));
         } else {
           datum.set_lob_data(*lob_comm, src.size_);
           iter.set_end();
@@ -224,7 +217,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         void *buf = allocator.alloc(data.length() + sizeof(ObLobCommon));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc buffer failed", K(ret), K(data.length()));
         } else {
           ObLobCommon *lob_comm = new(buf)ObLobCommon();
           MEMCPY(lob_comm->buffer_, data.ptr(), data.length());
@@ -254,7 +246,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
       lob_param.set_tmp_allocator(&lob_allocator);
       if (!src.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid src lob locator.", K(ret));
       } else if (OB_FAIL(lob_mngr->append(lob_param, src, iter))) {
       } else {
         datum.set_lob_data(*lob_param.lob_common_, lob_param.handle_size_);
@@ -280,7 +271,6 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
   ObTxReadSnapshot snapshot;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get lob manager handle.", K(ret));
   } else {
     ObString data = datum.get_string();
     // datum with null ptr and zero len should treat as no lob header
@@ -299,7 +289,6 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
         lob_param.tablet_id_ = tablet_id;
         if (!lob.is_valid()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid src lob locator.", K(ret));
         } else if (OB_FAIL(lob_mngr->build_lob_param(lob_param, allocator, collation_type, 0, UINT64_MAX, timeout_ts, lob))) {
         } else if (OB_FAIL(lob_mngr->erase(lob_param))) {
         } else {

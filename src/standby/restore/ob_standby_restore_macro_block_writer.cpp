@@ -197,7 +197,6 @@ int ObStandbyRestoreMacroBlockWriter::process(
           LOG_ERROR("failed to write macro block", K(ret), K(opt), K(macro_block_id),
               K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         } else {
-          ObTaskController::get().allow_next_syslog();
           ++write_count;
           write_size += data.capacity();
           LOG_INFO("success copy macro block", K(write_count));

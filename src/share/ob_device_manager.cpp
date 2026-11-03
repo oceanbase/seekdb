@@ -15,6 +15,7 @@
  */
 
 #include "ob_device_manager.h"
+#include <cinttypes>
 #include "share/io/ob_io_manager.h"
 #include "share/ob_local_device.h"
 
@@ -41,7 +42,7 @@ int ObDeviceManager::init_devices_env()
     }
     if (OB_FAIL(device_map_.create(MAX_DEVICE_INSTANCE*2, "DeviceMng", "DeviceMng"))) {
     } else if (OB_FAIL(handle_map_.create(MAX_DEVICE_INSTANCE*2, "DeviceMng", "DeviceMng"))) {
-    } else if (OB_FAIL(allocator_.init(ObMallocAllocator::get_instance(),
+    } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                       OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
     } else if (OB_FAIL(lock_.init(mem_attr))) {
     }
@@ -392,7 +393,7 @@ int ObDeviceManager::get_device_key_(
     if (OB_ISNULL(device_key = static_cast<char *>(allcator.alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "fail to alloc mem for device key", K(ret), K(alloc_size));
-    } else if (OB_FAIL(databuff_printf(device_key, alloc_size, "%s&%lu&%lu",
+    } else if (OB_FAIL(databuff_printf(device_key, alloc_size, "%s&%" PRIu64 "&%" PRIu64,
                                        OB_LOCAL_PREFIX,
                                        (uint64_t)storage_id_mod.storage_used_mod_,
                                        storage_id_mod.storage_id_))) {

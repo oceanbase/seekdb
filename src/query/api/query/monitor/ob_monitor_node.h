@@ -92,7 +92,7 @@ public:
       workarea_max_tempseg_(0),
       plan_hash_value_(common::OB_INVALID_ID)
   {
-    TraceId* trace_id = common::ObCurTraceId::get_trace_id();
+    const TraceId* trace_id = common::ObCurTraceId::get_trace_id();
     if (NULL != trace_id) {
       trace_id_ = *trace_id;
     }

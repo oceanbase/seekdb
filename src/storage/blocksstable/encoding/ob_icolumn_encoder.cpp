@@ -40,11 +40,9 @@ int ObIColumnEncoder::init(const ObColumnEncodingCtx &ctx,
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (!ctx.encoding_ctx_->is_valid() || column_index < 0
       || column_index >= ctx.encoding_ctx_->column_cnt_ || rows.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), K(column_index), "row count", rows.count());
   } else {
     ctx_ = &ctx;
     column_index_ = column_index;
@@ -73,7 +71,6 @@ int ObIColumnEncoder::get_row_checksum(int64_t &checksum) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     checksum = 0;
     FOREACH(r, *rows_) {

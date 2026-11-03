@@ -28,13 +28,13 @@ using namespace share::schema;
 namespace sql
 {
 
-bool LocationConstraint::operator==(const LocationConstraint &other) const {
-  return key_ == other.key_ && phy_loc_type_ == other.phy_loc_type_ && constraint_flags_ == other.constraint_flags_ ;
+bool TableAccessConstraint::operator==(const TableAccessConstraint &other) const {
+  return key_ == other.key_ && access_shape_ == other.access_shape_ && constraint_flags_ == other.constraint_flags_ ;
 }
 
 
 
-int ObLocationConstraintContext::calc_constraints_inclusion(const ObPwjConstraint *left,
+int TableAccessConstraintContext::calc_constraints_inclusion(const ObPwjConstraint *left,
                                                             const ObPwjConstraint *right,
                                                             InclusionType &inclusion_result)
 {
@@ -42,7 +42,6 @@ int ObLocationConstraintContext::calc_constraints_inclusion(const ObPwjConstrain
   inclusion_result = NotSubset;
   if (OB_ISNULL(left) || OB_ISNULL(right)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(left), K(right));
   } else {
     const ObPwjConstraint *set1 = NULL, *set2 = NULL;
     bool is_subset = true;
@@ -246,7 +245,6 @@ int ObSqlSchemaGuard::get_table_schema(uint64_t table_id,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;;
-    LOG_WARN("get unexpected null", K(ret), K(stmt));
   } else if (OB_FAIL(get_table_schema(ref_table_id, table_schema))) {
   }
   return ret;
@@ -259,7 +257,6 @@ int ObSqlSchemaGuard::get_table_schema(uint64_t table_id,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_item) ) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get unexpected null", K(ret), K(table_item));
   } else if (OB_FAIL(get_table_schema(table_id, table_schema))) {
   }
   return ret;
@@ -379,7 +376,6 @@ int ObSqlCtx::set_partition_infos(const ObTablePartitionInfoArray &info, ObIAllo
     PartitionInfoStorage *storage = NULL;
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate partition info storage failed", K(ret), K(count));
     } else if (FALSE_IT(storage = new (buf) PartitionInfoStorage(&allocator))) {
     } else if (OB_FAIL(storage->init(count))) {
     } else {
@@ -437,16 +433,16 @@ int ObSqlCtx::set_related_user_var_names(const ObIArray<ObString> &user_var_name
   return ret;
 }
 
-int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &location_constraint,
+int ObSqlCtx::set_access_constraints(const TableAccessConstraintContext &access_constraint,
                                        ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   base_constraints_.reset();
   strict_constraints_.reset();
   non_strict_constraints_.reset();
-  const ObIArray<LocationConstraint> &base_constraints = location_constraint.base_table_constraints_;
-  const ObIArray<ObPwjConstraint *> &strict_constraints = location_constraint.strict_constraints_;
-  const ObIArray<ObPwjConstraint *> &non_strict_constraints = location_constraint.non_strict_constraints_;
+  const ObIArray<TableAccessConstraint> &base_constraints = access_constraint.base_table_constraints_;
+  const ObIArray<ObPwjConstraint *> &strict_constraints = access_constraint.strict_constraints_;
+  const ObIArray<ObPwjConstraint *> &non_strict_constraints = access_constraint.non_strict_constraints_;
   if (base_constraints.count() > 0) {
     base_constraints_.set_allocator(&allocator);
     if (OB_FAIL(base_constraints_.init(base_constraints.count()))) {
@@ -517,7 +513,6 @@ int ObQueryCtx::get_local_session_vars(const int64_t idx, const ObLocalSessionVa
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(idx < 0 || idx >= all_local_session_vars_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid idx", K(ret), K(idx), K(all_local_session_vars_.count()));
   } else {
     local_session_var = &all_local_session_vars_.at(idx);
   }

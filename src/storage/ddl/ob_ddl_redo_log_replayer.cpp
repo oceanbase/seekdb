@@ -52,25 +52,6 @@ int ObDDLRedoLogReplayer::init(ObLS *ls)
   return ret;
 }
 
-int ObDDLRedoLogReplayer::replay_start(const ObDDLStartLog &log, const SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  ObDDLStartReplayExecutor replay_executor;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
-  } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-  } else if (OB_FAIL(replay_executor.execute(scn, log.get_table_key().tablet_id_))) {
-    if (OB_NO_NEED_UPDATE == ret) {
-      ret = OB_SUCCESS;
-    } else if (OB_EAGAIN != ret) {
-      LOG_ERROR("failed to replay", K(ret), K(log), K(scn));
-    }
-  }
-
-  return ret;
-}
-
 int ObDDLRedoLogReplayer::replay_redo(const ObDDLRedoLog &log, const SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -90,21 +71,6 @@ int ObDDLRedoLogReplayer::replay_redo(const ObDDLRedoLog &log, const SCN &scn)
     }
   }
 
-  return ret;
-}
-
-int ObDDLRedoLogReplayer::replay_commit(const ObDDLCommitLog &log, const SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  ObDDLCommitReplayExecutor replay_executor;
-
-  DEBUG_SYNC(BEFORE_REPLAY_DDL_PREPRARE);
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
-  } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-  } else if (OB_FAIL(replay_executor.execute(scn, log.get_table_key().tablet_id_))) {
-  }
   return ret;
 }
 

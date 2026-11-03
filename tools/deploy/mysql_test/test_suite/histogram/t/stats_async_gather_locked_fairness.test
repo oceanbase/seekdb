@@ -1,0 +1,81 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: wangyunlai.wyl
+# owner group: SQL1
+# tags: optimizer, opt_stats
+# descriptor: locked async gather candidates must not starve later tables
+
+call dbms_scheduler.disable('ASYNC_GATHER_STATS_JOB_PROC');
+
+connect (ag_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection ag_admin;
+alter system set_tp tp_no = 369, error_code = 2, frequency = 1;
+connection default;
+
+--disable_warnings
+drop table if exists ag_locked;
+drop table if exists ag_unlocked;
+--enable_warnings
+
+create table ag_unlocked(c1 bigint primary key);
+create table ag_locked(c1 bigint primary key)
+  partition by hash(c1) partitions 7;
+
+call dbms_stats.gather_table_stats(
+  'TEST', 'AG_LOCKED', granularity=>'GLOBAL');
+call dbms_stats.set_table_prefs(
+  'TEST', 'AG_LOCKED', 'ASYNC_GATHER_STALE_RATIO', '1000');
+call dbms_stats.set_table_prefs(
+  'TEST', 'AG_UNLOCKED', 'ASYNC_GATHER_STALE_RATIO', '500');
+call dbms_stats.lock_table_stats('TEST', 'AG_LOCKED');
+
+set @ag_n=0;
+insert into ag_locked
+  select (@ag_n:=@ag_n+1) from table(generator(7));
+set @ag_n=0;
+insert into ag_unlocked
+  select (@ag_n:=@ag_n+1) from table(generator(600));
+
+# Flush residual per-tablet DML counters into __all_monitor_modified.
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+call dbms_stats.flush_database_monitoring_info();
+
+select count(*) as locked_tablets
+  from oceanbase.dba_tab_modifications
+  where table_owner='TEST' and table_name='AG_LOCKED';
+select count(*) as unlocked_gathered
+  from oceanbase.dba_tab_statistics
+  where owner='TEST' and table_name='AG_UNLOCKED' and num_rows=600;
+
+call dbms_stats.async_gather_stats_job_proc();
+
+connection ag_admin;
+alter system set_tp tp_no = 369, error_code = 0, frequency = 0;
+connection default;
+
+select count(*) as unlocked_gathered
+  from oceanbase.dba_tab_statistics
+  where owner='TEST' and table_name='AG_UNLOCKED' and num_rows=600;
+select sum(inserts) as locked_pending_inserts
+  from oceanbase.dba_tab_modifications
+  where table_owner='TEST' and table_name='AG_LOCKED';
+
+call dbms_stats.unlock_table_stats('TEST', 'AG_LOCKED');
+call dbms_stats.async_gather_stats_job_proc();
+select count(*) as locked_gathered
+  from oceanbase.dba_tab_statistics
+  where owner='TEST' and table_name='AG_LOCKED'
+    and partition_name is null and num_rows=7;
+call dbms_stats.delete_table_prefs(
+  'TEST', 'AG_LOCKED', 'ASYNC_GATHER_STALE_RATIO');
+call dbms_stats.delete_table_prefs(
+  'TEST', 'AG_UNLOCKED', 'ASYNC_GATHER_STALE_RATIO');
+drop table ag_locked;
+drop table ag_unlocked;
+
+call dbms_scheduler.enable('ASYNC_GATHER_STATS_JOB_PROC');
+
+disconnect ag_admin;
+connection default;

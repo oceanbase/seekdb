@@ -45,13 +45,11 @@ int ObNgramFTParser::init(ObFTParserParam *param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), KPC(param), KPC(this));
   } else if (OB_ISNULL(param)
       || OB_ISNULL(param->cs_)
       || OB_ISNULL(param->fulltext_)
       || OB_UNLIKELY(0 >= param->ft_length_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(param));
   } else if (OB_FAIL(ngram_impl_.init(param->cs_,
                                       param->fulltext_,
                                       param->ft_length_,
@@ -79,11 +77,9 @@ int ObNgramFTParser::get_next_token(
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ngram ft parser isn't initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(ngram_impl_.get_next_token(word, word_len, char_len, word_freq))) {
     if (OB_ITER_END == ret) {
     } else {
-      LOG_WARN("fail to get next token", K(ret));
     }
   }
   return ret;
@@ -99,10 +95,8 @@ int ObNgramFTParserDesc::segment(
   ObNgramFTParser *parser = nullptr;
   if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(parser = OB_NEWx(ObNgramFTParser, param->allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate ngram ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
     } else {

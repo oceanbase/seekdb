@@ -38,7 +38,6 @@ class ObScanHelper;
 class ObMySQLTransaction;
 class ObMySQLProxy;
 class ObISQLClient;
-class ObCommonConfig;
 }
 namespace share
 {
@@ -530,7 +529,6 @@ public:
   virtual ~ObSchemaService() {}
   virtual int init(common::ObMySQLProxy *sql_proxy,
                    const share::schema::ObServerSchemaService *schema_service) = 0;
-  virtual void set_common_config(const common::ObCommonConfig *config) = 0;
 
 #define DECLARE_GET_DDL_SQL_SERVICE_FUNC(SCHEMA_TYPE, SCHEMA) \
   virtual Ob##SCHEMA_TYPE##SqlService &get_##SCHEMA##_sql_service() = 0;

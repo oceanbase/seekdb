@@ -81,13 +81,11 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
   buf = (char *)ctx.get_allocator().alloc(outline_sql.length());
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid ctx", K(ret));
   } else if (NULL == buf) {
     SQL_PC_LOG(WARN, "fail to alloc buf", K(outline_sql.length()));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid outline stmt is NULL", K(ret), K(outline_stmt));
   } else if (OB_FAIL(ObSQLUtils::get_outline_key(ctx.get_allocator(), ctx.get_my_session(),
                                                  outline_sql, outline_key,
                                                  FP_PARAMERIZE_AND_FILTER_HINT_MODE,
@@ -96,7 +94,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
   } else if (OB_UNLIKELY(has_questionmark_in_outline_sql)) {
     ret = OB_INVALID_OUTLINE;
     LOG_USER_ERROR(OB_INVALID_OUTLINE, "sql text should have no ?");
-    LOG_WARN("outline should have no question mark", K(outline_sql), K(ret));
   } else if (OB_FAIL(get_outline(ctx, outline_stmt, outline))) {
   } else {
     //to check whether ok
@@ -119,8 +116,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
         ret = OB_INVALID_OUTLINE;
         LOG_USER_ERROR(OB_INVALID_OUTLINE,
                        "signature derived from on_clause is not same as signature derived from to_clause");
-        LOG_WARN("outline key is not same with target key", K(outline_sql), K(target_sql),
-                 K(has_questionmark_in_target_sql), K(has_questionmark_in_outline_sql), K(ret));
       } else if (OB_FAIL(ObSQLUtils::get_outline_key(ctx.get_allocator(), ctx.get_my_session(),
                                                      target_sql, target_key_with_hint,
                                                      FP_MODE,
@@ -148,7 +143,6 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
   ObCacheObjGuard guard;
   if (OB_ISNULL(session_info) || OB_ISNULL(plan_cache) || OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameter", K(session_info), K(outline_stmt));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(
                   *plan_cache, guard, ObLibCacheNameSpace::NS_CRSR))) {
   } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
@@ -190,7 +184,6 @@ int ObOutlineExecutor::print_outline(ObExecContext &ctx, ObLogPlan *log_plan, Ob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(log_plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get log plan", K(ret), K(log_plan));
   } else if (OB_UNLIKELY(NULL == (tmp_ptr = ctx.get_allocator().alloc(OB_MAX_SQL_LENGTH)))) {//the same as __all_outline column outline_content
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to alloc memory", K(ret));
@@ -223,13 +216,10 @@ int ObOutlineExecutor::get_outline(ObExecContext &ctx, ObDMLStmt *outline_stmt, 
       || OB_ISNULL(ctx.get_stmt_factory())
       || OB_ISNULL(ctx.get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameter", K(session_info), K(pctx), K(outline_stmt));
   } else if (!is_valid_outline_stmt_type(outline_stmt->get_stmt_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected outline stmt type", K(outline_stmt->get_stmt_type()), K(ret));
   } else if (OB_ISNULL(ctx.get_expr_factory())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx.get_expr_factory()));
   } else {
     const ObGlobalHint &global_hint = outline_stmt->get_query_ctx()->get_global_hint();
     ObOptimizerContext optctx(session_info,
@@ -267,7 +257,6 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
   } else if (OB_FAIL(generate_outline_info(ctx, &stmt, outline_info))) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
   } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().create_outline(arg); }))) {
   } else {/*do nothing*/ }
@@ -292,7 +281,6 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("outline stmt is empty", K(ret));
   } else if (OB_FAIL(generate_outline_info1(ctx, outline_stmt, outline_info))) {
   } else {
     ObAlterOutlineInfo &alter_outline_info = arg.alter_outline_info_;
@@ -302,7 +290,6 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid alter outline info", K(alter_outline_info), K(ret));
     }
   }
 

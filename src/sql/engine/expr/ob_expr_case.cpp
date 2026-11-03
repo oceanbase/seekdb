@@ -52,7 +52,6 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
   //  [else expr3]
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
-    LOG_WARN("null types");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(param_num < 3 || param_num % 2 == 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -132,7 +131,6 @@ int ObExprCase::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_UNLIKELY(ObNullType != when_expr_res_type &&
                     !ob_is_integer_type(when_expr_res_type))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("when expr must return integer", K(ret), K(when_expr_res_type));
     }
   }
 
@@ -191,7 +189,6 @@ int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
     } else {
       if (OB_ISNULL(then_datum)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("then_datum is NULL", K(ret));
       } else {
         res_datum.set_datum(*then_datum);
       }
@@ -213,7 +210,6 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
   ObDatum *results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("results frame is not init", K(ret));
   } else if (batch_size <= 0) {
     // do nothing
   } else {
@@ -225,10 +221,8 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_ISNULL(data = alloc_guard.get_allocator().alloc(ObBitVector::memory_size(batch_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for case_when_match", K(ret), K(batch_size));
     } else if (OB_ISNULL(data1 = alloc_guard.get_allocator().alloc(ObBitVector::memory_size(batch_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for case_when_match", K(ret), K(batch_size));
     } else {
       case_when_match = to_bit_vector(data);
       case_not_match = to_bit_vector(data1);

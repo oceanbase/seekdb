@@ -29,9 +29,6 @@ int ObIvfAsyncTask::delete_deprecated_cache(ObPluginVectorIndexService &vector_i
   ObPluginVectorIndexMgr *index_mgr = &vector_index_service.get_index_mgr();
   if (OB_FAIL(index_mgr->erase_ivf_cache_mgr(ctx_->task_status_.tablet_id_))) {
     if (ret != OB_HASH_NOT_EXIST) {
-      LOG_WARN("failed to erase vector index ivf cache mgr",
-               K(ctx_->task_status_.tablet_id_),
-               KR(ret));
     } else {  // already removed
       ret = OB_SUCCESS;
     }
@@ -51,10 +48,8 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
 
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid null ctx_", K(ret), KP(ctx_));
   } else if (OB_ISNULL(aux_table_info = reinterpret_cast<ObIvfAuxTableInfo *>(ctx_->extra_data_))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid null aux_table_info", K(ret), KP(ctx_->extra_data_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
                  schema_guard))) {
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_param_with_dim(
@@ -70,7 +65,6 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
                                                                       cache_guard))) {
   } else if (OB_ISNULL(cache_mgr = cache_guard.get_ivf_cache_mgr())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid null cache mgr", K(ret));
   } else if (OB_FAIL(cache_mgr->get_or_create_cache_node(IvfCacheType::IVF_CENTROID_CACHE,
                                                          cent_cache))) {
   } else if (OB_FAIL(ObIvfCacheUtil::scan_and_write_ivf_cent_cache(
@@ -102,13 +96,10 @@ int ObIvfAsyncTask::do_work()
   DEBUG_SYNC(HANDLE_VECTOR_INDEX_ASYNC_TASK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObVecIndexAsyncTask is not init", KR(ret));
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->ls_) || OB_ISNULL(vector_index_service)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("unexpected nullptr", K(ret), KP(ctx_), KP(vector_index_service));
   } else if (OB_ISNULL(vec_idx_mgr_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get invalid vector index manager", KR(ret));
   } else if (ctx_->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
     if (OB_FAIL(delete_deprecated_cache(*vector_index_service))) {
     }
@@ -117,7 +108,6 @@ int ObIvfAsyncTask::do_work()
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid task type", K(ret), KPC(ctx_));
   }
 
   if (OB_NOT_NULL(ctx_)) {

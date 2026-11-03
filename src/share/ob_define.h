@@ -47,14 +47,6 @@ namespace common {
 const char *const OB_MYSQL_RECYCLE_PREFIX = "__recycle_$_";
 const char *const OB_RECYCLE_PREFIX = "RECYCLE_$_";
 
-OB_INLINE bool is_valid_log_compressor_type(common::ObCompressorType compressor_type)
-{
-   bool b_ret = false;
-   if (common::ObCompressorType::ZSTD_1_3_8_COMPRESSOR == compressor_type) {
-    b_ret = true;
-   }
-   return b_ret;
-}
 //check whether transaction version is valid
 OB_INLINE bool is_valid_trans_version(const int64_t trans_version)
 {
@@ -110,20 +102,14 @@ inline bool is_duplicate_key_err(int err)
   return ret;
 }
 
-inline bool is_get_location_timeout_error(int err)
-{
-  return OB_GET_LOCATION_TIME_OUT == err;
-}
-
 inline bool is_partition_change_error(int err)
 {
   bool ret = false;
   switch (err) {
     case OB_PARTITION_NOT_EXIST:
-    case OB_LOCATION_NOT_EXIST:
+    case OB_ACCESS_TARGET_NOT_EXIST:
     case OB_PARTITION_IS_STOPPED:
     case OB_PARTITION_IS_BLOCKED:
-    case OB_LS_LOCATION_NOT_EXIST:
     case OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST:
     case OB_LS_NOT_EXIST:
     case OB_TABLET_NOT_EXIST:
@@ -168,18 +154,12 @@ inline bool is_process_timeout_error(int err)
   return ret;
 }
 
-inline bool is_location_leader_not_exist_error(int err)
-{
-  return OB_LOCATION_LEADER_NOT_EXIST == err
-      || OB_LS_LOCATION_LEADER_NOT_EXIST == err;
-}
 
 inline bool is_master_changed_error(int err)
 {
   bool ret = false;
   switch (err) {
-    case OB_LOCATION_LEADER_NOT_EXIST:
-    case OB_LS_LOCATION_LEADER_NOT_EXIST:
+    case OB_LOG_STREAM_ACCESS_NOT_READY:
     case OB_NOT_MASTER:
     case OB_RS_NOT_MASTER:
     case OB_RS_SHUTDOWN:

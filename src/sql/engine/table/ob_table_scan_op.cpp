@@ -72,22 +72,18 @@ int SnapshotScanItem::set_snapshot_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDe
     // do nothing
   } else if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("snapshot query expr is NULL", K(ret));
   } else if (OB_FAIL(expr->eval(eval_ctx, datum))) {
   } else if (datum->is_null()) {
     ret = OB_ERR_SNAPSHOT_QUERY_EXP_NULL;
-    LOG_WARN("NULL value", K(ret));
   } else {
     if (TableItem::USING_SCN == snapshot_query_type_) {
       if (ObUInt64Type != expr->datum_meta_.type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("type not match", K(ret));
       } else if (OB_FAIL(scan_rtdef.fb_snapshot_.convert_for_sql(datum->get_int()))) {
       } else {
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("type not match", K(ret), K(snapshot_query_type_));
     }
   }
   // For the case where both hint-specified frozen_version and snapshot query specified snapshot version exist, choose to retain
@@ -116,7 +112,7 @@ OB_DEF_SERIALIZE(ObTableScanCtDef)
   OB_UNIS_ENCODE(has_lookup);
   if (OB_SUCC(ret) && has_lookup) {
     OB_UNIS_ENCODE(*lookup_ctdef_);
-    OB_UNIS_ENCODE(*lookup_loc_meta_);
+    OB_UNIS_ENCODE(*lookup_access_meta_);
   }
   bool has_dppr_tbl = (das_dppr_tbl_ != nullptr);
   OB_UNIS_ENCODE(has_dppr_tbl);
@@ -144,7 +140,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableScanCtDef)
   OB_UNIS_ADD_LEN(has_lookup);
   if (has_lookup) {
     OB_UNIS_ADD_LEN(*lookup_ctdef_);
-    OB_UNIS_ADD_LEN(*lookup_loc_meta_);
+    OB_UNIS_ADD_LEN(*lookup_access_meta_);
   }
   bool has_dppr_tbl = (das_dppr_tbl_ != nullptr);
   OB_UNIS_ADD_LEN(has_dppr_tbl);
@@ -174,26 +170,24 @@ OB_DEF_DESERIALIZE(ObTableScanCtDef)
     void *ctdef_buf = allocator_.alloc(sizeof(ObDASScanCtDef));
     if (OB_ISNULL(ctdef_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate das scan ctdef buffer failed", K(ret), K(sizeof(ObDASScanCtDef)));
     } else {
       lookup_ctdef_ = new(ctdef_buf) ObDASScanCtDef(allocator_);
       OB_UNIS_DECODE(*lookup_ctdef_);
     }
     if (OB_SUCC(ret)) {
-      void *loc_meta_buf = allocator_.alloc(sizeof(ObDASTableLocMeta));
-      if (OB_ISNULL(loc_meta_buf)) {
+      void *access_meta_buf = allocator_.alloc(sizeof(DASTableAccessMeta));
+      if (OB_ISNULL(access_meta_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate table loc meta failed", K(ret));
       } else {
-        lookup_loc_meta_ = new(loc_meta_buf) ObDASTableLocMeta(allocator_);
-        OB_UNIS_DECODE(*lookup_loc_meta_);
+        lookup_access_meta_ = new(access_meta_buf) DASTableAccessMeta(allocator_);
+        OB_UNIS_DECODE(*lookup_access_meta_);
       }
     }
   }
   bool has_dppr_tbl = (das_dppr_tbl_ != nullptr);
   OB_UNIS_DECODE(has_dppr_tbl);
   if (OB_SUCC(ret) && has_dppr_tbl) {
-    OZ(allocate_dppr_table_loc());
+    OZ(allocate_dppr_access_plan());
     OB_UNIS_DECODE(*das_dppr_tbl_);
   }
   OB_UNIS_DECODE(calc_part_id_expr_);
@@ -328,15 +322,14 @@ const ObDASScanCtDef *ObTableScanCtDef::get_lookup_ctdef() const
 
 
 
-int ObTableScanCtDef::allocate_dppr_table_loc()
+int ObTableScanCtDef::allocate_dppr_access_plan()
 {
   int ret = OB_SUCCESS;
-  void *buf = allocator_.alloc(sizeof(ObTableLocation));
+  void *buf = allocator_.alloc(sizeof(TableAccessPlan));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate table location buffer failed", K(ret));
   } else {
-    das_dppr_tbl_ = new(buf) ObTableLocation(allocator_);
+    das_dppr_tbl_ = new(buf) TableAccessPlan(allocator_);
   }
   return ret;
 }
@@ -367,7 +360,7 @@ OB_INLINE void ObTableScanRtDef::prepare_multi_part_limit_param()
 
 ObTableScanOpInput::ObTableScanOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObOpInput(ctx, spec),
-    tablet_loc_(nullptr),
+    tablet_access_(nullptr),
     not_need_extract_query_range_(false)
 {
 }
@@ -378,7 +371,7 @@ ObTableScanOpInput::~ObTableScanOpInput()
 
 void ObTableScanOpInput::reset()
 {
-  tablet_loc_ = nullptr;
+  tablet_access_ = nullptr;
   key_ranges_.reset();
   mbr_filters_.reset();
   range_array_pos_.reset();
@@ -430,13 +423,11 @@ OB_INLINE int ObTableScanOp::reuse_table_rescan_allocator()
     lib::ContextParam param;
     ObMemAttr attr("TableRescanCtx", ObCtxIds::DEFAULT_CTX_ID);
     param.set_mem_attr(attr)
-       .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     lib::MemoryContext mem_context;
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, param))) {
     } else if (OB_ISNULL(mem_context)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to create entity ", K(ret));
     } else {
       table_rescan_allocator_ = &mem_context->get_arena_allocator();
     }
@@ -448,7 +439,7 @@ OB_INLINE int ObTableScanOp::reuse_table_rescan_allocator()
 
 ObTableScanSpec::ObTableScanSpec(ObIAllocator &alloc, const ObPhyOperatorType type)
   : ObOpSpec(alloc, type),
-    table_loc_id_(OB_INVALID_ID),
+    table_ref_id_(OB_INVALID_ID),
     ref_table_id_(OB_INVALID_ID),
     limit_(NULL),
     offset_(NULL),
@@ -485,7 +476,7 @@ ObTableScanSpec::ObTableScanSpec(ObIAllocator &alloc, const ObPhyOperatorType ty
 }
 
 OB_SERIALIZE_MEMBER((ObTableScanSpec, ObOpSpec),
-                    table_loc_id_,
+                    table_ref_id_,
                     ref_table_id_,
                     flags_,
                     limit_,
@@ -517,7 +508,7 @@ DEF_TO_STRING(ObTableScanSpec)
   J_COLON();
   pos += ObOpSpec::to_string(buf + pos, buf_len - pos);
   J_COMMA();
-  J_KV(K(table_loc_id_),
+  J_KV(K(table_ref_id_),
        K(ref_table_id_),
        K(is_index_global_),
        K(limit_),
@@ -703,22 +694,21 @@ ObTableScanOp::~ObTableScanOp()
 {
 }
 
-OB_INLINE int ObTableScanOp::create_one_das_task(ObDASTabletLoc *tablet_loc)
+OB_INLINE int ObTableScanOp::create_one_das_task(DASRuntimeTabletAccess *tablet_access)
 {
   int ret = OB_SUCCESS;
   ObDASScanOp *scan_op = nullptr;
   bool reuse_das_op = false;
   if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan iter", K(ret));
-  } else if (OB_FAIL(scan_iter_->create_das_task(tablet_loc, scan_op, reuse_das_op))) {
+  } else if (OB_FAIL(scan_iter_->create_das_task(tablet_access, scan_op, reuse_das_op))) {
   } else if (!reuse_das_op) {
     scan_op->set_scan_ctdef(&MY_CTDEF.scan_ctdef_);
     scan_op->set_scan_rtdef(&tsc_rtdef_.scan_rtdef_);
     scan_op->set_can_part_retry(nullptr == tsc_rtdef_.scan_rtdef_.sample_info_
                                 && can_partition_retry());
     scan_op->set_inner_rescan(in_rescan_);
-    tsc_rtdef_.scan_rtdef_.table_loc_->is_reading_ = true;
+    tsc_rtdef_.scan_rtdef_.table_access_->is_reading_ = true;
     if (!MY_SPEC.is_index_global_ && MY_CTDEF.lookup_ctdef_ != nullptr) {
       if (OB_FAIL(pushdown_normal_lookup_to_das(*scan_op))) {
       }
@@ -739,18 +729,17 @@ int ObTableScanOp::pushdown_normal_lookup_to_das(ObDASScanOp &target_op)
 {
   int ret = OB_SUCCESS;
   //is local index lookup, need to set the lookup ctdef to the das scan op
-  ObDASTableLoc *lookup_table_loc = tsc_rtdef_.lookup_rtdef_->table_loc_;
-  ObDASTabletLoc *lookup_tablet_loc = ObDASUtils::get_related_tablet_loc(
-      *target_op.get_tablet_loc(), lookup_table_loc->loc_meta_->ref_table_id_);
-  if (OB_ISNULL(lookup_tablet_loc)) {
+  DASRuntimeTableAccess *lookup_table_access = tsc_rtdef_.lookup_rtdef_->table_access_;
+  DASRuntimeTabletAccess *lookup_tablet_access = ObDASUtils::get_related_tablet_access(
+      *target_op.get_tablet_access(), lookup_table_access->access_meta_->ref_table_id_);
+  if (OB_ISNULL(lookup_tablet_access)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lookup tablet loc is nullptr", K(ret), KPC(target_op.get_tablet_loc()), KPC(lookup_table_loc->loc_meta_));
   } else if (OB_FAIL(target_op.reserve_related_buffer(1))) {
   } else if (OB_FAIL(target_op.set_related_task_info(MY_CTDEF.lookup_ctdef_,
                                                     tsc_rtdef_.lookup_rtdef_,
-                                                    lookup_tablet_loc->tablet_id_))) {
+                                                    lookup_tablet_access->tablet_id_))) {
   } else {
-    lookup_table_loc->is_reading_ = true;
+    lookup_table_access->is_reading_ = true;
   }
   return ret;
 }
@@ -782,23 +771,19 @@ int ObTableScanOp::attach_related_taskinfo(ObDASScanOp &target_op, ObDASBaseRtDe
   int ret = OB_SUCCESS;
   if (OB_ISNULL(attach_rtdef) || OB_ISNULL(attach_rtdef->ctdef_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attach rtdef is invalid", K(ret), KP(attach_rtdef));
   } else if (attach_rtdef->op_type_ == DAS_OP_TABLE_SCAN) {
     const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(attach_rtdef->ctdef_);
     ObDASScanRtDef *scan_rtdef = static_cast<ObDASScanRtDef*>(attach_rtdef);
-    ObDASTableLoc *table_loc = scan_rtdef->table_loc_;
-    ObDASTabletLoc *tablet_loc = ObDASUtils::get_related_tablet_loc(
-        *target_op.get_tablet_loc(), table_loc->loc_meta_->ref_table_id_);
-    if (OB_ISNULL(tablet_loc)) {
+    DASRuntimeTableAccess *table_access = scan_rtdef->table_access_;
+    DASRuntimeTabletAccess *tablet_access = ObDASUtils::get_related_tablet_access(
+        *target_op.get_tablet_access(), table_access->access_meta_->ref_table_id_);
+    if (OB_ISNULL(tablet_access)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("related tablet loc is not found", K(ret),
-               KPC(target_op.get_tablet_loc()),
-               KPC(table_loc->loc_meta_));
     } else if (OB_FAIL(target_op.set_related_task_info(scan_ctdef,
                                                        scan_rtdef,
-                                                       tablet_loc->tablet_id_))) {
+                                                       tablet_access->tablet_id_))) {
     } else {
-      table_loc->is_reading_ = true;
+      table_access->is_reading_ = true;
     }
   } else {
     for (int i = 0; OB_SUCC(ret) && i < attach_rtdef->children_cnt_; ++i) {
@@ -865,26 +850,25 @@ int ObTableScanOp::prepare_pushdown_limit_param()
 int ObTableScanOp::prepare_das_task()
 {
   int ret = OB_SUCCESS;
-  ObDASTableLoc *table_loc = tsc_rtdef_.scan_rtdef_.table_loc_;
+  DASRuntimeTableAccess *table_access = tsc_rtdef_.scan_rtdef_.table_access_;
   const bool scan_all_local_tablets = !MY_SPEC.use_dist_das_
                                       && !MY_SPEC.gi_above_
                                       && OB_ISNULL(MY_CTDEF.das_dppr_tbl_)
-                                      && OB_NOT_NULL(table_loc)
-                                      && table_loc->get_tablet_locs().size() > 1;
+                                      && OB_NOT_NULL(table_access)
+                                      && table_access->get_tablet_accesses().size() > 1;
   if (OB_LIKELY(!MY_SPEC.use_dist_das_
                 && !scan_all_local_tablets
                 && OB_ISNULL(MY_CTDEF.das_dppr_tbl_))) {
-    if (OB_FAIL(create_one_das_task(MY_INPUT.tablet_loc_))) {
+    if (OB_FAIL(create_one_das_task(MY_INPUT.tablet_access_))) {
     }
   } else if (OB_LIKELY(nullptr == MY_CTDEF.das_dppr_tbl_)) {
-    if (OB_ISNULL(table_loc)) {
+    if (OB_ISNULL(table_access)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table location is null", K(ret));
     } else {
-      for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
-           OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
-        ObDASTabletLoc *tablet_loc = *node;
-        if (OB_FAIL(create_one_das_task(tablet_loc))) {
+      for (DASRuntimeTabletListIter node = table_access->tablet_accesses_begin();
+           OB_SUCC(ret) && node != table_access->tablet_accesses_end(); ++node) {
+        DASRuntimeTabletAccess *tablet_access = *node;
+        if (OB_FAIL(create_one_das_task(tablet_access))) {
         }
       }
     }
@@ -892,11 +876,11 @@ int ObTableScanOp::prepare_das_task()
     // dynamic partitions
     ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
     ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session());
-    const ObTableLocation &das_location = *MY_CTDEF.das_dppr_tbl_;
+    const TableAccessPlan &das_access = *MY_CTDEF.das_dppr_tbl_;
     ObSEArray<ObTabletID, 1> tablet_ids;
     ObSEArray<ObObjectID, 1> partition_ids;
     ObSEArray<ObObjectID, 1> first_level_part_ids;
-    if (OB_FAIL(das_location.calculate_tablet_ids(ctx_,
+    if (OB_FAIL(das_access.calculate_tablet_ids(ctx_,
                                                   plan_ctx->get_param_store(),
                                                   tablet_ids,
                                                   partition_ids,
@@ -904,15 +888,15 @@ int ObTableScanOp::prepare_das_task()
                                                   dtc_params))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
-      ObDASTabletLoc *tablet_loc = nullptr;
+      DASRuntimeTabletAccess *tablet_access = nullptr;
       ObObjectID partition_id = OB_INVALID_ID;
       ObObjectID first_partition_id = OB_INVALID_ID;
-      if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(*tsc_rtdef_.scan_rtdef_.table_loc_,
+      if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(*tsc_rtdef_.scan_rtdef_.table_access_,
                                                     tablet_ids.at(i),
-                                                    tablet_loc,
+                                                    tablet_access,
                                                     partition_id,
                                                     first_partition_id))) {
-      } else if (OB_FAIL(create_one_das_task(tablet_loc))) {
+      } else if (OB_FAIL(create_one_das_task(tablet_access))) {
       }
     }
   }
@@ -926,7 +910,6 @@ int ObTableScanOp::prepare_all_das_tasks()
     tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_;
     if (OB_UNLIKELY(tsc_rtdef_.group_size_ > tsc_rtdef_.max_group_size_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The amount of data exceeds the pre allocated memory", K(ret));
     }
   }
 
@@ -947,9 +930,7 @@ int ObTableScanOp::prepare_all_das_tasks()
         // may be disrupted when dealing with multiple range segments.
         // Therefore we need to sort the scan ranges when upper operator used the tsc ordering.
         if (MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_index_merge_scan_range(i, need_sort))) {
-          LOG_WARN("failed to prepare index merge scan range", K(ret));
         } else if (!MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_single_scan_range(i, need_sort))) {
-          LOG_WARN("prepare single scan range failed", K(ret));
         } else if (OB_FAIL(prepare_das_task())) {
         } else {
           MY_INPUT.key_ranges_.reuse();
@@ -968,7 +949,6 @@ int ObTableScanOp::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef,
   ObDASTaskFactory &das_factory = DAS_CTX(ctx_).get_das_factory();
   if (OB_ISNULL(attach_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attach ctdef is nullptr", K(ret));
   } else if (OB_FAIL(das_factory.create_das_rtdef(attach_ctdef->op_type_, attach_rtdef))) {
   } else if (ObDASTaskFactory::is_attached(attach_ctdef->op_type_)) {
     attach_rtdef->ctdef_ = attach_ctdef;
@@ -979,7 +959,6 @@ int ObTableScanOp::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef,
                                                            &ctx_.get_allocator(),
                                                            attach_ctdef->children_cnt_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate child buf failed", K(ret), K(attach_ctdef->children_cnt_));
       }
       for (int i = 0; OB_SUCC(ret) && i < attach_ctdef->children_cnt_; ++i) {
         if (OB_FAIL(init_attach_scan_rtdef(attach_ctdef->children_[i], attach_rtdef->children_[i]))) {
@@ -1015,13 +994,12 @@ int ObTableScanOp::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef,
       attach_rtdef = tsc_rtdef_.lookup_rtdef_;
     } else if (attach_ctdef->op_type_ != DAS_OP_TABLE_SCAN) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("attach ctdef type is invalid", K(ret), K(attach_ctdef->op_type_));
     } else {
       const ObDASScanCtDef *attach_scan_ctdef = static_cast<const ObDASScanCtDef*>(attach_ctdef);
-      const ObDASTableLocMeta *attach_loc_meta = MY_CTDEF.attach_spec_.get_attach_loc_meta(
-          MY_SPEC.table_loc_id_, attach_scan_ctdef->ref_table_id_);
+      const DASTableAccessMeta *attach_access_meta = MY_CTDEF.attach_spec_.get_attach_access_meta(
+          MY_SPEC.table_ref_id_, attach_scan_ctdef->ref_table_id_);
       ObDASScanRtDef *attach_scan_rtdef = static_cast<ObDASScanRtDef*>(attach_rtdef);
-      if (OB_FAIL(init_das_scan_rtdef(*attach_scan_ctdef, *attach_scan_rtdef, attach_loc_meta))) {
+      if (OB_FAIL(init_das_scan_rtdef(*attach_scan_ctdef, *attach_scan_rtdef, attach_access_meta))) {
       }
     }
   }
@@ -1054,14 +1032,14 @@ int ObTableScanOp::init_table_scan_rtdef()
   if (OB_SUCC(ret)) {
     const ObDASScanCtDef &scan_ctdef = MY_CTDEF.scan_ctdef_;
     ObDASScanRtDef &scan_rtdef = tsc_rtdef_.scan_rtdef_;
-    const ObDASTableLocMeta *loc_meta = MY_CTDEF.das_dppr_tbl_ != nullptr ?
-                                        &MY_CTDEF.das_dppr_tbl_->get_loc_meta() : nullptr;
-    if (OB_FAIL(init_das_scan_rtdef(scan_ctdef, scan_rtdef, loc_meta))) {
+    const DASTableAccessMeta *access_meta = MY_CTDEF.das_dppr_tbl_ != nullptr ?
+                                        &MY_CTDEF.das_dppr_tbl_->get_access_meta() : nullptr;
+    if (OB_FAIL(init_das_scan_rtdef(scan_ctdef, scan_rtdef, access_meta))) {
     } else if (!MY_SPEC.use_dist_das_
                && !MY_SPEC.gi_above_
                && OB_ISNULL(MY_CTDEF.das_dppr_tbl_)
-               && scan_rtdef.table_loc_->get_tablet_locs().size() == 1) {
-      MY_INPUT.tablet_loc_ = scan_rtdef.table_loc_->get_first_tablet_loc();
+               && scan_rtdef.table_access_->get_tablet_accesses().size() == 1) {
+      MY_INPUT.tablet_access_ = scan_rtdef.table_access_->get_first_tablet_access();
     }
   }
   if (OB_SUCC(ret) && MY_CTDEF.lookup_ctdef_ != nullptr) {
@@ -1072,14 +1050,13 @@ int ObTableScanOp::init_table_scan_rtdef()
       tsc_rtdef_.lookup_rtdef_ = static_cast<ObDASScanRtDef*>(das_rtdef);
       if (OB_FAIL(init_das_scan_rtdef(lookup_ctdef,
                                       *tsc_rtdef_.lookup_rtdef_,
-                                      MY_CTDEF.lookup_loc_meta_))) {
+                                      MY_CTDEF.lookup_access_meta_))) {
       }
     }
   }
   if (OB_SUCC(ret) && MY_CTDEF.attach_spec_.attach_ctdef_ != nullptr) {
     if (OB_ISNULL(tsc_rtdef_.attach_rtinfo_ = OB_NEWx(ObDASAttachRtInfo, &ctx_.get_allocator()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate attach rtinfo failed", K(ret));
     } else if (OB_FAIL(init_attach_scan_rtdef(MY_CTDEF.attach_spec_.attach_ctdef_,
                                               tsc_rtdef_.attach_rtinfo_->attach_rtdef_))) {
     } else if (tsc_rtdef_.attach_rtinfo_->pushdown_tasks_.empty()) {
@@ -1094,7 +1071,7 @@ int ObTableScanOp::init_table_scan_rtdef()
 
 OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef,
                                                  ObDASScanRtDef &das_rtdef,
-                                                 const ObDASTableLocMeta *loc_meta)
+                                                 const DASTableAccessMeta *access_meta)
 {
   int ret = OB_SUCCESS;
   const ObTableScanCtDef &tsc_ctdef = MY_CTDEF;
@@ -1121,7 +1098,6 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
     // if tsc enable batch rescan, the output order of tsc is determined by group id
     if (das_rtdef.scan_flag_.scan_order_ == ObQueryFlag::Reverse) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Scan order is not supported in batch rescan", K(ret), K(das_rtdef.scan_flag_.scan_order_));
     } else {
       das_rtdef.scan_flag_.scan_order_ = ObQueryFlag::KeepOrder;
     }
@@ -1163,18 +1139,18 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
     }
   }
   if (OB_SUCC(ret)) {
-    ObTableID table_loc_id = MY_SPEC.get_table_loc_id();
-    das_rtdef.table_loc_ = DAS_CTX(ctx_).get_table_loc_by_id(table_loc_id, das_ctdef.ref_table_id_);
-    if (OB_ISNULL(das_rtdef.table_loc_)) {
-      if (OB_ISNULL(loc_meta)) {
+    ObTableID table_ref_id = MY_SPEC.get_table_ref_id();
+    das_rtdef.table_access_ = DAS_CTX(ctx_).find_table_access(table_ref_id, das_ctdef.ref_table_id_);
+    if (OB_ISNULL(das_rtdef.table_access_)) {
+      if (OB_ISNULL(access_meta)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get table loc by id failed", K(ret), K(table_loc_id), K(das_ctdef.ref_table_id_),
-                 K(DAS_CTX(ctx_).get_table_loc_list()));
-      } else if (OB_FAIL(DAS_CTX(ctx_).extended_table_loc(*loc_meta, das_rtdef.table_loc_))) {
+        LOG_WARN("find table access by ID failed", K(ret), K(table_ref_id), K(das_ctdef.ref_table_id_),
+                 K(DAS_CTX(ctx_).get_table_accesses()));
+      } else if (OB_FAIL(DAS_CTX(ctx_).ensure_table_access(*access_meta, das_rtdef.table_access_))) {
       }
     }
-    if (OB_SUCC(ret) && OB_NOT_NULL(das_rtdef.table_loc_) && OB_NOT_NULL(das_rtdef.table_loc_->loc_meta_)) {
-      if (das_rtdef.table_loc_->loc_meta_->is_weak_read_) {
+    if (OB_SUCC(ret) && OB_NOT_NULL(das_rtdef.table_access_) && OB_NOT_NULL(das_rtdef.table_access_->access_meta_)) {
+      if (das_rtdef.table_access_->access_meta_->is_weak_read_) {
         das_rtdef.scan_flag_.set_is_select_follower();
       }
     }
@@ -1205,9 +1181,7 @@ int ObTableScanOp::prepare_scan_range()
   int ret = OB_SUCCESS;
   if (!need_perform_real_batch_rescan()) {
     if (MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_index_merge_scan_range())) {
-      LOG_WARN("failed to prepare index merge range", K(ret));
     } else if (!MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_single_scan_range())) {
-      LOG_WARN("failed to prepare single scan range", K(ret));
     }
   } else {
     ret = prepare_batch_scan_range();
@@ -1225,11 +1199,9 @@ int ObTableScanOp::prepare_batch_scan_range()
       tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_;
       if (OB_UNLIKELY(tsc_rtdef_.group_size_ > tsc_rtdef_.max_group_size_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The amount of data exceeds the pre allocated memory", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("batch nlj params is empry", K(ret));
     }
   }
   bool need_sort = MY_CTDEF.ordering_used_by_parent_;
@@ -1302,7 +1274,6 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
              key_ranges,
              MY_INPUT.mbr_filters_,
              ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
-    LOG_WARN("failed to extract pre query ranges", K(ret));
   } else if (!MY_CTDEF.get_query_range_provider().is_contain_geo_filters() &&
              MY_CTDEF.get_query_range_provider().is_fast_nlj_range() &&
              OB_FAIL(MY_CTDEF.get_query_range_provider().get_fast_nlj_tablet_ranges(
@@ -1314,7 +1285,6 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
               locate_range_buffer(),
               key_ranges,
               ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
-    LOG_WARN("failed to extract pre fast nlj query range", K(ret));
   } else if (!MY_CTDEF.get_query_range_provider().is_contain_geo_filters() &&
              !MY_CTDEF.get_query_range_provider().is_fast_nlj_range() &&
              OB_FAIL(ObSQLUtils::extract_pre_query_range(
@@ -1323,7 +1293,6 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
               ctx_,
               key_ranges,
               ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
-    LOG_WARN("failed to extract pre query ranges", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else {
@@ -1352,7 +1321,6 @@ int ObTableScanOp::prepare_index_merge_scan_range(int64_t group_idx, bool need_s
   ObDASBaseRtDef *attach_rtdef = tsc_rtdef_.attach_rtinfo_->attach_rtdef_;
   if (OB_ISNULL(attach_rtdef)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KPC(attach_rtdef), K(ret));
   } else {
     ObDASBaseRtDef *index_merge_rtdef = nullptr;
     ObDASBaseRtDef *vir_scan_rtdef = nullptr;
@@ -1378,7 +1346,6 @@ int ObTableScanOp::prepare_range_for_each_index(int64_t group_idx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rtdef) || rtdef->op_type_ != DAS_OP_INDEX_MERGE || OB_ISNULL(rtdef->ctdef_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid index merge rtdef", KPC(rtdef), K(ret));
   } else {
     ObDASIndexMergeRtDef *merge_rtdef = static_cast<ObDASIndexMergeRtDef*>(rtdef);
     const ObDASIndexMergeCtDef *merge_ctdef = static_cast<const ObDASIndexMergeCtDef*>(rtdef->ctdef_);
@@ -1387,7 +1354,6 @@ int ObTableScanOp::prepare_range_for_each_index(int64_t group_idx,
       ObIndexMergeType node_type = merge_ctdef->merge_node_types_.at(i);
       if (OB_ISNULL(child_rtdef)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid index merge rtdef", KPC(child_rtdef), K(ret));
       } else if (INDEX_MERGE_UNION == node_type) {
         if (OB_FAIL(SMART_CALL(prepare_range_for_each_index(group_idx, need_sort, allocator, child_rtdef)))) {
         }
@@ -1401,7 +1367,6 @@ int ObTableScanOp::prepare_range_for_each_index(int64_t group_idx,
         }
         if (OB_ISNULL(scan_rtdef)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected nullptr scan rtdef", KPC(child_rtdef), K(ret));
         } else {
           ObQueryRangeArray key_ranges;
           const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(scan_rtdef->ctdef_);
@@ -1418,7 +1383,6 @@ int ObTableScanOp::prepare_range_for_each_index(int64_t group_idx,
                     key_ranges,
                     scan_rtdef->mbr_filters_,
                     ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
-            LOG_WARN("failed to extract pre query ranges", K(ret));
           } else if (!query_range_provider.is_contain_geo_filters() &&
                     OB_FAIL(ObSQLUtils::extract_pre_query_range(
                     query_range_provider,
@@ -1426,7 +1390,6 @@ int ObTableScanOp::prepare_range_for_each_index(int64_t group_idx,
                     ctx_,
                     key_ranges,
                     ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
-            LOG_WARN("failed to extract pre query ranges", K(ret));
           } else {
             ObNewRange *key_range = nullptr;
             if (OB_UNLIKELY(need_sort) && key_ranges.count() > 1) {
@@ -1454,7 +1417,6 @@ int ObTableScanOp::set_need_check_outrow_lob()
     const ObExpr *e = MY_SPEC.output_[i];
     if (OB_ISNULL(e)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, expr is nullptr", K(ret));
     } else if (e->obj_meta_.is_lob_storage()) {
       need_check_outrow_lob_ = true;
       break;
@@ -1466,18 +1428,16 @@ int ObTableScanOp::set_need_check_outrow_lob()
 int ObTableScanOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  DASTableLocList &table_locs = ctx_.get_das_ctx().get_table_loc_list();
+  DASRuntimeTableList &table_accesses = ctx_.get_das_ctx().get_table_accesses();
   ObSQLSessionInfo *my_session = NULL;
   cur_trace_id_ = ObCurTraceId::get();
   init_scan_monitor_info();
   if (OB_ISNULL(my_session = GET_MY_SESSION(ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get my session", K(ret));
   } else if (OB_FAIL(ObDASUtils::check_nested_sql_mutating(MY_SPEC.ref_table_id_, ctx_, true))) {
   } else if (OB_FAIL(init_table_scan_rtdef())) {
   } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(fts_index_.init(MY_SPEC.is_fts_index_aux_, MY_SPEC.parser_name_,
           MY_SPEC.parser_properties_))) {
-    LOG_WARN("fail to init fts index cache", K(ret));
   } else {
     if (MY_SPEC.report_col_checksum_) {
       if (PHY_TABLE_SCAN == MY_SPEC.get_type()) {
@@ -1509,7 +1469,6 @@ int ObTableScanOp::inner_open()
       }
       if (OB_ISNULL(tsc_rtdef_.range_buffers_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(range_size), K(tsc_rtdef_.range_buffers_));
       } else if (!MY_SPEC.batch_scan_flag_) {
         ObNewRange *key_range = new(tsc_rtdef_.range_buffers_) ObNewRange();
       } else {
@@ -1534,11 +1493,9 @@ int ObTableScanOp::inner_open()
                                                                    can_partition_retry(),
                                                                    scan_iter_,
                                                                    iter_tree_))) {
-    LOG_WARN("failed to create table scan iter tree", K(tree_type), K(ret));
   }
   output_ = iter_tree_;
   if (OB_SUCC(ret) && OB_FAIL(rand_scan_processor_.init(&spec, this))) {
-    LOG_WARN("failed to init rand scan processor", K(ret));
   }
   return ret;
 }
@@ -1572,7 +1529,7 @@ int ObTableScanOp::do_init_before_get_row()
     } else {
       if (MY_SPEC.gi_above_) {
         ObGranuleTaskInfo info;
-        if (OB_FAIL(get_access_tablet_loc(info))) {
+        if (OB_FAIL(get_access_tablet_access(info))) {
         } else if (OB_FAIL(reassign_task_ranges(info))) {
         }
       }
@@ -1581,7 +1538,6 @@ int ObTableScanOp::do_init_before_get_row()
       } else if (OB_FAIL(prepare_all_das_tasks())) {
       } else if (OB_FAIL(do_table_scan())) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("fail to do table scan", K(ret));
         }
       } else {
         if (in_batch_rescan_subplan()) {
@@ -1635,7 +1591,6 @@ int ObTableScanOp::fill_storage_feedback_info()
   ObDASScanOp *scan_op = DAS_SCAN_OP(*scan_iter_->begin_task_iter());
   if (OB_ISNULL(scan_op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr das scan op", K(ret));
   } else {
     ObTableScanParam &scan_param = scan_op->get_scan_param();
     bool is_index_back = scan_param.scan_flag_.index_back_;
@@ -1722,7 +1677,7 @@ int ObTableScanOp::inner_rescan_for_tsc()
     LOG_TRACE("[group rescan] need perform real rescan", K(group_rescan_cnt_), K(ctx_.get_das_ctx().get_group_rescan_cnt()),
               K(group_id_), K(ctx_.get_das_ctx().get_current_group_id()), K(spec_.id_));
     if (is_virtual_table(MY_SPEC.ref_table_id_)
-        || (OB_NOT_NULL(scan_iter_) && !scan_iter_->is_all_local_task())
+        || (OB_NOT_NULL(scan_iter_) && !scan_iter_->has_task())
         || nullptr != MY_CTDEF.das_dppr_tbl_) {
       ret = close_and_reopen();
     } else {
@@ -1745,7 +1700,6 @@ int ObTableScanOp::close_and_reopen()
   iter_end_ = false;
   if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan iter", K(ret));
   } else if (OB_FAIL(inner_close())) {
   } else if (OB_FAIL(reuse_table_rescan_allocator())) {
   } else {
@@ -1780,7 +1734,6 @@ int ObTableScanOp::set_stmt_allocator(ObDASBaseRtDef *rtdef, ObIAllocator *alloc
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rtdef) || OB_ISNULL(alloc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(rtdef), K(alloc), K(ret));
   } else if (DAS_OP_TABLE_SCAN == rtdef->op_type_) {
     static_cast<ObDASScanRtDef*>(rtdef)->stmt_allocator_.set_alloc(alloc);
   } else {
@@ -1798,15 +1751,13 @@ int ObTableScanOp::local_iter_rescan()
   ObGranuleTaskInfo info;
   if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan iter", K(ret));
-  } else if (OB_FAIL(get_access_tablet_loc(info))) {
+  } else if (OB_FAIL(get_access_tablet_access(info))) {
   } else if (OB_FAIL(local_iter_reuse())) {
   } else if (OB_FAIL(reassign_task_ranges(info))) {
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (MY_INPUT.key_ranges_.empty() &&
       OB_FAIL(prepare_scan_range())) { // prepare scan input param
-    LOG_WARN("fail to prepare scan param", K(ret));
   } else {
     DASTaskIter task_iter = scan_iter_->begin_task_iter();
     for (; OB_SUCC(ret) && !task_iter.is_end(); ++task_iter) {
@@ -1841,13 +1792,12 @@ int ObTableScanOp::local_iter_reuse()
     ObDASScanOp *scan_op = DAS_SCAN_OP(*task_iter);
     if (OB_ISNULL(scan_op)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr das scan op", K(ret));
     } else {
-      bool need_switch_param = (scan_op->get_tablet_loc() != MY_INPUT.tablet_loc_ &&
-                                  MY_INPUT.tablet_loc_ != nullptr);
-      if (MY_INPUT.tablet_loc_ != nullptr) {
-        scan_op->set_tablet_id(MY_INPUT.tablet_loc_->tablet_id_);
-        scan_op->set_tablet_loc(MY_INPUT.tablet_loc_);
+      bool need_switch_param = (scan_op->get_tablet_access() != MY_INPUT.tablet_access_ &&
+                                  MY_INPUT.tablet_access_ != nullptr);
+      if (MY_INPUT.tablet_access_ != nullptr) {
+        scan_op->set_tablet_id(MY_INPUT.tablet_access_->tablet_id_);
+        scan_op->set_tablet_access(MY_INPUT.tablet_access_);
       }
       if (MY_SPEC.gi_above_) {
         if (!MY_SPEC.is_index_global_ && MY_CTDEF.lookup_ctdef_ != nullptr) {
@@ -1863,7 +1813,6 @@ int ObTableScanOp::local_iter_reuse()
       // save first ret_code, but continue to reuse iter anyway
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(scan_op->reuse_iter())) {
-        LOG_WARN("failed to reset iter", K(ret));
         first_fail_ret = OB_SUCC(first_fail_ret) ? tmp_ret : first_fail_ret;
       }
     }
@@ -1934,8 +1883,6 @@ int ObTableScanOp::check_need_real_rescan(bool &bret)
       } else {
         if (enable_group_rescan_test_mode) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the group id of tsc exceeds the group id of above operator",
-                    K(ret), K(group_rescan_cnt_), K(group_id_), K(ctx_.get_das_ctx().get_current_group_id()));
         } else {
           bret = true;
           output_ = iter_tree_;
@@ -1945,8 +1892,6 @@ int ObTableScanOp::check_need_real_rescan(bool &bret)
     } else {
       if (enable_group_rescan_test_mode) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the batch rescan count of tsc exceeds the batch count of above operator",
-                  K(ret), K(group_rescan_cnt_), K(ctx_.get_das_ctx().get_group_rescan_cnt()));
 
       } else {
         bret = true;
@@ -1966,15 +1911,13 @@ int ObTableScanOp::check_need_real_rescan(bool &bret)
         if (OB_UNLIKELY(tsc_rtdef_.bnlj_params_.empty()) ||
             OB_ISNULL(tsc_rtdef_.bnlj_params_.at(0).gr_param_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid bnlj params", K(tsc_rtdef_.bnlj_params_), K(ret));
-        } else if (OB_ISNULL(tsc_rtdef_.scan_rtdef_.table_loc_)) {
+        } else if (OB_ISNULL(tsc_rtdef_.scan_rtdef_.table_access_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected nullptr table loc", K(ret));
         } else if (FALSE_IT(group_size = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_)) {
         } else {
-          ObDASTableLoc *table_loc = tsc_rtdef_.scan_rtdef_.table_loc_;
-          for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
-              OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
+          DASRuntimeTableAccess *table_access = tsc_rtdef_.scan_rtdef_.table_access_;
+          for (DASRuntimeTabletListIter node = table_access->tablet_accesses_begin();
+              OB_SUCC(ret) && node != table_access->tablet_accesses_end(); ++node) {
             partition_cnt++;
           }
           if (OB_SUCC(ret)) {
@@ -2007,7 +1950,6 @@ int ObTableScanOp::set_batch_iter(int64_t group_id)
   int ret = OB_SUCCESS;
   if (!is_group_rescan()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("switch group with a null fold_iter", K(ret));
   } else {
     ret = fold_iter_->set_scan_group(group_id);
   }
@@ -2029,7 +1971,6 @@ int ObTableScanOp::get_next_row_with_das()
       if (OB_ITER_END == ret) {
         // do nothing.
       } else {
-        LOG_WARN("get next row from das result failed", K(ret));
       }
     } else {
       // We need do filter first before do the limit.
@@ -2088,7 +2029,6 @@ int ObTableScanOp::get_next_batch_with_das(int64_t &count, int64_t capacity)
     }
     if (OB_FAIL(ret)) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next batch from das result failed", K(ret));
       }
     } else {
       // We need do filter first before do the limit.
@@ -2141,7 +2081,6 @@ int ObTableScanOp::get_next_batch_with_das(int64_t &count, int64_t capacity)
     }
     if (OB_FAIL(ret)) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next batch from das result failed", K(ret));
       }
     } else {
       // We need do filter first before do the limit.
@@ -2177,7 +2116,6 @@ int ObTableScanOp::inner_get_next_row_implement()
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_get_next_row_for_tsc())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next row", K(ret));
     }
   }
   return ret;
@@ -2195,10 +2133,8 @@ int ObTableScanOp::inner_get_next_row_for_tsc()
     LOG_DEBUG("inner get next row meet a iter end", K(MY_SPEC.id_), K(this), K(lbt()));
   } else if (0 == (++iterated_rows_ % CHECK_STATUS_ROWS_INTERVAL)
              && OB_FAIL(ctx_.check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (OB_FAIL(get_next_row_with_das())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next row from ObNewRowIterator", K(ret));
     } else {
       //set found_rows:when the total number of rows returned is not 0, and there is a non-0 offset, the value of found_rows needs to be set,
       // To correct the final found_rows set to the session internal
@@ -2235,15 +2171,14 @@ int ObTableScanOp::inner_get_next_row_for_tsc()
     ObDASScanOp *scan_op = DAS_SCAN_OP(*scan_iter_->begin_task_iter());
     if (OB_ISNULL(scan_op)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr das scan op", K(ret));
     } else {
       ObTableScanParam &scan_param = scan_op->get_scan_param();
       ObTableScanStat &table_scan_stat = GET_PHY_PLAN_CTX(ctx_)->get_table_scan_stat();
       fill_table_scan_stat(scan_param.main_table_scan_stat_, table_scan_stat);
       LOG_DEBUG("[ROW_CACHE_ADJUST] fill cache stat for main table", K(&scan_param), K(scan_param.main_table_scan_stat_),
                                                     K(MY_SPEC.should_scan_index()), K(MY_SPEC.is_index_back()), K(MY_SPEC.is_index_global_),
-                                                    K(scan_op->is_local_task()), K(table_scan_stat));
-      if (MY_SPEC.is_index_back() && !MY_SPEC.is_index_global_ && scan_op->is_local_task()) {
+                                                    K(table_scan_stat));
+      if (MY_SPEC.is_index_back() && !MY_SPEC.is_index_global_) {
         ObTableScanParam *lookup_param = scan_op->get_local_lookup_param();
         if (OB_NOT_NULL(lookup_param)) {
           fill_table_scan_stat(lookup_param->main_table_scan_stat_, table_scan_stat);
@@ -2298,7 +2233,6 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
       brs_.end_ = true;
     } else if (OB_FAIL(get_next_batch_with_das(brs_.size_, batch_size))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next batch with mode failed", K(ret));
       } else {
         ret = OB_SUCCESS;
         brs_.end_ = true;
@@ -2351,8 +2285,8 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
     fill_table_scan_stat(scan_param.main_table_scan_stat_, table_scan_stat);
     LOG_DEBUG("[ROW_CACHE_ADJUST] fill cache stat for main table", K(&scan_param), K(scan_param.main_table_scan_stat_),
                                                     K(MY_SPEC.should_scan_index()), K(MY_SPEC.is_index_back()), K(MY_SPEC.is_index_global_),
-                                                    K(scan_op->is_local_task()), K(table_scan_stat));
-    if (MY_SPEC.is_index_back() && !MY_SPEC.is_index_global_ && scan_op->is_local_task()) {
+                                                    K(table_scan_stat));
+    if (MY_SPEC.is_index_back() && !MY_SPEC.is_index_global_) {
       ObTableScanParam *lookup_param = scan_op->get_local_lookup_param();
       if (OB_NOT_NULL(lookup_param)) {
         fill_table_scan_stat(lookup_param->main_table_scan_stat_, table_scan_stat);
@@ -2388,7 +2322,6 @@ OB_INLINE int ObTableScanOp::do_table_scan()
   need_init_before_get_row_ = false;
   if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan iter", K(ret));
   } else if (scan_iter_->has_task()) {
     //execute with das
     if (OB_FAIL(prepare_pushdown_limit_param())) {
@@ -2422,7 +2355,6 @@ int ObTableScanOp::cherry_pick_range_by_tablet_id(ObDASScanOp *scan_op)
     clear_evaluated_flag();
     bool can_prune = false;
     if (!add_all && OB_FAIL(can_prune_by_tablet_id(scan_op->get_tablet_id(), input_ranges.at(i), can_prune))) {
-      LOG_WARN("failed to check whether can prune by tablet id", K(ret));
     } else if (add_all || !can_prune) {
       prune_all = false;
       if (OB_FAIL(scan_ranges.push_back(input_ranges.at(i)))) {
@@ -2468,7 +2400,6 @@ int ObTableScanOp::can_prune_by_tablet_id(const ObTabletID &tablet_id,
               allocator, MY_SPEC.subpart_type_, MY_SPEC.subpart_range_pos_,
               scan_range, MY_SPEC.subpart_expr_, MY_SPEC.subpart_dep_cols_,
               can_prune, subpartition_range))) {
-    LOG_WARN("failed to construct subpartition range", K(ret));
   } else if (can_prune) {
     ObSEArray<ObObjectID, 4> partition_ids;
     ObSEArray<ObObjectID, 4> subpartition_ids;
@@ -2482,7 +2413,6 @@ int ObTableScanOp::can_prune_by_tablet_id(const ObTabletID &tablet_id,
       /*do nothing*/
     } else if (partition_ids.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should have only one partition id", K(partition_ids), K(partition_range), K(ret));
     } else if (ObPartitionLevel::PARTITION_LEVEL_ONE == MY_SPEC.part_level_) {
       if (tablet_ids.at(0) == tablet_id) {
         can_prune = false;
@@ -2496,7 +2426,6 @@ int ObTableScanOp::can_prune_by_tablet_id(const ObTabletID &tablet_id,
       /*do nothing*/
     } else if (subpartition_ids.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should have only one partition id", K(ret));
     } else if (tablet_ids.at(0) == tablet_id) {
       can_prune = false;
     }
@@ -2522,8 +2451,6 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
   }
   if (OB_ISNULL(scan_range.start_key_.get_obj_ptr()) || OB_ISNULL(scan_range.end_key_.get_obj_ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null point error", K(scan_range.start_key_.get_obj_ptr()),
-        K(scan_range.end_key_.get_obj_ptr()), K(ret));
   } else if (OB_UNLIKELY(scan_range.start_key_.is_min_row())
       || OB_UNLIKELY(scan_range.start_key_.is_max_row())
       || OB_UNLIKELY(scan_range.end_key_.is_min_row())
@@ -2532,8 +2459,6 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
     can_prune = false;
   } else if (OB_UNLIKELY(scan_range.start_key_.get_obj_cnt() != scan_range.end_key_.get_obj_cnt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should have the same range key count", K(scan_range.start_key_.get_obj_cnt()),
-        K(scan_range.end_key_.get_obj_cnt()), K(ret));
   } else if (part_range_pos.count() > 0) {
     int64_t range_key_count = part_range_pos.count();
     ObObj *start_row_key = NULL;
@@ -2541,19 +2466,15 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
     ObObj *function_obj = NULL;
     if (OB_ISNULL(start_row_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * range_key_count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory for start_obj failed", K(ret));
     } else if (OB_ISNULL(end_row_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * range_key_count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory for end_obj failed", K(ret));
     } else if (OB_ISNULL(function_obj = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory for function obj failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && can_prune && i < range_key_count; i++) {
         int64_t pos = part_range_pos.at(i);
         if (OB_UNLIKELY(pos < 0) || OB_UNLIKELY(pos >= scan_range.start_key_.get_obj_cnt())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid array pos", K(pos), K(scan_range.start_key_.get_obj_cnt()), K(ret));
         } else if (scan_range.start_key_.get_obj_ptr()[pos].is_max_value() ||
                    scan_range.start_key_.get_obj_ptr()[pos].is_min_value() ||
                    scan_range.end_key_.get_obj_ptr()[pos].is_max_value() ||
@@ -2571,8 +2492,6 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
                      OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), start_row_key[i],
                                                  expr->obj_meta_, expr->obj_datum_map_,
                                                  get_exec_ctx().get_allocator(), datum))) {
-            LOG_WARN("adjust lob datum failed", K(ret), K(i),
-                     K(start_row_key[i].get_meta()), K(expr->obj_meta_));
           }else {
             expr->set_evaluated_projected(eval_ctx_);
           }
@@ -2615,7 +2534,7 @@ int ObTableScanOp::reassign_task_ranges(ObGranuleTaskInfo &info)
   return ret;
 }
 
-int ObTableScanOp::get_access_tablet_loc(ObGranuleTaskInfo &info)
+int ObTableScanOp::get_access_tablet_access(ObGranuleTaskInfo &info)
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.gi_above_) {
@@ -2623,7 +2542,6 @@ int ObTableScanOp::get_access_tablet_loc(ObGranuleTaskInfo &info)
     if (OB_FAIL(ctx_.get_gi_task_map(gi_prepare_map))) {
     } else if (OB_FAIL(gi_prepare_map->get_refactored(MY_SPEC.id_, info))) {
       if (ret != OB_HASH_NOT_EXIST) {
-        LOG_WARN("failed to get prepare gi task", K(ret), K(MY_SPEC.id_));
       } else {
         // OB_HASH_NOT_EXIST mean no more task for tsc.
         LOG_DEBUG("no prepared task info, set table scan to end",
@@ -2631,8 +2549,8 @@ int ObTableScanOp::get_access_tablet_loc(ObGranuleTaskInfo &info)
         iter_end_ = true;
         ret = OB_SUCCESS;
       }
-    } else if (OB_FAIL(tsc_rtdef_.scan_rtdef_.table_loc_->get_tablet_loc_by_id(info.tablet_loc_->tablet_id_,
-                                                                               MY_INPUT.tablet_loc_))) {
+    } else if (OB_FAIL(tsc_rtdef_.scan_rtdef_.table_access_->find_tablet_access(info.tablet_access_->tablet_id_,
+                                                                               MY_INPUT.tablet_access_))) {
     } else {
       ctx_.set_granule_type(info.granule_type_);
     }
@@ -2702,13 +2620,10 @@ int ObTableScanOp::init_ddl_column_checksum()
     const ObIArray<ObColumnParam *> *cols = MY_CTDEF.scan_ctdef_.table_param_.get_read_info().get_columns();
     if (OB_ISNULL(session = ctx_.get_my_session())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid session", K(ret));
     } else if (OB_ISNULL(cols)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("col param array is unexpected null", K(ret),KP(cols));
     } else if (MY_SPEC.output_.count() != MY_SPEC.ddl_output_cids_.count()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(MY_SPEC.output_), K(MY_CTDEF.scan_ctdef_.table_param_), K(MY_SPEC.ddl_output_cids_));
     } else if (OB_FAIL(column_checksum_.init(MY_SPEC.ddl_output_cids_.count()))) {
     } else if (OB_FAIL(col_need_reshape_.init(MY_SPEC.ddl_output_cids_.count()))) {
     } else {
@@ -2723,7 +2638,6 @@ int ObTableScanOp::init_ddl_column_checksum()
           const ObColumnParam *col_param = cols->at(j);
           if (OB_ISNULL(col_param)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid col param", K(ret));
           } else if (MY_SPEC.ddl_output_cids_.at(i) == col_param->get_column_id()) {
             found = true;
             if (col_param->get_meta_type().is_lob_storage()) {
@@ -2745,7 +2659,6 @@ int ObTableScanOp::init_ddl_column_checksum()
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(col_need_reshape_.push_back(need_reshape))) {
-          LOG_WARN("failed to push back col need reshape", K(ret));
         }
       }
     }
@@ -2761,10 +2674,8 @@ int ObTableScanOp::ensure_ddl_column_checksum_array()
     int64_t task_cnt = 0;
     if (OB_ISNULL(scan_iter_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null scan iterator", K(ret));
     } else if (OB_UNLIKELY((task_cnt = scan_iter_->get_das_task_cnt()) <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected empty ddl scan task", K(ret), K(task_cnt));
     } else if (OB_UNLIKELY(column_cnt > 0 && task_cnt > INT64_MAX / column_cnt)) {
       ret = OB_SIZE_OVERFLOW;
       LOG_WARN("ddl checksum array size overflow", K(ret), K(task_cnt), K(column_cnt));
@@ -2799,10 +2710,8 @@ int ObTableScanOp::get_ddl_checksum_task_idx(int64_t &task_idx) const
   int64_t task_cnt = 0;
   if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null scan iterator", K(ret));
   } else if (OB_UNLIKELY((task_cnt = scan_iter_->get_das_task_cnt()) <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty ddl scan task", K(ret), K(task_cnt));
   } else if (1 == task_cnt) {
     task_idx = 0;
   } else if (OB_UNLIKELY(!scan_iter_->is_sequential_output())) {
@@ -2812,7 +2721,6 @@ int ObTableScanOp::get_ddl_checksum_task_idx(int64_t &task_idx) const
   } else if (OB_UNLIKELY((task_idx = scan_iter_->get_current_seq_task_idx()) < 0
                          || task_idx >= task_cnt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid current ddl scan task index", K(ret), K(task_idx), K(task_cnt));
   }
   return ret;
 }
@@ -2837,7 +2745,6 @@ int ObTableScanOp::add_ddl_column_checksum()
       const ObExpr *e = MY_SPEC.output_[i];
       if (OB_ISNULL(e)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, expr is nullptr", K(ret));
       } else if (OB_FAIL(e->eval(eval_ctx_, datum))) {
       } else if (FALSE_IT(store_datum = *datum)) {
 #ifdef ERRSIM
@@ -2846,7 +2753,6 @@ int ObTableScanOp::add_ddl_column_checksum()
       //   LOG_WARN("failed to corrupt obj", K(ret));
 #endif
       } else if (col_need_reshape_[i] && e->type_ != T_FUN_SYS_EMBEDDED_VEC && OB_FAIL(ObDDLUtil::reshape_ddl_column_obj(store_datum, e->obj_meta_))) {
-        LOG_WARN("reshape ddl column obj failed", K(ret));
       } else {
         column_checksum_[task_idx * cnt + i] += store_datum.checksum(0);
       }
@@ -2882,7 +2788,6 @@ int ObTableScanOp::add_ddl_column_checksum_batch(const int64_t row_count)
       const ObExpr *e = MY_SPEC.output_[i];
       if (OB_ISNULL(e)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, expr is nullptr", K(ret));
       } else if (OB_FAIL(e->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
       } else {
         ObDatumVector datum_array = e->locate_expr_datumvector(eval_ctx_);
@@ -2896,7 +2801,6 @@ int ObTableScanOp::add_ddl_column_checksum_batch(const int64_t row_count)
           //   LOG_WARN("failed to corrupt obj", K(ret));
 #endif
           } else if (col_need_reshape_[i] && e->type_ != T_FUN_SYS_EMBEDDED_VEC && OB_FAIL(ObDDLUtil::reshape_ddl_column_obj(store_datum, e->obj_meta_))) {
-            LOG_WARN("reshape ddl column obj failed", K(ret));
           } else {
             column_checksum_[task_idx * cnt + i] += store_datum.checksum(0);
           }
@@ -2938,7 +2842,6 @@ int ObTableScanOp::check_has_invalid_outrow_lob(const bool is_batch)
       const ObExpr *e = MY_SPEC.output_[i];
       if (OB_ISNULL(e)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, expr is nullptr", K(ret));
       } else if (!e->obj_meta_.is_lob_storage()) {
       } else if (is_batch) {
         if (OB_FAIL(e->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
@@ -2989,11 +2892,10 @@ int ObTableScanOp::report_ddl_column_checksum()
       for (DASTaskIter task_iter = scan_iter_->begin_task_iter();
            OB_SUCC(ret) && !task_iter.is_end(); ++task_iter, ++task_idx) {
         ObIDASTaskOp *task_op = *task_iter;
-        const ObDASTabletLoc *tablet_loc = nullptr;
+        const DASRuntimeTabletAccess *tablet_access = nullptr;
         ObArray<ObDDLChecksumItem> checksum_items;
-        if (OB_ISNULL(task_op) || OB_ISNULL(tablet_loc = task_op->get_tablet_loc())) {
+        if (OB_ISNULL(task_op) || OB_ISNULL(tablet_access = task_op->get_tablet_access())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null ddl scan task or tablet location", K(ret), K(task_idx), KP(task_op));
         }
         // Keep task ids stable until the whole batch is reported successfully.  If a later
         // tablet fails, retrying with the same ids overwrites the already reported rows
@@ -3003,7 +2905,7 @@ int ObTableScanOp::report_ddl_column_checksum()
           ObDDLChecksumItem item;
           item.execution_id_ = MY_SPEC.plan_->get_ddl_execution_id();
           item.table_id_ = table_id;
-          item.tablet_id_ = tablet_loc->tablet_id_.id();
+          item.tablet_id_ = tablet_access->tablet_id_.id();
           item.ddl_task_id_ = MY_SPEC.plan_->get_ddl_task_id();
           item.column_id_ = MY_SPEC.ddl_output_cids_.at(i) & VIRTUAL_GEN_FIXED_LEN_MASK;
           item.task_id_ = ctx_.get_px_sqc_id() << ObDDLChecksumItem::PX_SQC_ID_OFFSET
@@ -3024,7 +2926,7 @@ int ObTableScanOp::report_ddl_column_checksum()
         }
         if (OB_FAIL(ret)) {
         } else {
-          LOG_INFO("report ddl checksum table scan", K(task_idx), K(tablet_loc->tablet_id_), K(checksum_items));
+          LOG_INFO("report ddl checksum table scan", K(task_idx), K(tablet_access->tablet_id_), K(checksum_items));
           if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version,
                                                              checksum_items,
                                                              *GCTX.sql_proxy_))) {
@@ -3050,7 +2952,6 @@ int ObTableScanOp::do_diagnosis(ObExecContext &exec_ctx, ObBitVector &skip)
   ObDiagnosisManager& diagnosis_manager = exec_ctx.get_diagnosis_manager();
   if (OB_FAIL(output_->get_diagnosis_info(&diagnosis_manager))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get diagnosis info", K(ret));
   } else if (OB_FAIL(diagnosis_manager.do_diagnosis(skip,
                                             exec_ctx.get_my_session()->get_diagnosis_limit_num()))){
   }
@@ -3063,30 +2964,25 @@ int ObTableScanOp::inner_get_next_row()
   if (OB_UNLIKELY(MY_SPEC.is_spatial_ddl())) {
     if (OB_FAIL(inner_get_next_spatial_index_row())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("spatial index ddl : get next spatial index row failed", K(ret));
       }
     }
   } else if (OB_UNLIKELY(MY_SPEC.is_fts_ddl_ && nullptr == tsc_rtdef_.scan_rtdef_.sample_info_)) {
     if (OB_FAIL(inner_get_next_fts_index_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next fts index row", K(ret));
       }
     }
   } else if (OB_UNLIKELY(MY_SPEC.is_multivalue_ddl() && nullptr == tsc_rtdef_.scan_rtdef_.sample_info_)) {
     if (OB_FAIL(inner_get_next_multivalue_index_row())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("multivalue index ddl : get next multivalue index row failed", K(ret));
       }
     }
   } else if (OB_UNLIKELY(MY_SPEC.is_spiv_ddl() && nullptr == tsc_rtdef_.scan_rtdef_.sample_info_)) {
     if (OB_FAIL(inner_get_next_spiv_index_row())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("spiv index ddl : get next spiv index row failed", K(ret));
       }
     }
   } else if (OB_FAIL(inner_get_next_row_implement())) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("get next row failed", K(ret));
     }
   }
 
@@ -3116,7 +3012,6 @@ int ObTableScanOp::init_multivalue_index_rows()
   void *buf = ctx_.get_allocator().alloc(sizeof(ObDomainIndexRow));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate spatial row store failed", K(ret), K(buf));
   } else if (OB_FAIL(extend_domain_obj_buffer(SAPTIAL_INDEX_DEFAULT_ROW_COUNT))) {
   } else {
     domain_index_.dom_rows_ = new(buf) ObDomainIndexRow();
@@ -3157,7 +3052,6 @@ int ObTableScanOp::extend_domain_obj_buffer(uint32_t size)
 
     if (OB_ISNULL(row_buf) || OB_ISNULL(docid_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate spatial row store failed", K(ret), K(row_buf));
     } else if (domain_index_.rows_) {
       ctx_.get_allocator().free(domain_index_.rows_);
       domain_index_.rows_ = nullptr;
@@ -3212,7 +3106,6 @@ int ObTableScanOp::multivalue_get_pure_data(
     if (OB_FAIL(bin.reset_iter())) {
     } else if (!ObJsonVerType::is_opaque_or_string(bin.json_type())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to parse binary.", K(ret), K(json_arr_data));
     } else {
       data = bin.get_data();
       data_len = bin.get_data_length();
@@ -3267,7 +3160,6 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
       need_ignore_null = false;
       if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row failed", K(ret), "op", op_name());
         }
       } else {
         domain_index_.dom_rows_->reuse();
@@ -3294,7 +3186,6 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
 
         if (multivalue_idx < 0 || multivalue_idx > column_count - 1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to get multivalue idx invalid", K(ret), K(multivalue_idx));
         } else if (OB_FAIL(multivalue_get_pure_data(domain_index_.alloc_, data, data_len,
                                      rowkey_start, rowkey_end, record_num, is_save_rowkey, use_docid))) {
         } else if (record_num == 0 && is_unique_index) {
@@ -3340,7 +3231,6 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
             }
 
             if (OB_SUCC(ret) && OB_FAIL(domain_index_.dom_rows_->push_back(domain_index_.rows_ + i))) {
-              LOG_WARN("failed to push back spatial index row", K(ret), K(domain_index_.rows_[i]));
             }
           }
           break;
@@ -3399,7 +3289,6 @@ int ObTableScanOp::init_spiv_index_rows()
   void *buf = ctx_.get_allocator().alloc(sizeof(ObDomainIndexRow));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate spatial row store failed", K(ret), K(buf));
   } else if (OB_FAIL(extend_domain_obj_buffer(SAPTIAL_INDEX_DEFAULT_ROW_COUNT))) {
   } else {
     domain_index_.dom_rows_ = new(buf) ObDomainIndexRow();
@@ -3496,7 +3385,6 @@ int ObTableScanOp::get_sparse_vector_index_column_idxs(
   }
   if (OB_UNLIKELY(sparse_vec_idx == OB_INVALID_INDEX || dim_idx == OB_INVALID_INDEX || docid_idx == OB_INVALID_INDEX || value_idx == OB_INVALID_INDEX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not get sparse vector index column idxs", K(ret), K(sparse_vec_idx), K(dim_idx), K(docid_idx), K(value_idx));
   }
 
   return ret;
@@ -3552,7 +3440,6 @@ int ObTableScanOp::inner_get_next_spiv_index_row()
       while (OB_SUCC(ret) && domain_index_.domain_row_index_ >= domain_index_.dom_rows_->count()) {
         if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("get next row failed", K(ret), "op", op_name());
           }
         } else {
           domain_index_.dom_rows_->reuse();
@@ -3603,7 +3490,6 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
     if (domain_index_.domain_row_index_ >= domain_index_.dom_rows_->count()) {
       if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row failed", K(ret), "op", op_name());
         }
       } else {
         domain_index_.dom_rows_->reuse();
@@ -3631,16 +3517,12 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
           } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(geo_wkb, srid))) {
           } else if (OB_ISNULL(srs_provider)) {
             ret = OB_NOT_INIT;
-            LOG_WARN("SRS provider is not configured", K(ret));
           } else if (srid != 0 &&
               OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
-            LOG_WARN("failed to get srs guard", K(ret), K(srid));
           } else if (srid != 0 &&
               OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-            LOG_WARN("failed to get srs item", K(ret), K(srid));
           } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
                       OB_FAIL(srs_provider->get_srs_bounds(srid, srs_item, srs_bound))) {
-            LOG_WARN("failed to get srs bound", K(ret), K(srid));
           } else if (OB_FAIL(ObGeoTypeUtil::get_cellid_mbr_from_geom(geo_wkb, srs_item, srs_bound,
                                                                      cellids, mbr_val))) {
           } else if (cellids.size() == 0 && mbr_val.empty()) {
@@ -3648,10 +3530,8 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
             need_ignore_null = true;
           } else if (cellids.size() > SAPTIAL_INDEX_DEFAULT_ROW_COUNT) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("cellid over size", K(ret), K(cellids.size()));
           } else if (OB_ISNULL(domain_index_.rows_)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to alloc memory for spatial index datum row", K(ret));
           } else {
             for (uint64_t i = 0, datum_idx = 0; OB_SUCC(ret) && i < cellids.size(); i++) {
               domain_index_.rows_[i].reuse();
@@ -3687,7 +3567,6 @@ int ObTableScanOp::init_spatial_index_rows()
   void *mbr_buffer = ctx_.get_allocator().alloc(OB_DEFAULT_MBR_SIZE);
   if (OB_ISNULL(buf) || OB_ISNULL(mbr_buffer) || OB_ISNULL(row_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate spatial row store failed", K(ret), K(buf), K(mbr_buffer));
   } else {
     domain_index_.dom_rows_ = new(buf) ObDomainIndexRow();
     domain_index_.rows_ = new(row_buf) blocksstable::ObDatumRow[SAPTIAL_INDEX_DEFAULT_ROW_COUNT];
@@ -3713,7 +3592,6 @@ int ObTableScanOp::init_spatial_index_rows()
     }
     if (OB_FAIL(ret) || cnt != spatial_expr_cnt) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid spatial index exprs", K(ret), K(cnt));
     }
   }
   return ret;
@@ -3727,7 +3605,6 @@ int ObTableScanOp::fill_generated_cellid_mbr(
   const ObExprPtrIArray &exprs = MY_SPEC.output_;
   if (exprs.count() < 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid exprs count", K(ret), K(exprs.count()));
   } else {
     for (uint8_t i = 0; i < 2 && OB_SUCC(ret); i++) {
       ObObjDatumMapType type = i == 0 ? OBJ_DATUM_8BYTE_DATA : OBJ_DATUM_STRING;
@@ -3752,19 +3629,15 @@ int ObTableScanOp::inner_get_next_fts_index_row()
   blocksstable::ObDatumRow *row = nullptr;
   if (OB_FAIL(fts_index_.get_next_row(row))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next row from fts index cache", K(ret));
     } else if (OB_FAIL(fetch_next_fts_index_rows())) { // need overwrite return code
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to fetch next fts index rows", K(ret));
       }
     } else if (OB_FAIL(fts_index_.get_next_row(row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next row from fts index cache", K(ret));
       }
     }
   }
   if (FAILEDx(fill_generated_fts_cols(row))) {
-    LOG_WARN("fail to fill generate fts cols", K(ret), KPC(row));
   }
   return ret;
 }
@@ -3781,18 +3654,15 @@ int ObTableScanOp::fetch_next_fts_index_rows()
 
     if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next row implement", K(ret));
       }
     } else if (OB_FAIL(get_output_fts_col_expr_by_type(T_FUN_SYS_DOC_ID, doc_id_expr))) {
     } else if (OB_FAIL(get_output_fts_col_expr_by_type(T_FUN_SYS_WORD_SEGMENT, ft_expr))) {
     } else if (OB_ISNULL(ft_expr) || OB_ISNULL(doc_id_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpeted error, ft or doc id expr is nullptr", K(ret), KP(ft_expr), KP(doc_id_expr));
     } else if (OB_FAIL(ft_expr->eval(eval_ctx_, ft_datum))) {
     } else if (OB_FAIL(doc_id_expr->eval(eval_ctx_, doc_id_datum))) {
     } else if (OB_ISNULL(ft_datum) || OB_ISNULL(doc_id_datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpeted error, ft or doc id datum is nullptr", K(ret), KP(ft_datum), KP(doc_id_datum));
     } else {
       ObString ft = ft_datum->get_string();
       ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -3803,7 +3673,6 @@ int ObTableScanOp::fetch_next_fts_index_rows()
                                                             ft_expr->obj_meta_.has_lob_header(),
                                                             ft))) {
       } else if (OB_FAIL(fts_index_.segment(ft_expr->obj_meta_, *doc_id_datum, ft)) &&OB_ITER_END != ret) {
-        LOG_WARN("fail to segment fulltext", K(ret), K(doc_id_datum), K(ft));
       } else if (OB_ITER_END == ret) {
         has_segment_word = false;
         ret = OB_SUCCESS;
@@ -3822,7 +3691,6 @@ int ObTableScanOp::fill_generated_fts_cols(blocksstable::ObDatumRow *row)
   const ObExprOperatorType *expr_types = MY_SPEC.is_fts_index_aux_ ? ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE : ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE;
   if (OB_ISNULL(row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, row is nullptr", K(ret), KP(row));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT; ++i) {
       ObExpr *expr = nullptr;
@@ -3852,18 +3720,15 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
                && T_FUN_SYS_WORD_COUNT != type
                && T_FUN_SYS_DOC_LENGTH != type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fts column expr type", K(ret), "type", get_type_name(type));
   } else if (T_FUN_SYS_DOC_ID == type) {
     for (int64_t i = 0; OB_SUCC(ret) && OB_ISNULL(expr) && i < MY_SPEC.output_.count(); ++i) {
       ObExpr *tmp_expr = MY_SPEC.output_.at(i);
       if (OB_ISNULL(tmp_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, expr in output is nullptr", K(ret), K(i));
       } else if (T_FUN_SYS_WORD_SEGMENT == tmp_expr->type_) {
         const int64_t idx = MY_SPEC.is_fts_index_aux_ ? i+1 : i-1;
         if (OB_UNLIKELY(idx < 0 || idx >= MY_SPEC.output_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, invalid doc id idx", K(ret), K(idx), K(i), K(MY_SPEC.output_));
         } else {
           expr = MY_SPEC.output_.at(idx);
         }
@@ -3874,7 +3739,6 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
       ObExpr *tmp_expr = MY_SPEC.output_.at(i);
       if (OB_ISNULL(tmp_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, expr in output is nullptr", K(ret), K(i));
       } else if (type == tmp_expr->type_) {
         expr = tmp_expr;
       }
@@ -3882,7 +3746,6 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
   }
   if (OB_SUCC(ret) && OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, fts column expr isn't found", K(ret), "type", get_type_name(type), K(MY_SPEC.output_));
   }
   return ret;
 }
@@ -3906,7 +3769,6 @@ int ObRandScanProcessor::init(const ObTableScanSpec *tsc_spec,
       void *skip_buf = tsc_op->ctx_.get_allocator().alloc(skip_buf_size);
       if (OB_ISNULL(skip_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(skip_buf_size));
       } else {
         MEMSET(skip_buf, 0, skip_buf_size);
         rand_brs_.skip_ = to_bit_vector(skip_buf);
@@ -3925,7 +3787,6 @@ int ObRandScanProcessor::inner_get_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rand_brs_.skip_) || OB_ISNULL(tsc_op_) || OB_ISNULL(tsc_spec_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null arguments", K(ret));
   } else {
     ObBatchRows &brs = tsc_op_->brs_;
     ObEvalCtx &eval_ctx = tsc_op_->eval_ctx_;
@@ -3986,7 +3847,6 @@ int ObRandScanProcessor::inner_get_next_batch(const int64_t max_row_cnt)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected random scan status", K(ret), K(status_));
       }
       }
     }

@@ -284,8 +284,6 @@ int ObMajorPartitionMergeFuser::end_fuse_row(const storage::ObNopPos &nop_pos, b
           for (int64_t j = 0; OB_SUCC(ret) && j < generated_cols_.count(); j++) {
             if (idx == generated_cols_.at(j)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("Found nop generated columns in major fuser", K(ret), K(i), K(idx),
-                       K(nop_pos), K_(generated_cols), K(result_row));
             }
           }
         }

@@ -29,7 +29,6 @@ int ObInsertStmtPrinter::do_print()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt should not be NULL", K(ret));
   } else {
     expr_printer_.init(buf_, 
                        buf_len_, 
@@ -51,10 +50,8 @@ int ObInsertStmtPrinter::print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_UNLIKELY(!stmt_->is_insert_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid insert stmt", K(stmt_->get_stmt_type()),K(ret));
   } else if (OB_FAIL(print_basic_stmt())) {
   } else { /*do nothing*/ }
 
@@ -67,7 +64,6 @@ int ObInsertStmtPrinter::print_basic_stmt()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_temp_table_as_cte())) {
   } else if (OB_FAIL(print_insert())) {
   } else if (OB_FAIL(print_into())) {
@@ -85,7 +81,6 @@ int ObInsertStmtPrinter::print_insert()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt*>(stmt_);
     if (insert_stmt->is_replace()) {
@@ -109,13 +104,11 @@ int ObInsertStmtPrinter::print_into()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt*>(stmt_);
     const TableItem *table_item = NULL;
     if (OB_ISNULL(table_item = insert_stmt->get_table_item(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid table item", K(stmt_->get_table_size()), K(ret));
     } else if (OB_FAIL(print_table(table_item, true))) {
     } else {
       DATA_PRINTF("(");
@@ -123,7 +116,6 @@ int ObInsertStmtPrinter::print_into()
         const ObColumnRefRawExpr* column = insert_stmt->get_values_desc().at(i);
         if (OB_ISNULL(column)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column is NULL", K(ret));
         } else {
           PRINT_IDENT_WITH_QUOT(column->get_column_name());
           DATA_PRINTF(",");
@@ -143,10 +135,8 @@ int ObInsertStmtPrinter::print_values()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_insert_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid insert stmt", K(stmt_->get_stmt_type()), K(stmt_->get_table_size()), K(ret));
   } else {
     const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt*>(stmt_);
     if (insert_stmt->get_from_item_size() == 1) {
@@ -155,13 +145,11 @@ int ObInsertStmtPrinter::print_values()
       const ObSelectStmt* sub_select_stmt = NULL;
       if (OB_ISNULL(view) || OB_ISNULL(sub_select_stmt = view->ref_query_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sub select stmt is null", K(ret), K(sub_select_stmt));
       } else if (OB_FAIL(print_subquery(sub_select_stmt, PRINT_CTE))) {
       }
     } else {
       if (insert_stmt->get_values_desc().empty()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("value desc is empty", K(insert_stmt->get_values_desc()), K(ret));
       } else {
         int64_t column_count = insert_stmt->get_values_desc().count();
         int64_t row_count = insert_stmt->get_values_vector().count() / column_count;
@@ -172,10 +160,8 @@ int ObInsertStmtPrinter::print_values()
             const ObColumnRefRawExpr* column = insert_stmt->get_values_desc().at(j);
             if (OB_ISNULL(column)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("column is NULL", K(ret));
             } else if (i * column_count + j >= insert_stmt->get_values_vector().count()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpect values vector", K(ret));
             } else if (OB_FAIL(expr_printer_.do_print(insert_stmt->get_values_vector().at(i * column_count + j), T_INSERT_SCOPE))) {
             } else {
               DATA_PRINTF(",");

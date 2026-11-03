@@ -48,10 +48,6 @@ protected:
       const share::SCN &ddl_start_scn,
       const share::SCN &scn,
       bool &need_replay);
-  static int get_lob_meta_tablet_id(
-      const ObTabletHandle &tablet_handle,
-      const common::ObTabletID &possible_lob_meta_tablet_id,
-      common::ObTabletID &lob_meta_tablet_id);
 
   virtual bool is_replay_update_mds_table_() const override
   {
@@ -66,31 +62,6 @@ protected:
   ObLS *ls_;
   common::ObTabletID tablet_id_;
   share::SCN scn_;
-};
-
-class ObDDLStartReplayExecutor final : public ObDDLReplayExecutor
-{
-public:
-  ObDDLStartReplayExecutor();
-  ~ObDDLStartReplayExecutor() = default;
-
-  virtual bool is_replay_ddl_control_log_() const override final { return true; }
-
-  int init(
-      ObLS *ls,
-      const ObDDLStartLog &log,
-      const share::SCN &scn);
-
-protected:
-  // replay to the tablet
-  // @return OB_SUCCESS, replay successfully, data has written to tablet.
-  // @return OB_EAGAIN, failed to replay, need retry.
-  // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
-  // @return other error codes, failed to replay.
-  int do_replay_(ObTabletHandle &handle) override;
-  int replay_ddl_start(ObTabletHandle &handle, const bool is_lob_meta_tablet);
-private:
-  const ObDDLStartLog *log_;
 };
 
 class ObDDLRedoReplayExecutor final : public ObDDLReplayExecutor
@@ -123,33 +94,6 @@ private:
       bool &can_skip);
 private:
   const ObDDLRedoLog *log_;
-};
-
-class ObDDLCommitReplayExecutor final : public ObDDLReplayExecutor
-{
-public:
-  ObDDLCommitReplayExecutor();
-  ~ObDDLCommitReplayExecutor() = default;
-
-  virtual bool is_replay_ddl_control_log_() const override final { return true; }
-
-  int init(
-      ObLS *ls,
-      const ObDDLCommitLog &log,
-      const share::SCN &scn);
-
-protected:
-  // replay to the tablet
-  // @return OB_SUCCESS, replay successfully, data has written to tablet.
-  // @return OB_EAGAIN, failed to replay, need retry.
-  // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
-  // @return OB_TASK_EXPIRED, ddl task expired.
-  // @return other error codes, failed to replay.
-  int do_replay_(ObTabletHandle &handle) override;
-  int replay_ddl_commit(ObTabletHandle &handle);
-
-private:
-  const ObDDLCommitLog *log_;
 };
 
 class ObTabletForkFreezeReplayExecutor final : public ObDDLReplayExecutor

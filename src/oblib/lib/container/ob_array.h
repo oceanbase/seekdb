@@ -742,25 +742,29 @@ template<typename T, int64_t LOCAL_ARRAY_SIZE, typename BlockAllocatorT, bool au
 int64_t ObSEArrayImpl<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>::to_string(
     char *buf, int64_t buf_len) const
 {
-  int64_t need_print_count = (count_ > max_print_count_ ? max_print_count_ : count_);
   int64_t pos = 0;
-  const int64_t log_keep_size = (ObLogger::get_logger().is_in_async_logging()
-                                 ? OB_ASYNC_LOG_KEEP_SIZE
-                                 : OB_LOG_KEEP_SIZE);
   J_ARRAY_START();
-  //delete now.If needed, must add satisfy json and run passed observer pretest
-  //common::databuff_printf(buf, buf_len, pos, "%ld:", count_);
-  for (int64_t index = 0; (index < need_print_count - 1) && (pos < buf_len - 1); ++index) {
-    if (pos + log_keep_size >= buf_len - 1) {
-      BUF_PRINTF(OB_LOG_ELLIPSIS);
+  if constexpr (has_to_string<T>::value) {
+    int64_t need_print_count = (count_ > max_print_count_ ? max_print_count_ : count_);
+    const int64_t log_keep_size = (ObLogger::get_logger().is_in_async_logging()
+                                   ? OB_ASYNC_LOG_KEEP_SIZE
+                                   : OB_LOG_KEEP_SIZE);
+    //delete now.If needed, must add satisfy json and run passed observer pretest
+    //common::databuff_printf(buf, buf_len, pos, "%ld:", count_);
+    for (int64_t index = 0; (index < need_print_count - 1) && (pos < buf_len - 1); ++index) {
+      if (pos + log_keep_size >= buf_len - 1) {
+        BUF_PRINTF(OB_LOG_ELLIPSIS);
+        J_COMMA();
+        break;
+      }
+      BUF_PRINTO(at(index));
       J_COMMA();
-      break;
     }
-    BUF_PRINTO(at(index));
-    J_COMMA();
-  }
-  if (0 < need_print_count) {
-    BUF_PRINTO(at(need_print_count - 1));
+    if (0 < need_print_count) {
+      BUF_PRINTO(at(need_print_count - 1));
+    }
+  } else {
+    J_KV("cnt", count_);
   }
   J_ARRAY_END();
   return pos;

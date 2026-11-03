@@ -49,7 +49,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
   // After result.open, all required parameters such as last insert id for pkt_param have been calculated
   // For asynchronous add, delete, and modify operations, it is necessary to update the last insert id in advance to ensure the pkt_param parameter is correct in the callback
   // After the result set is closed, store_last_insert_id will be called again
-  ObCurTraceId::TraceId *cur_trace_id = NULL;
+  const ObCurTraceId::TraceId *cur_trace_id = NULL;
   if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("current trace id is NULL", K(ret));
@@ -77,11 +77,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     // }
     int cret = result.close();
     if (retry_ctrl_.need_retry()) {
-      LOG_WARN("result set open failed, will retry",
-               K(ret), K(cli_ret), K(cret), K(retry_ctrl_.need_retry()));
     } else {
-      LOG_WARN("result set open failed, let's leave process(). EndTransCb will clean this mess",
-               K(ret), K(cli_ret), K(cret), K(retry_ctrl_.need_retry()));
     }
     ret = cli_ret;
   } else if (result.is_with_rows()) {

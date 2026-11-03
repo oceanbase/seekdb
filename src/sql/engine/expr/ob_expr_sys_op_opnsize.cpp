@@ -69,7 +69,6 @@ int ObExprSysOpOpnsize::calc_sys_op_opnsize(const ObExpr *expr,const ObDatum *ar
   int ret = OB_SUCCESS;
   if (OB_ISNULL(arg) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null pointer", K(ret));
   } else if (!is_lob_storage(expr->datum_meta_.type_) || arg->is_null()) {
     size = sizeof(*arg) + (arg->is_null() ? 0 : arg->len_);
   } else { // (texts except tiny, json, gis)

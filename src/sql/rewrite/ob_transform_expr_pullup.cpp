@@ -156,7 +156,6 @@ int ObTransformExprPullup::need_transform(const ObIArray<ObParentDMLStmt> &paren
     const ObQueryHint *query_hint = NULL;
     if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), KP(ctx_), KP(query_hint));
     } else if (!query_hint->has_outline_data()) {
       need_trans = true;
     } else {
@@ -171,7 +170,6 @@ int ObTransformExprPullup::need_transform(const ObIArray<ObParentDMLStmt> &paren
             const TableItem *table = NULL;
             if (OB_ISNULL(table = stmt.get_table_item(i))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("table item is null", K(ret));
             } else if (!table->is_generated_table() || OB_ISNULL(table->ref_query_)) {
               //continue
             } else {
@@ -201,10 +199,8 @@ int ObTransformExprPullup::transform_view_recursively(TableItem *table_item,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
   } else if (OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table item is null", K(ret));
   } else if (!table_item->is_joined_table()) {
     if (OB_FAIL(pullup_expr_from_view(table_item, stmt, parent_reject_expr_map,
                                       parent_reject_subquery_map, transformed_views,
@@ -214,7 +210,6 @@ int ObTransformExprPullup::transform_view_recursively(TableItem *table_item,
     JoinedTable *joined_table = dynamic_cast<JoinedTable*>(table_item);
     if (OB_ISNULL(joined_table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("joined table item is null", K(ret));
     } else if (IS_OUTER_JOIN(joined_table->joined_type_)) {
       // the expr result of outer joined tables may be determined by the logic of outer join
       // (fill null or fill the origin value).
@@ -269,7 +264,6 @@ int ObExprNodeMap::add_expr_map(ObRawExpr *expr)
       if (OB_FAIL(expr_map_.set_refactored(hash_v, counter, 1))) {
       }
     } else {
-      LOG_WARN("get hash map failed", K(ret));
     }
   }
 
@@ -312,7 +306,6 @@ int ObExprNodeMap::get_ref_count(ObRawExpr *expr, int64_t &ref_count)
   } else if (OB_HASH_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
   } else {
-    LOG_WARN("fail to get hash map", K(ret));
   }
   return ret;
 }
@@ -340,7 +333,6 @@ int ObTransformExprPullup::build_parent_reject_exprs_map(ObSelectStmt &parent,
   int64_t the_first_scope_to_search = T_NONE_SCOPE;
 
   if (OB_FAIL(expr_reject_map.init()) || OB_FAIL(subquery_reject_map.init())) {
-    LOG_WARN("fail to init expr node map", K(ret));
   }
   
   //check ref column in subqueries
@@ -473,7 +465,6 @@ int ObTransformExprPullup::check_stmt_validity(const ObDMLStmt *stmt, bool &is_v
   is_valid = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else if (stmt->is_select_stmt()) {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt);
     if (!select_stmt->is_set_stmt()
@@ -531,7 +522,6 @@ int ObTransformExprPullup::rewrite_decision_by_hint(ObSelectStmt &parent,
       go_rewrite = pullup_hint->is_enable_hint();
       reason = CTRL_BY_PULLUP_HINT;
       if (!go_rewrite && OB_FAIL(ctx_->add_used_trans_hint(pullup_hint))) {
-        LOG_WARN("failed to add used trans hint", K(ret));
       }
     } else {
       go_rewrite = false;
@@ -544,7 +534,6 @@ int ObTransformExprPullup::rewrite_decision_by_hint(ObSelectStmt &parent,
     if (OB_NOT_NULL(pullup_hint)) {
       go_rewrite = pullup_hint->is_enable_hint();
       if (!go_rewrite && OB_FAIL(ctx_->add_used_trans_hint(pullup_hint))) {
-        LOG_WARN("failed to add used trans hint", K(ret));
       } else if (!go_rewrite) {
         OPT_TRACE("hint reject transform");
       }
@@ -573,7 +562,6 @@ int ObTransformExprPullup::construct_transform_hint(ObDMLStmt &stmt, void *trans
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_) || OB_ISNULL(trans_params)
       || OB_ISNULL(merged_stmts = static_cast<ObIArray<ObSelectStmt*>*>(trans_params))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(ctx_), KP(trans_params), KP(merged_stmts));
   } else {
     ObHint *hint = NULL;
     ObDMLStmt *child_stmt = NULL;
@@ -581,7 +569,6 @@ int ObTransformExprPullup::construct_transform_hint(ObDMLStmt &stmt, void *trans
     for (int64_t i = 0; OB_SUCC(ret) && i < merged_stmts->count(); ++i) {
       if (OB_ISNULL(child_stmt = merged_stmts->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(child_stmt));
       } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_PULLUP_EXPR, hint))) {
       } else if (OB_FAIL(child_stmt->get_qb_name(child_qb_name))) {
       } else if (OB_FAIL(ctx_->add_src_hash_val(child_qb_name))) {
@@ -606,7 +593,6 @@ int ObTransformExprPullup::pullup_expr_from_view(TableItem *view,
   bool try_rewrite = false;
   if (OB_ISNULL(view)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("view is null", K(ret));
   } else if (!is_view_acceptable_for_rewrite(*view)) {
     //skip everying
   } else if (OB_FAIL(rewrite_decision_by_hint(select_stmt, *(view->ref_query_),
@@ -668,12 +654,10 @@ int ObTransformExprPullup::pullup_expr_from_view(TableItem *view,
         bool is_parent_reject_subquery = false;
         if (OB_ISNULL(select_item.expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret), K(select_item.expr_));
         } else if (OB_FAIL(child_reject_map.is_exist(select_item.expr_, is_child_reject))) {
         } else if (OB_FAIL(parent_reject_expr_map.is_exist(view_project_column_expr, is_parent_reject))) {
         } else if (select_item.expr_->has_flag(CNT_SUB_QUERY)
                    && OB_FAIL(parent_reject_subquery_map.is_exist(view_project_column_expr, is_parent_reject_subquery))) {
-          LOG_WARN("fail to check expr exist", K(ret));
         } else if (is_child_reject || is_parent_reject || is_parent_reject_subquery
                    || !expr_need_pullup(select_item.expr_)) {
         } else {

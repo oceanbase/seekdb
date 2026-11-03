@@ -77,7 +77,6 @@ int ObJsonBinAggSerializer::append_key_and_value(ObString key, ObStringBuffer &v
   if (OB_ISNULL(key_info = static_cast<ObAggBinKeyInfo*>
                           (arr_allocator->alloc(sizeof(ObAggBinKeyInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate key info struct failed", K(ret));
   } else {
     int key_count = key_info_.count();
     key_info->key_len_ = key.length();
@@ -109,7 +108,6 @@ int ObJsonBinAggSerializer::append_key_and_value(ObString key, ObStringBuffer &v
       }
       key_info->value_len_ = value.length();
       if (OB_SUCC(ret) && OB_FAIL(key_info_.push_back(key_info))) {
-        LOG_WARN("failed to push back key_info.", K(ret));
       }
     }
   }
@@ -254,7 +252,6 @@ int ObJsonBinAggSerializer::construct_meta()
   
   if (key_start_ > header_.total_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("key start unexpected.", K(ret), K(key_start_));
   } else if (OB_FAIL(reserve_meta())) {
   } else {
     int64_t key_offset = 0;
@@ -352,7 +349,6 @@ int ObJsonBinAggSerializer::rewrite_total_size()
   } else if (ObMulModeVar::get_var_type(calculate_total_size) < 
               ObMulModeVar::get_var_type(actual_total_size)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("header size invalided", K(ret));
   } else {
     if (header_.obj_var_size_ == 1) {
       *reinterpret_cast<uint8_t*>(buff_.ptr() + header_.begin_ + header_.obj_var_offset_) = static_cast<uint8_t>(actual_total_size);

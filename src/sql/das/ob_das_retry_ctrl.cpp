@@ -23,15 +23,9 @@ using namespace share;
 using namespace share::schema;
 namespace sql {
 
-/**
- *
- * DAS cannot unconditionally retry for the error of tablet_location or ls_location, like -4725, -4721,
- * and needs to determine whether the real cause of the error is due to DDL operations or stale location cache.
- * 1. When the table or partition was dropped by DDL, the DAS task cannot be retried.
- * 2. When tablet location cache is stale, tablet location cache should be updated and das task needs to be retried.
- *
- **/
-void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
+// A retry must recheck the current schema: dropped tables stop task retries,
+// while a removed tablet requires statement-level retry with a fresh plan.
+void ObDASRetryCtrl::tablet_access_retry_proc(ObDASRef &das_ref,
                                                 ObIDASTaskOp &task_op,
                                                 bool &need_retry)
 {
@@ -39,42 +33,37 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   int ret = OB_SUCCESS;
   ObTableID ref_table_id = task_op.get_ref_table_id();
   ObDASCtx &das_ctx = DAS_CTX(das_ref.get_exec_ctx());
-  const ObDASTabletLoc *tablet_loc = task_op.get_tablet_loc();
+  const DASRuntimeTabletAccess *tablet_access = task_op.get_tablet_access();
   bool tablet_exist = false;
   schema::ObSchemaGetterGuard schema_guard;
   const schema::ObTableSchema *table_schema = nullptr;
-  if (OB_ISNULL(tablet_loc)) {
+  if (OB_ISNULL(tablet_access)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet loc is nullptr", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema service", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     // The runtime schema may not be ready.
     task_op.set_errcode(ret);
-    LOG_WARN("get runtime schema guard fail", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
     task_op.set_errcode(ret);
-    LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     // table could be dropped
     task_op.set_errcode(OB_TABLE_NOT_EXIST);
     LOG_WARN("table not exist,  maybe dropped by DDL, stop das retry", K(ref_table_id));
   } else if (table_schema->is_vir_table()) {
-    // the location of the virtual table can't be refreshed,
-    // so when a location exception occurs, virtual table is not retryable
-  } else if (OB_FAIL(table_schema->check_if_tablet_exists(tablet_loc->tablet_id_, tablet_exist))) {
+    // Virtual table accesses do not support tablet-level retry.
+  } else if (OB_FAIL(table_schema->check_if_tablet_exists(tablet_access->tablet_id_, tablet_exist))) {
   } else if (!tablet_exist) {
     // partition could be dropped or table could be truncated, in this case we return OB_SCHEMA_EAGAIN and
     // attempt statement-level retry
     task_op.set_errcode(OB_SCHEMA_EAGAIN);
-    LOG_WARN("partition not exist, maybe dropped by DDL or table was truncated", K(tablet_loc), K(ref_table_id));
+    LOG_WARN("partition not exist, maybe dropped by DDL or table was truncated", K(tablet_access), K(ref_table_id));
   } else {
-    das_ctx.force_refresh_location_cache(true, task_op.get_errcode());
+    das_ctx.record_retry_error(task_op.get_errcode());
     need_retry = true;
-    const ObDASTableLocMeta *loc_meta = tablet_loc->loc_meta_;
-    LOG_INFO("[DAS RETRY] refresh tablet location cache and retry DAS task",
-             "errcode", task_op.get_errcode(), KPC(loc_meta), KPC(tablet_loc));
+    const DASTableAccessMeta *access_meta = tablet_access->access_meta_;
+    LOG_INFO("[DAS RETRY] tablet still exists, retry DAS task",
+             "errcode", task_op.get_errcode(), KPC(access_meta), KPC(tablet_access));
   }
 }
 

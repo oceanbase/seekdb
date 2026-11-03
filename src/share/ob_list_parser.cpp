@@ -66,7 +66,6 @@ int ObListParser::get_token()
       }
       if (cur_ - start >= MAX_TOKEN_SIZE) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("token size is too large", "actual", cur_ - start, K(ret));
       } else {
         STRNCPY(value_buf_, start, cur_ - start);
         value_buf_[cur_ - start] = '\0';

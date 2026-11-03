@@ -35,7 +35,6 @@ int ObExprField::assign(const ObExprOperator &other)
   const ObExprField *tmp_other = dynamic_cast<const ObExprField *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObVectorExprOperator::assign(other))) {
     } else {
@@ -59,7 +58,6 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
   if (OB_FAIL(ret)) {
   } else if (param_num < 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param_num));
   } else {
     ObObjTypeClass type_class = ObNullTC;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
@@ -80,7 +78,6 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
         has_num = true;
       } else {
         ret = OB_ERR_ILLEGAL_TYPE;
-        LOG_WARN("invalid type", K(ret), K(type_class));
       }
       if (!ob_is_integer_type(types_stack[i].get_type()) &&
             !ob_is_decimal_int(types_stack[i].get_type())) {

@@ -17,6 +17,8 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include <cinttypes>
+
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
@@ -84,7 +86,6 @@ int ObSqlPlan::store_sql_plan(ObLogPlan* log_plan, ObPhysicalPlan* phy_plan)
   ObLogicalPlanRawData compress_plan;
   if (OB_ISNULL(phy_plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null phy plan", K(ret));
   } else if (OB_FAIL(init_buffer(plan_text))) {
   } else if (OB_FAIL(get_sql_plan_infos(plan_text, 
                                         log_plan->get_plan_root(),
@@ -93,7 +94,6 @@ int ObSqlPlan::store_sql_plan(ObLogPlan* log_plan, ObPhysicalPlan* phy_plan)
   } else if (OB_FAIL(phy_plan->set_logical_plan(compress_plan))) {
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to store sql plan", K(ret));
     ret = OB_SUCCESS;
   }
   destroy_buffer(plan_text);
@@ -132,7 +132,6 @@ int ObSqlPlan::store_sql_plan_for_explain(ObExecContext *ctx,
                                                       plan_table,
                                                       statement_id,
                                                       sql_plan_infos))) {
-    LOG_WARN("failed to store explain plan", K(ret));
     if (plan_table.compare("PLAN_TABLE") == 0) {
       //ignore error for default
       ret = OB_SUCCESS;
@@ -169,7 +168,6 @@ int ObSqlPlan::print_sql_plan(ObLogicalOperator* plan_top,
   } else if (OB_FAIL(plan_text_to_strings(out_plan_text, plan_strs))) {
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to store sql plan", K(ret));
     ret = OB_SUCCESS;
   }
   destroy_buffer(plan_text);
@@ -183,7 +181,6 @@ int ObSqlPlan::get_plan_outline_info_one_line(PlanText &plan_text,
   const ObQueryCtx *query_ctx = NULL;
   if (OB_ISNULL(plan) || OB_ISNULL(query_ctx = plan->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(plan), K(query_ctx));
   } else {
     plan_text.is_used_hint_ = false;
     plan_text.is_oneline_ = true;
@@ -213,7 +210,6 @@ int ObSqlPlan::get_plan_used_hint_info_one_line(PlanText &plan_text,
   if (OB_ISNULL(plan) || 
       OB_ISNULL(query_ctx = plan->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(plan), K(query_ctx));
   } else {
     const ObQueryHint &query_hint = query_ctx->get_query_hint();
     plan_text.is_used_hint_ = true;
@@ -257,7 +253,6 @@ int ObSqlPlan::construct_outline_global_hint(ObLogPlan &plan, ObGlobalHint &outl
   const ObQueryCtx *query_ctx = NULL;
   if (OB_ISNULL(query_ctx = plan.get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(query_ctx));
   } else {
     if (NULL != (del_upd_plan = dynamic_cast<ObDelUpdLogPlan*>(&plan))) {
       if (del_upd_plan->use_pdml()) {
@@ -300,14 +295,12 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       OB_ISNULL(ctx->get_sql_proxy()) ||
       OB_ISNULL(session = ctx->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null sql proxy", K(ret));
   } else if (OB_FAIL(
                  query::ObInnerSQLConnectionAccess::
                      create_spi_connection_with_external_session(
                          session, conn_guard))) {
   } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null sql connection", K(ret));
   } else if (OB_FAIL(prepare_and_store_session(session,
                                                saved_session,
                                                save_tx_desc,
@@ -318,7 +311,6 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
     ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     }  else if (OB_FAIL(escape_quotes(*plan_item))) {
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %.*s VALUES( \
       '%.*s', \
@@ -525,7 +517,6 @@ int ObSqlPlan::inner_escape_quotes(char* &ptr, int64_t &length)
     int64_t pos = 0;
     if (OB_ISNULL(buf=(char*)allocator_.alloc(buf_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       for (int64_t i = 0; i < length; ++i) {
         if (ptr[i] == '\'') {
@@ -547,7 +538,6 @@ int ObSqlPlan::get_sql_plan_infos(PlanText &plan_text,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(plan_top)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan", K(ret));
   //get operator tree info
   } else if (OB_FAIL(get_plan_tree_infos(plan_text, 
                                          plan_top, 
@@ -557,7 +547,6 @@ int ObSqlPlan::get_sql_plan_infos(PlanText &plan_text,
                                          false))) {
   } else if (sql_plan_infos.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan", K(ret));
   //get used hint、outline info
   } else if (OB_FAIL(get_plan_used_hint_info(plan_text, 
                                              plan_top, 
@@ -585,10 +574,8 @@ int ObSqlPlan::get_plan_tree_infos(PlanText &plan_text,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(plan_text.buf_) || OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null op", K(ret));
   } else if (plan_text.buf_len_ - plan_text.pos_ < sizeof(ObSqlPlanItem)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer size is not enough", K(ret));
   } else {
     ObSqlPlanItem *plan_item = new(plan_text.buf_ + plan_text.pos_)ObSqlPlanItem();
     plan_text.pos_ += sizeof(ObSqlPlanItem);
@@ -622,7 +609,6 @@ int ObSqlPlan::get_plan_used_hint_info(PlanText &plan_text,
   if (OB_ISNULL(plan_top) || OB_ISNULL(plan_top->get_plan()) || OB_ISNULL(sql_plan_item) ||
       OB_ISNULL(query_ctx = plan_top->get_plan()->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(plan_top), K(query_ctx));
   } else {
     const ObQueryHint &query_hint = query_ctx->get_query_hint();
     PlanText temp_text;
@@ -655,7 +641,6 @@ int ObSqlPlan::get_plan_tree_used_hint(PlanText &plan_text,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null op", K(ret));
   } else if (OB_FAIL(op->print_used_hint(plan_text))) {
   }
   for (int i = 0; OB_SUCC(ret) && i < op->get_num_of_child(); ++i) {
@@ -675,7 +660,6 @@ int ObSqlPlan::get_qb_name_trace(PlanText &plan_text,
   if (OB_ISNULL(plan) || OB_ISNULL(sql_plan_item) ||
       OB_ISNULL(query_ctx = plan->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(plan), K(query_ctx));
   } else {
     PlanText temp_text;
     temp_text.buf_ = plan_text.buf_ + plan_text.pos_;
@@ -710,7 +694,6 @@ int ObSqlPlan::get_plan_outline_info(PlanText &plan_text,
   if (OB_ISNULL(plan_top) || OB_ISNULL(plan_top->get_plan()) || OB_ISNULL(sql_plan_item) ||
       OB_ISNULL(query_ctx = plan_top->get_plan()->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(plan_top), K(query_ctx));
   } else {
     PlanText temp_text;
     temp_text.is_used_hint_ = false;
@@ -746,7 +729,6 @@ int ObSqlPlan::reset_plan_tree_outline_flag(ObLogicalOperator* op)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op) || OB_ISNULL(op->get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null op", K(ret));
   } else {
     op->get_plan()->reset_outline_print_flags();
   }
@@ -763,7 +745,6 @@ int ObSqlPlan::get_plan_tree_outline(PlanText &plan_text,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null op", K(ret));
   } else if (OB_FAIL(op->print_outline_data(plan_text))) {
   }
   for (int i = 0; OB_SUCC(ret) && i < op->get_num_of_child(); ++i) {
@@ -784,7 +765,6 @@ int ObSqlPlan::get_plan_other_info(PlanText &plan_text,
   if (OB_ISNULL(plan) || OB_ISNULL(sql_plan_item) ||
       OB_ISNULL(stmt=plan->get_stmt()) || OB_ISNULL(query_ctx=stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else {
     ObObjPrintParams print_params(query_ctx->get_timezone_info());
     ObPhyPlanType plan_type = plan->get_optimizer_context().get_phy_plan_type();
@@ -926,7 +906,6 @@ int ObSqlPlan::print_constraint_info(char *buf,
   int ret = OB_SUCCESS;
   if (info.const_idx_.count() != info.const_params_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect constraint info", K(info), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < info.const_idx_.count(); ++i) {
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
@@ -970,7 +949,6 @@ int ObSqlPlan::print_constraint_info(char *buf,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(info.pre_calc_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null expr", K(ret));
   } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
   } else if (OB_FAIL(info.pre_calc_expr_->get_name(buf, buf_len, pos))) {
   } else if (OB_FAIL(BUF_PRINTF(" result is "))) {
@@ -1010,7 +988,6 @@ int ObSqlPlan::format_sql_plan(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
   int ret = OB_SUCCESS;
   if (alloc_buffer && 
       OB_FAIL(init_buffer(plan_text))) {
-    LOG_WARN("failed to init buffer", K(ret));
   } else if (sql_plan_infos.empty()) {
     //do nothing
   } else {
@@ -1029,7 +1006,6 @@ int ObSqlPlan::format_sql_plan(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
         bool only_show_constraint = OB_SUCCESS != ret;
         ret = OB_SUCCESS;
         if (only_show_constraint && OB_FAIL(format_other_info(sql_plan_infos, plan_text))) {
-          LOG_WARN("failed to print other info", K(ret));
         }
       }
     } else if (EXPLAIN_OUTLINE == type) {
@@ -1092,7 +1068,6 @@ int ObSqlPlan::get_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_infos
     ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     }
     //ID
     if (OB_SUCC(ret)) {
@@ -1118,7 +1093,7 @@ int ObSqlPlan::get_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_infos
     //EST ROWS
     if (OB_SUCC(ret)) {
       if (plan_item->cardinality_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cardinality_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cardinality_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1130,7 +1105,7 @@ int ObSqlPlan::get_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_infos
     //EST COST
     if (OB_SUCC(ret)) {
       if (plan_item->cost_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cost_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cost_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1160,7 +1135,6 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     }
     //ID
     if (OB_SUCC(ret)) {
@@ -1186,7 +1160,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     //EST ROWS
     if (OB_SUCC(ret)) {
       if (plan_item->cardinality_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cardinality_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cardinality_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1198,7 +1172,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     //EST COST
     if (OB_SUCC(ret)) {
       if (plan_item->cost_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cost_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cost_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1209,7 +1183,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //REAL ROWS
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->real_cardinality_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->real_cardinality_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(RealRows)) {
         format_helper.column_len_.at(RealRows) = length;
@@ -1217,7 +1191,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //REAL COST
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->real_cost_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->real_cost_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(RealCost)) {
         format_helper.column_len_.at(RealCost) = length;
@@ -1225,7 +1199,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //IO TIME
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->io_cost_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->io_cost_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(IoTime)) {
         format_helper.column_len_.at(IoTime) = length;
@@ -1233,7 +1207,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //CPU TIME
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->cpu_cost_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cpu_cost_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(CpuTime)) {
         format_helper.column_len_.at(CpuTime) = length;
@@ -1273,7 +1247,6 @@ int PrefixHelper::set_value(int64_t idx,
     plan_item_idxs_.at(idx) = item_idx;
   } else if (idx > plan_item_idxs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect idx", K(ret));
   } else if (OB_FAIL(plan_item_idxs_.push_back(item_idx))) {
   }
 
@@ -1282,13 +1255,10 @@ int PrefixHelper::set_value(int64_t idx,
     color_idxs_.at(idx) = with_color ? cur_color_idx_++ : -1;
   } else if (idx > color_idxs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect idx", K(ret));
   } else if (!with_color &&
              OB_FAIL(color_idxs_.push_back(-1))) {
-    LOG_WARN("failed to push back idx", K(ret));
   } else if (with_color &&
              OB_FAIL(color_idxs_.push_back(cur_color_idx_++))) {
-    LOG_WARN("failed to push back idx", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -1296,7 +1266,6 @@ int PrefixHelper::set_value(int64_t idx,
     with_line_.at(idx) = with_line;
   } else if (idx > with_line_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect idx", K(ret));
   } else if (OB_FAIL(with_line_.push_back(with_line))) {
   }
   return ret;
@@ -1337,7 +1306,6 @@ int ObSqlPlan::get_operator_prefix(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
     ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     } else {
       if (plan_item->depth_ > plan_level) {
         //child
@@ -1358,7 +1326,6 @@ int ObSqlPlan::get_operator_prefix(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
           ObSqlPlanItem *child1 = sql_plan_infos.at(i+1);
           if (OB_ISNULL(child1)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpect null item", K(ret));
           } else if (child1->depth_ > plan_item->depth_) {
             need_line = true;
           }
@@ -1369,7 +1336,6 @@ int ObSqlPlan::get_operator_prefix(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
                                           i, 
                                           need_line, 
                                           option.with_color_))) {
-        LOG_WARN("failed to set value", K(ret));
       }
       buf_len = plan_level * 25;
       pos = 0;
@@ -1377,7 +1343,6 @@ int ObSqlPlan::get_operator_prefix(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
         buf = static_cast<char*>(allocator_.alloc(buf_len));
         if (OB_ISNULL(buf)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("allocate buffer failed", K(ret));
         }
       }
       //get prefix info
@@ -1389,7 +1354,6 @@ int ObSqlPlan::get_operator_prefix(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
             prefix_helper.plan_item_idxs_.at(j) >= sql_plan_infos.count() ||
             OB_ISNULL(parent_item=sql_plan_infos.at(prefix_helper.plan_item_idxs_.at(j)))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect idx", K(ret));
         } else if (prefix_helper.with_line_.at(j)) {
           const char *txt = get_tree_line(0);
           if (plan_item->parent_id_ == parent_item->id_) {
@@ -1470,7 +1434,6 @@ int ObSqlPlan::format_basic_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
       if (OB_ISNULL(plan_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null plan item", K(ret));
       }
       //ID
       if (OB_SUCC(ret)) {
@@ -1578,7 +1541,6 @@ int ObSqlPlan::format_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
       if (OB_ISNULL(plan_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null plan item", K(ret));
       }
       //ID
       if (OB_SUCC(ret)) {
@@ -1706,7 +1668,6 @@ int ObSqlPlan::format_real_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       ObSqlPlanItem *plan_item = sql_plan_infos.at(i);
       if (OB_ISNULL(plan_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null plan item", K(ret));
       }
       //ID
       if (OB_SUCC(ret)) {
@@ -1833,7 +1794,6 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
     //print output info
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     } else if (OB_FAIL(BUF_PRINTF("%3ld - ", i))) {
       //do nothing
     } else if (plan_item->projection_len_ <= 0 && 
@@ -1973,7 +1933,6 @@ int ObSqlPlan::format_used_hint(ObIArray<ObSqlPlanItem*> &sql_plan_infos, PlanTe
     //do nothing
   } else if (OB_ISNULL(sql_plan_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan item", K(ret));
   } else if (sql_plan_infos.at(0)->other_tag_len_ <= 0) {
     //do nothing
   } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
@@ -1996,7 +1955,6 @@ int ObSqlPlan::format_qb_name_trace(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Pl
     //do nothing
   } else if (OB_ISNULL(sql_plan_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan item", K(ret));
   } else if (sql_plan_infos.at(0)->remarks_len_ <= 0) {
     //do nothing
   } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
@@ -2019,7 +1977,6 @@ int ObSqlPlan::format_outline(ObIArray<ObSqlPlanItem*> &sql_plan_infos, PlanText
     //do nothing
   } else if (OB_ISNULL(sql_plan_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan item", K(ret));
   } else if (sql_plan_infos.at(0)->other_xml_len_ <= 0) {
     //do nothing
   } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
@@ -2049,7 +2006,6 @@ int ObSqlPlan::format_optimizer_info(ObIArray<ObSqlPlanItem*> &sql_plan_infos, P
   for (int64_t i = 0; OB_SUCC(ret) && i < sql_plan_infos.count(); ++i) {
     if (OB_ISNULL(sql_plan_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     } else if (sql_plan_infos.at(i)->optimizer_len_ <= 0) {
       //do nothing
     } else if (OB_FAIL(BUF_PRINTF("%.*s", 
@@ -2069,7 +2025,6 @@ int ObSqlPlan::format_other_info(ObIArray<ObSqlPlanItem*> &sql_plan_infos, PlanT
     //do nothing
   } else if (OB_ISNULL(sql_plan_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null plan item", K(ret));
   } else if (sql_plan_infos.at(0)->other_len_ <= 0) {
     //do nothing
   } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
@@ -2108,7 +2063,6 @@ int ObSqlPlan::inner_format_plan_to_json(ObIArray<ObSqlPlanItem*> &sql_plan_info
   if (info_idx < 0 || info_idx >= sql_plan_infos.count() || 
       OB_ISNULL(plan_item=sql_plan_infos.at(info_idx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect info idx", K(ret));
   } else {
     ObIAllocator *allocator = &allocator_;
     json::Pair *id = NULL;
@@ -2257,7 +2211,6 @@ int ObSqlPlan::inner_format_plan_to_json(ObIArray<ObSqlPlanItem*> &sql_plan_info
         ObSqlPlanItem *child_plan = sql_plan_infos.at(i);
         if (OB_ISNULL(child_plan)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null child plan", K(ret));
         } else if (plan_item->id_ != child_plan->parent_id_) {
           //do nothing
         } else {
@@ -2317,7 +2270,6 @@ int ObSqlPlan::plan_text_to_strings(PlanText &plan_text,
     } else if (i > last_pos &&
                OB_FAIL(plan_strs.push_back(ObString(i - last_pos, 
                                                     plan_text.buf_ + last_pos)))) {
-      LOG_WARN("failed to push back plan text", K(ret));
     } else {
       last_pos = i + 1;
     }
@@ -2339,10 +2291,8 @@ int ObSqlPlan::prepare_and_store_session(ObSQLSessionInfo *session,
   need_restore = false;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session value", K(ret));
   } else if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSQLSessionInfo::StmtSavedValue)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory for saved session value", K(ret));
   } else {
     session_value = new(ptr) sql::ObSQLSessionInfo::StmtSavedValue();
     if (OB_FAIL(session->save_session(*session_value))) {
@@ -2369,7 +2319,6 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session) || OB_ISNULL(session_value)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session value or saved session value", K(ret));
   } else if (OB_FAIL(session->restore_session(*session_value))) {
   } else {
     transaction::ObTxDesc *new_tx_desc = session->get_tx_desc();

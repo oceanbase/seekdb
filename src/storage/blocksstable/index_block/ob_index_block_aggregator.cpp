@@ -63,7 +63,6 @@ int ObSkipIndexAggResult::init(const int64_t agg_col_cnt, ObIAllocator &allocato
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(agg_row_.is_valid())) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_FAIL(agg_row_.init(allocator, agg_col_cnt))) {
   } else if (FALSE_IT(attr_array_.set_allocator(&allocator))) {
   } else if (OB_FAIL(attr_array_.init(agg_col_cnt))) {
@@ -91,7 +90,6 @@ int ObIColAggregator::init(
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(result_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else {
     col_desc_ = col_desc;
     result_ = &result;
@@ -125,7 +123,6 @@ int ObIColAggregator::copy_agg_datum(const ObDatum &src, ObDatum &dst)
   if (OB_UNLIKELY(src.is_outrow())|| OB_ISNULL(dst.ptr_) || OB_UNLIKELY(src.is_nop()) ||
       OB_UNLIKELY(!src.is_null() && src.len_ > ObSkipIndexColMeta::MAX_SKIP_INDEX_COL_LENGTH) ) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected agg datum for copy", K(ret), K(src), K(dst));
   } else if (src.is_null()) {
     dst.set_null();
   } else {
@@ -148,7 +145,6 @@ int ObIColAggregator::copy_inrow_string_prefix(
       || max_prefix_byte_len > ObSkipIndexColMeta::MAX_SKIP_INDEX_COL_LENGTH
       || orig_datum.is_null())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(orig_datum), K(prefix_datum), K(max_prefix_byte_len));
   } else if (ob_is_string_type(obj_type) && !ob_is_large_text(obj_type)) {
     ObDatum tmp_prefix;
     if (OB_FAIL(get_prefix_for_string_tc_datum(orig_datum, obj_type, collation_type, max_prefix_byte_len, tmp_prefix))) {
@@ -160,7 +156,6 @@ int ObIColAggregator::copy_inrow_string_prefix(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected obj type for string prefix", K(ret), K(obj_type), K(orig_datum));
   }
   return ret;
 }
@@ -216,7 +211,6 @@ int ObColNullCountAggregator::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_major)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("null count aggregator for non-major data not supported yet", K(ret));
   } else if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
   } else {
     null_count_ = 0;
@@ -241,12 +235,10 @@ int ObColNullCountAggregator::eval(const ObStorageDatum &datum, const ObSkipInde
     set_not_aggregate();
   } else if (OB_UNLIKELY(datum.is_ext()) || OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected aggregate status", K(ret), K(datum), KP_(result));
   } else if (agg_datum_attr.is_raw_data_) {
     null_count_ += datum.is_null() ? 1 : 0;
   } else if (datum.is_null()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected index block data", K(ret), K(datum));
   } else {
     null_count_ += datum.get_int();
   }
@@ -258,7 +250,6 @@ int ObColNullCountAggregator::get_result(const ObStorageDatum *&result)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     if (can_aggregate_) {
       result_->set_int(null_count_);
@@ -303,7 +294,6 @@ int ObColMaxAggregator::eval(const ObStorageDatum &datum, const ObSkipIndexDatum
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!can_aggregate_) {
     // Skip
   } else if (datum.is_nop()) {
@@ -329,7 +319,6 @@ int ObColMaxAggregator::eval(ObIDatumIter &datum_iter)
   ObDatum tmp_result;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!can_aggregate_) {
     // skip
   } else {
@@ -339,7 +328,6 @@ int ObColMaxAggregator::eval(ObIDatumIter &datum_iter)
       int cmp_res = 0;
       if (OB_FAIL(datum_iter.get_next(iter_datum))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next iter datum", K(ret));
         }
       } else if (need_set_not_aggregate(col_desc_.col_type_.get_type(), *iter_datum)) {
         set_not_aggregate();
@@ -354,7 +342,6 @@ int ObColMaxAggregator::eval(ObIDatumIter &datum_iter)
 
     if (!can_aggregate_) {
     } else if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to do max aggregation", K(ret));
     } else {
       ret = OB_SUCCESS;
       if (data_evaluated_) {
@@ -372,7 +359,6 @@ int ObColMaxAggregator::get_result(const ObStorageDatum *&result)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     if (!can_aggregate_ || !data_evaluated_) {
       result_->set_nop();
@@ -478,7 +464,6 @@ int ObColMinAggregator::eval(const ObStorageDatum &datum, const ObSkipIndexDatum
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!can_aggregate_) {
     // Skip
   } else if (datum.is_nop()) {
@@ -504,7 +489,6 @@ int ObColMinAggregator::eval(ObIDatumIter &datum_iter)
   ObDatum tmp_result;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!can_aggregate_) {
     // skip
   } else {
@@ -514,7 +498,6 @@ int ObColMinAggregator::eval(ObIDatumIter &datum_iter)
       int cmp_res = 0;
       if (OB_FAIL(datum_iter.get_next(iter_datum))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next iter datum", K(ret));
         }
       } else if (iter_datum->is_nop()) {
         process_nop_for_loose_agg(is_major_);
@@ -529,7 +512,6 @@ int ObColMinAggregator::eval(ObIDatumIter &datum_iter)
 
     if (!can_aggregate_ || !data_evaluated_) {
     } else if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to do max aggregation", K(ret));
     } else {
       ret = OB_SUCCESS;
       ObSkipIndexDatumAttr attr(true, false);
@@ -545,7 +527,6 @@ int ObColMinAggregator::get_result(const ObStorageDatum *&result)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     if (!can_aggregate_ || !data_evaluated_) {
       result_->set_nop();
@@ -585,7 +566,6 @@ int ObColSumAggregator::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_major)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("skip index sum column aggregator on non-major data not supported", K(ret));
   } else if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
   } else if (!can_agg_sum(col_desc.col_type_.get_type())) {
     set_not_aggregate();
@@ -609,7 +589,6 @@ int ObColSumAggregator::eval(const ObStorageDatum &datum, const ObSkipIndexDatum
   ObStorageDatum cast_datum;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!can_aggregate_ || datum.is_null()) {
     // Skip
   } else if (datum.is_nop()) {
@@ -622,7 +601,6 @@ int ObColSumAggregator::eval(const ObStorageDatum &datum, const ObSkipIndexDatum
       set_not_aggregate();
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to eval sum", K(ret), K(datum), KPC(result_), K(col_desc_));
     }
   }
   return ret;
@@ -634,7 +612,6 @@ int ObColSumAggregator::eval(ObIDatumIter &datum_iter)
   ObDatum tmp_result;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!can_aggregate_) {
     // skip
   } else if (OB_FAIL(choose_eval_func(true))) {
@@ -645,7 +622,6 @@ int ObColSumAggregator::eval(ObIDatumIter &datum_iter)
       int cmp_res = 0;
       if (OB_FAIL(datum_iter.get_next(iter_datum))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next iter datum", K(ret));
         }
       } else if (iter_datum->is_nop()) {
         // sum pre-agg on nop data not supported
@@ -656,14 +632,12 @@ int ObColSumAggregator::eval(ObIDatumIter &datum_iter)
           set_not_aggregate();
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to eval sum", K(ret), K(iter_datum), KPC(result_), K(col_desc_));
         }
       }
     }
 
     if (!can_aggregate_) {
     } else if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to do max aggregation", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -676,7 +650,6 @@ int ObColSumAggregator::get_result(const ObStorageDatum *&result)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     if (!can_aggregate_) {
       result_->set_nop();
@@ -720,7 +693,6 @@ int ObColSumAggregator::choose_eval_func(const bool is_data)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected skip index sum type", K(ret), K(is_data), K(obj_tc));
         break;
       }
     }
@@ -743,7 +715,6 @@ int ObColSumAggregator::choose_eval_func(const bool is_data)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected skip index sum type", K(ret), K(is_data), K(obj_tc));
         break;
       }
     }
@@ -901,7 +872,6 @@ int ObBM25ParamAggregator::init(
   col_agg_metas_.set_allocator(&allocator);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else if (OB_FAIL(agg_row_proj_idxes_.prepare_allocate(agg_col_cnt))) {
   } else if (OB_FAIL(result_idxes_.prepare_allocate(agg_col_cnt))) {
   } else if (OB_FAIL(col_agg_metas_.prepare_allocate(agg_col_cnt))) {
@@ -914,10 +884,8 @@ int ObBM25ParamAggregator::init(
     if (idx_col_meta.get_col_type() == SK_IDX_BM25_MAX_SCORE_TOKEN_FREQ) {
       if (OB_UNLIKELY(found_token_freq)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected duplicate token freq column", K(ret), K(full_agg_metas));
       } else if (OB_UNLIKELY(!full_col_descs.at(idx_col_meta.get_col_idx()).col_type_.is_uint64())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected token freq column type", K(ret), K(i), K(full_agg_metas), K(full_col_descs));
       } else {
         found_token_freq = true;
         agg_row_proj_idxes_.at(TOKEN_FREQ_IDX) = i;
@@ -929,10 +897,8 @@ int ObBM25ParamAggregator::init(
     } else if (idx_col_meta.get_col_type() == SK_IDX_BM25_MAX_SCORE_DOC_LEN) {
       if (OB_UNLIKELY(found_doc_length)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected duplicate doc length column", K(ret), K(full_agg_metas));
       } else if (OB_UNLIKELY(!full_col_descs.at(idx_col_meta.get_col_idx()).col_type_.is_uint64())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected doc length column type", K(ret), K(i), K(full_agg_metas), K(full_col_descs));
       } else {
         found_doc_length = true;
         agg_row_proj_idxes_.at(DOC_LENGTH_IDX) = i;
@@ -947,7 +913,6 @@ int ObBM25ParamAggregator::init(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(!found_token_freq || !found_doc_length)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected missing token freq or doc length column", K(ret), K(full_agg_metas));
   } else {
     agg_result_row_ = &agg_result_row;
     allocator_ = &allocator;
@@ -988,7 +953,6 @@ int ObBM25ParamAggregator::eval(const ObDatumRow &datum_row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     const int64_t token_freq_data_idx = col_agg_metas_.at(TOKEN_FREQ_IDX).col_idx_;
     const int64_t doc_length_data_idx = col_agg_metas_.at(DOC_LENGTH_IDX).col_idx_;
@@ -1005,7 +969,6 @@ int ObBM25ParamAggregator::eval(const ObIMicroBlockWriter &data_micro_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     ObMicroDataPreAggParam token_freq_param;
     ObMicroDataPreAggParam doc_length_param;
@@ -1021,11 +984,8 @@ int ObBM25ParamAggregator::eval(const ObIMicroBlockWriter &data_micro_writer)
       while (OB_SUCC(ret)) {
         if (OB_FAIL(token_freq_iter.get_next(token_freq_datum))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
-            LOG_WARN("Fail to get token freq datum", K(ret));
           } else if (OB_ITER_END != doc_length_iter.get_next(doc_length_datum)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("token freq datum iter inconsistent with doc length datum iter",
-                K(ret), KPC(token_freq_param.col_datums_), KPC(doc_length_param.col_datums_));
           }
         } else if (OB_FAIL(doc_length_iter.get_next(doc_length_datum))) {
         } else if (OB_FAIL(do_max_score_agg(*token_freq_datum, *doc_length_datum))) {
@@ -1033,7 +993,6 @@ int ObBM25ParamAggregator::eval(const ObIMicroBlockWriter &data_micro_writer)
       }
 
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("Fail to do bm25 max score aggregate on micro block", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
@@ -1047,7 +1006,6 @@ int ObBM25ParamAggregator::eval(const ObSkipIndexAggResult &agg_row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     const uint32_t token_freq_agg_idx = agg_row_proj_idxes_.at(TOKEN_FREQ_IDX);
     const uint32_t doc_length_agg_idx = agg_row_proj_idxes_.at(DOC_LENGTH_IDX);
@@ -1064,7 +1022,6 @@ int ObBM25ParamAggregator::eval(ObAggRowReader &agg_row_reader)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     const ObSkipIndexColMeta &token_freq_col_meta = col_agg_metas_.at(TOKEN_FREQ_IDX);
     const ObSkipIndexColMeta &doc_length_col_meta = col_agg_metas_.at(DOC_LENGTH_IDX);
@@ -1083,7 +1040,6 @@ int ObBM25ParamAggregator::do_max_score_agg(const ObDatum &token_freq_datum, con
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(token_freq_datum.is_null() || doc_length_datum.is_null())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null datum", K(ret), K(token_freq_datum), K(doc_length_datum));
   } else if (token_freq_datum.is_nop() || doc_length_datum.is_nop()) {
     // skip
   } else {
@@ -1166,7 +1122,6 @@ int ObISkipIndexAggregator::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else if (0 == full_agg_metas.count()) {
     need_aggregate_ = false;
     is_inited_ = true;
@@ -1192,7 +1147,6 @@ int ObISkipIndexAggregator::eval(const char *buf, const int64_t buf_size, const 
   ObStorageDatum tmp_null_datum;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!need_aggregate_) {
     // skip
   } else if (FALSE_IT(agg_row_reader_.reset())) {
@@ -1209,13 +1163,11 @@ int ObISkipIndexAggregator::eval(const char *buf, const int64_t buf_size, const 
       if (OB_FAIL(agg_row_reader_.read(idx_col_meta, tmp_datum, is_min_max_prefix))) {
       } else if (OB_UNLIKELY(tmp_datum.is_ext())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected ext agg datum", K(ret), K(tmp_datum), K(idx_col_meta));
       } else if (tmp_datum.is_null()) {
         ObSkipIndexColMeta null_col_meta(idx_col_meta.col_idx_, SK_IDX_NULL_COUNT);
         if (OB_FAIL(agg_row_reader_.read(null_col_meta, tmp_null_datum))) {
         } else if (tmp_null_datum.is_ext()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected null count datum", K(ret), K(tmp_null_datum), K(idx_col_meta));
         } else if (tmp_null_datum.is_null()) {
           col_aggs_.at(single_col_agg_idx)->set_not_aggregate();
         } else if (tmp_null_datum.get_int() > row_count) {
@@ -1251,13 +1203,10 @@ int ObISkipIndexAggregator::get_aggregated_row(const ObSkipIndexAggResult *&aggr
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!need_aggregate_) {
     aggregated_row = nullptr;
   } else if (OB_UNLIKELY(!evaluated_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected get aggregated row from unevaluated data",
-        K(ret), K_(evaluated), K_(need_aggregate), K_(col_aggs));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < full_agg_metas_->count(); ++i) {
       const ObStorageDatum *result = nullptr;
@@ -1267,11 +1216,9 @@ int ObISkipIndexAggregator::get_aggregated_row(const ObSkipIndexAggResult *&aggr
       } else if (OB_FAIL(col_aggs_.at(single_col_agg_idx)->get_result(result))) {
       } else if (OB_ISNULL(result)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Fail to get aggregated column result", K(ret), K(i));
       } else if (OB_UNLIKELY(result->len_ > ObSkipIndexColMeta::MAX_SKIP_INDEX_COL_LENGTH
           || result->is_outrow())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected aggregated result datum", K(ret), K(result), K(i), K_(full_agg_metas));
       }
     }
 
@@ -1314,7 +1261,6 @@ int ObISkipIndexAggregator::calc_max_agg_size(
       uint32_t sum_store_size = 0;
       if (OB_FAIL(get_skip_index_store_upper_size(datum_type, precision, agg_cell_size))) {
       } else if (can_agg_sum(obj_type) && OB_FAIL(get_sum_store_size(obj_type, sum_store_size))) {
-        LOG_WARN("failed to get sum store size", K(ret), K(obj_type));
       } else {
         while (OB_SUCC(ret) && end < aggs_count && cur_col_idx == full_agg_metas.at(end).col_idx_) {
           const ObSkipIndexColType idx_type = static_cast<ObSkipIndexColType>(full_agg_metas.at(end).col_type_);
@@ -1336,7 +1282,6 @@ int ObISkipIndexAggregator::calc_max_agg_size(
           }
           default: {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("Not support skip index aggregate type", K(ret), K(idx_type));
           }
           }
           ++end;
@@ -1394,7 +1339,6 @@ int ObISkipIndexAggregator::init_col_aggregators(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(has_bm25_token_freq != has_bm25_doc_len)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected bm25 token freq withour doc len parameter in skip index", K(ret), K(full_agg_metas));
   } else if (OB_FAIL(col_aggs_.reserve(single_col_agg_count))) {
   } else if (OB_FAIL(init_multi_col_aggregators(multi_col_agg_count, full_agg_metas, full_col_descs, agg_result_, allocator))) {
   } else {
@@ -1432,7 +1376,6 @@ int ObISkipIndexAggregator::init_col_aggregators(
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Not supported skip index aggregate type", K(ret), K(idx_type));
       }
       }
     }
@@ -1469,7 +1412,6 @@ int ObISkipIndexAggregator::init_multi_col_aggregators(
   } else if (OB_FAIL(multi_col_aggs_.reserve(multi_col_agg_count))) {
   } else if (OB_ISNULL(multi_col_agg = OB_NEWx(ObBM25ParamAggregator, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to allocate memory for bm25 param aggregator", K(ret));
   } else if (OB_FAIL(multi_col_agg->init(full_agg_metas, full_col_descs, agg_result_row, allocator))) {
   } else if (OB_FAIL(multi_col_aggs_.push_back(multi_col_agg))) {
   }
@@ -1499,7 +1441,6 @@ int ObISkipIndexAggregator::init_col_aggregator(
     LOG_WARN("not supported skip index on column with unknown column type", K(col_desc), K(col_type));
   } else if (OB_ISNULL(buf = allocator.alloc(sizeof(T)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to alloc memory for column aggregator", K(ret));
   } else if (FALSE_IT(col_aggregator = new (buf) T())) {
   } else if (OB_FAIL(col_aggregator->init(is_major, col_desc, result_datum, result_attr))) {
   } else if (OB_FAIL(col_aggs_.push_back(col_aggregator))) {
@@ -1520,7 +1461,6 @@ int ObSkipIndexIndexAggregator::eval(const ObSkipIndexAggResult &agg_row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!need_aggregate_) {
     // skip
   } else {
@@ -1532,10 +1472,8 @@ int ObSkipIndexIndexAggregator::eval(const ObSkipIndexAggResult &agg_row)
         // skip
       } else if (OB_UNLIKELY(single_col_agg_idx == -1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected single col agg idx", K(ret), K(single_col_agg_idx), K(full_agg_metas_->at(i)));
       } else if (OB_UNLIKELY(datum.is_ext() && !datum.is_nop())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexcepted extended datum" , K(ret), K(datum), K(agg_row), K(full_agg_metas_->at(i)));
       } else if (OB_FAIL(col_aggs_.at(single_col_agg_idx)->eval(datum, agg_datum_attr))) {
         col_aggs_.at(single_col_agg_idx)->set_not_aggregate();
         LOG_ERROR("Fail to eval aggregate column", K(ret), K(datum),
@@ -1564,7 +1502,6 @@ int ObSkipIndexDataAggregator::eval(const ObDatumRow &datum_row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (!need_aggregate_) {
     // skip
   } else {
@@ -1601,7 +1538,6 @@ int ObSkipIndexDataAggregator::eval(const ObIMicroBlockWriter &data_micro_writer
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!need_aggregate_) {
   } else {
     ObMicroDataPreAggParam pre_agg_param;
@@ -1615,7 +1551,6 @@ int ObSkipIndexDataAggregator::eval(const ObIMicroBlockWriter &data_micro_writer
       } else if (OB_FAIL(data_micro_writer.get_pre_agg_param(idx_col_meta.col_idx_, pre_agg_param))) {
       } else if (OB_ISNULL(pre_agg_param.col_datums_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr to column datums", K(ret));
       } else {
         if (ObSkipIndexColType::SK_IDX_NULL_COUNT == idx_col_meta.col_type_) {
           tmp_result.set_int(pre_agg_param.null_cnt_);
@@ -1682,7 +1617,6 @@ int ObSkipIndexDataAggregator::do_col_agg_with_pre_agg_integer(
     pre_agg_result = agg_param.max_integer_;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected skip index type", K(ret), K(idx_type));
   }
 
   if (OB_FAIL(ret)) {
@@ -1700,7 +1634,6 @@ int ObSkipIndexDataAggregator::do_col_agg_with_pre_agg_integer(
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected data type", K(ret), K(datum_type), K(type_class));
     }
   } else if (type_class == ObUIntTC) {
     switch (datum_type) {
@@ -1714,15 +1647,12 @@ int ObSkipIndexDataAggregator::do_col_agg_with_pre_agg_integer(
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected data type", K(ret), K(datum_type), K(type_class));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected data type class", K(ret), K(type_class));
   }
   ObSkipIndexDatumAttr agg_datum_attr;
   if (FAILEDx(col_aggs_.at(agg_idx)->eval(tmp_result, agg_datum_attr))) {
-    LOG_WARN("failed to do aggregation", K(ret), K(agg_idx), K(tmp_result));
   }
   return ret;
 }
@@ -1852,7 +1782,6 @@ int ObIndexBlockAggregator::init(const ObDataStoreDesc &store_desc, ObIAllocator
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Already inited", K(ret));
   } else {
     need_data_aggregate_ = store_desc.get_agg_meta_array().count() != 0;
     if (!need_data_aggregate_) {
@@ -1874,10 +1803,8 @@ int ObIndexBlockAggregator::eval(const ObIndexBlockRowDesc &row_desc)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(!row_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid index block row descriptor", K(ret));
   } else if (need_data_aggregate()) {
     if (OB_ISNULL(row_desc.aggregated_row_)) {
       // There is data that does not contain aggregate row, so we disable skip index aggregate, do nothing here.
@@ -1887,7 +1814,6 @@ int ObIndexBlockAggregator::eval(const ObIndexBlockRowDesc &row_desc)
           row_desc.serialized_agg_row_buf_);
       if (OB_UNLIKELY(!agg_row_header->is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Invalid aggregated row header", K(ret), KPC(agg_row_header));
       } else if (OB_FAIL(skip_index_aggregator_.ObISkipIndexAggregator::eval(
           row_desc.serialized_agg_row_buf_, agg_row_header->length_, row_desc.row_count_))) {
       }
@@ -1906,10 +1832,8 @@ int ObIndexBlockAggregator::get_index_agg_result(ObIndexBlockRowDesc &row_desc)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (need_data_aggregate()
              && OB_FAIL(skip_index_aggregator_.get_aggregated_row(row_desc.aggregated_row_))) {
-    LOG_WARN("Fail to get aggregated row", K(ret));
   } else {
     aggregate_info_.get_agg_result(row_desc);
   }
@@ -1924,7 +1848,6 @@ int ObIndexBlockAggregator::get_index_row_agg_info(ObIndexRowAggInfo &index_row_
   index_row_agg_info.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (need_data_aggregate()) {
     if (OB_FAIL(skip_index_aggregator_.get_aggregated_row(agg_row))) {
     } else if (OB_FAIL(index_row_agg_info.aggregated_row_.init(agg_row->get_agg_col_cnt(), allocator))) {

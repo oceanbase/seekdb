@@ -71,12 +71,9 @@ int ObAdvanceScanner::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), KP(this), K(lbt()));
   } else if (OB_UNLIKELY(is_reverse_scan)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reverse scan is not supported", KR(ret), K(is_reverse_scan));
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
-    LOG_WARN("failed to deep copy scan range", KR(ret));
   } else {
     read_info_ = &read_info;
     stmt_alloc_ = &stmt_allocator;
@@ -95,16 +92,11 @@ int ObAdvanceScanner::switch_info(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), KP(this), K(lbt()));
   } else if (OB_UNLIKELY(is_reverse_scan)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reverse scan is not supported", KR(ret), K(is_reverse_scan));
   } else if (OB_UNLIKELY(read_info_ != &read_info || stmt_alloc_ != &stmt_allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected argument in rescan", KR(ret),
-             KP_(read_info), KP(&read_info), KP_(stmt_alloc), KP(&stmt_allocator), K(lbt()));
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
-    LOG_WARN("failed to deep copy scan range", KR(ret));
   } else {
     LOG_TRACE("[ADVANCE SCAN] success to switch info", KR(ret), K(*this));
   }
@@ -117,20 +109,14 @@ int ObAdvanceScanner::advance_scan(const ObDatumRange &scan_range)
   int cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), KP(this), K(lbt()));
   } else if (OB_FAIL(scan_range.end_key_.compare(complete_range_.end_key_, datum_utils_, cmp_ret, false/*compare_datum_cnt*/))) {
-    LOG_WARN("failed to compare end_key_", KR(ret), K(scan_range), K_(complete_range));
   } else if (cmp_ret != 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("endkey is not same", KR(ret), K(cmp_ret), K(scan_range), K_(complete_range));
   } else if (OB_FAIL(scan_range.start_key_.compare(complete_range_.start_key_, datum_utils_, cmp_ret))) {
-    LOG_WARN("failed to compare start_key_", KR(ret), K(scan_range), K_(complete_range));
   } else if (cmp_ret <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new startkey is not greater", KR(ret), K(cmp_ret), K(scan_range), K_(complete_range));
   } else if (FALSE_IT(range_alloc_.reuse())) {
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
-    LOG_WARN("failed to deep copy scan range", KR(ret));
   } else {
     left_border_reached_ = false;
   }
@@ -156,9 +142,7 @@ int ObAdvanceScanner::skip(ObMicroIndexInfo &index_info, ObAdvanceScanState &pre
     const ObBorderFlag &border_flag = complete_range_.border_flag_;
     if (OB_UNLIKELY(!complete_range_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected complete range", KR(ret), K(prev_state), K(state), K_(complete_range), K(endkey), KPC(this));
     } else if (OB_FAIL(endkey.compare(left_border, datum_utils_, left_cmp_ret, cmp_datum_cnt))) {
-      LOG_WARN("failed to compare left border", KR(ret), K(prev_state), K(state), K(endkey), K_(complete_range), KPC(this));
     } else if (left_cmp_ret < 0 || (0 == left_cmp_ret && !border_flag.inclusive_start())) {
       state_determined = true;
       // CASE:1.1 in forward scan
@@ -197,11 +181,9 @@ int ObAdvanceScanner::skip(
     state.set_state(0, ObAdvanceScanNodeState::PREFIX_SKIPPED_LEFT);
   } else if (OB_UNLIKELY(!micro_scanner.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected scanner state", KR(ret), K(state), K(micro_scanner), KPC(this));
   } else if (first || -1 == micro_current_) { // -1 == micro_current_ means forward scan in an already opened micro block
     if (OB_FAIL(micro_scanner.end_of_block())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to check end of block", KR(ret), K(micro_scanner));
       } else {
         ret = OB_SUCCESS;
         state.set_state(0, ObAdvanceScanNodeState::PREFIX_SKIPPED_LEFT);
@@ -219,7 +201,6 @@ int ObAdvanceScanner::skip(
     bool range_covered = false;
     if (OB_FAIL(micro_scanner.skip_to_range(micro_start_, micro_last_, complete_range_, is_left_border, is_right_border,
                                             micro_current_, has_data, range_covered))) {
-      LOG_WARN("failed to skip to next prefix range", KR(ret), K(micro_scanner), KPC(this));
     } else if (has_data) {
       micro_start_ = MAX(micro_start_, micro_current_);
       left_border_reached_ = true;
@@ -245,19 +226,14 @@ int ObAdvanceScanFactory::build_advance_scanner(
 
   if (OB_UNLIKELY(!iter_param.is_advance_scan())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument to build advance scanner", KR(ret), K(iter_param), K(lbt()));
   } else if (OB_UNLIKELY(nullptr == range || !range->is_valid() || nullptr == read_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument to build advance scanner", KPC(range), KP(read_info));
   } else if (nullptr != advance_scanner) {
     if (OB_FAIL(advance_scanner->switch_info(is_reverse_scan, *range, *read_info, stmt_allocator))) {
-      LOG_WARN("failed to switch advance scanner", KR(ret));
     }
   } else if (OB_ISNULL(advance_scanner = OB_NEWx(ObAdvanceScanner, &stmt_allocator, read_info->get_datum_utils()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc advance scanner", KR(ret));
   } else if (OB_FAIL(advance_scanner->init(is_reverse_scan, *range, *read_info, stmt_allocator))) {
-    LOG_WARN("failed to init advance scanner", KR(ret));
   }
   if (OB_FAIL(ret) && nullptr != advance_scanner) {
     advance_scanner->~ObAdvanceScanner();

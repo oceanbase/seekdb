@@ -81,7 +81,6 @@ int ObLogWindowFunction::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(sort_keys_.count() < rd_sort_keys_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected params", K(ret), K(sort_keys_.count()), K(rd_sort_keys_cnt_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < rd_sort_keys_cnt_; i++) {
       if (OB_FAIL(all_exprs.push_back(sort_keys_.at(i).expr_))) {
@@ -131,7 +130,6 @@ int ObLogWindowFunction::get_plan_item_info(PlanText &plan_text,
     for (int64_t i = 0; i < win_exprs_.count() && OB_SUCC(ret); ++i) {
       ObWinFunRawExpr *win_expr = win_exprs_.at(i);
       if (i != 0 && OB_FAIL(BUF_PRINTF("\n      "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         EXPLAIN_PRINT_EXPR(win_expr, type);
       }
@@ -183,7 +181,6 @@ int ObLogWindowFunction::est_input_rows_mem_bound_ratio()
   ObLogicalOperator *first_child = nullptr;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(first_child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("first child is null", K(ret), K(first_child));
   } else {
     input_width = first_child->get_width();
     for (int64_t i = 0; i < get_window_exprs().count(); i++) {
@@ -202,7 +199,6 @@ int ObLogWindowFunction::est_window_function_part_cnt()
   ObLogicalOperator *first_child = get_child(ObLogicalOperator::first_child);
   if (OB_ISNULL(first_child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null first child", K(ret));
   } else if (get_window_exprs().count() > 0 && get_window_exprs().at(0)->get_partition_exprs().count() > 0) {
     // FIME: @zongmei.zzm, modify the first partition columns to all the partition columns
     // after @jiangxiu.wt support more accurate method to calculate NDV with multi columns
@@ -236,7 +232,6 @@ int ObLogWindowFunction::est_width()
   ObSEArray<ObRawExpr*, 16> output_exprs;
   if (OB_ISNULL(plan = get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input", K(ret));
   } else if (OB_FAIL(get_winfunc_output_exprs(output_exprs))) {
   } else if (OB_FAIL(ObOptEstCost::estimate_width_for_exprs(get_plan()->get_basic_table_metas(),
                                                             get_plan()->get_selectivity_ctx(),
@@ -257,7 +252,6 @@ int ObLogWindowFunction::get_winfunc_output_exprs(ObIArray<ObRawExpr *> &output_
   ObSEArray<ObRawExpr*, 16> extracted_col_aggr_winfunc_exprs;
   if (OB_ISNULL(plan = get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input", K(ret));
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_select_item_exprs_for_width_est()))) {
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_orderby_exprs_for_width_est()))) {
   } else if (OB_FAIL(ObRawExprUtils::extract_col_aggr_winfunc_exprs(candi_exprs,
@@ -281,10 +275,8 @@ int ObLogWindowFunction::inner_est_cost(double child_card, double child_width, d
   op_cost = 0.0;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("plan is null", K(ret));
   } else if (OB_UNLIKELY((parallel = get_parallel()) < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(parallel), K(ret)); 
   } else if (OB_FAIL(ObOptEstCost::cost_window_function(child_card / parallel,
                                                         child_width,
                                                         win_exprs_.count(),
@@ -322,12 +314,10 @@ int ObLogWindowFunction::est_cost()
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(first_child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("first child is null", K(ret), K(first_child));
   } else if (OB_FAIL(get_child_est_info(child_card, child_width, sel))) {
   } else if (OB_FAIL(inner_est_cost(child_card, child_width, op_cost_))) {
   } else if (need_re_est_child_cost() &&
              OB_FAIL(SMART_CALL(first_child->re_est_cost(param, child_card, child_cost)))) {
-    LOG_WARN("failed to re est child cost", K(ret));
   } else if (!need_re_est_child_cost() && 
              OB_FALSE_IT(child_cost=first_child->get_cost())) {
   } else {
@@ -353,7 +343,6 @@ int ObLogWindowFunction::do_re_est_cost(EstimateCostInfo &param, double &card, d
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(get_child_est_info(child_card, child_width, sel))) {
   } else if (sel < OB_DOUBLE_EPSINON || is_block_op() ||
              param.need_row_count_ < 0 ||
@@ -364,7 +353,6 @@ int ObLogWindowFunction::do_re_est_cost(EstimateCostInfo &param, double &card, d
     for (int64_t i = 0; OB_SUCC(ret) && i < win_exprs_.count(); i ++) {
       if (OB_ISNULL(win_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else if (prefix_part_expr_idx < 0) {
         prefix_part_expr_idx = i;
       } else if (win_exprs_.at(i)->get_partition_exprs().count() <
@@ -413,7 +401,6 @@ int ObLogWindowFunction::get_child_est_info(double &child_card, double &child_wi
   ObLogicalOperator *child = get_child(ObLogicalOperator::first_child);
   if (OB_ISNULL(child) || OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(child));
   } else {
     child_card = child->get_card();
     child_width = child->get_width();
@@ -463,7 +450,6 @@ int ObLogWindowFunction::compute_op_ordering()
   if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
   } else if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("first child is null", K(ret), K(child));
   } else if (!single_part_parallel_) {
     is_local_order_ = (range_dist_parallel_ || is_fully_partition_wise()
                        || (get_sort_keys().empty()
@@ -480,7 +466,6 @@ int ObLogWindowFunction::compute_sharding_info()
   if (is_single_part_parallel()) {
     if (OB_ISNULL(get_plan())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       strong_sharding_ = get_plan()->get_optimizer_context().get_distributed_sharding();
     }
@@ -514,7 +499,6 @@ int ObLogWindowFunction::print_outline_data(PlanText &plan_text)
   ObString qb_name;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = dynamic_cast<const ObSelectStmt*>(get_plan()->get_stmt()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()), K(stmt));
   } else if (get_plan()->has_added_win_dist()) {
     /* do nothing */
   } else if (OB_FAIL(stmt->get_qb_name(qb_name))) {
@@ -536,7 +520,6 @@ int ObLogWindowFunction::add_win_dist_options(const ObLogicalOperator *op,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(op));
   } else if (LOG_WINDOW_FUNCTION != op->get_type()
              && LOG_EXCHANGE != op->get_type()
              && LOG_SORT != op->get_type()
@@ -569,7 +552,6 @@ int ObLogWindowFunction::print_used_hint(PlanText &plan_text)
   const ObSelectStmt *stmt = NULL;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = dynamic_cast<const ObSelectStmt*>(get_plan()->get_stmt()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()), K(stmt));
   } else if (OB_FALSE_IT(win_dist_hint = get_plan()->get_log_plan_hint().get_window_dist())) {
   } else if (NULL == win_dist_hint || get_plan()->has_added_win_dist()) {
     /* do nothing */
@@ -594,7 +576,6 @@ int ObLogWindowFunction::print_used_hint(PlanText &plan_text)
                         || is_array_equal(hint_opt.win_func_idxs_, outline_opt.win_func_idxs_));
       }
       if (OB_SUCC(ret) && hint_match && OB_FAIL(win_dist_hint->print_hint(plan_text))) {
-        LOG_WARN("print hint failed", K(ret));
       }
     }
   }
@@ -613,13 +594,11 @@ int ObLogWindowFunction::inner_replace_op_exprs(ObRawExprReplacer &replacer)
     ObWinFunRawExpr *new_expr = NULL;
     if (OB_ISNULL(win_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("win expr is null", K(ret));
     } else if (OB_FAIL(replace_expr_action(replacer, win_expr))) {
     } else if (win_expr == win_exprs_.at(i)) {
       // do nothing
     } else if (OB_ISNULL(new_expr = static_cast<ObWinFunRawExpr *>(win_expr))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new win expr is null", K(ret));
     } else {
       win_exprs_.at(i) = new_expr;
     }
@@ -633,7 +612,6 @@ int ObLogWindowFunction::get_rd_sort_keys(common::ObIArray<OrderItem> &rd_sort_k
   rd_sort_keys.reuse();
   if (OB_UNLIKELY(sort_keys_.count() < rd_sort_keys_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected params", K(ret), K(sort_keys_.count()), K(rd_sort_keys_cnt_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < rd_sort_keys_cnt_; i++) {
       if (OB_FAIL(rd_sort_keys.push_back(sort_keys_.at(i)))) {
@@ -668,7 +646,6 @@ int ObLogWindowFunction::compute_op_parallel_info()
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null child op", K(ret));
     } else if (child->get_part_cnt() > 0 &&
                get_parallel() > child->get_part_cnt()) {
       int64_t reduce_parallel = child->get_part_cnt();

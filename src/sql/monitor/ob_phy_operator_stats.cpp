@@ -28,7 +28,6 @@ int ObPhyOperatorStats::init(ObIAllocator *alloc, int64_t op_count)
   void *ptr = NULL;
   if (OB_ISNULL(alloc) || OB_UNLIKELY(op_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret),K(alloc), K(op_count));
   } else {
     array_size_ = op_count * StatId::MAX_STAT * COPY_COUNT;
     //2 is to save plan_id and operation_id
@@ -67,7 +66,6 @@ int ObPhyOperatorStats::get_op_stat_accumulation(ObPhysicalPlan *plan,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(plan));
   } else {
     int64_t exec_times = 0;
     int64_t op_first_index = op_id * StatId::MAX_STAT;

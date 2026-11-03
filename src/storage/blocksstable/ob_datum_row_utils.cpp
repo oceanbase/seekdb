@@ -27,12 +27,10 @@ int ObDatumRowUtils::ob_create_row(ObIAllocator &allocator, int64_t col_count, O
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(col_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row_count is invalid", K(ret), K(col_count));
   } else {
     void *row_buf = NULL;
     if (OB_ISNULL(row_buf = allocator.alloc(sizeof(blocksstable::ObDatumRow)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed", K(ret), K(sizeof(blocksstable::ObDatumRow)));
     } else if (FALSE_IT(datum_row = new(row_buf) blocksstable::ObDatumRow())) {
     } else if (OB_FAIL(datum_row->init(allocator, col_count))) {
     }
@@ -50,13 +48,11 @@ int ObDatumRowUtils::ob_create_rows(ObIAllocator &allocator, int64_t row_count, 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(col_count <= 0 || row_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("col count or row count is invalid", K(ret), K(col_count), K(row_count));
   } else {
     void *rows_buf = nullptr;
     const size_t rows_buf_len = sizeof(blocksstable::ObDatumRow) * row_count;
     if (OB_ISNULL(rows_buf = allocator.alloc(rows_buf_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate row buffer", K(ret), K(rows_buf_len));
     } else {
       char *row_buf = static_cast<char*>(rows_buf);
       datum_rows = new(row_buf) blocksstable::ObDatumRow[row_count]();
@@ -92,7 +88,6 @@ int ObDatumRowUtils::ob_create_rows_shallow_copy(ObIAllocator &allocator,
     const size_t rows_buf_len = sizeof(blocksstable::ObDatumRow) * row_count;
     if (OB_ISNULL(rows_buf = allocator.alloc(rows_buf_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate row buffer", K(ret), K(rows_buf_len));
     } else {
       char *row_buf = static_cast<char*>(rows_buf);
       dst_rows = new(row_buf) blocksstable::ObDatumRow[row_count]();
@@ -115,7 +110,6 @@ int ObDatumRowUtils::prepare_rowkey(
   int ret = OB_SUCCESS;
   if (!datum_row.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid datum row", K(ret), K(datum_row));
   } else if (OB_FAIL(rowkey.assign(datum_row.storage_datums_, key_datum_cnt))) {
   } else if (OB_FAIL(rowkey.prepare_memtable_readable(col_descs, allocator))) {
   }

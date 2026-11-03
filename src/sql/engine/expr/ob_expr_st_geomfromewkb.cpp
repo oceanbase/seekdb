@@ -93,16 +93,13 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
         expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), ewkb))) {
     } else if (OB_FAIL(get_header_info_from_ewkb(ewkb, header))) {
-      LOG_WARN("fail to get ewkb header info from ewkb", K(ret), K(ewkb));
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOMFROMEWKB);
     } else if (header.bo_ != ObGeoWkbByteOrder::LittleEndian) {
       ret = OB_ERR_GIS_DATA_WRONG_ENDIANESS;
       LOG_USER_ERROR(OB_ERR_GIS_DATA_WRONG_ENDIANESS);
-      LOG_WARN("invalid byte order", K(ret), K(header.bo_));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, header.srid_, srs))) {
     } else if (OB_FAIL(create_geo_by_ewkb(tmp_allocator, ewkb, header, srs, geo))) {
-      LOG_WARN("fail to create geometry object with raw ewkb", K(ret));
       if (ret == OB_ERR_SRS_NOT_FOUND) {
        // do nothing
       } else {
@@ -131,7 +128,6 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
 
   if (!is_null_result && OB_SUCC(ret)) {
     if (need_reverse && OB_FAIL(ObGeoExprUtils::reverse_coordinate(geo, N_PRIV_ST_GEOMFROMEWKB))) {
-      LOG_WARN("failed to reverse geometry coordinate", K(ret));
     }
 
     if (OB_SUCC(ret) && is_geographical) {
@@ -145,7 +141,6 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
     res.set_null();
   } else if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null geometry", K(ret));
   } else {
     ObString res_wkb;
     if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))) {
@@ -242,7 +237,6 @@ int ObExprPrivSTGeomFromEWKB::create_geo_by_ewkb(ObIAllocator &allocator,
 
   if (ewkb.length() < EWKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid ewkb length", K(ret), K(ewkb.length()));
   } else {
     ObGeoCRS crs = ObGeoCRS::Cartesian;
     ObString ewkb_data;
@@ -270,7 +264,6 @@ int ObExprPrivSTGeomFromEWKB::create_geo_by_ewkb(ObIAllocator &allocator,
         ObIWkbGeometry *geo_bin = static_cast<ObIWkbGeometry *>(geo);
         if (OB_FAIL(geo->do_visit(ewkb_check))) {
           ret = OB_ERR_GIS_INVALID_DATA;
-          LOG_WARN("fail to do ewkb check by wkb checker", K(ret), K(ewkb_data), K(header), K(crs));
         } else if (geo_bin->length() != ewkb_data.length()
             && (geo_bin->length() + WKB_GEO_SRID_SIZE != ewkb.length())) {
           ret = OB_ERR_GIS_INVALID_DATA;

@@ -36,7 +36,6 @@ int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx) const
   ObDatum *res = NULL;
   if (OB_ISNULL(src_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr not init", K(ret), KP(src_));
   } else if (OB_FAIL(src_->eval(eval_ctx, res))) {
   } else if (OB_FAIL(update_dynamic_param(eval_ctx,*res))) {
   }
@@ -49,7 +48,6 @@ int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx, ObObjParam *&pa
   ObPhysicalPlanCtx *phy_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
   if (OB_ISNULL(phy_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null phy ctx", K(ret), KP(phy_ctx));
   } else if (OB_FAIL(set_dynamic_param(eval_ctx))) {
   } else {
     ParamStore &param_store = phy_ctx->get_param_store_for_update();
@@ -64,7 +62,6 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, ObDatum &dat
   ObPhysicalPlanCtx *phy_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
   if (OB_ISNULL(phy_ctx) || OB_ISNULL(dst_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(phy_ctx), KP(dst_));
   } else {
     clear_parent_evaluated_flag(eval_ctx, *dst_);
     ObDatum &param_datum = dst_->locate_expr_datum(eval_ctx);
@@ -81,7 +78,6 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, ObDatum &dat
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(param_idx_ < 0 || param_idx_ >= param_store.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid index", K(ret), K(param_idx_), K(param_store.count()));
     } else if (OB_FAIL(param_datum.to_obj(param_store.at(param_idx_),
                                    dst_->obj_meta_,
                                    dst_->obj_datum_map_))) {
@@ -175,7 +171,6 @@ int ObOpSpec::set_children_pointer(ObOpSpec **children, const uint32_t child_cnt
   int ret = OB_SUCCESS;
   if (child_cnt > 0 && NULL == children) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(child_cnt), KP(children));
   } else {
     children_ = children;
     child_cnt_ = child_cnt;
@@ -198,7 +193,6 @@ int ObOpSpec::set_child(const uint32_t idx, ObOpSpec *child)
   int ret = OB_SUCCESS;
   if (idx >= child_cnt_ || OB_ISNULL(child)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(idx), K(child_cnt_), KP(child));
   } else {
     children_[idx] = child;
     if (0 == idx) {
@@ -233,9 +227,6 @@ int ObOpSpec::create_op_input_recursive(ObExecContext &exec_ctx) const
   int64_t create_child_cnt = child_cnt_;
   if (OB_ISNULL(kit) || (child_cnt_ > 0 && NULL == children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("operator kit should be created before create operator "
-             "and children must be valid",
-             K(ret), KP(kit), K(id_), KP(children_), K(create_child_cnt), K(type_));
   } else {
     kit->spec_ = this;
     LOG_TRACE("trace create input", K(ret), K(id_), K(type_), K(lbt()));
@@ -249,7 +240,6 @@ int ObOpSpec::create_op_input_recursive(ObExecContext &exec_ctx) const
                   exec_ctx.get_allocator(), exec_ctx, *this, kit->input_))) {
       } else if (OB_ISNULL(kit->input_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL input returned", K(ret));
       } else {
         kit->input_->set_deserialize_allocator(&exec_ctx.get_allocator());
       }
@@ -263,7 +253,6 @@ int ObOpSpec::create_op_input_recursive(ObExecContext &exec_ctx) const
         // Here if there is a child but it is nullptr, it means it is a receive operator
         if (!IS_PX_RECEIVE(type_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("only receive is leaf in px", K(ret), K(type_), K(id_));
         }
       } else if (OB_FAIL(children_[i]->create_op_input_recursive(exec_ctx))) {
       }
@@ -281,7 +270,6 @@ int ObOpSpec::create_operator(ObExecContext &exec_ctx, ObOperator *&op) const
       || OB_ISNULL(GET_PHY_PLAN_CTX(exec_ctx))
       || OB_ISNULL(GET_SQL_EXECUTOR_CTX(exec_ctx))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(create_operator_recursive(exec_ctx, op))) {
   } else if (OB_FAIL(create_exec_feedback_node_recursive(exec_ctx))) {
   }
@@ -298,9 +286,6 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
     int64_t create_child_cnt = child_cnt_;
     if (OB_ISNULL(kit) || (child_cnt_ > 0 && NULL == children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator kit should be created before create operator "
-              "and children must be valid",
-              K(ret), K(id_), KP(kit), KP(children_), K(create_child_cnt), K(type_));
     } else {
       kit->spec_ = this;
       for (int64_t i = 0; OB_SUCC(ret) && i < child_cnt_; i++) {
@@ -308,7 +293,6 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
           // Here if there is a child but it is nullptr, it means it is a receive operator
           if (!IS_PX_RECEIVE(type_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("only receive is leaf in px", K(ret), K(type_), K(id_));
           } else {
             create_child_cnt = 0;
           }
@@ -328,7 +312,6 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
                     exec_ctx.get_allocator(), exec_ctx, *this, kit->input_))) {
         } else if (OB_ISNULL(kit->input_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL input returned", K(ret));
         } else {
         }
       }
@@ -341,7 +324,6 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
                   kit->input_, create_child_cnt, kit->op_))
           || OB_ISNULL(kit->op_)) {
         ret = OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret;
-        LOG_WARN("create operator failed", K(ret), KP(kit->op_), K(*this));
       } else {
         op = kit->op_;
         op->get_monitor_info().set_op(op);
@@ -365,7 +347,6 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
             // Here if there is a child but it is nullptr, it means it is a receive operator
             if (!IS_PX_RECEIVE(type_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("only receive is leaf in px", K(ret), K(type_), K(id_));
             }
           } else if (OB_FAIL(children_[i]->create_operator_recursive(exec_ctx, child_op))) {
           } else if (OB_FAIL(op->set_child(i, child_op))) {
@@ -388,7 +369,6 @@ int ObOpSpec::create_exec_feedback_node_recursive(ObExecContext &exec_ctx) const
   ObPhysicalPlanCtx *physical_ctx = exec_ctx.get_physical_plan_ctx();
   if (OB_ISNULL(plan_) || OB_ISNULL(physical_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan or ctx is null", K(ret), K(plan_), K(physical_ctx));
   } else if (!physical_ctx->get_check_pdml_affected_rows() && !plan_->need_record_plan_info()) {
   } else if (OB_ISNULL(kit)) {
   } else {
@@ -417,7 +397,6 @@ int ObOpSpec::assign_spec_ptr_recursive(ObExecContext &exec_ctx) const
   ObOperatorKit *kit = exec_ctx.get_operator_kit(id_);
   if (NULL == kit) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("operator kit is NULL", K(ret));
   } else {
     kit->spec_ = this;
     for (int64_t i = 0; OB_SUCC(ret) && i < child_cnt_; i++) {
@@ -437,17 +416,14 @@ int ObOpSpec::accept(ObOpSpecVisitor &visitor) const
     // do nothing
   } else if (OB_ISNULL(children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null children", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < child_cnt_; i++) {
     if (OB_ISNULL(children_[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null children", K(ret));
     } else if (OB_FAIL(children_[i]->accept(visitor))) {
     }
   } // end for
   if (OB_SUCC(ret) && OB_FAIL(visitor.post_visit(*this))) {
-    LOG_WARN("failed to post visit", K(ret));
   }
   return ret;
 }
@@ -498,7 +474,6 @@ int ObOperator::set_children_pointer(ObOperator **children, const uint32_t child
   int ret = OB_SUCCESS;
   if (child_cnt > 0 && NULL == children) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(child_cnt), KP(children));
   } else {
     children_ = children;
     child_cnt_ = child_cnt;
@@ -521,7 +496,6 @@ int ObOperator::set_child(const uint32_t idx, ObOperator *child)
   int ret = OB_SUCCESS;
   if (idx >= child_cnt_ || OB_ISNULL(child)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(idx), K(child_cnt_), KP(child));
   } else {
     children_[idx] = child;
     if (0 == idx) {
@@ -559,14 +533,12 @@ int ObOperator::output_expr_decint_datum_len_check()
     const ObExpr *expr = spec_.output_[i];
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, expr is nullptr", K(ret));
     } else if (!ob_is_decimal_int(expr->datum_meta_.get_type())) {
       // do nothing
     } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
     } else {
       const int16_t precision = expr->datum_meta_.precision_;
       if (OB_UNLIKELY(precision < 0)) {
-        LOG_WARN("the precision of decimal int expr is unknown", K(ret), K(precision), K(*expr));
       } else if (!datum->is_null() && datum->len_ != 0) {
         const int len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
         OB_ASSERT (len == datum->len_);
@@ -583,18 +555,15 @@ int ObOperator::output_expr_decint_datum_len_check_batch()
     const ObExpr *expr = spec_.output_[i];
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, expr is nullptr", K(ret));
     } else if (!ob_is_decimal_int(expr->datum_meta_.get_type())) {
       // do nothing
     } else {
       const int16_t precision = expr->datum_meta_.precision_;
       const int len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
       if (OB_UNLIKELY(precision < 0)) {
-        LOG_WARN("the precision of decimal int expr is unknown", K(ret), K(precision), K(*expr));
       } else if (OB_FAIL(expr->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
       } else if (GET_MY_SESSION(eval_ctx_.exec_ctx_)->is_diagnosis_enabled() &&
                 OB_FAIL(do_diagnosis(eval_ctx_.exec_ctx_, *brs_.skip_))) {
-        LOG_WARN("fail to do diagnosis", K(ret));
       } else if (!expr->is_batch_result()) {
         const ObDatum &datum = expr->locate_expr_datum(eval_ctx_);
         if (!datum.is_null() && datum.len_ != 0) {
@@ -649,7 +618,6 @@ int ObOperator::open()
           // children_ pointer is checked before operator open, no need check again.
           if (OB_FAIL(children_[i]->open())) {
             if (OB_TRY_LOCK_ROW_CONFLICT != ret && OB_TRANSACTION_SET_VIOLATION != ret) {
-              LOG_WARN("Open child operator failed", K(ret), "op_type", op_name());
             }
           }
         }
@@ -664,16 +632,13 @@ int ObOperator::open()
         }
         #ifdef ENABLE_DEBUG_LOG
         else if (OB_FAIL(init_dummy_mem_context())) {
-          LOG_WARN("failed to get mem context", K(ret));
         } else if (OB_LIKELY(nullptr == dummy_ptr_)
                 && OB_ISNULL(dummy_ptr_ = static_cast<char *>(dummy_mem_context_->get_malloc_allocator().alloc(sizeof(char))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc memory", K(ret));
         }
         #endif
         else if (OB_FAIL(inner_open())) {
           if (OB_TRY_LOCK_ROW_CONFLICT != ret && OB_TRANSACTION_SET_VIOLATION != ret) {
-            LOG_WARN("Open this operator failed", K(ret), "op_type", op_name());
           }
         }
         open_order = (OPEN_SELF_FIRST == open_order) ? OPEN_CHILDREN_LATER : OPEN_EXIT;
@@ -696,7 +661,6 @@ int ObOperator::open()
         void * ptr = ctx_.get_allocator().alloc(sizeof(ObBatchResultHolder));
         if (OB_ISNULL(ptr)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocation failed for brs_checker_", K(ret), K(sizeof(ObBatchResultHolder)));
         } else {
           // replace new the object
           brs_checker_ = new(ptr) ObBatchResultHolder();
@@ -739,7 +703,6 @@ int ObOperator::init_skip_vector()
     void *mem = ctx_.get_allocator().alloc(ObBitVector::memory_size(batch_size));
     if (OB_ISNULL(mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       brs_.skip_ = to_bit_vector(mem);
       brs_.skip_->init(batch_size);
@@ -764,7 +727,6 @@ int ObOperator::rescan()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(inner_rescan())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to inner rescan", K(ret));
     }
   } else {
 #ifndef NDEBUG
@@ -810,8 +772,6 @@ int ObOperator::switch_iterator()
   for (int64_t i = 0; OB_SUCC(ret) && i < child_cnt_; i++) {
     if (OB_FAIL(children_[i]->switch_iterator())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("switch child operator iterator failed",
-                 K(ret), K(op_name()), K(children_[i]->op_name()));
       }
     }
   }
@@ -861,7 +821,6 @@ int ObOperator::close()
         right_to_die_or_duty_to_live();
       } else if (OB_SUCCESS != tmp_ret) {
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        LOG_WARN("failed to close child operator", K(ret), "op_type", op_name());
       }
     }
   }
@@ -870,7 +829,6 @@ int ObOperator::close()
   int tmp_ret = inner_close();
   if (OB_SUCCESS != tmp_ret) {
     ret = tmp_ret; // overwrite child's error code.
-    LOG_WARN("Close this operator failed", K(ret), "op_type", op_name());
   }
   op_monitor_info_.close_time_ = oceanbase::common::ObClockGenerator::getClock();
   IGNORE_RETURN setup_op_feedback_info();
@@ -891,7 +849,6 @@ int ObOperator::setup_op_feedback_info()
   ObPhysicalPlanCtx *phy_ctx = ctx_.get_physical_plan_ctx();
   if (OB_ISNULL(spec_.plan_) || OB_ISNULL(phy_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan is null", K(ret));
   } else if ((!spec_.plan_->need_record_plan_info() && !phy_ctx->get_check_pdml_affected_rows()) ||
              OB_INVALID_INDEX == fb_node_idx_) {
   } else {
@@ -953,8 +910,6 @@ int ObOperator::get_next_row()
       while (OB_SUCC(ret)) {
         if (OB_FAIL(inner_get_next_row())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("inner get next row failed", K(ret), "type", spec_.type_, "op", op_name(),
-              "op_id", spec_.id_);
           }
         } else if (OB_FAIL(try_check_status())) {
         } else {
@@ -970,7 +925,6 @@ int ObOperator::get_next_row()
 #ifndef NDEBUG
           if (OB_SUCC(ret) && !filtered) {
             if (OB_FAIL(output_expr_decint_datum_len_check())) {
-              LOG_WARN("output expr sanity check failed", K(ret));
             }
           }
 #endif
@@ -1043,7 +997,6 @@ int ObOperator::push_stash_rows(const int64_t max_row_cnt, const int64_t output_
     void *mem = ctx_.get_allocator().alloc(ObBitVector::memory_size(get_spec().max_batch_size_));
     if (OB_ISNULL(mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       stash_brs_.skip_ = to_bit_vector(mem);
     }
@@ -1137,7 +1090,6 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
 #ifndef NDEBUG
         if (OB_SUCC(ret) && !all_filtered) {
           if (OB_FAIL(output_expr_decint_datum_len_check_batch())) {
-            LOG_WARN("output expr sanity check batch failed", K(ret));
           }
         }
 #endif
@@ -1158,7 +1110,6 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
       }
 
       if (OB_SUCC(ret) && OB_FAIL(try_push_stash_rows(op_max_row_cnt))) {
-        LOG_WARN("try push stash rows failed", K(ret));
       }
 
       if (OB_SUCC(ret)) {
@@ -1313,7 +1264,6 @@ int ObOperator::do_drain_exch()
       for (int64_t i = 0; i < child_cnt_ && OB_SUCC(ret); i++) {
         if (OB_ISNULL(children_[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL child found", K(ret), K(i));
         } else if (OB_FAIL(children_[i]->drain_exch())) {
         }
       }
@@ -1510,7 +1460,6 @@ int ObBatchRescanParams::deep_copy_param(const common::ObObjParam &org_param,
     /*do nothing*/
   } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(obj_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate new obj failed", K(ret), K(obj_size), K(org_param));
   } else if (OB_FAIL(new_param.deep_copy(org_param, buf, obj_size, pos))) {
   }
   return ret;
@@ -1524,7 +1473,6 @@ int ObBatchRescanParams::append_batch_rescan_param(const ObIArray<int64_t> &para
   } else if (param_idxs.count() != param_idxs_.count()) {
     if (param_idxs_.count() != 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid count", K(ret), K(param_idxs_.count()));
     } else if (OB_FAIL(param_idxs_.assign(param_idxs))) {
     }
   }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "rust/config.h"
 #include "observer/ob_server_utils.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
@@ -49,8 +50,8 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                int64_t& total_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  int64_t suggested_clog_disk_size = GCONF.log_disk_size;
-  int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
+  int64_t suggested_clog_disk_size = config::log_disk_size();
+  int64_t suggested_clog_disk_percentage = config::log_disk_percentage();
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
   int64_t data_disk_total_size = 0;
@@ -94,8 +95,8 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
                                                 int64_t& data_disk_percentage)
 {
   int ret = OB_SUCCESS;
-  int64_t suggested_data_disk_size = GCONF.datafile_size;
-  int64_t suggested_data_disk_percentage = GCONF.datafile_disk_percentage;
+  int64_t suggested_data_disk_size = config::datafile_size();
+  int64_t suggested_data_disk_percentage = config::datafile_disk_percentage();
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
   int64_t data_disk_total_size = 0;
@@ -195,7 +196,7 @@ const char *ObServerUtils::build_syslog_file_info()
     int n = snprintf(info, max_info_len,
                      "observer version: %s, revision: %s, "
                      "sysname: %s, os release: %s, machine: %s, tz GMT offset: %02d:%02d",
-                     PACKAGE_STRING, build_version(),
+                     PACKAGE_NAME " " PACKAGE_VERSION, build_version(),
                      os_sysname, os_release, os_machine, gmtoff_hour, gmtoff_minute);
     if (n <= 0) {
       ret = OB_ERR_SYS;
@@ -215,16 +216,14 @@ int ObServerUtils::calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &ac
 {
   int ret = OB_SUCCESS;
 
-  const int64_t datafile_maxsize = GCONF.datafile_maxsize;
-  const int64_t datafile_next = GCONF.datafile_next;
+  const int64_t datafile_maxsize = config::datafile_maxsize();
+  const int64_t datafile_next = config::datafile_next();
   const int64_t datafile_size =
     OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
 
   if (OB_UNLIKELY(datafile_maxsize <= 0) ||
       OB_UNLIKELY(datafile_size) <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument",
-      K(ret), K(datafile_maxsize), K(datafile_size));
   } else {
     // attention: max_extend_file maybe equal to zero in the following situations:
     // 1. alter datafile_size as A, alter datafile_maxsize as B, and A < B
@@ -273,9 +272,7 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
   const int64_t DEFAULT_DATA_DISK_PERCENTAGE_ON_SAME_FILESYSTEM = 60;
   const int64_t DEFAULT_CLOG_DISK_PERCENTAGE_ON_SAME_FILESYSTEM = 30;
 
-  // We use sstable_dir as the data disk directory to identify whether the log and data are located
-  // on the same file system, and the storage module will ensure that sstable_dir and slog_dir are
-  // located on the same file system;
+  // Compare data and transaction-log filesystems to choose their default disk shares.
   const char* data_dir = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
   const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
 

@@ -142,7 +142,6 @@ int ObColumnIndexArray::deep_copy(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur column index array is invalid", K(ret), KPC(this));
   } else {
     dst_array.version_ = version_;
     dst_array.rowkey_mode_ = rowkey_mode_;
@@ -150,7 +149,6 @@ int ObColumnIndexArray::deep_copy(
     dst_array.schema_rowkey_cnt_ = schema_rowkey_cnt_;
     dst_array.column_cnt_ = column_cnt_;
     if (!rowkey_mode_ && OB_FAIL(array_.deep_copy(dst_buf, buf_size, pos, dst_array.array_))) {
-      LOG_WARN("failed to deep copy", K(ret));
     }
   }
   return ret;
@@ -168,7 +166,6 @@ int ObColumnIndexArray::serialize(char *buf, const int64_t buf_len, int64_t &pos
     LST_DO_CODE(OB_UNIS_ENCODE, schema_rowkey_cnt_, column_cnt_);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("for non-rowkey-mode, should not use serialize func", K(ret), K(rowkey_mode_));
   }
   return ret;
 }
@@ -187,13 +184,10 @@ int ObColumnIndexArray::deserialize(const char *buf, const int64_t data_len, int
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(rowkey_mode_ != tmp_rowkey_mode || for_memtable_ != tmp_for_memtable)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("deserialize info is different from cur array", KR(ret), K(rowkey_mode_), K(tmp_rowkey_mode),
-      K(for_memtable_), K(tmp_for_memtable));
   } else if (rowkey_mode_) {
     LST_DO_CODE(OB_UNIS_DECODE, schema_rowkey_cnt_, column_cnt_);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("for non-rowkey-mode, should not use deserialize func", K(ret), K(rowkey_mode_));
   }
   return ret;
 }
@@ -292,7 +286,6 @@ int ObTableReadInfo::init_pre_check(
   const int64_t out_cols_cnt = cols_desc.count();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), KPC(this));
   } else if (OB_UNLIKELY(schema_rowkey_cnt < 0
       || schema_column_count < 0
       || out_cols_cnt < schema_rowkey_cnt
@@ -301,9 +294,6 @@ int ObTableReadInfo::init_pre_check(
       || (nullptr != cols_param && cols_param->count() != cols_desc.count())
       || (nullptr != cols_extend && cols_extend->count() != cols_desc.count()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(schema_rowkey_cnt), K(schema_column_count),
-             K(cols_desc.count()), KPC(storage_cols_index), KPC(cols_param),
-             KPC(cols_extend));
   }
   return ret;
 }
@@ -325,9 +315,7 @@ int ObTableReadInfo::init(
       false/*is_global_index_table*/))) { // init basic info
   } else if (OB_FAIL(ObReadInfoStruct::prepare_arrays(allocator, cols_desc, cols_desc.count()))) {
   } else if (nullptr != cols_param && OB_FAIL(cols_param_.init_and_assign(*cols_param, allocator))) {
-    LOG_WARN("Fail to assign cols_param", K(ret));
   } else if (nullptr != cols_extend && OB_FAIL(cols_extend_.init_and_assign(*cols_extend, allocator))) {
-    LOG_WARN("Fail to assign cols_extend", K(ret));
   } else if (FALSE_IT(inner_gene_cols_index_by_col_descs(schema_rowkey_cnt, cols_desc, storage_cols_index))) {
   } else if (OB_FAIL(init_datum_utils(allocator))) {
   } else {
@@ -460,7 +448,6 @@ int ObTableReadInfo::serialize(
     for (int64_t i = 0; OB_SUCC(ret) && i < cols_param_.count(); ++i) {
       if (OB_ISNULL(cols_param_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(i));
       } else if (OB_FAIL(cols_param_.at(i)->serialize(buf, buf_len, pos))) {
       }
     }
@@ -494,7 +481,6 @@ int ObTableReadInfo::deserialize(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(READ_INFO_FORMAT_VERSION != format_version_)) {
     ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("table read info format version mismatch", K(ret), K_(format_version), K(READ_INFO_FORMAT_VERSION));
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
   } else if (FALSE_IT(cols_index_.rowkey_mode_ = false)) {
   } else if (OB_FAIL(cols_index_.array_.deserialize(buf, data_len, pos, allocator))) {
@@ -509,7 +495,6 @@ int ObTableReadInfo::deserialize(
       void *tmp_ptr  = NULL;
       if (OB_ISNULL(tmp_ptr = allocator.alloc(column_param_cnt * sizeof(ObColumnParam *)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to alloc", K(ret), K(column_param_cnt));
       } else if (FALSE_IT(column = static_cast<ObColumnParam **>(tmp_ptr))) {
         // not reach
       } else {
@@ -519,14 +504,12 @@ int ObTableReadInfo::deserialize(
           cur_column = nullptr;
           if (OB_ISNULL(tmp_ptr = allocator.alloc(sizeof(ObColumnParam)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc failed", K(ret));
           } else if (FALSE_IT(cur_column = new (tmp_ptr) ObColumnParam(allocator))) {
           } else if (OB_FAIL(cur_column->deserialize(buf, data_len, pos))) {
           } else if (OB_FAIL(tmp_columns.push_back(cur_column))) {
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(cols_param_.init_and_assign(tmp_columns, allocator))) {
-          LOG_WARN("Fail to add columns", K(ret));
         }
       }
     }
@@ -584,7 +567,6 @@ int64_t ObTableReadInfo::get_serialize_size() const
     for (int64_t i = 0; OB_SUCC(ret) && i < cols_param_.count(); ++i) {
       if (OB_ISNULL(cols_param_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(i));
       } else {
         len += cols_param_.at(i)->get_serialize_size();
       }
@@ -649,12 +631,10 @@ int ObRowkeyReadInfo::init(
   const int64_t out_cols_cnt = schema_column_count + extra_rowkey_cnt;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), KPC(this));
   } else if (OB_UNLIKELY(0 > schema_rowkey_cnt
     || schema_column_count > OB_ROW_MAX_COLUMNS_COUNT
     || schema_rowkey_cnt > schema_column_count)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(schema_rowkey_cnt), K(rowkey_col_descs.count()), K(out_cols_cnt), K(schema_column_count));
   }
   if (OB_SUCC(ret)) {
     init_basic_info(schema_column_count, schema_rowkey_cnt,
@@ -692,7 +672,6 @@ int ObRowkeyReadInfo::deep_copy(char *buf, const int64_t buf_len, ObRowkeyReadIn
   const int64_t memory_size = get_deep_copy_size();
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < memory_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalue argument", K(ret), KP(buf), K(buf_len), K(memory_size));
   } else {
     ObRowkeyReadInfo *dst_value = new (buf) ObRowkeyReadInfo();
     int64_t pos = sizeof(ObRowkeyReadInfo);
@@ -747,7 +726,6 @@ int ObRowkeyReadInfo::deserialize(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(READ_INFO_FORMAT_VERSION != format_version_)) {
     ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("rowkey read info format version mismatch", K(ret), K_(format_version), K(READ_INFO_FORMAT_VERSION));
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
   } else if (OB_FAIL(cols_index_.deserialize(buf, data_len, pos, allocator))) {
   } else if (OB_FAIL(memtable_cols_index_.deserialize(buf, data_len, pos, allocator))) {

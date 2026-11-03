@@ -61,7 +61,6 @@ int ObGeoElevationExtent::add_geometry(const ObGeometry &g)
   int ret = OB_SUCCESS;
   if (!ObGeoTypeUtil::is_3d_geo_type(g.type())) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("geometry should be 3D type", K(ret), K(g.type()));
   } else {
     ObGeometry3D *geo3d = const_cast<ObGeometry3D *>(reinterpret_cast<const ObGeometry3D *>(&g));
     if (OB_FAIL(geo3d->create_elevation_extent(*this))) {
@@ -95,7 +94,6 @@ int ObGeoElevationExtent::add_point(double x, double y, double z)
 {
   int ret = OB_SUCCESS;
   if (cells_.empty() && OB_FAIL(cells_.prepare_allocate(cell_num_x_ * cell_num_y_))) {
-    LOG_WARN("fail to reserve cells", K(ret), K(cell_num_x_), K(cell_num_y_));
   } else {
     int64_t cell_idx = get_cell_idx(x, y);
     ObGeoElevationCell &cell = cells_[cell_idx];
@@ -153,7 +151,6 @@ int ObGeoElevationVisitor::add_geometry(
   ObArenaAllocator tmp_allocator;
   if (!ObGeoTypeUtil::is_3d_geo_type(geo.type())) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("geometry should be 3D type", K(ret), K(geo.type()), K(geo.type()));
   } else {
     ObGeometry3D &geo_3D = reinterpret_cast<ObGeometry3D &>(const_cast<ObGeometry &>(geo));
     if (OB_FAIL(geo_3D.check_empty(is_geo_empty))) {
@@ -186,11 +183,8 @@ int ObGeoElevationVisitor::init(const ObGeometry &geo1, const ObGeometry &geo2)
   } else if (OB_FAIL(add_geometry(geo2, extent, is_geo2_empty))) {
   } else if (OB_ISNULL(extent_ = OB_NEWx(ObGeoElevationExtent, allocator_, extent))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret));
   } else if (!is_geo1_empty && OB_FAIL(extent_->add_geometry(geo1))) {
-    LOG_WARN("fail to add geometry to extent", K(ret));
   } else if (!is_geo2_empty && OB_FAIL(extent_->add_geometry(geo2))) {
-    LOG_WARN("fail to add geometry to extent", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -449,11 +443,9 @@ int ObGeoElevationVisitor::get_geometry_3D(ObGeometry *&geo)
   int ret = OB_SUCCESS;
   if (!is_inited_ || !ObGeoTypeUtil::is_3d_geo_type(type_3D_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("visitor is not inited or not executed", K(ret), K(is_inited_), K(type_3D_));
   } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(
           *allocator_, type_3D_, ObGeoCRS::Geographic == crs_, true, geo, srid_))) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("failed to create swkb", K(ret), K(crs_), K(type_3D_));
   } else {
     geo->set_data(buffer_.string());
   }

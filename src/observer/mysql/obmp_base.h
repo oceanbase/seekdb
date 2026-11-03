@@ -20,7 +20,6 @@
 #include "rpc/frame/ob_sql_processor.h"
 #include "sql/ob_sql_context.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/monitor/ob_process_malloc_callback.h"
 #include "share/ob_server_struct.h"
 #include "query/protocol/ob_mysql_packet_sender.h"
 
@@ -131,57 +130,6 @@ inline void ObMPBase::clear_wb_content(sql::ObSQLSessionInfo &session)
 {
   session.reset_warnings_buf();
 }
-
-class ObProcessMallocCallback final : public lib::ObMallocCallback
-{
-public:
-  ObProcessMallocCallback(int64_t cur_used, int64_t &max_used)
-    : cur_used_(cur_used), max_used_(max_used) {
-      max_used_ = cur_used_ > max_used_ ? cur_used_ : max_used_;
-  }
-  virtual ~ObProcessMallocCallback() {}
-
-  virtual void operator()(const ObMemAttr &attr, int64_t add_size) override
-  {
-    // EN_SQL_MEMORY_LABEL_HIGH64 and EN_SQL_MEMORY_LABEL_LOW64 inject the two
-    // halves of a monitored lib::ObLabel. Both events must be set together.
-    // When the injection takes effect, the maximum memory usage is counted
-    // only for the specified label.
-
-    //To obtain the label_high64 and label_low64 values of an lib::ObLabel,
-    //you can use the tool './label2int64 LabelName' to easily retrieve them.
-    //If you don't have access to this tool,
-    //you can map a string that conforms to the lib::ObLabel format into two int64_t integer values,
-    //ensuring consistency with the endianness of the target machine.
-    int64_t label_high64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_HIGH64);
-    if (OB_UNLIKELY(lib::ObLabel("SqlDtlBuf") == attr.label_
-                    || lib::ObLabel(ObNewModIds::OB_MEMSTORE) == attr.label_)) {
-      // do nothing
-    } else if (label_high64 != 0) {
-      int64_t label_low64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_LOW64);
-      char trace_label[16] = {'\0'};
-      MEMSET(trace_label, 0, sizeof(trace_label));
-      MEMCPY(trace_label, &label_high64, sizeof(int64_t));
-      MEMCPY(trace_label + 8, &label_low64, sizeof(int64_t));
-      if (lib::ObLabel(trace_label) == attr.label_) {
-        cur_used_ += add_size;
-        max_used_ = cur_used_ > max_used_ ? cur_used_ : max_used_;
-#ifdef ERRSIM
-        int64_t dynamic_leak_size = - EVENT_CODE(EventTable::EN_SQL_MEMORY_DYNAMIC_LEAK_SIZE);
-        if (dynamic_leak_size > 0 && max_used_ >= dynamic_leak_size) {
-          abort();
-        }
-#endif //end of ERRSIM
-      }
-    } else {
-      cur_used_ += add_size;
-      max_used_ = cur_used_ > max_used_ ? cur_used_ : max_used_;
-    }
-  }
-private:
-  int64_t cur_used_;
-  int64_t &max_used_;
-}; // end of class ObProcessMallocCallback
 
 } // end of namespace observer
 } // end of namespace oceanbsae

@@ -66,6 +66,18 @@ public:
   const ObTabletID &get_tablet_id() const { return tablet_id_; }
   int64_t get_slice_idx() const { return slice_idx_; }
   TO_STRING_KV(K(is_inited_), K(tablet_id_), K(slice_idx_), K(storage_column_count_), K(row_count_), KP(macro_block_writer_), K(unique_index_id_));
+  static int report_unique_key_duplicated(
+      const int ret_code,
+      const uint64_t table_id,
+      const blocksstable::ObDatumRow &datum_row,
+      const common::ObTabletID &tablet_id,
+      int &report_ret_code);
+  static int report_unique_key_duplicated(
+      const int ret_code,
+      const uint64_t table_id,
+      const blocksstable::ObBatchDatumRows &datum_rows,
+      const common::ObTabletID &tablet_id,
+      int &report_ret_code);
 protected:
   bool is_inited_;
   ObArenaAllocator allocator_;

@@ -68,7 +68,6 @@ int ObDDLContinuousVector::expand(const int64_t need_size)
   const int64_t need_capacity = size_ + need_size;
   if (OB_UNLIKELY(data_ != buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected data", KR(ret), KP(data_), KP(buf_));
   } else if (need_capacity < capacity_) {
   } else {
     int64_t new_capacity = capacity_ > 0 ? capacity_ * 2 : ALLOC_PAGE_SIZE;
@@ -79,8 +78,6 @@ int ObDDLContinuousVector::expand(const int64_t need_size)
     char *new_data = static_cast<char *>(ob_malloc_align(16, new_capacity, mem_attr));
     if (OB_ISNULL(new_data)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate mem", KR(ret), K(capacity_), K(size_), K(need_size),
-               K(new_capacity));
     } else {
       if (size_ > 0) {
         MEMCPY(new_data, buf_, size_);
@@ -386,7 +383,6 @@ int ObDDLContinuousVector::append_batch(const int64_t batch_idx, ObIVector *src,
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), KPC(this), KPC(src), K(format));
       break;
   }
   return ret;
@@ -434,7 +430,6 @@ int ObDDLContinuousVector::append_selective(const int64_t batch_idx, ObIVector *
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), KPC(this), KPC(src), K(format));
       break;
   }
   return ret;
@@ -470,7 +465,6 @@ int ObDDLContinuousVector::shallow_copy(ObIVector *src, const int64_t batch_size
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), KPC(this), KPC(src), K(format));
       break;
   }
   return ret;

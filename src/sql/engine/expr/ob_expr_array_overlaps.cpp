@@ -62,7 +62,6 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   ObCollectionTypeBase *coll_type2 = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if ((!ob_is_collection_sql_type(type1.get_type()) && !type1.is_null())
              || (!ob_is_collection_sql_type(type2.get_type()) && !type2.is_null())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -72,11 +71,9 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type1))) {
   } else if (coll_type1->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type1->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type1->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type2.get_subschema_id(), coll_type2))) {
   } else if (coll_type2->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type2->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type2->type_id_));
   } else if (type1.get_subschema_id() == type2.get_subschema_id()) {
     // do nothing
   } else {
@@ -119,9 +116,7 @@ int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, l_meta_id, l_datum->get_string(), l_arr_obj))) {
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, r_meta_id, r_datum->get_string(), r_arr_obj))) {
   } else if (relation == OVERLAPS && OB_FAIL(l_arr_obj->overlaps(*r_arr_obj, bret))) {
-    LOG_WARN("array overlaps failed", K(ret));
   } else if (relation == CONTAINS_ALL && OB_FAIL(l_arr_obj->contains_all(*r_arr_obj, bret))) {
-    LOG_WARN("array contains failed", K(ret));
   } else {
     res.set_bool(bret);
   }
@@ -156,9 +151,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, l_meta_id, l_array.at(j)->get_string(), l_arr_obj))) {
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, r_meta_id, r_array.at(j)->get_string(), r_arr_obj))) {
       } else if (relation == OVERLAPS && OB_FAIL(l_arr_obj->overlaps(*r_arr_obj, bret))) {
-        LOG_WARN("array overlaps failed", K(ret));
       } else if (relation == CONTAINS_ALL && OB_FAIL(l_arr_obj->contains_all(*r_arr_obj, bret))) {
-        LOG_WARN("array contains all failed", K(ret));
       } else {
         res_datum.at(j)->set_bool(bret);
       }

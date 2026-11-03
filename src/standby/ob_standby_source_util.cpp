@@ -53,7 +53,6 @@ int StandbySourceParser::get_first_service_addr(
     addr_str = addr_str.trim();
     if (addr_str.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("service standby source has no address", KR(ret));
     }
   } else {
     bool is_plain_addr = true;
@@ -64,7 +63,6 @@ int StandbySourceParser::get_first_service_addr(
     }
     if (!is_plain_addr) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("only SERVICE or a plain address is supported for standby source", KR(ret));
     } else {
       addr_str = source;
     }
@@ -74,7 +72,6 @@ int StandbySourceParser::get_first_service_addr(
     if (OB_FAIL(addr.parse_from_string(addr_str))) {
     } else if (!addr.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid standby service address", KR(ret), K(addr_str));
     }
   }
   return ret;

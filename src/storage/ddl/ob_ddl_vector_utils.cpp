@@ -64,13 +64,11 @@ int ObDDLVectorUtils::new_vector(VectorFormat format, VecValueTypeClass value_tc
     }
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), K(format));
       break;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(vector)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc vector", KR(ret));
   }
   return ret;
 }
@@ -81,7 +79,6 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == vector || max_batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(vector), K(max_batch_size));
   } else {
     const VectorFormat format = vector->get_format();
     switch (format) {
@@ -94,10 +91,8 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
         char *data = nullptr;
         if (OB_ISNULL(nulls = to_bit_vector(allocator.alloc(nulls_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(nulls_size));
         } else if (OB_ISNULL(data = static_cast<char *>(allocator.alloc(data_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(data_size));
         } else {
           nulls->reset(max_batch_size);
           MEMSET(data, 0, data_size);
@@ -114,10 +109,8 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
         uint32_t *offsets = nullptr;
         if (OB_ISNULL(nulls = to_bit_vector(allocator.alloc(nulls_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(nulls_size));
         } else if (OB_ISNULL(offsets = static_cast<uint32_t *>(allocator.alloc(offsets_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(offsets_size));
         } else {
           nulls->reset(max_batch_size);
           MEMSET(offsets, 0, offsets_size);
@@ -136,13 +129,10 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
         char **ptrs = nullptr;
         if (OB_ISNULL(nulls = to_bit_vector(allocator.alloc(nulls_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(nulls_size));
         } else if (OB_ISNULL(lens = static_cast<int32_t *>(allocator.alloc(lens_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(lens_size));
         } else if (OB_ISNULL(ptrs = static_cast<char **>(allocator.alloc(ptrs_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(ptrs_size));
         } else {
           nulls->reset(max_batch_size);
           MEMSET(lens, 0, lens_size);
@@ -159,7 +149,6 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
         ObDatum *datums = nullptr;
         if (OB_ISNULL(datums = static_cast<ObDatum *>(allocator.alloc(datums_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(datums_size));
         } else {
           uniform_vec->set_datums(datums);
         }
@@ -171,7 +160,6 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
         ObDatum *datums = nullptr;
         if (OB_ISNULL(datums = static_cast<ObDatum *>(allocator.alloc(datums_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc mem", KR(ret), K(datums_size));
         } else {
           uniform_vec->set_datums(datums);
         }
@@ -179,7 +167,6 @@ int ObDDLVectorUtils::prepare_vector(ObIVector *vector, const int64_t max_batch_
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected vector format", KR(ret), K(format));
         break;
     }
   }
@@ -192,7 +179,6 @@ int ObDDLVectorUtils::to_datum(ObIVector *vector, const int64_t idx, ObDatum &da
   datum.reset();
   if (OB_UNLIKELY(nullptr == vector || idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(vector), K(idx));
   } else {
     const VectorFormat format = vector->get_format();
     switch (format) {
@@ -240,7 +226,6 @@ int ObDDLVectorUtils::to_datum(ObIVector *vector, const int64_t idx, ObDatum &da
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected vector format", KR(ret), K(format));
         break;
     }
   }
@@ -256,7 +241,6 @@ int ObDDLVectorUtils::reshape_storage_vector(const ObObjMeta &col_type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(vector) || !selector.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid storage vector reshape arguments", KR(ret), KP(vector), K(selector));
   } else if (!col_type.is_binary() && !col_type.is_fixed_len_char_type()) {
     // No storage normalization is needed for other column types.
   } else {
@@ -272,7 +256,6 @@ int ObDDLVectorUtils::reshape_storage_vector(const ObObjMeta &col_type,
                && VEC_UNIFORM != format
                && VEC_UNIFORM_CONST != format) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected storage vector format", KR(ret), K(format), K(col_type));
     }
 
     int64_t idx = 0;
@@ -293,7 +276,6 @@ int ObDDLVectorUtils::reshape_storage_vector(const ObObjMeta &col_type,
             char *padded_payload = static_cast<char *>(allocator.alloc(binary_len));
             if (OB_ISNULL(padded_payload)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("failed to allocate binary padding", KR(ret), K(binary_len));
             } else {
               MEMCPY(padded_payload, payload, length);
               MEMSET(padded_payload + length, '\0', binary_len - length);
@@ -335,14 +317,12 @@ int ObDDLVectorUtils::check_rowkey_length(const ObDDLBatchRows &batch_rows,
   if (OB_UNLIKELY(batch_rows.empty() || batch_rows.get_column_count() < rowkey_column_count ||
                   rowkey_column_count <= 0 || col_descs.count() < rowkey_column_count)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(batch_rows), K(rowkey_column_count), K(col_descs.count()));
   } else {
     int64_t *rowkey_len = nullptr;
     const int64_t row_count = batch_rows.size();
     if (OB_ISNULL(rowkey_len = static_cast<int64_t *>(
                     ob_malloc(sizeof(int64_t) * row_count, "DDL_CheckRK")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", KR(ret), K(rowkey_len));
     } else {
       memset(rowkey_len, 0, sizeof(int64_t) * row_count);
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < rowkey_column_count; col_idx++) {
@@ -363,7 +343,6 @@ int ObDDLVectorUtils::check_rowkey_length(const ObDDLBatchRows &batch_rows,
       if (rowkey_len[row_idx] > OB_MAX_VARCHAR_LENGTH_KEY) {
         ret = OB_ERR_TOO_LONG_KEY_LENGTH;
         LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_VARCHAR_LENGTH_KEY);
-        LOG_WARN("rowkey is too long", K(ret), K(row_idx), K(rowkey_len[row_idx]));
       }
     }
     if (OB_NOT_NULL(rowkey_len)) {
@@ -385,7 +364,6 @@ int ObDDLVectorUtils::make_const_tablet_id_vector(const ObTabletID &tablet_id,
   vector = nullptr;
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tablet_id));
   } else {
     if (OB_FAIL(new_vector(VEC_UNIFORM_CONST, tablet_id_value_tc, allocator, vector))) {
     } else {
@@ -393,7 +371,6 @@ int ObDDLVectorUtils::make_const_tablet_id_vector(const ObTabletID &tablet_id,
       ObStorageDatum *storage_datum = nullptr;
       if (OB_ISNULL(storage_datum = OB_NEWx(ObStorageDatum, &allocator))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to new ObStorageDatum", KR(ret));
       } else {
         storage_datum->set_uint(tablet_id.id());
         uniform_vec->set_datums(storage_datum);
@@ -585,21 +562,17 @@ int ObDDLVectorUtils::batch_fill_hidden_pk(ObIVector *vector, const int64_t star
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == vector || start < 0 || size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(vector), K(start), K(size));
   } else if (size > 0) {
     uint64_t start_value = OB_INVALID_ID;
     if (1 == size) {
       if (OB_FAIL(pk_interval.next_value(start_value))) {
-        LOG_WARN("fail to get next value", KR(ret), K(pk_interval));
         ret = OB_ERR_UNEXPECTED; // rewrite error code
       }
     } else {
       ObTabletCacheInterval batch_pk;
       if (OB_FAIL(pk_interval.fetch(size, batch_pk))) {
-        LOG_WARN("fail to fetch pk interval", KR(ret), K(pk_interval), K(size));
         ret = OB_ERR_UNEXPECTED; // rewrite error code
       } else if (OB_FAIL(batch_pk.get_value(start_value))) {
-        LOG_WARN("fail to get value", KR(ret), K(batch_pk));
         ret = OB_ERR_UNEXPECTED; // rewrite error code
       }
     }
@@ -610,8 +583,6 @@ int ObDDLVectorUtils::batch_fill_hidden_pk(ObIVector *vector, const int64_t star
           ObFixedLengthBase *fixed_vec = static_cast<ObFixedLengthBase *>(vector);
           if (OB_UNLIKELY(fixed_vec->get_length() != sizeof(uint64_t))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected hidden pk vector value length", KR(ret),
-                     K(fixed_vec->get_length()));
           } else {
             uint64_t *pks = reinterpret_cast<uint64_t *>(fixed_vec->get_data());
             for (int64_t i = 0; i < size; ++i) {
@@ -622,7 +593,6 @@ int ObDDLVectorUtils::batch_fill_hidden_pk(ObIVector *vector, const int64_t star
         }
         default:
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected vector format", KR(ret), K(format));
           break;
       }
     }
@@ -636,12 +606,10 @@ int ObDDLVectorUtils::batch_fill_value(common::ObIVector *vector, const int64_t 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == vector || vector->get_format() != VEC_FIXED || start < 0 || size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(start), K(size), KPC(vector));
   } else if (size > 0) {
     ObFixedLengthBase *fixed_vec = static_cast<ObFixedLengthBase *>(vector);
     if (OB_UNLIKELY(fixed_vec->get_length() != sizeof(int64_t))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector value length", KR(ret), K(fixed_vec->get_length()));
     } else {
       int64_t *pks = reinterpret_cast<int64_t *>(fixed_vec->get_data());
       for (int64_t i = 0; i < size; ++i) {
@@ -669,7 +637,6 @@ int ObDDLVectorUtils::make_const_multi_version_vector(const int64_t value,
     ObStorageDatum *storage_datum = nullptr;
     if (OB_ISNULL(storage_datum = OB_NEWx(ObStorageDatum, &allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to new ObStorageDatum", KR(ret));
     } else {
       storage_datum->set_int(value);
       uniform_vec->set_datums(storage_datum);

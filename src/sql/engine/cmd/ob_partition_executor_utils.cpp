@@ -167,7 +167,6 @@ int check_list_value_duplicate(T **partition_array,
             !ObSQLUtils::is_same_type_for_compare(tmp_row.get_cell(z).get_meta(),
                                                   row.get_cell(z).get_meta())) {
           ret = OB_ERR_PARTITION_VALUE_ERROR;
-          LOG_WARN("partiton value should have same meta info", K(ret), K(tmp_row), K(row), K(j));
         }
       }
       if (OB_SUCC(ret) && tmp_row == row) {
@@ -198,20 +197,16 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
   ObSubPartition *subpart_info = NULL;
   if (OB_UNLIKELY(list_values_exprs.count() != real_part_num)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected list values exprs count", K(ret), K(real_part_num),
-        K(list_values_exprs.count()));
   }
   // Check the validity of the default value
   for (int64_t i = 0; OB_SUCC(ret) && i < list_values_exprs.count(); ++i) {
     if (OB_ISNULL(row_expr = list_values_exprs.at(i)) ||
         OB_UNLIKELY(T_OP_ROW != row_expr->get_expr_type())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected expr", K(ret), K(row_expr));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < row_expr->get_param_count(); ++j) {
       if (OB_ISNULL(value_expr = row_expr->get_param_expr(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected expr", K(ret), K(value_expr));
       } else if (ObMaxType == value_expr->get_data_type()) {
         ++default_count;
         if (i != list_values_exprs.count() - 1) {
@@ -233,11 +228,9 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
     row_expr = list_values_exprs.at(i);
     if (OB_ISNULL(row_expr = list_values_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected expr", K(ret), K(row_expr));
     } else if ((is_subpart && OB_ISNULL(subpart_info = subpartition_array[i])) ||
                (!is_subpart && OB_ISNULL(part_info = partition_array[i]))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected part or subpart", K(ret), K(part_info), K(subpart_info));
     } else if (row_expr->get_param_count() == 1 && ObMaxType == row_expr->get_param_expr(0)->get_data_type()) {
       // default
       ObNewRow row;
@@ -320,7 +313,6 @@ int ObPartitionExecutorUtils::cast_expr_to_obj(ObExecContext &ctx,
     // do nothing
   } else if (values_exprs_num <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect partition value exprs", K(ret), K(values_exprs_num));
   } else {
     ObRawExpr *fun_expr = NULL;
     ObRawExpr *expr = NULL;
@@ -332,7 +324,6 @@ int ObPartitionExecutorUtils::cast_expr_to_obj(ObExecContext &ctx,
         if (OB_ISNULL(fun_expr = partition_fun_expr.at(j)) ||
             OB_ISNULL(expr = partition_value_exprs.at(i * fun_expr_num + j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(fun_expr), K(expr));
         } else if (ObMaxType == expr->get_data_type()) {
           value_obj = ObObj::make_max_obj();
         } else {
@@ -344,7 +335,6 @@ int ObPartitionExecutorUtils::cast_expr_to_obj(ObExecContext &ctx,
                                                                fun_expr->get_result_type(),
                                                                expr,
                                                                value_obj))) {
-            LOG_WARN("failed to expr cal and cast with check varchar len", K(ret));
           } else if (stmt::T_CREATE_INDEX == stmt_type &&
                      OB_FAIL(expr_cal_and_cast(stmt_type,
                                                is_list_part,
@@ -353,12 +343,9 @@ int ObPartitionExecutorUtils::cast_expr_to_obj(ObExecContext &ctx,
                                                fun_expr->get_collation_type(),
                                                expr,
                                                value_obj))) {
-            LOG_WARN("expr cal and cast fail", K(ret));
           } else if ((!value_obj.is_null() || !is_list_part) &&
                      value_obj.get_collation_type() != fun_expr->get_collation_type()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("value_obj's collation type is not the same with fun_expr", K(ret),
-                      K(value_obj), K(*fun_expr));
           }
         } //end of else
         if (OB_SUCC(ret)) {
@@ -392,30 +379,24 @@ int ObPartitionExecutorUtils::set_range_part_high_bound(ObExecContext &ctx,
   ObSEArray<ObObj, OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
   if (is_subpart && OB_UNLIKELY(!stmt.use_def_sub_part())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subpart shoud be template", K(ret));
   } else if (is_subpart && (OB_ISNULL(subpartition_array))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subpartition_array is NULL", K(ret));
   } else if (!is_subpart && OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition_array is NULL", K(ret));
   } else if (OB_FAIL(cast_expr_to_obj(ctx, stmt_type, false /*is_list_part*/, range_fun_exprs,
                                       range_values_exprs, range_partition_obj))) {
   } else if (part_num * fun_expr_num != range_partition_obj.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid partition num", K(part_num), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
       ObRowkey high_rowkey(&range_partition_obj.at(i * fun_expr_num), fun_expr_num);
       if (is_subpart) {
         if (OB_ISNULL(subpart_info = subpartition_array[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("subpart_info is null", K(ret));
         } else if (OB_FAIL(subpart_info->set_high_bound_val(high_rowkey))) {
         }
       } else if (OB_ISNULL(part_info= partition_array[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("part_info is null", K(ret));
       } else if (OB_FAIL(part_info->set_high_bound_val(high_rowkey))) {
       }
     }
@@ -434,10 +415,8 @@ int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
   T* cur_part = NULL;
   if (OB_ISNULL(array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Empty partition", K(ret));
   } else if (OB_ISNULL(array[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Empty partition", K(ret));
   } else {
     rowkey_last = &array[0]->get_high_bound_val();
     last_part = array[0];
@@ -446,14 +425,12 @@ int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
     const ObRowkey *rowkey_cur = NULL;
     if (OB_ISNULL(cur_part = array[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Empty partition", K(i), K(ret));
     } else {
       bool is_increasing = true;
       bool need_check_maxvalue = false;
       rowkey_cur = &array[i]->get_high_bound_val();
       if (rowkey_cur->get_obj_cnt() != rowkey_last->get_obj_cnt()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid object count", K(*rowkey_cur), K(*rowkey_last), K(ret));
       } else {
         for (int64_t j = 0; j < rowkey_cur->get_obj_cnt() && OB_SUCC(ret); j++) {
           if (!ObSQLUtils::is_same_type_for_compare(rowkey_cur->get_obj_ptr()[j].get_meta(),
@@ -461,7 +438,6 @@ int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
               && !rowkey_cur->get_obj_ptr()[j].is_max_value()
               && !rowkey_last->get_obj_ptr()[j].is_max_value()) {
             ret = OB_ERR_PARTITION_VALUE_ERROR;
-            LOG_WARN("partiton value should have same meta info", K(ret), K(*rowkey_cur), K(*rowkey_last), K(j));
           } else if (rowkey_cur->get_obj_ptr()[j].is_max_value() &&
                      rowkey_last->get_obj_ptr()[j].is_max_value()) {
             need_check_maxvalue = true;
@@ -494,10 +470,8 @@ int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
       if (OB_SUCC(ret) && !is_increasing) {
         if (stmt::T_ALTER_TABLE == stmt_type) {
           ret = OB_ERR_ADD_PART_BOUN_NOT_INC;
-          LOG_WARN("Range values should be increasing", K(*rowkey_cur), K(*rowkey_last), K(ret));
         } else {
           ret = OB_ERR_RANGE_NOT_INCREASING_ERROR;
-          LOG_WARN("Range values should be increasing", K(*rowkey_cur), K(*rowkey_last), K(ret));
           const ObString &err_msg = last_part->get_part_name();
           LOG_USER_ERROR(OB_ERR_RANGE_NOT_INCREASING_ERROR, 0, err_msg.ptr());
         }
@@ -541,7 +515,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     } else if (temp_obj.is_null()) {
       if (!is_list_part) {
         ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-        LOG_WARN("Not allowed to use NULL value in VALUES LESS THAN", K(ret));
       }
     } else {
       if (ob_is_uint_tc(fun_expr_type)) {
@@ -549,8 +522,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
         // If range expression is unsigned, then here we need to check if value is uint
         if (ob_is_int_tc(temp_obj.get_type()) && temp_obj.get_int() < 0) {
           ret = OB_ERR_PARTITION_CONST_DOMAIN_ERROR;
-          LOG_WARN("Partition constant is out of partition function domain", K(ret),
-                   K(fun_expr_type), "value_type", temp_obj.get_type());
         }
       }
     }
@@ -566,8 +537,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
           expected_obj_type = ob_is_int_tc(fun_expr_type) ? ObIntType : ObUInt64Type;
         } else if (!temp_obj.is_null()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("value expr should be integer type too",
-                   "type", temp_obj.get_type(), K(ret));
         }
       }
       const ObObj *out_val_ptr = NULL;
@@ -586,8 +555,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(out_val_ptr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to cast obj, but out_val_ptr is NULL", K(ret),
-                   K(expected_obj_type), K(fun_expr_type), K(temp_obj));
         } else {
           value_obj = *out_val_ptr;
         }
@@ -638,7 +605,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     } else if (temp_obj.is_null()) {
       if (!is_list_part) {
         ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-        LOG_WARN("Not allowed to use NULL value in VALUES LESS THAN", K(ret));
       }
     } else {
       if (ob_is_uint_tc(fun_expr_type)) {
@@ -646,8 +612,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
         // If range expression is unsigned, then here we need to check if value is uint
         if (ob_is_int_tc(temp_obj.get_type()) && temp_obj.get_int() < 0) {
           ret = OB_ERR_PARTITION_CONST_DOMAIN_ERROR;
-          LOG_WARN("Partition constant is out of partition function domain", K(ret),
-                   K(fun_expr_type), "value_type", temp_obj.get_type());
         }
       }
     }
@@ -663,8 +627,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
           expected_obj_type = ob_is_int_tc(fun_expr_type) ? ObIntType : ObUInt64Type;
         } else if (!temp_obj.is_null()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("value expr should be integer type too",
-                   "type", temp_obj.get_type(), K(ret));
         }
       }
       const ObObj *out_val_ptr = NULL;
@@ -688,13 +650,10 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(out_val_ptr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to cast obj, but out_val_ptr is NULL", K(ret),
-                   K(expected_obj_type), K(fun_expr_type), K(temp_obj));
         } else if (!is_list_part && ObDecimalIntType == expected_obj_type) {
           // range columns in mysql mode
           cast_ctx.cast_mode_ &= ~CM_WARN_ON_FAIL;
           if (OB_FAIL(common::obj_accuracy_check(cast_ctx, dst_res_type.get_accuracy(), fun_collation_type, tmp_out_obj, tmp_out_obj, out_val_ptr))) {
-            LOG_WARN("obj_accuracy_check", K(ret));
             if (ret == OB_ERR_DATA_TOO_LONG) {
                ret = OB_ERR_DATA_TOO_LONG_IN_PART_CHECK;
             }
@@ -727,13 +686,10 @@ int ObPartitionExecutorUtils::set_list_part_rows(ObExecContext &ctx,
       table_schema.get_def_sub_part_num() : table_schema.get_first_part_num();
   if (is_subpart && OB_UNLIKELY(!stmt.use_def_sub_part())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subpart shoud be template", K(ret));
   } else if (is_subpart && (OB_ISNULL(subpartition_array))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null subpartition_array", K(ret));
   } else if (!is_subpart && OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null partition_array", K(ret));
   } else if (OB_FAIL(cast_list_expr_to_obj(ctx, stmt_type, is_subpart, part_num, partition_array,
                                            subpartition_array, list_fun_exprs, list_values_exprs))) {
   }
@@ -760,28 +716,23 @@ int ObPartitionExecutorUtils::set_individual_range_part_high_bound(ObExecContext
 
   if (OB_UNLIKELY(stmt.use_def_sub_part())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subpart is template", K(ret));
   } else if (OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition_array is NULL", K(ret));
   }
   for (int64_t i =0; OB_SUCC(ret) && i < part_num; ++i) {
     range_partition_obj.reset();
     if (OB_ISNULL(partition = partition_array[i]) ||
         OB_ISNULL(subpartition_array = partition->get_subpart_array())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(partition), K(subpartition_array));
     } else if (OB_FAIL(cast_expr_to_obj(ctx, stmt_type, false, range_fun_expr,
                                         range_values_exprs_array.at(i), range_partition_obj))) {
     } else if (partition->get_sub_part_num() * fun_expr_num != range_partition_obj.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid partition num", K(part_num), K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < partition->get_sub_part_num(); ++j) {
       ObRowkey high_rowkey(&range_partition_obj.at(j * fun_expr_num), fun_expr_num);
       if (OB_ISNULL(subpartition = subpartition_array[j])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null subpartition", K(ret));
       } else if (OB_FAIL(subpartition->set_high_bound_val(high_rowkey))) {
       }
     }
@@ -811,15 +762,12 @@ int ObPartitionExecutorUtils::set_individual_list_part_rows(ObExecContext &ctx,
 
   if (OB_UNLIKELY(stmt.use_def_sub_part())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subpart is template", K(ret));
   } else if (OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition_array is NULL", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
     if (OB_ISNULL(partition = partition_array[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(partition), K(subpartition));
     } else if (OB_FAIL(cast_list_expr_to_obj(ctx, stmt_type, true, partition->get_sub_part_num(),
                                              partition_array, partition->get_subpart_array(),
                                              list_fun_exprs, list_values_exprs_array.at(i)))) {
@@ -834,7 +782,6 @@ int ObPartitionExecutorUtils::row_expr_to_array(ObRawExpr *row_expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row_expr) || OB_UNLIKELY(T_OP_ROW != row_expr->get_expr_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected expr", K(ret), K(row_expr));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < row_expr->get_param_count(); ++i) {
     if (OB_FAIL(list_values_expr_array.push_back(row_expr->get_param_expr(i)))) {
@@ -851,7 +798,6 @@ int ObPartitionExecutorUtils::sort_list_paritition_if_need(ObTableSchema &table_
     const int64_t array_count = table_schema.get_partition_num();
     if (OB_ISNULL(partition_array)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       lib::ob_sort(partition_array,
                 partition_array + array_count,

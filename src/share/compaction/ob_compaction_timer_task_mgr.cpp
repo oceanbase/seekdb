@@ -27,7 +27,6 @@ int ObCompactionTimerTask::restart_schedule_timer_task(
 {
   int ret = OB_SUCCESS;
   if (timer.task_exist(timer_task) && OB_FAIL(timer.cancel(timer_task))) {
-    LOG_WARN("failed to cancel task", K(ret));
   } else if (OB_FAIL(timer.schedule(timer_task, schedule_interval, true/*repeat*/, immediate))) {
   }
   return ret;

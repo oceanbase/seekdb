@@ -44,7 +44,6 @@ int ObExprJsonExtract::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num < 2)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid argument number", K(ret), K(param_num));
   } else {
     // 1st param is json doc
     ObObjType in_type = types_stack[0].get_type();
@@ -110,7 +109,6 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
   MultimodeAlloctor allocator(tmp_alloc_g.get_allocator());
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum))) {
   } else if (json_datum->is_null()) {
     is_null_result = true; // mysql return NULL result
@@ -123,7 +121,6 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
     if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(json_arg, ctx, allocator, j_str, is_null_result))) {
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type, j_in_type, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
-      LOG_WARN("fail to get json base", K(ret), K(j_in_type));
       ret = OB_ERR_INVALID_JSON_TEXT;
     }
   }
@@ -136,7 +133,6 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
     }
-    LOG_WARN("fail to handle json param 0 in json extract in new sql engine", K(ret));
   } else if (is_null_result ==  false) {
     ObJsonSeekResult hit;
     ObJsonSeekResult hits;

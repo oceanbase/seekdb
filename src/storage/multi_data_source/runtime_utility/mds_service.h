@@ -17,6 +17,7 @@
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_SERVICE_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_SERVICE_H
 
+#include "lib/function/ob_function.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string_holder.h"
@@ -25,7 +26,6 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/allocator/ob_vslice_alloc.h"
-#include "share/ob_occam_timer.h"
 #include "storage/allocator/ob_mds_allocator.h"
 #include "lib/hash/ob_linear_hash_map.h"
 

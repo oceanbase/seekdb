@@ -36,8 +36,7 @@ class ObOptStatManager
 public:
   ObOptStatManager();
   virtual ~ObOptStatManager() {}
-  virtual int init(ObMySQLProxy *proxy,
-                   ObServerConfig *config);
+  virtual int init(ObMySQLProxy *proxy);
   static int64_t get_default_data_size();
 
   static int64_t get_default_avg_row_size();

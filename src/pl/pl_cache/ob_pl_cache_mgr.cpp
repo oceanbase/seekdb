@@ -51,7 +51,6 @@ int ObPLCacheMgr::get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
     int64_t sys_var_encode_max_size = MAX_SYS_VARS_STR_SIZE;
     if (nullptr == (buf = (char *)allocator.alloc(MAX_SYS_VARS_STR_SIZE))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocator memory", K(ret), K(MAX_SYS_VARS_STR_SIZE));
     } else if (OB_FAIL(sys_vars.serialize_sys_vars(buf, sys_var_encode_max_size, pos))) {
       if (OB_BUF_NOT_ENOUGH == ret || OB_SIZE_OVERFLOW ==ret) {
         ret = OB_SUCCESS;
@@ -60,19 +59,16 @@ int ObPLCacheMgr::get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
           sys_var_encode_max_size = 2 * sys_var_encode_max_size;
           if (NULL == (buf = (char *)allocator.alloc(sys_var_encode_max_size))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to allocator memory", K(ret), K(sys_var_encode_max_size));
           } else if (OB_FAIL(sys_vars.serialize_sys_vars(buf, sys_var_encode_max_size, pos))) {
             if (i != 2 && (OB_BUF_NOT_ENOUGH == ret || OB_SIZE_OVERFLOW ==ret)) {
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("fail to serialize system vars", K(ret));
             }
           } else {
             break;
           }
         }
       } else {
-        LOG_WARN("fail to serialize system vars", K(ret));
       }
       if (OB_SUCC(ret)) {
         (void)sys_var_str.assign(buf, int32_t(pos));
@@ -93,7 +89,6 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
   ObGlobalReqTimeService::check_req_timeinfo();
   if (OB_ISNULL(lib_cache) || OB_ISNULL(pc_ctx.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is null");
   } else if (OB_FAIL(get_sys_var_in_pl_cache_str(*pc_ctx.session_info_, tmp_alloc, pc_ctx.key_.sys_vars_str_))) {
   } else {
     if (OB_FAIL(lib_cache->get_cache_obj(ctx, &pc_ctx.key_, guard))) {
@@ -166,7 +161,6 @@ int ObPLCacheMgr::add_pl_object(ObPlanCache *lib_cache,
     PL_CACHE_LOG(WARN, "invalid cache obj", K(ret));
   } else if (OB_ISNULL(lib_cache) || OB_ISNULL(pc_ctx.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is null");
   } else if (OB_FAIL(get_sys_var_in_pl_cache_str(*pc_ctx.session_info_, tmp_alloc, pc_ctx.key_.sys_vars_str_))) {
   } else {
     pl::PLCacheObjStat *stat = NULL;
@@ -197,7 +191,6 @@ int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_obj
   ObGlobalReqTimeService::check_req_timeinfo();
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is null");
   } else if (OB_NOT_NULL(pc_ctx.session_info_) &&
               false == pc_ctx.session_info_->get_local_ob_enable_pl_cache()) {
     // do nothing
@@ -260,7 +253,6 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   } else if (OB_FAIL(runtime_schema_guard.get_database_schema( db_id, database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database schema is null", K(ret));
   } else {
     db_name = database_schema->get_database_name();
   }
@@ -272,7 +264,6 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
     // do nothing
   } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sql proxy", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %lu databases = \"%.*s\"",
                                       key_id, db_name.length(), db_name.ptr()))) {
   } else {
@@ -291,7 +282,6 @@ int ObPLCacheMgr::cache_evict_all_pl(ObPlanCache *lib_cache)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is null");
   } else {
     LCKeyValueArray to_evict_keys;
     ObGetPLKVEntryOp get_ids_op(&to_evict_keys);
@@ -308,7 +298,6 @@ int ObPLCacheMgr::cache_evict_pl_cache_single(ObPlanCache *lib_cache, uint64_t d
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is null");
   } else {
     LCKeyValueArray to_evict_keys;
     GETPLKVEntryOp get_ids_op(db_id, attr, &to_evict_keys);

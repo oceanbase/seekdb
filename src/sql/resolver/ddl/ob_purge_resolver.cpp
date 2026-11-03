@@ -32,7 +32,6 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
   ObPurgeTableStmt *purge_table_stmt = NULL;
   if (OB_ISNULL(session_info_) || T_PURGE_TABLE != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   }
   //create Purge table stmt
   if (OB_SUCC(ret)) {
@@ -52,18 +51,13 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
     ObString table_name;
     if (OB_ISNULL(table_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_node should not be null", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name))) {
     } else if (session_info_->get_database_name() != db_name) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge tables in recyclebin dropped from other schema");
-      LOG_WARN("purge tables in recyclebin dropped from other schema is not supported",
-               K(ret), K(db_name), K(session_info_->get_database_name()));
-      LOG_WARN("purge table db.xx should not specified with db name", K(ret));
     } else if (OB_FAIL(schema_checker_->get_database_id(db_name, db_id))) {
     } else if (table_name.empty()){
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("table name should not be empty", K(ret));
     } else {
       
       purge_table_stmt->set_database_id(db_id);
@@ -82,7 +76,6 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
   ObPurgeIndexStmt *purge_index_stmt = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info or schema_checker is null", K(ret), K(schema_checker_), K(session_info_));
   } else if (T_PURGE_INDEX != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree",  K(parser_tree.type_));
@@ -107,19 +100,15 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
     const share::schema::ObTableSchema *table_schema = NULL;
     if (OB_ISNULL(table_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_node should not be null", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(table_node,
                                            table_name,
                                            db_name))){
     } else if (session_info_->get_database_name() != db_name){
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge indexes in recyclebin dropped from other schema");
-      LOG_WARN("purge indexes in recyclebin dropped from other schema is not supported",
-               K(ret), K(db_name), K(session_info_->get_database_name()));
     } else if (OB_FAIL(schema_checker_->get_database_id(db_name, db_id))) {
     } else if (table_name.empty()){
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("table name should not be empty", K(ret));
     } else {
       UNUSED(schema_checker_->get_table_schema(
                                                OB_RECYCLEBIN_SCHEMA_ID,
@@ -145,7 +134,6 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
   ObPurgeDatabaseStmt *purge_database_stmt = NULL;
   if (OB_ISNULL(session_info_) || T_PURGE_DATABASE != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   }
   //create Purge table stmt
   if (OB_SUCC(ret)) {
@@ -163,7 +151,6 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
     int32_t max_database_name_length = OB_MAX_DATABASE_NAME_LENGTH;
     if (OB_ISNULL(dbname_node) || OB_UNLIKELY(T_IDENT != dbname_node->type_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid parse tree", K(ret));
     } else if (OB_UNLIKELY(
             static_cast<int32_t>(dbname_node->str_len_) > max_database_name_length)) {
       ret = OB_ERR_TOO_LONG_IDENT;
@@ -173,7 +160,6 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
                          static_cast<int32_t>(dbname_node->str_len_));
       if (db_name.empty()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("database_name is empty()", K(ret));
       } else {
         purge_database_stmt->set_db_name(db_name);
       }
@@ -191,7 +177,6 @@ int ObPurgeRecycleBinResolver::resolve(const ParseNode &parser_tree)
   ObPurgeRecycleBinStmt *purge_recyclebin_stmt = NULL;
   if (OB_ISNULL(session_info_) || T_PURGE_RECYCLEBIN != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   }
   //create Purge table stmt
   if (OB_SUCC(ret)) {

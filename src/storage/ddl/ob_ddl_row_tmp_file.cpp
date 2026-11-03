@@ -39,7 +39,6 @@ int ObDDLRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_opened_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("the ObDDLRowFile is opened already", K(ret));
   } else if (OB_UNLIKELY(all_column_schema_its.empty() ||
                          !tablet_id.is_valid() ||
                          slice_idx < 0 ||
@@ -47,8 +46,6 @@ int ObDDLRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its
                          memory_limit <= 0 ||
                          dir_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("there are invalid argument", K(ret), K(all_column_schema_its.count()), K(tablet_id),
-        K(slice_idx), K(max_batch_size), K(memory_limit), K(dir_id));
   }
   if (OB_SUCC(ret)) {
     ObArray<query::ObSpillColumnDesc> columns;
@@ -92,7 +89,6 @@ int ObDDLRowFile::close()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
   } else {
     if (OB_NOT_NULL(spool_factory_)) {
       spool_factory_->destroy(spool_);
@@ -112,11 +108,8 @@ int ObDDLRowFile::append_batch(const blocksstable::ObBatchDatumRows &bdrs)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
   } else if (OB_UNLIKELY(bdrs.vectors_.count() != column_count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the column count is not equal to the batch datum rows's vector count",
-        K(ret), K(bdrs.vectors_.count()), K(column_count_));
   } else {
     query::ObSpillBatchAppendResult result;
     const query::ObSpillBatchView batch(bdrs.vectors_, bdrs.row_count_);
@@ -133,7 +126,6 @@ int ObDDLRowFile::seal()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
   } else if (OB_FAIL(spool_->seal())) {
   } else {
     rotation_recommended_ = false;
@@ -148,16 +140,12 @@ int ObDDLRowFile::get_next_batch(blocksstable::ObBatchDatumRows *&bdrs)
   bdrs = nullptr;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
   } else if (OB_FAIL(spool_->next_batch(batch))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next batch", KR(ret));
     }
   } else if (OB_ISNULL(batch.vectors_) || batch.row_count_ <= 0 ||
              batch.vectors_->count() != column_count_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("spill spool returned an invalid batch", K(ret), KP(batch.vectors_),
-        K(batch.row_count_), K(column_count_));
   } else {
     for (int64_t i = 0; i < column_count_; ++i) {
       bdrs_.vectors_.at(i) = batch.vectors_->at(i);
@@ -228,16 +216,12 @@ int ObDDLRowFileGenerator::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("the ObDDLRowFileGenerator has been initialized", K(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() ||
                           slice_idx < 0 ||
                           max_batch_size <= 0 ||
                           row_file_memory_limit <= 0 ||
                           all_column_schema_its.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("there are invalid argument",
-        K(ret), K(tablet_id), K(slice_idx),
-        K(max_batch_size), K(row_file_memory_limit), K(all_column_schema_its));
   } else {
     tablet_id_ = tablet_id;
     slice_idx_ = slice_idx;
@@ -254,8 +238,6 @@ int ObDDLRowFileGenerator::init(
         sync_chunk_data_ = OB_NEW(ObChunk, ObMemAttr("ChunkDataOutput"));
         if (OB_UNLIKELY(nullptr == row_file_arr_for_output_ || nullptr == sync_chunk_data_)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate row file output",
-              K(ret), KP(row_file_arr_for_output_), KP(sync_chunk_data_));
         }
         FLOG_INFO("the ObDDLRowFileGenerator is generation sync output mode",
             K(ret), K(is_generation_sync_output_));
@@ -276,12 +258,9 @@ int ObDDLRowFileGenerator::append_batch(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFileGenerator is not initialized", K(ret));
   } else if (OB_UNLIKELY((!is_slice_end && bdrs.row_count_ <= 0) ||
                           bdrs.row_count_ > max_batch_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the are invalid arguments",
-        K(ret), K(is_slice_end), K(bdrs), K(max_batch_size_));
   } else if (is_slice_end && bdrs.row_count_ <= 0) {
     // by pass
   } else {
@@ -291,7 +270,6 @@ int ObDDLRowFileGenerator::append_batch(
       row_file = OB_NEW(ObDDLRowFile, ObMemAttr("DDLRowFile"));
       if (OB_UNLIKELY(nullptr == row_file)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate row file", K(ret));
       } else if (OB_FAIL(row_file->open(all_column_schema_its_,
                                         tablet_id_,
                                         slice_idx_,
@@ -306,11 +284,9 @@ int ObDDLRowFileGenerator::append_batch(
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(row_file->append_batch(bdrs))) {
-      LOG_WARN("fail to append batch", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(try_generate_output_chunk(is_slice_end, output_chunk))) {
-    LOG_WARN("fail to generate ddl output chunk", K(ret));
   }
   return ret;
 }
@@ -325,7 +301,6 @@ int ObDDLRowFileGenerator::try_generate_output_chunk(
   output_chunk.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFileGenerator is not initialized", K(ret));
   } else {
     if (is_generation_sync_output_) {
       row_file_arr_for_output_->reuse();
@@ -339,8 +314,6 @@ int ObDDLRowFileGenerator::try_generate_output_chunk(
           if (OB_UNLIKELY(nullptr == row_file_arr_for_output_ ||
                           nullptr == sync_chunk_data_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("row file output is null",
-                K(ret), KP(row_file_arr_for_output_), KP(sync_chunk_data_));
           } else {
             if (OB_FAIL(row_file_arr_for_output_->push_back(row_file))) {
             } else {
@@ -353,11 +326,9 @@ int ObDDLRowFileGenerator::try_generate_output_chunk(
             row_files_ptr = OB_NEW(ObArray<ObDDLRowFile *>, ObMemAttr("DDLRowFiles"));
             if (OB_UNLIKELY(nullptr == chunk_data || nullptr == row_files_ptr)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("fail to allocate memory", K(ret), KP(chunk_data), KP(row_files_ptr));
             }
           }
           if (FAILEDx(row_files_ptr->push_back(row_file))) {
-            LOG_WARN("fail to push back row file", K(ret), KPC(row_file));
           } else {
             row_file = nullptr;
           }

@@ -46,6 +46,7 @@ inline int usleep(useconds_t usec) {
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_clock_generator.h"
+#include "lib/thread_local/ob_tsi_utils.h"
 
 #if defined(__APPLE__)
 #include <sys/types.h>  // includes BSD type definitions
@@ -624,7 +625,7 @@ inline bool is_cpu_support_sse42()
       : "a"(1)
       :);
   return 0 != (data & CPUID_STD_SSE4_2);
- #elif defined(__aarch64__)
+ #elif defined(__aarch64__) || defined(__wasm__)
   return 0;
  #else
   #error arch unsupported

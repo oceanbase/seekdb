@@ -63,6 +63,12 @@ int ObExprSleep::sleep(int64_t usec)
       break;
     } else {
       int64_t current_time = ObTimeUtility::current_time();
+      // The worker status check uses a cached clock that can lag behind short sleeps.
+      // Check the query deadline against the real time before returning success.
+      if (current_time >= THIS_WORKER.get_timeout_ts()) {
+        ret = OB_TIMEOUT;
+        break;
+      }
       usec_rem = current_time < dead_line ? dead_line - current_time : 0;
       usec_req = static_cast<useconds_t>(MIN(CHECK_INTERVAL_IN_US, usec_rem));
     }
@@ -87,7 +93,6 @@ int ObExprSleep::get_usec(const number::ObNumber &nmb, int64_t &value, ObIAlloca
     } else if (OB_FAIL(tmp_nmb.mul(other, res, alloc))) {
     } else if (!res.is_valid_uint64(tmp)) { //based on the behaviour of mysql.
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("out of range", K(ret), K(res), K(tmp));
     } else {
       //use usecond to calc
       value = tmp / NSECS_PER_USEC;
@@ -107,7 +112,6 @@ int ObExprSleep::eval_sleep(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   } else if (sec->is_null()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sleep");
-    LOG_WARN("invalid arguments to sleep");
   } else if (OB_FAIL(get_usec(number::ObNumber(sec->get_number()), usec, calc_alloc))) {
     ret = OB_SUCCESS;
   } else {

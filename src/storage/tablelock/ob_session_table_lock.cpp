@@ -116,7 +116,6 @@ int acquire_named_lock(share::ObILockMetadataSession &session_io,
                          session_io, transaction::tablelock::LOCK_OBJECT,
                          request, false, need_lock))) {
   } else if (need_lock && OB_FAIL(service->lock(tx, tx_param, request))) {
-    LOG_WARN("acquire named lock failed", KR(ret), K(lock_id_value));
   }
   return ret;
 }
@@ -150,7 +149,6 @@ int acquire_mysql_table_lock(share::ObILockMetadataSession &session_io,
                          session_io, transaction::tablelock::LOCK_TABLE,
                          request, false, need_lock))) {
   } else if (need_lock && OB_FAIL(service->lock(tx, tx_param, request))) {
-    LOG_WARN("acquire MySQL table lock failed", KR(ret), K(target));
   }
   return ret;
 }

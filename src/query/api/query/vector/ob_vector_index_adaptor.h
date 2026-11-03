@@ -268,6 +268,7 @@ public:
       incr_iter_ctx_(nullptr),
       snap_iter_ctx_(nullptr),
       bitmaps_(nullptr),
+      bitmap_view_ready_(false),
       pre_filter_(nullptr),
       vec_data_(),
       allocator_(allocator),
@@ -326,6 +327,7 @@ private:
   void *incr_iter_ctx_;
   void *snap_iter_ctx_;
   ObVectorIndexRoaringBitMap *bitmaps_;
+  bool bitmap_view_ready_; // Query-local index-id view; do not merge newer shared state.
   ObHnswBitmapFilter *pre_filter_;  // pre filter only
   ObVectorParamData vec_data_;
   ObIAllocator *allocator_;       // allocator for vec_lookup_op, used to allocate memory for final query result
@@ -719,7 +721,8 @@ public:
   int complete_index_mem_data(SCN read_scn,
                               common::ObNewRowIterator *row_iter,
                               blocksstable::ObDatumRow *last_row,
-                              ObArray<uint64_t> &i_vids);
+                              ObArray<uint64_t> &i_vids,
+                              ObVectorQueryAdaptorResultContext *ctx);
   int complete_index_mem_data_incremental(ObVectorQueryAdaptorResultContext *ctx,
                                          SCN query_scn,
                                          ObArray<uint64_t> &i_vids);

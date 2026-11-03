@@ -47,7 +47,6 @@ int ObMPStatistic::process()
   }
   if (OB_FAIL(ret) && need_disconnect) {
     force_disconnect();
-    LOG_WARN("disconnect connection", KR(ret));
   }
   return ret;
 }

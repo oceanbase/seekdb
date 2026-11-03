@@ -36,11 +36,8 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
       || OB_ISNULL(ctx.get_plan_cache_access_service())
       || OB_ISNULL(ctx.get_prepared_statement_runtime())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("required execution dependency is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()),
-        KP(ctx.get_plan_cache_access_service()), K(ret));
   } else if (stmt::T_CALL_PROCEDURE != stmt.get_prepare_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("it must be call procedure stmt", K(ret), K(stmt));
   } else {
     ObObjParam result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
@@ -93,7 +90,6 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
             } else {
               if (OB_ISNULL(ctx.get_sql_ctx()->schema_guard_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("schema guard is null");
               } else if (OB_FAIL(ctx.get_my_session()->update_query_sensitive_system_variable(*(ctx.get_sql_ctx()->schema_guard_)))) {
               } else if (OB_FAIL(result_set.open())) {
               }
@@ -105,15 +101,12 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                 ObCallProcedureStmt *call_stmt = static_cast<ObCallProcedureStmt*>(result_set.get_cmd());
                 if (OB_ISNULL(call_proc_info = call_stmt->get_call_proc_info())) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("call procedure info is null", K(ret));
                 } else if (OB_ISNULL(ctx.get_ps_cache())) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("ps cache is null", K(ret));
                 } else if (OB_FAIL(ctx.get_my_session()->get_inner_ps_stmt_id(stmt.get_prepare_id(), inner_stmt_id))) {
                 } else if (OB_FAIL(ctx.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
                 } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("get stmt info is null", K(ret));
                 } else {
                   const ObIArray<int64_t> &fixed_params_idx = ps_info->get_raw_params_idx();
                   for (int64_t i = 0; OB_SUCC(ret) && i < call_proc_info->get_expressions().count(); ++i) {
@@ -133,24 +126,19 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                           int64_t using_idx = idx - origin_param_cnt;
                           if (using_idx >= stmt.get_params().count()) {
                             ret = OB_ERR_UNEXPECTED;
-                            LOG_WARN("unexpected idx", K(ret), K(using_idx), K(stmt.get_params().count()));
                           } else {
                             const ObRawExpr *expr = stmt.get_params().at(using_idx);
                             if (OB_ISNULL(expr)) {
                               ret = OB_ERR_UNEXPECTED;
-                              LOG_WARN("expr is null", K(ret), K(stmt));
                             } else if (T_OP_GET_USER_VAR != expr->get_expr_type()) {
                               ret = OB_ERR_UNEXPECTED;
-                              LOG_WARN("it must be user var", K(ret), K(stmt));
                             } else {
                               ObExprCtx expr_ctx;
                               if (OB_ISNULL(expr->get_param_expr(0))) {
                                 ret = OB_ERR_UNEXPECTED;
-                                LOG_WARN("sys var is NULL", K(*expr), K(ret));
                               } else if (OB_UNLIKELY(!expr->get_param_expr(0)->is_const_raw_expr()
                                 || !static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().is_varchar())) {
                                 ret = OB_ERR_UNEXPECTED;
-                                LOG_WARN("invalid user var", K(*expr->get_param_expr(0)), K(ret));
                               } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx, ctx.get_allocator(), expr_ctx))) {
                               } else {
                                 const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_varchar();
@@ -171,7 +159,6 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
 
               int tmp_ret = OB_SUCCESS;
               if ((tmp_ret = result_set.close()) != OB_SUCCESS) {
-                LOG_WARN("result set open failed", K(result_set.get_statement_id()), K(ret));
                 ret = OB_SUCCESS == ret ? tmp_ret : ret;
               }
             }

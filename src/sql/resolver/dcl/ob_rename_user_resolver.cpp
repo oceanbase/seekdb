@@ -38,7 +38,6 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Session info is not inited", K(ret));
   } else if (node != NULL && T_RENAME_USER == node->type_ && node->num_child_ > 0) {
     if (OB_ISNULL(rename_user_stmt = create_stmt<ObRenameUserStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -50,7 +49,6 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
         ParseNode *rename_info = NULL;
         if (OB_ISNULL(rename_info = node->children_[i])) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("Child should not be NULL", K(ret), K(i));
         } else if (4 == rename_info->num_child_ && T_RENAME_INFO == rename_info->type_
                    && NULL != rename_info->children_[0] && NULL != rename_info->children_[2]) {
           ObString from_user(rename_info->children_[0]->str_len_, rename_info->children_[0]->str_value_);
@@ -86,13 +84,11 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
           }
         } else {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("sql_parser parse rename_info error", K(ret));
         }
       } // end for
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rename user ParseNode error", K(ret));
   }
   return ret;
 }

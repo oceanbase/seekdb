@@ -87,7 +87,6 @@ int ObEvalCtx::init_datum_caster()
     void *buf = NULL;
     if (OB_ISNULL(buf = exec_ctx_.get_allocator().alloc(sizeof(ObDatumCaster)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else if (FALSE_IT(datum_caster = new(buf) ObDatumCaster())) {
     } else if (OB_FAIL(datum_caster->init(exec_ctx_))) {
     } else {
@@ -299,10 +298,8 @@ char *ObExpr::alloc_str_res_mem(ObEvalCtx &ctx, const int64_t size, const int64_
       const int64_t alloc_size = next_pow2(size);
       if (OB_UNLIKELY(alloc_size > UINT32_MAX)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(size), K(alloc_size), K(ret));
       } else if (OB_ISNULL(mem = static_cast<char *>(ctx.alloc_expr_res(alloc_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(ret));
       } else {
         // When extend memory, the old memory can not free, because the old memory may
         // still be referenced. see: ob_datum_cast.cpp::common_copy_string
@@ -407,7 +404,6 @@ int ObDatumObjParam::from_objparam(const ObObjParam &objparam, ObIAllocator *all
   if (OB_UNLIKELY(objparam.is_ext_sql_array())) {
     if (OB_ISNULL(allocator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("construct array param datum need allocator", K(ret));
     } else if (OB_FAIL(construct_array_param_datum(objparam, *allocator))) {
     }
   } else if (OB_FAIL(datum_.from_obj(objparam))) {
@@ -437,7 +433,6 @@ int ObDatumObjParam::to_objparam(common::ObObjParam &obj_param, ObIAllocator *al
   if (OB_UNLIKELY(meta_.is_ext_sql_array())) {
     if (OB_ISNULL(allocator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("construct sql array obj need allocator", K(ret));
     } else if (OB_FAIL(construct_sql_array_obj(obj_param, *allocator))) {
     }
   } else if (OB_FAIL(datum_.to_obj(obj_param, meta))) {
@@ -460,7 +455,6 @@ int ObDatumObjParam::construct_array_param_datum(const ObObjParam &obj_param, Ob
     datum_array = ObSqlDatumArray::alloc(allocator, array_obj->count_);
     if (OB_ISNULL(datum_array)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate datum array buffer failed", K(ret));
     } else {
       datum_array->element_ = array_obj->element_;
     }
@@ -472,7 +466,6 @@ int ObDatumObjParam::construct_array_param_datum(const ObObjParam &obj_param, Ob
         uint32_t def_res_len = ObDatum::get_reserved_size(obj_datum_map, array_obj->data_[i].get_precision());
         if (OB_ISNULL(datum_array->data_[i].ptr_ = static_cast<char *>(allocator.alloc(def_res_len)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory", K(def_res_len), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -501,7 +494,6 @@ int ObDatumObjParam::construct_sql_array_obj(ObObjParam &obj_param, ObIAllocator
     ObSqlArrayObj *array_obj = ObSqlArrayObj::alloc(allocator, datum_array->count_);
     if (OB_ISNULL(array_obj)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate array buffer failed", K(ret), K(datum_array->count_));
     } else {
       array_obj->element_ = datum_array->element_;
     }
@@ -773,23 +765,19 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("NULL plan ctx", K(ret));
   } else {
     const auto &param_store = ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
     if (expr.extra_ >= param_store.count()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid param store idx", K(ret), K(expr), K(param_store.count()));
     } else {
       const ObObj &v = param_store.at(expr.extra_);
       if (v.get_type() != expr.datum_meta_.type_ && !v.is_null()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("obj type miss match", K(ret), K(v), K(expr));
       } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
       } else if (is_lob_storage(v.get_type()) &&
                  OB_FAIL(ob_adjust_lob_datum(ctx.exec_ctx_, v, expr.obj_meta_,
                                              expr.obj_datum_map_,
                                              ctx.exec_ctx_.get_allocator(), expr_datum))) {
-        LOG_WARN("adjust lob datum failed", K(ret), K(v.get_meta()), K(expr.obj_meta_));
       }
     }
   }
@@ -802,13 +790,11 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session) || OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(session));
   } else {
     ObCastMode cast_mode = CM_NONE;
     const auto &param_store = ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
     if (expr.extra_ >= param_store.count()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid param store idx", K(ret), K(expr), K(param_store.count()));
     } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(
                        session->get_stmt_type(), session, cast_mode))) {
     } else {

@@ -106,7 +106,6 @@ int ObIntegerBaseDiffEncoder::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
@@ -114,8 +113,6 @@ int ObIntegerBaseDiffEncoder::init(
     type_store_size_ = get_type_size_map()[column_type_.get_type()];
     if ((ObIntSC != sc && ObUIntSC != sc) || type_store_size_ < 0) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported type for integer base diff",
-          K(ret), K(sc), K_(type_store_size), K_(column_index));
     } else {
       mask_ = INTEGER_MASK_TABLE[type_store_size_];
       if (ObIntSC == sc) {
@@ -150,7 +147,6 @@ int ObIntegerBaseDiffEncoder::traverse_cells(T &integer_data)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     for (int64_t i = 0; i < ctx_->col_datums_->count(); ++i) {
       const ObDatum &datum = ctx_->col_datums_->at(i);
@@ -167,7 +163,6 @@ int ObIntegerBaseDiffEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     int64_t null_cnt = ctx_->null_cnt_;
     int64_t nope_cnt = ctx_->nope_cnt_;
@@ -234,7 +229,6 @@ int ObIntegerBaseDiffEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     char *data = buf_writer.current();
     header_ = reinterpret_cast<ObIntegerBaseDiffHeader *>(data);
@@ -266,10 +260,8 @@ int ObIntegerBaseDiffEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else {
     DeltaGetter getter(integer_data_);
     FixDataSetter setter(integer_data_);

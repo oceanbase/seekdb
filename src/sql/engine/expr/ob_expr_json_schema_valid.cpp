@@ -72,7 +72,6 @@ int ObExprJsonSchemaValid::cg_expr(ObExprCGCtx &op_cg_ctx,
     bool got_data = false;
     if (OB_ISNULL(info)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(info->init_json_schema_extra_info(alloc, op_cg_ctx, schema, got_data))) {
     } else if (got_data) {
       rt_expr.extra_info_ = info;
@@ -116,7 +115,6 @@ int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx 
   if (OB_FAIL(ret)) {
   } else if (!is_null_result && OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1,
                                              j_doc, is_null_result, false, false, true))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else {
@@ -170,7 +168,6 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
     got_data = false;
   } else if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("execution context is null", K(ret));
   } else if (OB_FAIL(ObJsonExprHelper::get_const_json_schema(
                  const_data, N_JSON_SCHEMA_VALID, *exec_ctx, &alloc, j_schema))) {
   } else if (OB_FAIL(j_schema->get_raw_binary(json_schema_, &alloc))){
@@ -187,7 +184,6 @@ int ObExprJsonSchemaValidInfo::deep_copy(common::ObIAllocator &allocator,
   INIT_SUCC(ret);
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     ObExprJsonSchemaValidInfo &other = *static_cast<ObExprJsonSchemaValidInfo *>(copied_info);
     if (OB_FAIL(ob_write_string(allocator, json_schema_, other.json_schema_, true))) {

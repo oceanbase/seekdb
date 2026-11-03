@@ -27,7 +27,7 @@
 #include "share/ob_debug_sync.h"
 #include "share/log/palf/log_define.h"
 #include "share/rc/ob_server_runtime.h"
-#include "standby/ob_standby_grpc.h"
+#include "standby/standby_rpc.h"
 #include "standby/ob_standby_source_util.h"
 #include "standby/standby_host.h"
 #include "storage/ls/ob_ls.h"
@@ -79,7 +79,7 @@ int get_local_position(
   end_lsn.reset();
   end_scn.reset();
   sync_scn.reset();
-  if (OB_ISNULL(log_service) || OB_ISNULL(log_service->get_log_replay_service())) {
+  if (OB_ISNULL(log_service)) {
     ret = OB_NOT_INIT;
     LOG_WARN("log replay service is not initialized", KR(ret), KP(log_service));
   } else if (OB_FAIL(get_log_handler(log_handler))) {
@@ -87,7 +87,7 @@ int get_local_position(
     LOG_WARN("failed to get local log end lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_end_scn(end_scn))) {
     LOG_WARN("failed to get local log end scn", KR(ret), K(end_lsn));
-  } else if (OB_FAIL(log_service->get_log_replay_service()->get_max_replayed_scn(sync_scn))) {
+  } else if (OB_FAIL(log_service->get_max_replayed_scn(sync_scn))) {
     LOG_WARN("failed to get local replay progress", KR(ret), K(end_lsn), K(end_scn));
   }
   return ret;
@@ -363,22 +363,19 @@ int ObStandbyLogSyncService::get_source_addr_(common::ObAddr &source_addr) const
   int ret = OB_SUCCESS;
   common::ObArenaAllocator allocator("StandbySource");
   common::ObString source;
-  int64_t version = 0;
-  ret = load_source_snapshot_(allocator, source, version, source_addr);
+  ret = load_source_snapshot_(allocator, source, source_addr);
   return ret;
 }
 
 int ObStandbyLogSyncService::load_source_snapshot_(
     common::ObIAllocator &allocator,
     common::ObString &source,
-    int64_t &version,
     common::ObAddr &source_addr) const
 {
   int ret = OB_SUCCESS;
   source.reset();
   source_addr.reset();
-  version = 0;
-  if (OB_FAIL(host_->load_log_restore_source(allocator, source, version))) {
+  if (OB_FAIL(host_->load_log_restore_source(allocator, source))) {
     LOG_WARN("failed to load standby log source", KR(ret));
   } else if (source.empty()) {
     ret = OB_ENTRY_NOT_EXIST;
@@ -396,14 +393,14 @@ int ObStandbyLogSyncService::query_source_promotion_boundary_(
     StandbyPromotionBoundary &boundary)
 {
   int ret = OB_SUCCESS;
-  ObStandbyGrpcClient client;
+  StandbyRpcClient client;
   StandbyPromotionBoundaryRequest request;
   boundary = StandbyPromotionBoundary();
   if (OB_FAIL(request.add_visited(config_->promotion_node_id_))) {
     LOG_WARN("failed to initialize promotion boundary path",
         KR(ret), K(config_->promotion_node_id_));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
-    LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
+    LOG_WARN("failed to init standby RPC client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.get_promotion_boundary(request, boundary))) {
     LOG_WARN("failed to query source promotion boundary", KR(ret), K(source_addr));
   }
@@ -440,7 +437,7 @@ int ObStandbyLogSyncService::sync_once_(
   int ret = OB_SUCCESS;
   palf::LSN start_lsn;
   logservice::ObLogHandler *log_handler = nullptr;
-  ObStandbyGrpcClient client;
+  StandbyRpcClient client;
   made_progress = false;
   if (OB_SUCCESS != (ret = get_fatal_error_())) {
   } else if (OB_FAIL(get_log_handler(log_handler))) {
@@ -450,7 +447,7 @@ int ObStandbyLogSyncService::sync_once_(
     // submitted group again and violate PALF's strict continuity check.
     LOG_WARN("failed to get local standby log import position", KR(ret));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
-    LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
+    LOG_WARN("failed to init standby RPC client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.fetch_log(
       start_lsn,
       FETCH_BATCH_BYTES,
@@ -511,8 +508,6 @@ int ObStandbyLogSyncService::validate_switch_to_primary_(const bool is_failover)
   common::ObString rechecked_source;
   common::ObAddr source_addr;
   common::ObAddr rechecked_addr;
-  int64_t source_version = 0;
-  int64_t rechecked_version = 0;
   StandbyPromotionBoundary boundary;
   StandbyPromotionBoundary rechecked_boundary;
   share::SCN target_scn;
@@ -535,7 +530,7 @@ int ObStandbyLogSyncService::validate_switch_to_primary_(const bool is_failover)
 
   if (OB_SUCC(ret) && !is_failover
       && OB_FAIL(load_source_snapshot_(
-          source_allocator, source, source_version, source_addr))) {
+          source_allocator, source, source_addr))) {
     LOG_WARN("lossless switchover requires a valid log source", KR(ret));
   } else if (OB_SUCC(ret) && !is_failover
              && OB_FAIL(query_source_promotion_boundary_(source_addr, boundary))) {
@@ -566,16 +561,14 @@ int ObStandbyLogSyncService::validate_switch_to_primary_(const bool is_failover)
       && OB_FAIL(load_source_snapshot_(
           recheck_allocator,
           rechecked_source,
-          rechecked_version,
           rechecked_addr))) {
     LOG_WARN("failed to recheck switchover source", KR(ret));
   } else if (OB_SUCC(ret) && !is_failover
-             && (source_version != rechecked_version
-                 || source.compare(rechecked_source) != 0
+             && (source.compare(rechecked_source) != 0
                  || source_addr != rechecked_addr)) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("standby source changed during switchover validation", KR(ret),
-        K(source_version), K(rechecked_version), K(source), K(rechecked_source));
+        K(source), K(rechecked_source));
   } else if (OB_SUCC(ret) && !is_failover
              && OB_FAIL(query_source_promotion_boundary_(
                  rechecked_addr, rechecked_boundary))) {
@@ -600,8 +593,6 @@ int ObStandbyLogSyncService::prepare_promotion_(
   common::ObString rechecked_source;
   common::ObAddr source_addr;
   common::ObAddr rechecked_addr;
-  int64_t source_version = 0;
-  int64_t rechecked_version = 0;
   StandbyPromotionBoundary boundary;
   StandbyPromotionBoundary rechecked_boundary;
   share::SCN local_end_scn;
@@ -625,7 +616,7 @@ int ObStandbyLogSyncService::prepare_promotion_(
 
   if (OB_SUCC(ret) && !is_failover
       && OB_FAIL(load_source_snapshot_(
-          source_allocator, source, source_version, source_addr))) {
+          source_allocator, source, source_addr))) {
     LOG_WARN("lossless switchover requires a valid log source", KR(ret));
   } else if (OB_SUCC(ret) && !is_failover
              && OB_FAIL(query_source_promotion_boundary_(source_addr, boundary))) {
@@ -658,16 +649,14 @@ int ObStandbyLogSyncService::prepare_promotion_(
                && OB_FAIL(load_source_snapshot_(
                    recheck_allocator,
                    rechecked_source,
-                   rechecked_version,
                    rechecked_addr))) {
       LOG_WARN("failed to recheck standby source before promotion", KR(ret));
     } else if (!is_failover
-               && (source_version != rechecked_version
-                   || source.compare(rechecked_source) != 0
+               && (source.compare(rechecked_source) != 0
                    || source_addr != rechecked_addr)) {
       ret = OB_STATE_NOT_MATCH;
       LOG_WARN("standby source changed before promotion commit", KR(ret),
-          K(source_version), K(rechecked_version), K(source), K(rechecked_source));
+          K(source), K(rechecked_source));
     } else if (!is_failover
                && OB_FAIL(query_source_promotion_boundary_(
                    rechecked_addr, rechecked_boundary))) {

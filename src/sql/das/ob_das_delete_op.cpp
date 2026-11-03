@@ -59,7 +59,6 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
     if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
       }
     }
   } else if (ctdef.table_param_.get_data_table().is_hybrid_vector_index() &&
@@ -69,14 +68,12 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
       // For embedded table, perform actual delete operation
       if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_execution_, ctdef.column_ids_, &iter, affected_rows))) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("delete rows to access service failed", K(ret), K(tablet_id));
         }
       }
     } else if (share::schema::is_hybrid_vec_index_log_type(ctdef.table_param_.get_data_table().get_index_type())) {
       // For other hybrid vector index tables (like log table), perform insert to record delete mark
       if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_, ctdef.column_ids_, &iter, affected_rows))) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
         }
       }
     }
@@ -87,13 +84,11 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
                               &iter,
                               affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("delete rows to access service failed", K(ret));
     }
   } else if (!(ctdef.is_ignore_ || 
             ctdef.table_param_.get_data_table().is_domain_index())
       && 0 == affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected_rows after do delete", K(affected_rows), K(ret));
   }
   return ret;
 }
@@ -133,7 +128,6 @@ int ObDASDeleteOp::open_op()
           del_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
   } else if (OB_FAIL(del_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("delete row to partition storage failed", K(ret));
     }
   } else {
     affected_rows_ = affected_rows;
@@ -153,7 +147,6 @@ int ObDASDeleteOp::assign_task_result(ObIDASTaskOp *other)
   int ret = OB_SUCCESS;
   if (other->get_type() != get_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected task type", K(ret), KPC(other));
   } else {
     ObDASDeleteOp *del_op = static_cast<ObDASDeleteOp *>(other);
     affected_rows_ = del_op->get_affected_rows();
@@ -172,7 +165,6 @@ int ObDASDeleteOp::init_task_info(uint32_t row_extend_size)
   int ret = OB_SUCCESS;
   if (!write_buffer_.is_inited()
       && OB_FAIL(write_buffer_.init(op_alloc_, row_extend_size, "DASDeleteBuffer"))) {
-    LOG_WARN("init delete buffer failed", K(ret));
   }
   return ret;
 }
@@ -184,7 +176,6 @@ int ObDASDeleteOp::write_row(const ExprFixedArray &row,
   int ret = OB_SUCCESS;
   if (!write_buffer_.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(write_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
   }
   return ret;

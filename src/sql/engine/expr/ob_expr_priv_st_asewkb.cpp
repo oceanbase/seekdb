@@ -91,7 +91,6 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb_str))) {
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb_str, srs))) {
   } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_wkb(tmp_allocator, wkb_str, srs, geo, true, true, true))) {
-    LOG_WARN("fail to create geo by wkb", K(ret), K(wkb_str));
     if (ret != OB_ERR_SRS_NOT_FOUND && ret != OB_ERR_INVALID_GEOMETRY_TYPE) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_ASEWKB);
@@ -110,11 +109,9 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
       ObLobLocatorV2 lob(res_wkb, expr.obj_meta_.has_lob_header());
       ObGeoWkbHeader header;
       if (is_geog && OB_FAIL(ObGeoExprUtils::check_coordinate_range(srs, geo, N_PRIV_ST_ASEWKB, true))) {
-        LOG_WARN("fail to check coordinate range", K(ret));
       } else if (OB_FAIL(lob.get_inrow_data(res_wkb))) {
       } else if (res_wkb.length() < data_offset) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected wkb length", K(ret), K(res_wkb.length()));
       } else if (OB_FAIL(ObGeoTypeUtil::get_header_info_from_wkb(res_wkb, header))) {
       } else {
         // ewkb:[bo][type][srid][data]

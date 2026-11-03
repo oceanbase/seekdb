@@ -31,18 +31,14 @@ ObLogAllocator::ObLogAllocator()
   : total_limit_(INT64_MAX), pending_replay_mutator_size_(0),
     LOG_HANDLE_SUBMIT_TASK_SIZE(sizeof(palf::LogHandleSubmitTask)),
     LOG_IO_FLUSH_LOG_TASK_SIZE(sizeof(palf::LogIOFlushLogTask)),
-    LOG_IO_FLUSH_META_TASK_SIZE(sizeof(palf::LogIOFlushMetaTask)),
     LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE(sizeof(palf::LogIOTruncatePrefixBlocksTask)),
-    LOG_IO_PURGE_THROTTLING_TASK_SIZE(sizeof(palf::LogIOPurgeThrottlingTask)),
     clog_blk_alloc_(),
     replay_log_task_blk_alloc_(REPLAY_MEM_LIMIT_THRESHOLD),
     clog_ge_alloc_(ObMemAttr(ObModIds::OB_CLOG_GE), ObVSliceAlloc::DEFAULT_BLOCK_SIZE, clog_blk_alloc_),
     log_handle_submit_task_alloc_(LOG_HANDLE_SUBMIT_TASK_SIZE, ObMemAttr("HandleSubmit"), choose_blk_size(LOG_HANDLE_SUBMIT_TASK_SIZE), clog_blk_alloc_, this),
     log_io_flush_log_task_alloc_(LOG_IO_FLUSH_LOG_TASK_SIZE, ObMemAttr("FlushLog"), choose_blk_size(LOG_IO_FLUSH_LOG_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_flush_meta_task_alloc_(LOG_IO_FLUSH_META_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_FLUSH_META_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
-    replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
-    log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr("PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this)
+    log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr("TruncatePrefix"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
+    replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_)
 {
   set_nway(static_cast<int32_t>(share::server_cpu_count()));
 }
@@ -59,9 +55,7 @@ void ObLogAllocator::destroy()
   clog_ge_alloc_.destroy();
   log_handle_submit_task_alloc_.destroy();
   log_io_flush_log_task_alloc_.destroy();
-  log_io_flush_meta_task_alloc_.destroy();
   log_io_truncate_prefix_blocks_task_alloc_.destroy();
-  log_io_purge_throttling_task_alloc_.destroy();
   replay_log_task_alloc_.destroy();
 }
 
@@ -153,27 +147,6 @@ void ObLogAllocator::free_log_handle_submit_task(LogHandleSubmitTask *ptr)
   }
 }
 
-LogIOFlushMetaTask *ObLogAllocator::alloc_log_io_flush_meta_task(
-		const int64_t palf_epoch)
-{
-  LogIOFlushMetaTask *ret_ptr = NULL;
-  void *ptr = log_io_flush_meta_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOFlushMetaTask(palf_epoch);
-    ATOMIC_INC(&flying_meta_task_);
-  }
-  return ret_ptr;
-}
-
-void ObLogAllocator::free_log_io_flush_meta_task(LogIOFlushMetaTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogIOFlushMetaTask();
-    log_io_flush_meta_task_alloc_.free(ptr);
-    ATOMIC_DEC(&flying_meta_task_);
-  }
-}
-
 palf::LogIOTruncatePrefixBlocksTask *ObLogAllocator::alloc_log_io_truncate_prefix_blocks_task(
 		const int64_t palf_epoch)
 {
@@ -218,25 +191,6 @@ void ObLogAllocator::free_replay_log_buf(void *ptr)
   }
 }
 
-LogIOPurgeThrottlingTask *ObLogAllocator::alloc_log_io_purge_throttling_task(const int64_t palf_epoch)
-{
-  LogIOPurgeThrottlingTask *ret_ptr = NULL;
-  void *ptr = log_io_purge_throttling_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOPurgeThrottlingTask(palf_epoch);
-  }
-  return ret_ptr;
-}
-
-void ObLogAllocator::free_log_io_purge_throttling_task(palf::LogIOPurgeThrottlingTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogIOPurgeThrottlingTask();
-    log_io_purge_throttling_task_alloc_.free(ptr);
-  }
-}
-
-
 void ObLogAllocator::set_nway(const int32_t nway)
 {
   if (nway > 0) {
@@ -262,7 +216,6 @@ int64_t ObLogAllocator::get_limit() const
 {
   return ATOMIC_LOAD(&total_limit_);
 }
-
 
 #define SLICE_FREE_OBJ(name, cls) \
 void ob_slice_free_##name(typeof(cls) *ptr) \

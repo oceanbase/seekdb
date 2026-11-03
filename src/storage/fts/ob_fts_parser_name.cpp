@@ -30,10 +30,8 @@ int ObFTParserName::set_name(const char *name)
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(name)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("parser name is null", K(ret));
   } else if (OB_UNLIKELY(STRLEN(name) >= OB_FT_PARSER_NAME_LENGTH)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("parser name is too long", K(ret), KCSTRING(name));
   } else {
     int64_t i = 0;
     for (; '\0' != name[i]; ++i) {
@@ -49,7 +47,6 @@ int ObFTParserName::set_name(const common::ObString &name)
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(name.empty() || name.length() >= OB_FT_PARSER_NAME_LENGTH)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("parser name is invalid", K(ret), K(name));
   } else {
     common::ObString::obstr_size_t i = 0;
     for (; i < name.length() && '\0' != name[i]; ++i) {

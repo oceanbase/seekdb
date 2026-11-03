@@ -49,10 +49,8 @@ int ObLSReservedSnapshotMgr::init(ObLS *ls, ObLogHandler *log_handler)
   ObMemAttr attr("DepTabletSet");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLSReservedSnapshotMgr is inited", K(ret), KP(ls));
   } else if (OB_UNLIKELY(nullptr == ls || nullptr == log_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls), K(log_handler));
   } else if (OB_FAIL(ObIStorageClogRecorder::init(0/*max_saved_version*/, log_handler))) {
   } else if (OB_FAIL(dependent_tablet_set_.create(HASH_BUCKET, attr, attr))) {
   } else {
@@ -83,15 +81,12 @@ int ObLSReservedSnapshotMgr::add_dependent_medium_tablet(const ObTabletID tablet
   int hash_ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSReservedSnapshotMgr is not inited", K(ret), K(tablet_id));
   } else {
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (OB_HASH_EXIST == (hash_ret = dependent_tablet_set_.exist_refactored(tablet_id.id()))) {
       ret = OB_ENTRY_EXIST; // tablet exist
     } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != hash_ret)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to check exist in tablet set", K(ret), K(hash_ret),
-          K(tablet_id));
     } else if (OB_FAIL(dependent_tablet_set_.set_refactored(tablet_id.id()))) {
     }
   }
@@ -104,7 +99,6 @@ int ObLSReservedSnapshotMgr::del_dependent_medium_tablet(const ObTabletID tablet
   int64_t new_snapshot_version = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSReservedSnapshotMgr is not inited", K(ret), K(tablet_id));
   } else {
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (OB_FAIL(dependent_tablet_set_.erase_refactored(tablet_id.id()))) {
@@ -155,12 +149,10 @@ int ObLSReservedSnapshotMgr::update_min_reserved_snapshot(const int64_t new_snap
   bool send_log_flag = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSReservedSnapshotMgr is not inited", K(ret), KP(ls_));
   } else {
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (new_snapshot_version < min_reserved_snapshot_) {
       ret = OB_SNAPSHOT_DISCARDED;
-      LOG_WARN("failed to update min reserved snapshot", K(ret),         K(new_snapshot_version), K(min_reserved_snapshot_));
     } else if (0 == dependent_tablet_set_.size()) { // no dependent tablet, can push snapshot forward
       if (new_snapshot_version > min_reserved_snapshot_) {
         // update min_reserved_snapshot and send clog
@@ -190,14 +182,11 @@ int ObLSReservedSnapshotMgr::try_sync_reserved_snapshot(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSReservedSnapshotMgr not inited", K(ret), KP(ls_));
   } else if (OB_UNLIKELY(new_reserved_snapshot < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(new_reserved_snapshot));
   } else if (update_flag) {
     if (OB_FAIL(update_min_reserved_snapshot(new_reserved_snapshot))) {
       if (OB_SNAPSHOT_DISCARDED != ret) {
-        LOG_WARN("failed to update min_reserved_snapshot", K(ret), K(new_reserved_snapshot));
       }
     }
   } else if (OB_FAIL(sync_clog(new_reserved_snapshot))) {
@@ -223,7 +212,6 @@ int ObLSReservedSnapshotMgr::replay_reserved_snapshot_log(
   int64_t reserved_snapshot = OB_INVALID_VERSION;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSReservedSnapshotMgr not inited", K(ret), KP(ls_));
   } else if (OB_FAIL(serialization::decode_i64(buf, size, pos, &reserved_snapshot))) {
   } else if (OB_FAIL(ObIStorageClogRecorder::replay_clog(reserved_snapshot, scn, buf, size, pos))) {
   }
@@ -258,7 +246,6 @@ int ObLSReservedSnapshotMgr::inner_update_reserved_snapshot(const int64_t reserv
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(reserved_snapshot < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(reserved_snapshot));
   } else {
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (reserved_snapshot > min_reserved_snapshot_) {

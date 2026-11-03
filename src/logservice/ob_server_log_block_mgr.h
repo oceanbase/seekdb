@@ -26,6 +26,8 @@
 #include "lib/lock/ob_tc_rwlock.h"          // ObTCRWLock
 #include "lib/lock/ob_spin_lock.h"          // ObSpinLock
 #include "share/log/palf/log_define.h"      // block_id_t
+#include "share/startup_result.h"
+#include "share/local_io_config.h"
 #include "palf/log_block_pool_interface.h"  // ObIServerLogBlockPool
 #include "palf/log_io_utils.h"              // ObBaseDirFunctor
 
@@ -71,7 +73,7 @@ public:
   typedef int (*GetLogDiskInfoInConfig)(int64_t &log_disk_size,
                                         int64_t &log_disk_percentage,
                                         int64_t &total_log_disk_size);
-  ObServerLogBlockMgr();
+  explicit ObServerLogBlockMgr(share::StartupResult &startup_result);
   ~ObServerLogBlockMgr();
   // @brief initialize ObServerLogBlockMgr, reload myself if has reserved.
   // @param[in] the path of log disk(ie: like **/store/clog), and make sure this path has existed.
@@ -79,7 +81,8 @@ public:
   //   OB_SUCCESS
   //   OB_IO_ERROR
   int init(const char *log_disk_base_path,
-           GetLogDiskInfoInConfig get_log_disk_info_in_config);
+           GetLogDiskInfoInConfig get_log_disk_info_in_config,
+           const share::LocalIOConfig &io_config);
   void bind_log_service(ObLogService &log_service)
   {
     log_service_ = &log_service;
@@ -91,6 +94,7 @@ public:
     }
   }
   int start(const int64_t log_disk_size);
+  void stop() { stopped_.store(true); }
   void destroy();
   int get_disk_usage(int64_t &in_use_size_byte);
   int64_t get_log_disk_size();
@@ -142,6 +146,9 @@ private:
   int scan_runtime_dir_(const char *runtime_dir, int64_t &has_allocated_block_cnt);
   int scan_ls_dir_(const char *ls_dir, int64_t &has_allocated_block_cnt);
 private:
+  share::StartupResult &startup_result_;
+  share::LocalIOConfig io_config_;
+  std::atomic<bool> stopped_{false};
   GetLogDiskInfoInConfig get_log_disk_info_in_config_func_;
   ObLogService *log_service_;
   // NB: in progress of expanding, the free size byte calcuated by BLOCK_SIZE * (max_block_id_ - min_block_id_) may be greater than

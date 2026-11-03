@@ -37,17 +37,12 @@ ObFileSystemRouter & ObFileSystemRouter::get_instance()
 ObFileSystemRouter::ObFileSystemRouter()
 {
   data_dir_[0] = '\0';
-  slog_dir_[0] = '\0';
   clog_dir_[0] = '\0';
   sstable_dir_[0] = '\0';
 
   clog_file_spec_.retry_write_policy_ = "normal";
   clog_file_spec_.log_create_policy_ = "normal";
   clog_file_spec_.log_write_policy_ = "truncate";
-
-  slog_file_spec_.retry_write_policy_ = "normal";
-  slog_file_spec_.log_create_policy_ = "normal";
-  slog_file_spec_.log_write_policy_ = "truncate";
 
   svr_seq_ = 0;
   is_inited_ = false;
@@ -56,17 +51,12 @@ ObFileSystemRouter::ObFileSystemRouter()
 void ObFileSystemRouter::reset()
 {
   data_dir_[0] = '\0';
-  slog_dir_[0] = '\0';
   clog_dir_[0] = '\0';
   sstable_dir_[0] = '\0';
 
   clog_file_spec_.retry_write_policy_ = "normal";
   clog_file_spec_.log_create_policy_ = "normal";
   clog_file_spec_.log_write_policy_ = "truncate";
-
-  slog_file_spec_.retry_write_policy_ = "normal";
-  slog_file_spec_.log_create_policy_ = "normal";
-  slog_file_spec_.log_write_policy_ = "truncate";
 
   svr_seq_ = 0;
   is_inited_ = false;
@@ -78,19 +68,13 @@ int ObFileSystemRouter::init(const char *data_dir, const char *redo_dir)
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(data_dir)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(init_local_dirs(data_dir, redo_dir))) {
   } else {
     clog_file_spec_.retry_write_policy_ = "normal";
     clog_file_spec_.log_create_policy_ = "normal";
     clog_file_spec_.log_write_policy_ = "truncate";
-
-    slog_file_spec_.retry_write_policy_ = "normal";
-    slog_file_spec_.log_create_policy_ = "normal";
-    slog_file_spec_.log_write_policy_ = "truncate";
 
     is_inited_ = true;
   }
@@ -145,17 +129,6 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   }
 
   if (OB_SUCC(ret)) {
-    pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/slog", data_dir_);
-    if (pret < 0 || pret >= MAX_PATH_SIZE) {
-      ret = OB_BUF_NOT_ENOUGH;
-      LOG_ERROR("construct slog path fail", K(ret));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_))) {
-    }
-  }
-
-  if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_dir.assign(redo_dir))) {
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
     } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
@@ -187,7 +160,7 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
 
   if (OB_SUCC(ret)) {
     LOG_INFO("succeed to construct local dir",
-      KCSTRING(data_dir_), KCSTRING(slog_dir_), KCSTRING(clog_dir_), KCSTRING(sstable_dir_));
+      KCSTRING(data_dir_), KCSTRING(clog_dir_), KCSTRING(sstable_dir_));
   }
 
   return ret;

@@ -50,7 +50,6 @@ int ObIDASTaskOp::start_das_task()
   } else {
     task_started_ = true;
     if (OB_FAIL(open_op())) {
-      LOG_WARN("open das task op failed", K(ret));
       if (OB_ERR_DEFENSIVE_CHECK == ret) {
         //dump das task data to help analysis defensive bug
         dump_data();
@@ -163,10 +162,8 @@ int ObDASSnapshotOptInfo::init(transaction::ObTxIsolationLevel isolation_level)
   int64_t mem_size = sizeof(transaction::ObTxReadSnapshot);
   if (OB_ISNULL(buf = alloc_.alloc(mem_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for ObTxReadSnapshot", K(ret), K(mem_size));
   } else if (OB_ISNULL(buf2 = alloc_.alloc(mem_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for ObTxReadSnapshot", K(ret), K(mem_size));
   } else {
     use_specify_snapshot_ = true;
     isolation_level_ = isolation_level;
@@ -189,7 +186,6 @@ int ObIDASTaskOp::state_advance()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid task state",KR(ret), K_(task_status));
   }
   return ret;
 }
@@ -201,7 +197,6 @@ int DASOpResultIter::get_next_row()
     ObDASScanOp *scan_op = DAS_SCAN_OP(*task_iter_);
     if (OB_ISNULL(scan_op)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected das task op type", K(ret), KPC(*task_iter_));
     } else {
       ret = scan_op->get_output_result_iter()->get_next_row();
     }
@@ -220,30 +215,6 @@ int DASOpResultIter::next_result()
   }
   if (OB_UNLIKELY(task_iter_.is_end())) {
     ret = OB_ITER_END;
-  }
-  return ret;
-}
-
-int DASOpResultIter::reset_wild_datums_ptr()
-{
-  int ret = OB_SUCCESS;
-  if (wild_datum_info_ != nullptr) {
-    if (wild_datum_info_->exprs_ != nullptr &&
-        wild_datum_info_->max_output_rows_ > 0) {
-      FOREACH_CNT(e, *wild_datum_info_->exprs_) {
-        (*e)->locate_datums_for_update(wild_datum_info_->eval_ctx_,
-                                       wild_datum_info_->max_output_rows_);
-        ObEvalInfo &info = (*e)->get_eval_info(wild_datum_info_->eval_ctx_);
-        info.point_to_frame_ = true;
-      }
-      wild_datum_info_->exprs_ = nullptr;
-      wild_datum_info_->max_output_rows_ = 0;
-    }
-    // A global index scan and its lookup can share expressions. Associate the
-    // two iterators so resetting either side also restores the shared datums.
-    if (wild_datum_info_->lookup_iter_ != nullptr) {
-      wild_datum_info_->lookup_iter_->reset_wild_datums_ptr();
-    }
   }
   return ret;
 }

@@ -223,8 +223,6 @@ int ObSharedNothingTmpFileMetaTree::insert_items(
         //cascade to modify the internal pages
         if (FAILEDx(cascade_modification_at_internal_(meta_items,
                                   level_origin_page_write_counts, level_new_pages))) {
-          STORAGE_LOG(WARN, "fail to cascade modification at internal", KR(ret), K(meta_items),
-                                        K(level_origin_page_write_counts), K(level_new_pages), KPC(this));
         }
       }
       if (FAILEDx(level_page_range_array_.reserve(level_new_pages.count()))) {
@@ -435,7 +433,6 @@ int ObSharedNothingTmpFileMetaTree::add_new_page_and_fill_items_at_leaf_(
     }
   }
   if (FAILEDx(level_new_pages.at(0).push_back(ObTmpFileGlobal::INVALID_PAGE_ID))) {
-    STORAGE_LOG(WARN, "fail to push back", KR(ret), K(fd_));
   } else if (OB_FAIL(wbp_->alloc_page(fd_, leaf_page_offset, new_page_id, new_page_buff))) {
   } else if (FALSE_IT(stat_info_.meta_page_alloc_cnt_++)) {
   } else if (OB_FAIL(init_page_header_(new_page_buff, 0 /*level*/))) {
@@ -619,7 +616,6 @@ int ObSharedNothingTmpFileMetaTree::add_new_page_and_fill_items_at_internal_(
     }
   }
   if (FAILEDx(level_new_pages.at(page_level).push_back(ObTmpFileGlobal::INVALID_PAGE_ID))) {
-    STORAGE_LOG(WARN, "fail to push back", KR(ret), K(fd_), K(page_level));
   } else if (OB_FAIL(wbp_->alloc_page(fd_, internal_page_offset, new_page_id, new_page_buff))) {
   } else if (FALSE_IT(stat_info_.meta_page_alloc_cnt_++)) {
   } else if (OB_FAIL(init_page_header_(new_page_buff, page_level))) {
@@ -1698,7 +1694,6 @@ int ObSharedNothingTmpFileMetaTree::finish_write_tail(
       } else if (OB_FAIL(rewrite_item_(leaf_page_buff, page_header.item_num_ - 1, data_item))) {
       }
       if (FAILEDx(wbp_->notify_dirty(fd_, page_id, page_key))) {
-        STORAGE_LOG(ERROR, "fail to notify dirty for meta", KR(ret), K(fd_), K(page_id), K(page_key));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2260,7 +2255,6 @@ int ObSharedNothingTmpFileMetaTree::calculate_truncate_index_path_(
         }
       }
       if (FAILEDx(item_index_arr.push_back(std::make_pair(child_level_page_index, item_index)))) {
-        STORAGE_LOG(WARN, "fail to push back", KR(ret), K(fd_), K(child_level_page_index), K(item_index));
       }
     }
   }
@@ -2613,7 +2607,6 @@ int ObSharedNothingTmpFileMetaTree::get_page_(
         }
       }
       if (FAILEDx(check_page_(page_buff))) {
-        STORAGE_LOG(ERROR, "the page is invalid or corrupted", KR(ret), K(fd_), KP(page_buff));
       }
       STORAGE_LOG(INFO, "load page from disk", KR(ret), K(fd_), K(need_load_from_disk), K(page_info), K(level_page_index));
     } else {
@@ -2699,7 +2692,6 @@ int ObSharedNothingTmpFileMetaTree::cache_page_for_write_(
           }
         }
         if (FAILEDx(check_page_(new_page_buff))) {
-          STORAGE_LOG(ERROR, "the page is invalid or corrupted", KR(ret), K(fd_), KP(new_page_buff));
         }
         if (OB_SUCC(ret)) {
           //change page state to cached

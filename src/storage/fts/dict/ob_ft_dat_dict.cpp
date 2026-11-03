@@ -37,7 +37,6 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Builder has already inited", K(ret));
   } else {
     size_t map_size = ObArrayHashMap::estimate_size(trie.node_num());
     size_t array_size = trie.node_num() * 6; // by experience.
@@ -47,7 +46,6 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
 
     if (OB_ISNULL(dat_ = static_cast<ObFTDAT *>(alloc_.alloc(total_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc dat mem block", K(ret));
     } else {
       memset(dat_, 0, total_size);
       dat_->mem_block_size_ = total_size;
@@ -70,7 +68,6 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(dat_) || OB_ISNULL(dat_->buff)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dat_ is null", K(ret));
   } else {
     int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
     int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
@@ -264,7 +261,6 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
   ObFTSingleWord word;
   word.set_word(ft_char.ptr(), ft_char.length());
   if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
-    LOG_WARN("fail to find word code", K(ret));
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     hit.set_unmatch();

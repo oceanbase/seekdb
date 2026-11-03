@@ -43,13 +43,10 @@ int ObEncodingHashTable::create(const int64_t bucket_num, const int64_t node_num
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_created_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already created", K(ret));
   } else if (OB_UNLIKELY(0 >= bucket_num || 0 >= node_num)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(bucket_num), K(node_num));
   } else if (0 != (bucket_num  & (bucket_num - 1))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("bucket number must be power of 2", K(ret), K(bucket_num));
   } else {
     bucket_num_ = bucket_num;
     // if node_num only increase little, can still reuse hashtable
@@ -64,19 +61,14 @@ int ObEncodingHashTable::create(const int64_t bucket_num, const int64_t node_num
 
     if (OB_ISNULL(buckets_ = reinterpret_cast<HashBucket *>(alloc_.alloc(bucket_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for bucket", K(ret), K(bucket_size));
     } else if (OB_ISNULL(lists_ = reinterpret_cast<NodeList *>(alloc_.alloc(lists_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for lists", K(ret), K(lists_size));
     } else if (OB_ISNULL(nodes_ = reinterpret_cast<HashNode *>(alloc_.alloc(nodes_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for nodes", K(ret), K(nodes_size));
     } else if (OB_ISNULL(skip_bit_ = sql::to_bit_vector((char *)alloc_.alloc(vec_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for skip bit", K(ret), K(vec_size));
     } else if (OB_ISNULL(hash_val_ = reinterpret_cast<uint64_t *>(alloc_.alloc(node_num_ * sizeof(uint64_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for hash val", K(ret), K_(node_num));
     } else {
       MEMSET(buckets_, 0, bucket_size);
       MEMSET(lists_, 0, lists_size);
@@ -265,7 +257,6 @@ int ObEncodingHashTableBuilder::equal(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(lhs.is_ext() || rhs.is_ext())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected ext datum in encoding hash table", K(ret), K(lhs), K(rhs));
   } else {
     is_equal = ObDatum::binary_equal(lhs, rhs);
   }
@@ -309,16 +300,13 @@ int ObEncodingHashTableFactory::create(const int64_t bucket_num, const int64_t n
   hashtable = NULL;
   if (bucket_num <= 0 || node_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(bucket_num), K(node_num));
   } else if (hashtables_.count() > 0) {
     // we assume most time hashtables cached with same size, so only check one hashtable
     ObEncodingHashTable *cache_hashtable = hashtables_[hashtables_.count() - 1];
     if (NULL == cache_hashtable) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cache_hashtable is null", K(ret));
     } else if (!cache_hashtable->created()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("all hashtable assume already created", K(ret));
     } else if (cache_hashtable->get_bucket_num() >= bucket_num
         && cache_hashtable->get_node_num() >= node_num) {
       cache_hashtable->reuse();
@@ -333,9 +321,7 @@ int ObEncodingHashTableFactory::create(const int64_t bucket_num, const int64_t n
   if (OB_SUCC(ret) && NULL == hashtable) {
     if (NULL == (hashtable = allocator_.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret));
     } else if (OB_FAIL(hashtable->create(bucket_num, node_num))) {
-      LOG_WARN("hashtable create failed", K(ret), K(bucket_num), K(node_num));
       // free it directly
       allocator_.free(hashtable);
     }
@@ -348,15 +334,12 @@ int ObEncodingHashTableFactory::recycle(const bool force_cache, ObEncodingHashTa
   int ret = OB_SUCCESS;
   if (NULL == hashtable) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(hashtable), K(ret));
   } else if (!hashtable->created()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("hashtable not created", K(ret));
   } else if (!force_cache && hashtable->get_node_cnt() >= MAX_CACHED_HASHTABLE_SIZE) {
     allocator_.free(hashtable);
   } else {
     if (OB_FAIL(hashtables_.push_back(hashtable))) {
-      LOG_WARN("push_back failed", K(ret));
       // free it
       allocator_.free(hashtable);
     }
@@ -380,7 +363,6 @@ int build_column_encoding_ctx(ObEncodingHashTable *ht,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ht)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ht is null", K(ret));
   } else {
     col_ctx.null_cnt_ = ht->get_null_list().size_;
     col_ctx.nope_cnt_ = ht->get_nope_list().size_;
@@ -443,7 +425,6 @@ int build_column_encoding_ctx(ObEncodingHashTable *ht,
         }
         if (OB_UNLIKELY(ObDecimalIntSC == store_class && var_store)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("var store for store class invalid", K(ret), K(store_class), K(var_store), K(col_ctx));
         }
         break;
       }
@@ -469,7 +450,6 @@ int build_column_encoding_ctx(ObEncodingHashTable *ht,
 
       default:
         ret = OB_INNER_STAT_ERROR;
-        LOG_WARN("not supported store class", K(ret), K(store_class));
     }
   }
   return ret;

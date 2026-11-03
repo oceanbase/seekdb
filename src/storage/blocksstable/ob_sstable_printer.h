@@ -21,7 +21,7 @@
 #include "ob_block_sstable_struct.h"
 #include "ob_macro_block_common_header.h"
 #include "index_block/ob_agg_row_struct.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
+#include "storage/blockstore/ob_linked_macro_block_struct.h"
 
 #define NONE_COLOR "\033[m"
 #define RED "\033[0;32;31m"

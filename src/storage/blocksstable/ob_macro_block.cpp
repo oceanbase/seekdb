@@ -362,7 +362,6 @@ void ObMacroBlock::print_flush_log(const ObStorageObjectHandle &macro_handle) co
   int ret = OB_SUCCESS;
   const MacroBlockId macro_id = macro_handle.get_macro_id();
   // ATTENTION! Critical diagnostic log, DO NOT CHANGE!!!
-  share::ObTaskController::get().allow_next_syslog();
   STORAGE_LOG(INFO, "macro block writer succeed to flush macro block.", K(ret),
               "block_id", macro_id, K(common_header_), K(macro_header_),
               K_(contain_uncommitted_row), K_(max_merged_trans_version), KP(&macro_handle));

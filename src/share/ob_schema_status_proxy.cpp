@@ -66,7 +66,6 @@ int ObSchemaStatusProxy::init()
   
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     common::SpinWLockGuard guard(schema_status_cache_lock_);
     schema_status_cache_ = schema_status;
@@ -129,7 +128,6 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
             ret = OB_SUCCESS;
             break;
           } else {
-            LOG_WARN("fail to next", K(ret));
           }
         } else if (OB_FAIL(core_table.get_uint(ROW_ID_CNAME, row_id))) {
         } else if (OB_FAIL(core_table.get_int(SNAPSHOT_TIMESTAMP_CNAME, snapshot_timestamp))) {
@@ -165,20 +163,17 @@ int ObSchemaStatusProxy::set_runtime_schema_status(
   } else if (OB_UNLIKELY(OB_INVALID_TIMESTAMP != refresh_schema_status.snapshot_timestamp_
                          && 0 != refresh_schema_status.snapshot_timestamp_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("snapshot timestamp must invalid or zero", KR(ret), K(refresh_schema_status));
   } else if (OB_FAIL(trans.start(&sql_proxy_))) {
   } else {
     ObCoreTableProxy kv(OB_ALL_SCHEMA_STATUS_TNAME, trans);
     if (OB_FAIL(dml.add_pk_column(ROW_ID_CNAME, static_cast<uint64_t>(1)))
         || OB_FAIL(dml.add_column(SNAPSHOT_TIMESTAMP_CNAME, refresh_schema_status.snapshot_timestamp_))
         || OB_FAIL(dml.add_column(READABLE_SCHEMA_VERSION_CNAME, refresh_schema_status.readable_schema_version_))) {
-      LOG_WARN("fail to add column", KR(ret), K(refresh_schema_status));
     } else if (OB_FAIL(kv.load_for_update())) {
     } else if (OB_FAIL(dml.splice_core_cells(kv, cells))) {
     } else if (OB_FAIL(kv.replace_row(cells, affected_rows))) {
     } else if (affected_rows > 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should update/insert 0 or 1 row", K(ret), K(affected_rows));
     }
   }
   if (trans.is_started()) {

@@ -104,7 +104,6 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
 
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator,
       0, j_base, is_null))) {
   }
@@ -135,14 +134,12 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
         ObIJsonBase *j_val = NULL;
         if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
           ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-          LOG_WARN("failed: get_json_val.", K(ret), K(i));
         } else {
           // if added position's father is not array(is scaler or object), need pack into array
           // 1. create a new array.
           void *buf = NULL;
           if (OB_ISNULL(buf = temp_allocator.alloc(sizeof(ObJsonArray)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc a new json array", K(ret));
           } else {
             ObIJsonBase *jb_pos_node = hit[0];
             ObJsonNode *j_pos_node = static_cast<ObJsonNode *>(jb_pos_node);
@@ -156,7 +153,6 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
               void *buf = NULL;
               if (OB_ISNULL(buf = temp_allocator.alloc(sizeof(ObJsonArray)))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_WARN("fail to alloc a new json array", K(ret));
               } else {
                 ObJsonArray *j_new_arr = new (buf) ObJsonArray(&temp_allocator);
                 ObIJsonBase *jb_new_arr = j_new_arr;

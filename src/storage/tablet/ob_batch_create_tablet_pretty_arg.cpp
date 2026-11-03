@@ -43,7 +43,7 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
     J_OBJ_START();
     for (int64_t i = 0; i < arg_.tablets_.count(); ++i) {
       const obcall::ObCreateTabletInfo &info = arg_.tablets_.at(i);
-      ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+      const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
       BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
       BUF_PRINTO(PC(trace_id));

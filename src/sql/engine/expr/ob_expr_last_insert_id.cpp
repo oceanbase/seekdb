@@ -75,7 +75,6 @@ int ObExprLastInsertID::eval_last_insert_id(
   ObDatum *arg = NULL;
   if (NULL == plan_ctx || NULL == session) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan context or session is NULL", K(ret), K(plan_ctx), K(session));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else {
     if (0 == expr.arg_cnt_) {

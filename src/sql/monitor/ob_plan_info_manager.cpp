@@ -17,6 +17,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_plan_info_manager.h"
+#include "lib/compress/ob_compressor_pool.h"
 namespace oceanbase
 {
 namespace sql
@@ -189,7 +190,6 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
   for (int64_t i = 0; OB_SUCC(ret) && i < plan_items.count(); ++i) {
     if (OB_ISNULL(plan_items.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     } else {
       total_size += sizeof(ObSqlPlanItem) + plan_items.at(i)->get_extra_size();
     }
@@ -200,7 +200,6 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
   } else if (NULL == (buf = (char*)allocator.alloc(total_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     if (REACH_TIME_INTERVAL(100 * 1000)) {
-      LOG_WARN("alloc mem failed", K(total_size), K(ret));
     }
   } else {
     //init operator count
@@ -214,7 +213,6 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
     ObSqlPlanItem* plan_item = plan_items.at(i);
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null plan item", K(ret));
     } else {
       //init operator map info
       ObLogicalPlanHead::PlanItemPos *plan_item_pos = head->plan_item_pos_ + i;
@@ -274,11 +272,9 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
                                                                              compressor))) {
   } else if (OB_ISNULL(compressor)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null compressor", K(ret));
   } else if (NULL == (compress_buf = (char*)allocator.alloc(compress_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     if (REACH_TIME_INTERVAL(100 * 1000)) {
-      LOG_WARN("alloc mem failed", K(compress_size), K(ret));
     }
   } else if (OB_FAIL(compressor->compress(buf, 
                                           total_size,
@@ -320,7 +316,6 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
     if (NULL == (uncompress_buf = (char*)allocator.alloc(uncompress_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       if (REACH_TIME_INTERVAL(100 * 1000)) {
-        LOG_WARN("alloc mem failed", K(uncompress_size), K(ret));
       }
     } else {
       MEMCPY(uncompress_buf, logical_plan_, uncompress_size);
@@ -329,11 +324,9 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
                                                                              compressor))) {
   } else if (OB_ISNULL(compressor)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null compressor", K(ret));
   } else if (NULL == (uncompress_buf = (char*)allocator.alloc(uncompress_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     if (REACH_TIME_INTERVAL(100 * 1000)) {
-      LOG_WARN("alloc mem failed", K(uncompress_size), K(ret));
     }
   } else if (OB_FAIL(compressor->decompress(logical_plan_, 
                                             logical_plan_len_,
@@ -357,7 +350,6 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
       if (plan_item_pos->offset_ < 0 || 
           plan_item_pos->offset_ + plan_item_pos->length_ > uncompress_size) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("broken compressed data", K(ret));
       } else {
         ObSqlPlanItem *plan_item = reinterpret_cast<ObSqlPlanItem*>(
                                     uncompress_buf+plan_item_pos->offset_);
@@ -397,7 +389,6 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
         CONVERT_OFFSET_TO_PTR(other_xml_);
         if (OB_SUCC(ret) && 
             OB_FAIL(plan_items.push_back(plan_item))) {
-          LOG_WARN("failed to push back plan item", K(ret));
         }
       }
     }

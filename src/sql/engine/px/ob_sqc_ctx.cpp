@@ -36,12 +36,8 @@ ObSqcCtx::ObSqcCtx(ObPxInitSqcArgs &sqc_arg) : msg_loop_(),
       all_tasks_finish_(false),
       interrupted_(false),
       opt_stats_gather_whole_msg_proc_(msg_proc_),
-      join_filter_count_row_whole_msg_proc_(msg_proc_),
-      arena_allocator_(),
-      direct_load_mgr_handles_(nullptr),
-      lob_direct_load_mgr_handles_(nullptr)
+      join_filter_count_row_whole_msg_proc_(msg_proc_)
 {
-  arena_allocator_.set_attr(ObMemAttr("DDL_DLM"));
 }
 
 int ObSqcCtx::add_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider &provider)
@@ -60,7 +56,6 @@ int ObSqcCtx::get_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type,
   for (int i = 0; OB_SUCC(ret) && i < whole_msg_provider_list_.count(); ++i) {
     if (OB_ISNULL(whole_msg_provider_list_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should never be nullptr, unexpected", K(ret));
     } else if (op_id == whole_msg_provider_list_.at(i)->op_id_
                && msg_type == whole_msg_provider_list_.at(i)->msg_type_) {
       provider = whole_msg_provider_list_.at(i);
@@ -70,7 +65,6 @@ int ObSqcCtx::get_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type,
   // Expected to traverse operators and register providers when sqc starts
   if (nullptr == provider) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should have a whole msg provider for op", K(op_id), K(ret), K(msg_type));
   }
   return ret;
 }
@@ -87,7 +81,6 @@ int ObSqcCtx::get_init_channel_msg_cnt(uint64_t op_id, int64_t *&curr_piece_cnt)
   }
   if (nullptr == curr_piece_cnt) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should have a init channel msg cnt for op", K(ret), K(op_id));
   }
   return ret;
 }

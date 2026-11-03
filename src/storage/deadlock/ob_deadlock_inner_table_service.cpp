@@ -30,10 +30,10 @@ share::ObDeadlockEventHistoryTableStorage ObDeadLockInnerTableService::storage_;
 int ObDeadLockInnerTableService::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.meta_db_pool_)) {
+  if (OB_ISNULL(GCTX.local_store_)) {
     ret = OB_NOT_INIT;
-    DETECT_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
-  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    DETECT_LOG(WARN, "local_store_ is not initialized", K(ret));
+  } else if (OB_FAIL(storage_.init(GCTX.local_store_))) {
   }
   return ret;
 }

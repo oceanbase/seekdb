@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_database_sql_service.h"
+#include <inttypes.h>
 
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log.h"
@@ -49,7 +50,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
   
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database schema is invalid", K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;
@@ -62,7 +62,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
           || OB_FAIL(dml.add_column("read_only", database_schema.is_read_only()))
           || OB_FAIL(dml.add_column("in_recyclebin", database_schema.is_in_recyclebin()))
           || OB_FAIL(dml.add_gmt_modified())) {
-        LOG_WARN("add column failed", K(ret));
       }
     }
     ObDMLExecHelper exec(sql_client);
@@ -73,7 +72,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
     }
 
     // insert into __all_database_history
@@ -81,11 +79,9 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dml.add_pk_column("schema_version", database_schema.get_schema_version()))
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-      LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_HISTORY_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
     }
 
     // log operations
@@ -115,7 +111,6 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
   
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database scheam is invalid", K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;
@@ -127,17 +122,14 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
           || OB_FAIL(dml.add_column("read_only", database_schema.is_read_only()))
           || OB_FAIL(dml.add_column("in_recyclebin", database_schema.is_in_recyclebin()))
           || OB_FAIL(dml.add_gmt_modified())) {
-        LOG_WARN("add column failed", K(ret));
       }
     }
     ObDMLExecHelper exec(sql_client);
 
     // insert into __all_database
     if (FAILEDx(exec.exec_update(OB_ALL_DATABASE_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute insert failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
     }
 
     // insert into __all_database_history
@@ -146,15 +138,12 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
       if (OB_FAIL(dml.add_pk_column(OBJ_GET_K(database_schema, schema_version)))
           || OB_FAIL(dml.add_column("is_deleted", is_deleted))
           || OB_FAIL(dml.add_column("comment", database_schema.get_comment()))) {
-        LOG_WARN("add column failed", K(ret));
       }
     }
 
     if (FAILEDx(exec.exec_replace(OB_ALL_DATABASE_HISTORY_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute insert failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
     }
 
     // log operations
@@ -187,24 +176,22 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   
 
   // delete from __all_database
-  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %lu",
+  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %" PRIu64,
                             OB_ALL_DATABASE_TNAME,
                             ObSchemaUtils::get_extract_schema_id(database_id)))) {
   } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
   } else {
     // mark delete in __all_database_history
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(database_id, schema_version, is_deleted) "
-                               "VALUES(%lu, %ld, %ld)",
+                               "VALUES(%" PRIu64 ", %" PRId64 ", %" PRId64 ")",
                                OB_ALL_DATABASE_HISTORY_TNAME,
                                ObSchemaUtils::get_extract_schema_id(database_id),
                                new_schema_version, IS_DELETED))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
     }
   }
 

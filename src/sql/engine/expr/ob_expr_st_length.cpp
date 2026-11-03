@@ -75,9 +75,7 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     // bugfix 53283098, should allow double type in calc_result_type2
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_CROSSES);
-    LOG_WARN("invalid type", K(ret), K(type1));
   } else if (expr.arg_cnt_ == 2 && OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, gis_unit))) {
-    LOG_WARN("eval geo unit arg failed", K(ret));
   } else if (expr.arg_cnt_ == 2 && gis_unit->is_null()) {
     is_null_res = true;
   } else {
@@ -100,13 +98,11 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       // cal length
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       if (OB_FAIL(gis_context.append_geo_arg(geo))) {
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Length>::geo_func::eval(gis_context, res_num))) {
-        LOG_WARN("eval st distance failed", K(ret));
         if (OB_ERR_GIS_INVALID_DATA == ret) {
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_LENGTH);
         } else {
@@ -114,15 +110,17 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         }
       } else if (std::isinf(res_num)) {
         ret = OB_OPERATE_OVERFLOW;
-        LOG_WARN("Length value is out of range in st_length", K(ret));
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Length", N_ST_LENGTH);
       } else if (expr.arg_cnt_ == 2) {
         // transfer to unit
-        if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(
-                       gis_unit->get_string(), srs, res_num, res_num))) {
+        ObString unit_str;
+        const ObExpr *unit_arg = expr.args_[1];
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+                ctx.exec_ctx_, temp_allocator, *gis_unit, unit_arg->datum_meta_,
+                unit_arg->obj_meta_.has_lob_header(), unit_str))) {
+        } else if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(unit_str, srs, res_num, res_num))) {
         } else if (std::isinf(res_num)) {
           ret = OB_OPERATE_OVERFLOW;
-          LOG_WARN("Length value is out of range in st_length", K(ret));
           LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Length", N_ST_LENGTH);
         } 
       }

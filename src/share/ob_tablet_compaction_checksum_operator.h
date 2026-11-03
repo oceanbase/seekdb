@@ -28,13 +28,6 @@
 #include "share/scn.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 
-// Forward declaration
-namespace oceanbase {
-namespace share {
-class ObSQLiteConnection;
-class ObTabletReplicaChecksumTableStorage;
-}
-}
 #include "share/compaction/ob_tablet_check_info.h"
 #include "share/compaction/ob_array_with_map.h"
 
@@ -130,101 +123,6 @@ public:
   ObDataChecksumType data_checksum_type_;
 };
 typedef ObArrayWithMap<share::ObTabletReplicaChecksumItem> ObReplicaCkmArray;
-
-// Operator for __all_tablet_replica_checksum
-class ObTabletReplicaChecksumOperator
-{
-public:
-  // Initialize SQLite storage (called once at startup)
-  static int init(ObSQLiteConnectionPool &meta_db_pool,
-                  const common::ObAddr &self_addr);
-
-  // Get a batch of checksum_items
-  // Default: checksum_items' compaction_scn = @compaction_scn
-  // If include_larger_than = true: checksum_items' compaction_scn >= @compaction_scn
-  static int batch_get(
-      const common::ObIArray<common::ObTabletID> &tablet_ids,
-      const SCN &compaction_scn,
-      common::ObISQLClient &sql_proxy,
-      ObReplicaCkmArray &items,
-      const bool include_larger_than,
-      const int32_t group_id);
-  // Update checksum items within a SQLite transaction
-  static int batch_update_with_trans(
-      share::ObSQLiteConnection *conn,
-      const common::ObIArray<ObTabletReplicaChecksumItem> &item);
-  // Remove checksum items within a SQLite transaction
-  static int batch_remove_with_trans(
-      share::ObSQLiteConnection *conn,
-      const common::ObIArray<ObTabletReplica> &tablet_meta_rows);
-  static int remove_residual_checksum(
-      common::ObISQLClient &sql_client,
-      const ObAddr &server,
-      const int64_t limit,
-      int64_t &affected_rows);
-  static int get_tablets_replica_checksum(const ObIArray<compaction::ObTabletCheckInfo> &tablet_check_infos,
-      ObReplicaCkmArray &tablet_replica_checksum_items);
-  static int get_visible_column_meta(
-      const ObTabletReplicaReportColumnMeta &column_meta,
-      common::ObIAllocator &allocator,
-      common::ObString &column_meta_visible_str);
-  static int range_get(const common::ObTabletID &start_tablet_id,
-      const int64_t range_size,
-      const int32_t group_id,
-      common::ObISQLClient &sql_proxy,
-      ObIArray<ObTabletReplicaChecksumItem> &items,
-      int64_t &tablet_cnt);
-  static int range_get(const common::ObTabletID &start_tablet_id,
-      const common::ObTabletID &end_tablet_id,
-      const int64_t compaction_scn,
-      common::ObISQLClient &sql_proxy,
-      ObIArray<ObTabletReplicaChecksumItem> &items);
-  static int multi_get(
-    const ObIArray<ObTabletID> &tablet_id_list,
-    const int64_t compaction_scn,
-    common::ObISQLClient &sql_proxy,
-    ObIArray<ObTabletReplicaChecksumItem> &items);
-  static int get_min_compaction_scn(SCN &min_compaction_scn);
-
-private:
-  // range_get_ removed - no longer used
-  // inner_batch_insert_or_update_by_sql_ removed - no longer used
-  // inner_batch_get_by_sql_ removed - no longer used, replaced by SQLite storage
-  // construct_batch_get_sql_str_ removed - no longer used, replaced by SQLite storage
-
-  static int construct_tablet_replica_checksum_items_(
-      common::sqlclient::ObMySQLResult &res,
-      common::ObIArray<ObTabletReplicaChecksumItem> &items,
-      int64_t &tablet_items_cnt);
-  static int construct_tablet_replica_checksum_items_(
-    sqlclient::ObMySQLResult &res,
-    ObReplicaCkmArray &items);
-  static int construct_tablet_replica_checksum_item_(
-      common::sqlclient::ObMySQLResult &res,
-      ObTabletReplicaChecksumItem &item);
-
-  // batch_iterate_replica_checksum_range_ removed - no longer used
-  // batch_check_tablet_checksum_in_range_ removed - no longer used
-
-public:
-  // get column checksum from item and store result in map
-  // KV of @column_ckm_map is: <column_id, column_checksum>
-  static int get_tablet_replica_checksum_items(common::ObMySQLProxy &mysql_proxy,
-      const SCN &compaction_scn,
-      const common::ObIArray<common::ObTabletID> &tablet_ids,
-      ObReplicaCkmArray &items);
-  static int construct_tablet_id_list(const ObIArray<ObTabletID> &tablet_ids, ObSqlString &sql);
-private:
-  static ObTabletReplicaChecksumTableStorage storage_;
-  static ObSQLiteConnectionPool *meta_db_pool_;
-  static common::ObAddr self_addr_;
-
-  const static int64_t MAX_BATCH_COUNT = 128;
-  const static int64_t PRINT_LOG_INVERVAL = 2 * 60 * 1000 * 1000L; // 2m
-  const static int64_t MOCK_COLUMN_CHECKSUM = 580000000000000;
-};
-
-// construct_batch_get_sql_str_ template removed - no longer used, replaced by SQLite storage
 
 class ObTabletDataChecksumChecker
 {

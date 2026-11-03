@@ -392,12 +392,10 @@ DEFINE_ERROR(OB_INDEX_COUNT_REACH_THE_LIMIT, -4613, -1, "HY000", "created index 
 DEFINE_ERROR(OB_TASK_EXPIRED, -4614, -1, "HY000", "task expired");
 DEFINE_ERROR_EXT(OB_MACHINE_RESOURCE_NOT_ENOUGH, -4624, -1, "HY000", "machine resource is not enough to hold a new unit", "zone '%s' server \'%s\' %s resource is not enough to hold a new unit");
 DEFINE_ERROR(OB_RS_NOT_MASTER, -4638, -1, "HY000", "The RootServer is not the master");
-DEFINE_ERROR(OB_LOCATION_NOT_EXIST, -4653, -1, "HY000", "location not exist");
-DEFINE_ERROR(OB_LOCATION_LEADER_NOT_EXIST, -4654, -1, "HY000", "location leader not exist");
+DEFINE_ERROR(OB_ACCESS_TARGET_NOT_EXIST, -4653, -1, "HY000", "access target does not exist");
 DEFINE_ERROR_EXT(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, -4659, -1, "HY000", "resource unit value is below limit", "invalid %s value, min value is %s");
 DEFINE_ERROR(OB_SESSION_ENTRY_EXIST, -4661, -1, "HY000", "Session already exist");
 DEFINE_ERROR_EXT(OB_GOT_SIGNAL_ABORTING, -4662, ER_GOT_SIGNAL, "01000", "Got signal. Aborting!", "%s: Got signal %d. Aborting!");
-DEFINE_ERROR(OB_GET_LOCATION_TIME_OUT, -4664, 4012, "HY000", "Timeout");
 DEFINE_ERROR(OB_RUN_JOB_NOT_SUCCESS, -4674, -1, "HY000", "run job not success yet");
 DEFINE_ERROR(OB_NEED_REMOVE_UNNEED_TABLE, -4676, -1, "HY000", "need remove unneed table");
 DEFINE_ERROR(OB_NO_NEED_MERGE, -4677, -1, "HY000", "no need to merge");
@@ -415,8 +413,7 @@ DEFINE_ERROR(OB_ERR_ATLER_TABLE_ILLEGAL_FK, -4714, -1, "HY000", "unique/primary 
 
 // for log stream and tablet
 DEFINE_ERROR(OB_LS_NOT_EXIST, -4719, -1, "HY000", "log stream does not exist");
-DEFINE_ERROR(OB_LS_LOCATION_NOT_EXIST, -4721, -1, "HY000", "log stream location does not exist");
-DEFINE_ERROR(OB_LS_LOCATION_LEADER_NOT_EXIST, -4722, -1, "HY000", "log stream location leader does not exist");
+DEFINE_ERROR(OB_LOG_STREAM_ACCESS_NOT_READY, -4722, -1, "HY000", "log stream access is not ready");
 DEFINE_ERROR(OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST, -4723, -1, "HY000", "mapping between tablet and log stream does not exist");
 DEFINE_ERROR(OB_TABLET_EXIST, -4724, -1, "HY000", "unexpected tablet existence");
 DEFINE_ERROR(OB_TABLET_NOT_EXIST, -4725, -1, "HY000", "tablet does not exist");

@@ -61,13 +61,12 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
 public:
   ObAllVirtualServer();
   virtual ~ObAllVirtualServer();
-  int init(common::ObAddr &addr, common::ObServerConfig *config);
+  int init(common::ObAddr &addr);
   virtual int inner_get_next_row(common::ObNewRow *&row);
 
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   common::ObAddr addr_;
-  common::ObServerConfig *config_;
   char role_buf_[64];
   char switchover_status_buf_[128];
   char pending_role_buf_[64];

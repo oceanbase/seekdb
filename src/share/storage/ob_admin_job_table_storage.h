@@ -19,7 +19,7 @@
 
 #include "lib/ob_define.h"
 #include "lib/string/ob_string.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include "share/inner_table/local_table_schema.h"
 
 namespace oceanbase
 {
@@ -62,8 +62,8 @@ public:
   ObAdminJobTableStorage();
   virtual ~ObAdminJobTableStorage();
 
-  int init(ObSQLiteConnectionPool *pool);
-  bool is_inited() const { return nullptr != pool_; }
+  int init(LocalStore *store);
+  bool is_inited() const { return nullptr != store_; }
 
   int create_job(const ObAdminJobEntry &entry);
   int complete_job(const int64_t job_id, const common::ObString &job_status, const int64_t result_code);
@@ -72,9 +72,7 @@ public:
   int get_max_job_id(int64_t &max_job_id);
 
 private:
-  int create_table_if_not_exists_();
-
-  ObSQLiteConnectionPool *pool_;
+  LocalStore *store_;
   DISALLOW_COPY_AND_ASSIGN(ObAdminJobTableStorage);
 };
 

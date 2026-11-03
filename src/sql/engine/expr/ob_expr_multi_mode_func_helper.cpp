@@ -44,7 +44,6 @@ int MultimodeAlloctor::eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::ObDat
   int ret = OB_SUCCESS;
   if (OB_ISNULL(arg)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid null expr argument", K(ret), K(arg));
   } else if (OB_FAIL(arg->eval(ctx, datum))) {
   }
   return ret;

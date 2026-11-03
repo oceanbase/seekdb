@@ -283,8 +283,10 @@ int ObStorageMetaValue::bypass_process_storage_meta(
   } else {
     time_guard.click("deserialize");
     ObIStorageMetaObj *tiny_meta = nullptr;
-    const int64_t buffer_pos = sizeof(ObStorageMetaValue);
-    const int64_t buffer_size = sizeof(ObStorageMetaValue) + t.get_deep_copy_size();
+    // The metadata wrapper is only pointer-aligned; on wasm32 its size can be
+    // 12 bytes while the following SSTable contains 8-byte atomic fields.
+    const int64_t buffer_pos = common::upper_align(sizeof(ObStorageMetaValue), alignof(T));
+    const int64_t buffer_size = buffer_pos + t.get_deep_copy_size();
     if (OB_ISNULL(buffer = static_cast<char *>(allocator.alloc(buffer_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate memory", K(ret), K(buffer_size));

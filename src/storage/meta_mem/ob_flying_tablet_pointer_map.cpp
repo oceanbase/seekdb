@@ -39,7 +39,6 @@ int ObFlyingTabletPointerMap::init()
   int64_t bucket_num = 999;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(map_.create(bucket_num, "FlyTabletPtrMap", "FlyTabletPtrMap"))) {
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("FlyTabletMapLk")))) {
   } else {
@@ -53,7 +52,6 @@ int ObFlyingTabletPointerMap::set(const ObDieingTabletMapKey &key, ObTabletPoint
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObResourceMap has not been inited", K(ret));
   } else if (OB_FAIL(map_.set_refactored(key, handle))) {
   } else {
     FLOG_INFO("success to push tablet_pointer to flying_map", K(ret), K(key), KP(handle.get_resource_ptr()), KPC(handle.get_resource_ptr()), K(count()));
@@ -72,10 +70,8 @@ int ObFlyingTabletPointerMap::check_exist(
   uint64_t hash_val = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObResourceMap has not been inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else {
     common::ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
     if (OB_ISNULL(handle_ptr = map_.get(key))) {
@@ -83,7 +79,6 @@ int ObFlyingTabletPointerMap::check_exist(
       LOG_INFO("tablet handle not exist", K(ret), K(key));
     } else if (OB_ISNULL(t_ptr = handle_ptr->get_resource_ptr())) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get tablet pointer", K(ret), KP(t_ptr));
     } else {
       is_exist = true;
     }
@@ -109,10 +104,8 @@ int ObFlyingTabletPointerMap::erase(const ObDieingTabletMapKey &key)
   bool is_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObResourceMap has not been inited", K(ret));
   } else if (OB_FAIL(check_exist(key, is_exist))) {
   } else if (!is_exist) {
-    LOG_WARN("this key is not exist, do not erase", K(ret), K(key));
   } else if (OB_FAIL(inner_erase_(key))) {
   } 
 
@@ -127,16 +120,12 @@ int ObFlyingTabletPointerMap::inner_erase_(const ObDieingTabletMapKey &key)
   uint64_t hash_val = 0;
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else {
     common::ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
     if (OB_ISNULL(handle_ptr = map_.get(key))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get from map", K(ret), K(key));
     } else if (!handle_ptr->get_resource_ptr()->need_remove_from_flying_()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet_pointer should not be erased when tablet has been referred", 
-        K(ret), KP(handle_ptr->get_resource_ptr()), KPC(handle_ptr->get_resource_ptr()) );
     } else if (OB_FAIL(map_.erase_refactored(key))) {
     }
   }

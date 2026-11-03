@@ -37,11 +37,9 @@ int ObMPAuthResponse::process()
 
   if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get connection fail", K(conn), K(ret));
   } else if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql session info is null", K(ret));
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
@@ -61,7 +59,6 @@ int ObMPAuthResponse::process()
   }
   if (OB_FAIL(ret) && need_disconnect) {
     force_disconnect();
-    LOG_WARN("disconnect connection", KR(ret));
   }
   return ret;
 }

@@ -18,17 +18,18 @@
 #define OCEANBASE_ALLOCATOR_OB_VECTOR_ALLOCATOR_H_
 #include "data_plane/vector/ob_i_vector_memory.h"
 #include "lib/vector/ob_vector_util.h"
-#include "storage/throttle/ob_share_throttle_define.h"
 namespace oceanbase {
 namespace share {
+
+class ObVectorAllocator;
 
 class ObVectorMemContext {
 public:
     ObVectorMemContext()
     : check_cnt_(0),
       memory_context_(nullptr),
-      throttle_tool_(nullptr) {};
-  int init(lib::MemoryContext &mem_context, share::TxShareThrottleTool *throttle_tool);
+      vector_allocator_(nullptr) {};
+  int init(lib::MemoryContext &mem_context, ObVectorAllocator *vector_allocator);
 
   void *alloc(int64_t size);
   void free(void *ptr);
@@ -40,15 +41,14 @@ private:
   uint32_t check_cnt_;
   // Created by parent node memory_context
   lib::MemoryContext memory_context_;
-  // Reference the shared throttle tool for both Vector and aggregate limits.
-  share::TxShareThrottleTool *throttle_tool_;
+  // All Vector contexts share the same module usage accounting.
+  ObVectorAllocator *vector_allocator_;
 };
 
 class ObVectorAllocator : public ObVectorMemContext,
                                 public ObIAllocator {
 public:
-  ObVectorAllocator() : is_inited_(false), all_used_mem_(0), throttle_tool_(nullptr), memory_context_(nullptr) {}
-  DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Vector);
+  ObVectorAllocator() : is_inited_(false), all_used_mem_(0), memory_context_(nullptr) {}
 
   int init();
   void destroy() { is_inited_ = false; }
@@ -60,13 +60,11 @@ public:
   inline lib::MemoryContext get_mem_context() { return memory_context_;}
   inline uint64_t* get_used_mem_ptr() { return &all_used_mem_; }
   int64_t get_rb_mem_used();
-  static void get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration);
-  TO_STRING_KV(K(is_inited_), KP(throttle_tool_), KP(memory_context_.ref_context()));
+  TO_STRING_KV(K(is_inited_), KP(memory_context_.ref_context()));
 
 private:
   bool is_inited_;
   uint64_t all_used_mem_;
-  share::TxShareThrottleTool *throttle_tool_;
   lib::MemoryContext memory_context_;
 };
 

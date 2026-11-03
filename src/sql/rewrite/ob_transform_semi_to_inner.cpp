@@ -44,7 +44,6 @@ int ObTransformSemiToInner::transform_one_stmt(
   ObTryTransHelper try_trans_helper;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param has null", K(ret), K(stmt), K(ctx_));
   } else if (OB_FAIL(semi_infos.assign(stmt->get_semi_infos()))) {
   } else {
     bool cost_based_trans_tried = cost_based_trans_tried_;
@@ -65,13 +64,11 @@ int ObTransformSemiToInner::transform_one_stmt(
       OPT_TRACE("try to transform semi join ", stmt->get_table_item_by_id(semi_info->right_table_id_));
       if (OB_ISNULL(semi_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null semi info", K(ret));
       } else if (semi_info->is_anti_join()) {
         //do nothing
         OPT_TRACE("anti join can not transform");
       } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(semi_info->right_table_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null table item", K(ret));
       } else if (OB_FAIL(check_hint_valid(*stmt, 
                                           *table_item, 
                                           force_trans,
@@ -152,7 +149,6 @@ int ObTransformSemiToInner::transform_semi_to_inner(ObDMLStmt *root_stmt,
       OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(stmt) ||
       OB_ISNULL(pre_semi_info) || OB_ISNULL(root_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("has null param", K(ret));
   } else if (OB_FALSE_IT(semi_info = stmt->get_semi_info_by_id(pre_semi_info->semi_id_))) {
   } else if (NULL == semi_info) {
     /* do nothing */
@@ -169,7 +165,6 @@ int ObTransformSemiToInner::transform_semi_to_inner(ObDMLStmt *root_stmt,
              OB_FALSE_IT(trans_stmt = stmt)) {
     // If the right table does not need to add a distinct operator, then rewrite based on rules, without considering the cost, so deep copy of stmt is not needed
   } else if (need_check_cost && OB_FAIL(is_ignore_semi_info(pre_semi_info->semi_id_, ignore))) {
-    LOG_WARN("failed to check is ignore semi info", K(ret));
   } else if (ignore) {
     OPT_TRACE("this semi join has checked cost, not need try again");
   } else if (need_check_cost &&
@@ -177,13 +172,10 @@ int ObTransformSemiToInner::transform_semi_to_inner(ObDMLStmt *root_stmt,
                                                       *ctx_->expr_factory_,
                                                       stmt,
                                                       trans_stmt))) {
-    LOG_WARN("failed to deep copy stmt", K(ret));
   } else if (OB_ISNULL(trans_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_ISNULL(semi_info = trans_stmt->get_semi_info_by_id(pre_semi_info->semi_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null semi info", K(ret));
   } else if (OB_FAIL(do_transform_by_rewrite_form(trans_stmt, semi_info, ctx, trans_param))) {
   } else {
     trans_happened = true;
@@ -212,7 +204,6 @@ int ObTransformSemiToInner::gather_params_by_rewrite_form(ObDMLStmt* trans_stmt,
 
   if (OB_ISNULL(trans_stmt) || OB_ISNULL(semi_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(trans_stmt), K(semi_info));
   } else if (OB_FAIL(split_join_condition(*trans_stmt, 
                                           *semi_info, 
                                           equal_join_conds, 
@@ -236,10 +227,8 @@ int ObTransformSemiToInner::gather_params_by_rewrite_form(ObDMLStmt* trans_stmt,
   } else if (trans_param.use_aggr_inner()) {
     if (cmp_join_conds.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("one and only one compare-join-condition is required", K(ret));
     } else if (OB_ISNULL(trans_param.cmp_join_cond_ = cmp_join_conds.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (OB_FAIL(collect_param_expr_related_to_right_table(*trans_stmt, 
                                                                  *semi_info, 
                                                                  trans_param.cmp_join_cond_, 
@@ -273,7 +262,6 @@ int ObTransformSemiToInner::do_transform_by_rewrite_form(ObDMLStmt* stmt,
   int ret  = OB_SUCCESS;
   if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(semi_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(ret), K(ctx_), K(stmt), K(semi_info));
   } else if (OB_FAIL(gather_params_by_rewrite_form(stmt, semi_info, trans_param))) {
   } else if (trans_param.use_inner()) {
     if (OB_FAIL(do_transform(*stmt, 
@@ -296,7 +284,6 @@ int ObTransformSemiToInner::do_transform_by_rewrite_form(ObDMLStmt* stmt,
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(view_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null pointer", K(ret));
       } else if (OB_FAIL(do_transform(*view_stmt, 
                                semi_info,
                                ctx,
@@ -306,7 +293,6 @@ int ObTransformSemiToInner::do_transform_by_rewrite_form(ObDMLStmt* stmt,
         ObSelectStmt* right_stmt = NULL;
         if (OB_ISNULL(right_table)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret));
         } else if (OB_FAIL(push_right_table_ids(right_table, ctx.view_table_id_))) {
         } else if (right_table->is_generated_table()) {
           if (OB_FAIL(find_basic_table(right_table->ref_query_, ctx.table_id_))) {
@@ -365,7 +351,6 @@ int ObTransformSemiToInner::split_join_condition(ObDMLStmt& stmt,
     ObRawExpr* right_param;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (!union_table_set.is_superset(expr->get_relation_ids())) {
       if (OB_FAIL(invalid_conds.push_back(expr))) {
       }
@@ -379,7 +364,6 @@ int ObTransformSemiToInner::split_join_condition(ObDMLStmt& stmt,
       }
     } else if (OB_ISNULL(left_param = expr->get_param_expr(0)) || OB_ISNULL(right_param = expr->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null param", K(ret), K(left_param), K(right_param));
     } else if (right_table_set.is_superset(expr->get_relation_ids())) {
       if (OB_FAIL(filter_conds.push_back(expr))) {
       }
@@ -395,9 +379,7 @@ int ObTransformSemiToInner::split_join_condition(ObDMLStmt& stmt,
       } else if (T_OP_EQ != expr->get_expr_type()) {
         bool less_or_greater = is_less_or_greater_expr(expr->get_expr_type());
         if (less_or_greater && OB_FAIL(cmp_join_conds.push_back(expr))) {
-          LOG_WARN("failed to push back expr", K(ret));
         } else if (!less_or_greater && OB_FAIL(other_conds.push_back(expr))) {
-          LOG_WARN("failed to push back expr", K(ret));
         }
       } else if (OB_FAIL(equal_join_conds.push_back(expr))) {
       }
@@ -416,7 +398,6 @@ int ObTransformSemiToInner::split_join_condition(ObDMLStmt& stmt,
     if (semi_conditions.count() != invalid_conds.count() + filter_conds.count() + equal_join_conds.count() + 
                                    cmp_join_conds.count() + other_conds.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected condition splitting : count mismatch", K(ret));
     }
   }
   return ret;
@@ -471,13 +452,11 @@ int ObTransformSemiToInner::check_basic_validity(ObDMLStmt *root_stmt,
 
   if (OB_ISNULL(root_stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(root_stmt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < left_table_ids.count(); i++) {
     TableItem* temp_table = NULL;
     if (OB_ISNULL(temp_table = stmt.get_table_item_by_id(left_table_ids.at(i)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get table items", K(ret), K(semi_info));
     } else if (OB_FAIL(left_tables.push_back(temp_table))) {
     }
   }
@@ -486,7 +465,6 @@ int ObTransformSemiToInner::check_basic_validity(ObDMLStmt *root_stmt,
     // do nothing
   } else if (OB_ISNULL(right_table = stmt.get_table_item_by_id(semi_info.right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get table items", K(ret), K(semi_info));
   } else if (OB_FAIL(check_semi_join_condition(stmt,
                                                semi_info,
                                                left_exprs,
@@ -532,14 +510,12 @@ int ObTransformSemiToInner::check_basic_validity(ObDMLStmt *root_stmt,
   } else if (invalid_conds_count > 0) {
     // do nothing
   } else if (cmp_join_conds_count < 2 && OB_FAIL(check_can_add_deduplication(left_exprs, right_exprs, can_add_deduplication))) {
-    LOG_WARN("failed to check can add deduplication on right", K(ret));
   } else if (!ctx.is_multi_join_cond_ && !ctx.hint_force_ &&
              OB_FAIL(check_join_condition_match_index(root_stmt,
                                                       stmt,
                                                       semi_info,
                                                       semi_info.semi_conditions_,
                                                       condition_match_index))) {
-    LOG_WARN("failed to check join condition match index", K(ret));
   } else if (!ctx.is_multi_join_cond_ && !condition_match_index) {
     // do nothing
     OPT_TRACE("semi condition not match index and is not multi join , will not transform");
@@ -603,7 +579,6 @@ int ObTransformSemiToInner::non_sens_dul_vals_need_check_cost(ObDMLStmt &stmt,
   ObSEArray<uint64_t, 4> column_ids_no_dup;
   if (OB_ISNULL(right_table = stmt.get_table_item_by_id(semi_info.right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("semi right table is null", K(ret), K(right_table));
   } else if (!right_table->is_basic_table()) {
     need_check_cost = true;
   } else if (OB_FAIL(ObOptimizerUtil::extract_column_ids(semi_info.semi_conditions_, right_table->table_id_, column_ids))) {
@@ -622,7 +597,6 @@ int ObTransformSemiToInner::check_query_from_dual(ObSelectStmt *stmt, bool& quer
   ObSEArray<ObSelectStmt*, 4> child_stmts;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(stmt));
   } else if (OB_FAIL(stmt->get_child_stmts(child_stmts))) {
   } else if (stmt->get_table_items().count() == 0 && child_stmts.count() == 0) {
     query_from_dual = true;
@@ -633,7 +607,6 @@ int ObTransformSemiToInner::check_query_from_dual(ObSelectStmt *stmt, bool& quer
       TableItem *table_item = stmt->get_table_items().at(i);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(table_item));
       } else if (!(table_item->is_temp_table() || table_item->is_generated_table())) {
         temp_flag = false;
       } else if (table_item->is_temp_table()) {
@@ -641,7 +614,6 @@ int ObTransformSemiToInner::check_query_from_dual(ObSelectStmt *stmt, bool& quer
         ObSelectStmt *temp_stmt = NULL;
         if (OB_ISNULL(temp_stmt = table_item->ref_query_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret), K(temp_stmt));
         } else if (temp_stmt->has_recursive_cte()) {
           temp_flag = false;
         } else if (OB_FAIL(child_stmts.push_back(table_item->ref_query_))) {
@@ -672,7 +644,6 @@ int ObTransformSemiToInner::check_right_exprs_unique(ObDMLStmt &stmt,
   ObSelectStmt *ref_query = NULL;
   if (OB_ISNULL(right_table) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret), K(right_table), K(ctx_));
   } else if (!right_table->is_generated_table() && !right_table->is_temp_table()) {
     // baisc table
     ObSEArray<TableItem*, 1> right_tables;
@@ -685,14 +656,12 @@ int ObTransformSemiToInner::check_right_exprs_unique(ObDMLStmt &stmt,
     }
   } else if (OB_ISNULL(ref_query = right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ref query", K(ret));
   } else {
     ObSEArray<ObRawExpr*, 4> right_cols;
     ObSEArray<ObRawExpr*, 4> right_select_exprs;
     for (int64_t i = 0; OB_SUCC(ret) && i < right_exprs.count(); ++i) {
       if (OB_ISNULL(right_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (right_exprs.at(i)->is_column_ref_expr()) {
         ret = right_cols.push_back(right_exprs.at(i));
       }
@@ -795,12 +764,10 @@ int ObTransformSemiToInner::collect_param_exprs_of_correlated_conds(ObDMLStmt& s
     ObRawExpr* right = NULL;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (collect_equal_info && T_OP_EQ != expr->get_expr_type()) {
       //do nothing
     } else if (OB_ISNULL(left = expr->get_param_expr(0)) || OB_ISNULL(right = expr->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null param", K(ret), K(*expr));
     } else {
       if (left_table_set.is_superset(left->get_relation_ids()) &&
           right_table_set.is_superset(right->get_relation_ids())) {
@@ -816,7 +783,6 @@ int ObTransformSemiToInner::collect_param_exprs_of_correlated_conds(ObDMLStmt& s
         //do nothing, right filter condition maybe like right = right
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected equal correlated condition", K(ret), K(*expr));
       }
     }
   }
@@ -834,7 +800,6 @@ int ObTransformSemiToInner::collect_param_expr_related_to_right_table(ObDMLStmt&
   ObSEArray<ObRawExpr*, 4> left_exprs;
   if (OB_ISNULL(correlated_condition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(correlated_conditions.push_back(correlated_condition))) {
   } else if (OB_FAIL(collect_param_exprs_of_correlated_conds(stmt, 
                                                              semi_info, 
@@ -843,10 +808,8 @@ int ObTransformSemiToInner::collect_param_expr_related_to_right_table(ObDMLStmt&
                                                              right_exprs))) {
   } else if (left_exprs.count() != 1 || right_exprs.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param expr count", K(ret), K(left_exprs.count()), K(right_exprs.count()), K(*correlated_condition));
   } else if (OB_ISNULL(param_expr_related_to_right_table = right_exprs.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", K(ret));
   }
   return ret;
 }
@@ -870,7 +833,6 @@ int ObTransformSemiToInner::collect_filter_conds_related_to_right_table(ObDMLStm
     ObRawExpr* expr = filter_conds.at(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (left_table_set.is_superset(expr->get_relation_ids())) {
       // do nothing
     } else if (right_table_set.is_superset(expr->get_relation_ids())) {
@@ -903,7 +865,6 @@ int ObTransformSemiToInner::check_right_table_output_one_row(TableItem &right_ta
     if (OB_ISNULL(right_table.ref_query_) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_) ||
         OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null param", K(right_table), K(ret));
     } else if (OB_FAIL(ObTransformUtils::check_limit_value(*right_table.ref_query_,
                                                            ctx_->exec_ctx_,
                                                            ctx_->allocator_,
@@ -912,7 +873,6 @@ int ObTransformSemiToInner::check_right_table_output_one_row(TableItem &right_ta
                                                            const_param_info))) {
     } else if (!const_param_info.const_idx_.empty() &&
                OB_FAIL(ctx_->plan_const_param_constraints_.push_back(const_param_info))) {
-      LOG_WARN("failed to push back const param info", K(ret));
     }
   }
   return ret;
@@ -927,14 +887,12 @@ int ObTransformSemiToInner::check_can_add_deduplication(const ObIArray<ObRawExpr
   is_valid = true;
   if (left_exprs.count() != right_exprs.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect expr count", K(left_exprs), K(right_exprs), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < left_exprs.count(); ++i) {
     ObRawExpr *left = left_exprs.at(i);
     ObRawExpr *right = right_exprs.at(i);
     if (OB_ISNULL(left) || OB_ISNULL(right)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret), K(left), K(right));
     } else if (OB_FAIL(check_need_add_cast(left,
                                           right,
                                           need_add_cast,
@@ -955,7 +913,6 @@ int ObTransformSemiToInner::check_need_add_cast(const ObRawExpr *left_arg,
   bool is_equal = false;
   if (OB_ISNULL(left_arg) || OB_ISNULL(right_arg)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("left arg and right arg should not be NULL", K(ret), K(left_arg), K(right_arg));
   } else if (OB_FAIL(ObRelationalExprOperator::is_equal_transitive(left_arg->get_result_type(),
                                                                    right_arg->get_result_type(),
                                                                    is_valid))) {
@@ -979,7 +936,6 @@ int ObTransformSemiToInner::check_join_condition_match_index(ObDMLStmt *root_stm
   is_match_index = false;
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is null", K(ret), K(ctx_));
   }
   // check semi condition is match left table
   for (int64_t i = 0; OB_SUCC(ret) && !is_match_index && i < semi_conditions.count(); ++i) {
@@ -991,7 +947,6 @@ int ObTransformSemiToInner::check_join_condition_match_index(ObDMLStmt *root_stm
       ObColumnRefRawExpr *col_expr = NULL;
       if (OB_ISNULL(e) || OB_UNLIKELY(!e->is_column_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (OB_FALSE_IT(col_expr = static_cast<ObColumnRefRawExpr*>(e))) {
       } else if (!ObOptimizerUtil::find_item(semi_info.left_table_ids_, col_expr->get_table_id())) {
         // do nothing
@@ -1020,14 +975,12 @@ int ObTransformSemiToInner::do_transform(ObDMLStmt &stmt,
   ObSEArray<ObRawExpr *, 2> new_condition_exprs;
   if (OB_ISNULL(ctx_) || OB_ISNULL(semi_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::remove_item(stmt.get_semi_infos(), semi_info))) {
   } else if (!need_add_distinct) {
     if (OB_FAIL(append(stmt.get_condition_exprs(), semi_info->semi_conditions_))) {
     } else if (OB_FAIL(stmt.add_from_item(semi_info->right_table_id_, false))) {
     } else if (OB_ISNULL(right_table = stmt.get_table_item_by_id(semi_info->right_table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("right table item is null", K(ret));
     } else if (OB_FAIL(push_right_table_ids(right_table, ctx.view_table_id_))) {
     } else if (right_table->is_generated_table()) {
       if (OB_FAIL(find_basic_table(right_table->ref_query_, ctx.table_id_))) {
@@ -1045,7 +998,6 @@ int ObTransformSemiToInner::do_transform(ObDMLStmt &stmt,
   } else if (OB_FAIL(append(stmt.get_condition_exprs(), new_condition_exprs))) {
   } else if (OB_ISNULL(right_table = stmt.get_table_item_by_id(semi_info->right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("right table item is null", K(ret), K(right_table));
   } else if (OB_FAIL(ObTransformUtils::replace_with_empty_view(ctx_,
                                                                &stmt,
                                                                view_table,
@@ -1059,13 +1011,10 @@ int ObTransformSemiToInner::do_transform(ObDMLStmt &stmt,
                                                           &trans_param.equal_right_exprs_))) {
   } else if (OB_ISNULL(view_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null table item", K(ret));
   } else if (!view_table->is_generated_table()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect generated table item", K(*view_table), K(ret));
   } else if (OB_ISNULL(ref_query = view_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ref query", K(ret));
   } else if (OB_FAIL(add_distinct(*ref_query, trans_param.equal_left_exprs_, trans_param.equal_right_exprs_))) {
   } else if (OB_FAIL(stmt.add_from_item(view_table->table_id_, false))) {
   } else if (OB_FAIL(find_basic_table(ref_query, ctx.table_id_))) {
@@ -1080,13 +1029,11 @@ int ObTransformSemiToInner::push_right_table_ids(TableItem* right_table,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(right_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null right table", K(ret));
   } else if (OB_FAIL(view_table_ids.push_back(right_table->table_id_))) {
   } else if (right_table->is_generated_table()) {
     ObSelectStmt* right_stmt = NULL;
     if (OB_ISNULL(right_stmt = right_table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("right stmt is null", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < right_stmt->get_table_items().count(); ++i) {
       if (OB_FAIL(push_right_table_ids(right_stmt->get_table_item(i), view_table_ids))) {
@@ -1103,7 +1050,6 @@ int ObTransformSemiToInner::find_basic_table(ObSelectStmt* stmt, uint64_t &table
   table_id = OB_INVALID_ID;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (stmt->is_set_stmt()) {
     for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_ID == table_id && i < stmt->get_set_query().count(); ++i) {
       if (OB_FAIL(SMART_CALL(find_basic_table(stmt->get_set_query(i),table_id)))) {
@@ -1114,7 +1060,6 @@ int ObTransformSemiToInner::find_basic_table(ObSelectStmt* stmt, uint64_t &table
       TableItem *table = stmt->get_table_item(i);
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null table item", K(ret));
       } else if (!table->is_generated_table()) {
         table_id = table->table_id_;
         find = true;
@@ -1143,7 +1088,6 @@ int ObTransformSemiToInner::do_transform_with_aggr(ObDMLStmt& stmt,
   bool need_add_group_by = trans_param.need_add_gby_;
   if (OB_ISNULL(ctx_) || OB_ISNULL(semi_info) || OB_ISNULL(cmp_join_cond) || OB_ISNULL(cmp_right_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret));
   } else if (OB_FAIL(create_min_max_aggr_expr(&stmt, ctx_->expr_factory_, cmp_join_cond, cmp_right_expr, view_aggr_expr))) {
   } else if (OB_FAIL(ObTransformUtils::replace_expr(cmp_right_expr, view_aggr_expr, cmp_join_cond))) {
   } else if (OB_FAIL(new_condition_exprs.assign(semi_info->semi_conditions_))) {
@@ -1155,7 +1099,6 @@ int ObTransformSemiToInner::do_transform_with_aggr(ObDMLStmt& stmt,
   } else if (OB_FAIL(append(stmt.get_condition_exprs(), new_condition_exprs))) {
   } else if (OB_ISNULL(right_table = stmt.get_table_item_by_id(semi_info->right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("right table item is null", K(ret), K(right_table));
   } else if (OB_FAIL(ObTransformUtils::replace_with_empty_view(ctx_,
                                                                &stmt,
                                                                view_table,
@@ -1169,13 +1112,10 @@ int ObTransformSemiToInner::do_transform_with_aggr(ObDMLStmt& stmt,
                                                           &view_select_exprs))) {
   } else if (OB_ISNULL(view_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null table item", K(ret));
   } else if (!view_table->is_generated_table()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect generated table item", K(*view_table), K(ret));
   } else if (OB_ISNULL(ref_query = view_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ref query", K(ret));
   } else if (OB_FAIL(stmt.add_from_item(view_table->table_id_, false))) {
   } else if (need_add_group_by) {
     if (OB_FAIL(add_group_by_with_cast(*ref_query, trans_param.equal_left_exprs_, trans_param.equal_right_exprs_))) {
@@ -1201,7 +1141,6 @@ int ObTransformSemiToInner::create_min_max_aggr_expr(ObDMLStmt* stmt,
   bool is_less_cmp = false;
   if (OB_ISNULL(ctx_) || OB_ISNULL(expr_factory) || OB_ISNULL(condition_expr) || OB_ISNULL(target_param_expr) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(ret), K(ctx_), K(expr_factory), K(condition_expr), K(target_param_expr), K(stmt));
   } else {
     target_at_left = condition_expr->get_param_expr(0) == target_param_expr;
     target_at_right = condition_expr->get_param_expr(1) == target_param_expr;
@@ -1209,7 +1148,6 @@ int ObTransformSemiToInner::create_min_max_aggr_expr(ObDMLStmt* stmt,
     is_less_cmp = condition_expr->get_expr_type() == T_OP_LT || condition_expr->get_expr_type() == T_OP_LE;
     if (target_at_left == target_at_right || is_greater_cmp == is_less_cmp) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected conflict conditions", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1222,7 +1160,6 @@ int ObTransformSemiToInner::create_min_max_aggr_expr(ObDMLStmt* stmt,
     if (OB_FAIL(expr_factory->create_raw_expr(aggr_type, aggr_expr))) {
     } else if (OB_ISNULL(aggr_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to create aggr expr", K(ret), K(aggr_type));
     } else if (OB_FAIL(aggr_expr->add_real_param_expr(target_param_expr))) {
     } else if (OB_FAIL(aggr_expr->formalize(ctx_->session_info_))) {
     } else if (OB_FAIL(aggr_expr->pull_relation_id())) {
@@ -1238,10 +1175,8 @@ int ObTransformSemiToInner::add_group_by_with_cast(ObSelectStmt& view,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret));
   } else if (left_exprs.count() != right_exprs.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect expr count", K(ret), K(left_exprs), K(right_exprs));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < left_exprs.count(); i++) {
     ObRawExpr* left = left_exprs.at(i);
@@ -1251,11 +1186,9 @@ int ObTransformSemiToInner::add_group_by_with_cast(ObSelectStmt& view,
     bool is_valid = false;
     if (OB_ISNULL(left) || OB_ISNULL(right)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret), K(left), K(right));
     } else if (OB_FAIL(check_need_add_cast(left, right, need_add_cast, is_valid))) {
     } else if (!is_valid) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expect valid cast expr", K(ret));
     } else if (need_add_cast) {
       if (OB_FAIL(ObRawExprUtils::create_cast_expr(*ctx_->expr_factory_, 
                                                   right, 
@@ -1281,10 +1214,8 @@ int ObTransformSemiToInner::add_distinct(ObSelectStmt &view,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret));
   } else if (left_exprs.count() != right_exprs.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect expr count", K(ret), K(left_exprs), K(right_exprs));
   }
   view.assign_distinct();
   for (int64_t i = 0; OB_SUCC(ret) && i < view.get_select_item_size(); ++i) {
@@ -1299,7 +1230,6 @@ int ObTransformSemiToInner::add_distinct(ObSelectStmt &view,
       bool is_valid = false;
       if (OB_ISNULL(left) || OB_ISNULL(right)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (right != item.expr_) {
         //do nothing
       } else if (OB_FAIL(check_need_add_cast(left,
@@ -1308,7 +1238,6 @@ int ObTransformSemiToInner::add_distinct(ObSelectStmt &view,
                                             is_valid))) {
       } else if (!is_valid) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect valid cast expr", K(ret));
       } else if (need_add_cast) {
       }
     }
@@ -1318,7 +1247,6 @@ int ObTransformSemiToInner::add_distinct(ObSelectStmt &view,
       //do nothing
     } else if (OB_ISNULL(left) || OB_ISNULL(right)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::create_cast_expr(*ctx_->expr_factory_,
                                                         right,
                                                         left->get_result_type(),
@@ -1336,7 +1264,6 @@ int ObTransformSemiToInner::add_ignore_semi_info(const uint64_t semi_id)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx has null param", K(ret));
   } else if (OB_FAIL(ctx_->ignore_semi_infos_.push_back(semi_id))) {
   }
   return ret;
@@ -1348,7 +1275,6 @@ int ObTransformSemiToInner::is_ignore_semi_info(const uint64_t semi_id, bool &ig
   ignore = false;
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx has null param", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !ignore && i < ctx_->ignore_semi_infos_.count(); ++i) {
     if (ctx_->ignore_semi_infos_.at(i) == semi_id) {
@@ -1367,7 +1293,6 @@ int ObTransformSemiToInner::is_expected_plan(ObLogPlan *plan, void *check_ctx, b
   is_valid = false;
   if (OB_ISNULL(ctx) || OB_ISNULL(plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (!is_trans_plan) {
     //do nothing
   } else if (ctx->is_multi_join_cond_) {
@@ -1388,7 +1313,6 @@ int ObTransformSemiToInner::is_expected_plan(ObLogPlan *plan, void *check_ctx, b
       parent = parents.at(i);
       if (OB_ISNULL(parent)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null operator", K(ret));
       } else if (log_op_def::LOG_JOIN == parent->get_type()) {
         ObLogJoin *join_op = static_cast<ObLogJoin*>(parent);
         //After semi to inner, it needs to be used as a driving table and 
@@ -1415,7 +1339,6 @@ int ObTransformSemiToInner::find_operator(ObLogicalOperator* root,
   table_op = NULL;
   if (OB_ISNULL(root)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null logical operator", K(ret));
   } else if (log_op_def::LOG_TABLE_SCAN == root->get_type()) {
     ObLogTableScan *scan = static_cast<ObLogTableScan *>(root);
     if (scan->get_table_id() == table_id) {
@@ -1455,7 +1378,6 @@ int ObTransformSemiToInner::check_is_semi_condition(ObIArray<ObExecParamRawExpr 
   for (int64_t i = 0; OB_SUCC(ret) && i < nl_params.count(); ++i) {
     if (OB_ISNULL(nl_params.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("nl param is null", K(ret));
     } else if (OB_FAIL(param_exprs.push_back(nl_params.at(i)->get_ref_expr()))) {
     }
   }
@@ -1481,7 +1403,6 @@ int ObTransformSemiToInner::construct_transform_hint(ObDMLStmt &stmt, void *tran
       OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_) ||
       OB_ISNULL(trans_right_table_items = static_cast<ObIArray<TableItem*> *>(trans_params))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_SEMI_TO_INNER, hint))) {
   } else {
     TableItem *table_item = NULL;
@@ -1491,7 +1412,6 @@ int ObTransformSemiToInner::construct_transform_hint(ObDMLStmt &stmt, void *tran
     for (int64_t i = 0; OB_SUCC(ret) && i < trans_right_table_items->count(); ++i) {
       if (OB_ISNULL(table_item = trans_right_table_items->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(table_item));
       } else if (OB_FALSE_IT(table_hint.set_table(*table_item))) {
       } else if (OB_FAIL(hint->get_tables().push_back(table_hint))) {
       } else if (OB_FAIL(ctx_->add_src_hash_val(table_item->get_table_name()))) {
@@ -1503,7 +1423,6 @@ int ObTransformSemiToInner::construct_transform_hint(ObDMLStmt &stmt, void *tran
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
     } else if (use_hint && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-      LOG_WARN("failed to add used trans hint", K(ret));
     } else {
       hint->set_qb_name(ctx_->src_qb_name_);
     }
@@ -1523,7 +1442,6 @@ int ObTransformSemiToInner::check_hint_valid(const ObDMLStmt &stmt,
   const ObSemiToInnerHint *myhint = static_cast<const ObSemiToInnerHint*>(get_hint(stmt.get_stmt_hint()));
   if (OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(query_hint));
   } else {
     force_trans = NULL != myhint && (myhint->get_tables().count() == 0 || 
                                      myhint->enable_semi_to_inner(query_hint->cs_type_, table));

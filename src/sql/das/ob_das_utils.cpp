@@ -49,11 +49,11 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
   }
   while (OB_SUCC(ret) && cur_parent_ctx != nullptr) {
     ObDASCtx &parent_das_ctx = cur_parent_ctx->get_das_ctx();
-    FOREACH_X(node, parent_das_ctx.get_table_loc_list(), OB_SUCC(ret)) {
-      ObDASTableLoc *table_loc = *node;
-      if (table_loc->loc_meta_->ref_table_id_ == ref_table_id 
-          && (table_loc->is_writing_ || !is_reading)
-          && !table_loc->is_fk_check_ ) {
+    FOREACH_X(node, parent_das_ctx.get_table_accesses(), OB_SUCC(ret)) {
+      DASRuntimeTableAccess *table_access = *node;
+      if (table_access->access_meta_->ref_table_id_ == ref_table_id
+          && (table_access->is_writing_ || !is_reading)
+          && !table_access->is_fk_check_ ) {
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
         
@@ -63,7 +63,6 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
           LOG_MYSQL_USER_ERROR(OB_ERR_MUTATING_TABLE_OPERATION, table_schema->get_table_name());
         }
         ret = OB_ERR_MUTATING_TABLE_OPERATION;
-        LOG_WARN("table is mutating", K(ret), K(ref_table_id));
       }
     }
     if (OB_SUCC(ret)) {
@@ -80,37 +79,36 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
   return ret;
 }
 
-ObDASTabletLoc *ObDASUtils::get_related_tablet_loc(const ObDASTabletLoc &tablet_loc,
+DASRuntimeTabletAccess *ObDASUtils::get_related_tablet_access(const DASRuntimeTabletAccess &tablet_access,
                                                    ObTableID related_table_id)
 {
-  ObDASTabletLoc *ret_tablet_loc = nullptr;
-  if (related_table_id == tablet_loc.loc_meta_->ref_table_id_) {
-    ret_tablet_loc = const_cast<ObDASTabletLoc*>(&tablet_loc);
+  DASRuntimeTabletAccess *ret_tablet_access = nullptr;
+  if (related_table_id == tablet_access.access_meta_->ref_table_id_) {
+    ret_tablet_access = const_cast<DASRuntimeTabletAccess*>(&tablet_access);
   } else {
-    for (ObDASTabletLoc *cur_node = tablet_loc.next_;
-        cur_node != nullptr && cur_node != &tablet_loc;
+    for (DASRuntimeTabletAccess *cur_node = tablet_access.next_;
+        cur_node != nullptr && cur_node != &tablet_access;
         cur_node = cur_node->next_) {
-      if (cur_node->loc_meta_->ref_table_id_ == related_table_id) {
-        ret_tablet_loc = cur_node;
+      if (cur_node->access_meta_->ref_table_id_ == related_table_id) {
+        ret_tablet_access = cur_node;
         break;
       }
     }
   }
-  return ret_tablet_loc;
+  return ret_tablet_access;
 }
 
-int ObDASUtils::build_table_loc_meta(ObIAllocator &allocator,
-                                     const ObDASTableLocMeta &src,
-                                     ObDASTableLocMeta *&dst)
+int ObDASUtils::build_table_access_meta(ObIAllocator &allocator,
+                                     const DASTableAccessMeta &src,
+                                     DASTableAccessMeta *&dst)
 {
   int ret = OB_SUCCESS;
   dst = nullptr;
-  void *buf = allocator.alloc(sizeof(ObDASTableLocMeta));
+  void *buf = allocator.alloc(sizeof(DASTableAccessMeta));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate table loc meta failed", K(ret), K(sizeof(ObDASTableLocMeta)));
   } else {
-    dst = new(buf) ObDASTableLocMeta(allocator);
+    dst = new(buf) DASTableAccessMeta(allocator);
     if (OB_FAIL(dst->assign(src))) {
     }
   }
@@ -222,7 +220,6 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
       const char *str = value.get_string_ptr();
       if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
       } else {
         char pad_char = '\0';
         MEMCPY(dest_str, str, len);
@@ -255,13 +252,9 @@ int ObDASUtils::find_child_das_def(const ObDASBaseCtDef *root_ctdef,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root_ctdef) || OB_ISNULL(root_rtdef)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_ctdef), K(root_rtdef));
   } else if (OB_UNLIKELY(root_ctdef->op_type_ != root_rtdef->op_type_
       || root_ctdef->children_cnt_ != root_rtdef->children_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the op_type of ctdef and rtdef do not match", K(ret),
-             K(root_ctdef->op_type_), K(root_rtdef->op_type_),
-             K(root_ctdef->children_cnt_), K(root_rtdef->children_cnt_));
   } else if (root_ctdef->op_type_ == op_type) {
     target_ctdef = root_ctdef;
     target_rtdef = root_rtdef;
@@ -285,7 +278,6 @@ int ObDASUtils::find_child_das_ctdef(const ObDASBaseCtDef *root_ctdef,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_ctdef));
   } else if (root_ctdef->op_type_ == op_type) {
     target_ctdef = root_ctdef;
   } else {
@@ -306,7 +298,6 @@ int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root_rtdef)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_rtdef));
   } else if (root_rtdef->op_type_ == op_type) {
     target_rtdef = root_rtdef;
   } else {
@@ -417,7 +408,6 @@ int ObDASUtils::wait_das_retry(int64_t retry_cnt)
     THIS_WORKER.sched_run();
     if (THIS_WORKER.is_timeout()) {
       ret = OB_TIMEOUT;
-      LOG_WARN("this worker is timeout after retry sleep. no more retry", K(ret));
     }
   }
   return ret;

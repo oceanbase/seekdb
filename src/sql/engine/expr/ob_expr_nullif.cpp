@@ -141,10 +141,8 @@ int ObExprNullif::set_extra_info(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   DatumCastExtraInfo *info = OB_NEWx(DatumCastExtraInfo, expr_cg_ctx.allocator_, *(expr_cg_ctx.allocator_), type_);
   if (OB_ISNULL(info)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_ISNULL(expr_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx.session is null", K(ret));
   } else {
     const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
     ObSQLUtils::get_default_cast_mode(is_explicit_cast, result_flag,
@@ -179,7 +177,6 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   } else if (ob_is_enumset_inner_tc(rt_expr.args_[0]->datum_meta_.type_)) {
     if (OB_UNLIKELY(!ob_is_uint_tc(rt_expr.args_[1]->datum_meta_.type_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param type", K(ret), K(rt_expr.args_[1]->datum_meta_));
     } else {
       rt_expr.eval_func_ = eval_nullif_enumset;
     }
@@ -187,7 +184,6 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
     if (OB_UNLIKELY(rt_expr.datum_meta_.type_ != rt_expr.args_[0]->datum_meta_.type_
                     || rt_expr.datum_meta_.cs_type_ != rt_expr.args_[0]->datum_meta_.cs_type_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected type", K(ret), K(rt_expr.datum_meta_), K(rt_expr.args_[0]->datum_meta_));
     } else {
       rt_expr.eval_func_ = eval_nullif_enumset;
     }
@@ -231,7 +227,6 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                                             cmp_meta.get_collation_type(),
                                                             has_lob_header))){
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("cmp func is null", K(ret), K(cmp_meta));
           } else {
             rt_expr.inner_func_cnt_ = 1;
             rt_expr.inner_functions_[0] = reinterpret_cast<void*>(cmp_func);
@@ -257,7 +252,6 @@ int ObExprNullif::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
       && (!string_type || src_expr.datum_meta_.cs_type_ == dst_meta.cs_type_)) {
     res_datum = src_expr.locate_expr_datum(ctx);
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
-    LOG_WARN("init datum caster failed", K(ret));
   } else {
     ObDatum *cast_datum = NULL;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_meta, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
@@ -284,7 +278,6 @@ int ObExprNullif::cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, Ob
       expr_datum = *res_datum;
     }
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
-    LOG_WARN("init datum caster failed", K(ret));
   } else {
     ObDatum *cast_datum = NULL;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_expr.datum_meta_, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
@@ -309,8 +302,6 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   } else if (OB_UNLIKELY(1 != expr.inner_func_cnt_) || OB_ISNULL(expr.inner_functions_)
       || OB_ISNULL(expr.inner_functions_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param", K(ret), K(expr.inner_func_cnt_), KP(expr.inner_functions_),
-                                 KP(expr.inner_functions_[0]));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_e1))) {
   } else if (FALSE_IT(cast_info = static_cast<DatumCastExtraInfo *>(expr.extra_info_))) {
   } else if (ObNullType == cast_info->cmp_meta_.type_) {
@@ -370,7 +361,6 @@ int ObExprNullif::eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_e1))) {
   } else if (OB_ISNULL(expr.extra_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra info is null", K(ret));
   } else if (FALSE_IT(cast_info = static_cast<DatumCastExtraInfo *>(expr.extra_info_))) {
   } else if (ob_is_enumset_inner_tc(expr.args_[0]->datum_meta_.type_)) {
     ObEnumSetInnerValue inner_value;

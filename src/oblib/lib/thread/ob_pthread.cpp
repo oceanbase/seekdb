@@ -60,7 +60,7 @@ int ob_pthread_tryjoin_np(void *ptr)
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(ptr)) {
     ObPThread *thread = (ObPThread*) ptr;
-    if (OB_SUCC(thread->try_wait())) {
+    if (OB_SUCCESS == (ret = thread->try_wait())) {
       OB_LOG(INFO, "ob_pthread_tryjoin_np succeed", KP(thread));
       OB_DELETE(ObPThread, "PThread", thread);
     }

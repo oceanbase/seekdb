@@ -346,7 +346,6 @@ int ObTmpFileFlushManager::check_tmp_file_disk_usage_limit_(const int64_t curren
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file page cache controller is not inited", KR(ret));
   } else {
     int64_t disk_usage_limit = pc_ctrl_.get_disk_usage_limit();
     int64_t used_page_num = 0;
@@ -383,7 +382,6 @@ int ObTmpFileFlushManager::fast_fill_block_buf_with_meta_(ObTmpFileFlushTask &fl
           KR(ret), K(flush_task), K(flush_ctx_));
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to fast fill block buf with meta", KR(ret), K(flush_task), K(flush_ctx_));
     }
   }
   return ret;
@@ -503,7 +501,6 @@ int ObTmpFileFlushManager::inner_fill_block_buf_(
         // push back first to prevent array resizing or
         // hash map allocate node failure AFTER copying the file data
         if (FAILEDx(get_or_create_file_in_ctx_(file.get_fd(), file_flush_ctx))) {
-          STORAGE_LOG(WARN, "fail to get or create file in file flush ctx", KR(ret), K(file));
         } else if (OB_FAIL(flush_infos.push_back(ObTmpFileFlushInfo()))) {
         } else if (FALSE_IT(last_idx = flush_infos.size() - 1)) {
         } else if (!is_meta && OB_FAIL(file.generate_data_flush_info(flush_task, flush_infos.at(last_idx),
@@ -971,7 +968,6 @@ int ObTmpFileFlushManager::handle_async_write_(ObTmpFileFlushTask &flush_task, F
     LOG_ERROR("unexpected cur_flush_timer_idx_", KR(ret), K(cur_flush_timer_idx_));
   } else if (OB_ISNULL(flush_timers_[cur_flush_timer_idx_])) {
     ret = OB_NOT_INIT;
-    LOG_WARN("flush timer is null", KR(ret), K(cur_flush_timer_idx_), K(flush_task));
   } else if (OB_FAIL(flush_timers_[cur_flush_timer_idx_]->schedule(
       flush_task.get_flush_write_block_task(), 0/*delay*/, false/*repeat*/))) {
   } else {

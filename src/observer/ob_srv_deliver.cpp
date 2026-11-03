@@ -43,12 +43,9 @@ int dispatch_req(ObRequest &req)
     ObServerRuntime *runtime = static_cast<ObServerRuntime *>(share::server_runtime());
     if (OB_ISNULL(runtime)) {
       ret = OB_SERVER_RUNTIME_NOT_READY;
-      LOG_WARN("server runtime is NULL", K(ret));
     } else if (runtime->has_stopped()) {
       ret = OB_SERVER_RUNTIME_NOT_READY;
-      LOG_WARN("server runtime is stopped", K(ret));
     } else if (OB_FAIL(runtime->recv_request(req))) {
-      LOG_WARN("dispatch request fail", K(ret), K(req));
       if (OB_SIZE_OVERFLOW == ret) {
         LOG_DBA_ERROR_V2(OB_SERVER_REQUEST_QUEUE_FULL, ret,
           "deliver mysql request to runtime: ", runtime->id(), " queue failed, the queue is full. ",
@@ -57,7 +54,6 @@ int dispatch_req(ObRequest &req)
       }
     }
   } else {
-    LOG_WARN("cannot enter server runtime", K(ret));
   }
 
   return ret;
@@ -146,7 +142,6 @@ int ObSrvDeliver::deliver(rpc::ObRequest &req)
   }
   if (ObRequest::OB_MYSQL == req.get_type()) {
     if (OB_FAIL(deliver_mysql_request(req))) {
-      LOG_WARN("deliver mysql request fail", K(req), K(ret));
       //If it is a lock conflict repost request, if the deliver fails, the link is broken,
       //Normal requests will break the link at the upper level
       if (req.is_retry_on_lock()) {
@@ -155,7 +150,6 @@ int ObSrvDeliver::deliver(rpc::ObRequest &req)
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ignore unknown request", K(req), K(ret));
   }
 
   return ret;

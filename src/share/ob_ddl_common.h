@@ -18,11 +18,11 @@
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
 namespace oceanbase { namespace common { struct ObDatum; } }
+#include "rust/config.h"
 #include "lib/allocator/page_arena.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_service.h"
-#include "share/location_cache/ob_location_struct.h"
 #include "common/ob_role.h"
 #include "share/tablet/ob_tablet_read_mode.h"
 #include "share/ob_batch_selector.h"
@@ -35,7 +35,7 @@ struct ObAlterTableArg;
 }
 namespace share
 {
-class ObSQLiteConnectionPool;
+class LocalStore;
 namespace schema { class ObMultiVersionSchemaService; }
 // the block_sstable_struct.h chain previously provided header-level using declarations for bare names; the chain is gone, so add explicit using declarations (all have fwd declarations)
 using schema::ObTableSchema;
@@ -563,7 +563,7 @@ public:
   static bool is_table_lock_retry_ret_code(int ret)
   {
     return OB_TRY_LOCK_ROW_CONFLICT == ret || OB_NOT_MASTER == ret || OB_TIMEOUT == ret
-           || OB_EAGAIN == ret || OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_TRANS_CTX_NOT_EXIST == ret;
+           || OB_EAGAIN == ret || OB_LOG_STREAM_ACCESS_NOT_READY == ret || OB_TRANS_CTX_NOT_EXIST == ret;
   }
 
   static int check_can_convert_character(const ObObjMeta &obj_meta, const bool is_domain_index, const bool is_string_lob)
@@ -580,11 +580,11 @@ public:
     common::ObIAllocator &allocator,
     ObIArray<ObString> &partition_names);
   static int get_tablet_data_size(
-    ObSQLiteConnectionPool &meta_db_pool,
+    LocalStore &store,
     const common::ObTabletID &tablet_id,
     int64_t &data_size);
   static int get_tablet_data_row_cnt(
-    ObSQLiteConnectionPool &meta_db_pool,
+    LocalStore &store,
     const common::ObTabletID &tablet_id,
     int64_t &data_row_cnt);
   static int get_ls_host_left_disk_space(
@@ -630,7 +630,7 @@ public:
       const ObObjMeta &obj_meta);
   static int64_t calc_inner_sql_execute_timeout()
   {
-    return max(OB_MAX_DDL_BUILD_TIMEOUT, GCONF._ob_ddl_timeout);
+    return max(OB_MAX_DDL_BUILD_TIMEOUT, config::_ob_ddl_timeout());
   }
 
   /**
@@ -652,9 +652,7 @@ public:
   static int check_schema_version_refreshed(schema::ObMultiVersionSchemaService &schema_service,
                                             const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
-  static int check_table_compaction_checksum_error(schema::ObMultiVersionSchemaService &schema_service,
-                                                   common::ObISQLClient &sql_client,
-                                                   ObSQLiteConnectionPool &meta_db_pool,
+  static int check_table_compaction_checksum_error(common::ObISQLClient &sql_client,
                                                    const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
                                           const int64_t parallel,

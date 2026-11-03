@@ -59,10 +59,8 @@ int ObTabletMediumClogReplayExecutor::init(const share::SCN &scn)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!medium_info_.is_valid() || !scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(medium_info_), K(scn));
   } else {
     scn_ = scn;
     is_inited_ = true;
@@ -129,10 +127,8 @@ int ObTabletMediumCompactionInfoRecorder::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(log_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(log_handler));
   } else if (OB_FAIL(ObIStorageClogRecorder::init(max_saved_version, log_handler))) {
   } else {
     ignore_medium_ = tablet_id.is_special_merge_tablet();
@@ -151,13 +147,11 @@ int ObTabletMediumCompactionInfoRecorder::submit_medium_compaction_info(
   int64_t table_id = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (ignore_medium_) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to submit medium compaction clog", K(ret), K_(tablet_id));
   } else if (OB_UNLIKELY(!medium_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(medium_info));
   } else if (FALSE_IT(medium_info_ = &medium_info)) {
   } else if (OB_FAIL(try_update(medium_info.medium_snapshot_, &allocator))) {
   }
@@ -198,7 +192,6 @@ int ObTabletMediumCompactionInfoRecorder::replay_medium_compaction_log(
   int64_t update_version = OB_INVALID_VERSION;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (ignore_medium_) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to replay medium compaction clog", K(ret), K_(tablet_id));
@@ -243,7 +236,6 @@ int ObTabletMediumCompactionInfoRecorder::on_sync_clog_success(const int64_t upd
   int ret = OB_SUCCESS;
   if (OB_ISNULL(medium_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium info is invalid", K(ret), K_(clog_scn), KP_(medium_info));
   } else if (OB_UNLIKELY(medium_info_->medium_snapshot_ != update_version)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("medium snapshot not match", K(ret), KPC(medium_info_), K(update_version));
@@ -266,8 +258,6 @@ int ObTabletMediumCompactionInfoRecorder::submit_trans_on_mds_table(const bool i
       || !tablet_handle_ptr_->is_valid()
       || nullptr == mds_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium info or tablet handle is unexpected null", K(ret), K_(tablet_id),
-        KP_(medium_info), K_(tablet_handle_ptr), KPC_(mds_ctx));
   } else if (is_commit) {
     mds_ctx_->single_log_commit(clog_scn_, clog_scn_);
   } else {
@@ -323,14 +313,12 @@ int ObTabletMediumCompactionInfoRecorder::prepare_struct_in_lock(
 
   if (OB_UNLIKELY(nullptr == medium_info_ || nullptr == allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium_info or allocator is unexpected null", K(ret), KP_(medium_info), KP(allocator));
   } else if (buf_len >= common::OB_MAX_LOG_ALLOWED_SIZE) { // need be separated into several clogs
     ret = OB_ERR_DATA_TOO_LONG;
     LOG_WARN("medium info log too long", K(buf_len), LITERAL_K(common::OB_MAX_LOG_ALLOWED_SIZE));
   } else if (FALSE_IT(allocator_ = allocator)) {
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(alloc_buf_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), KPC(medium_info_));
   } else {
     logcb_ptr_ = new(buf) ObStorageCLogCb(*this);
     alloc_buf_offset += sizeof(ObStorageCLogCb);
@@ -342,7 +330,6 @@ int ObTabletMediumCompactionInfoRecorder::prepare_struct_in_lock(
   }
 
   if (FAILEDx(get_tablet_handle(tablet_id_, *tablet_handle_ptr_))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id));
   } else if (OB_FAIL(log_header.serialize(alloc_clog_buf, buf_len, pos))) {
   } else if (OB_FAIL(tablet_id_.serialize(alloc_clog_buf, buf_len, pos))) {
   } else if (OB_FAIL(serialization::encode_i64(alloc_clog_buf, buf_len, pos, medium_info_->medium_snapshot_))) {
@@ -370,8 +357,6 @@ int ObTabletMediumCompactionInfoRecorder::submit_log(
       || nullptr == clog_buf
       || clog_len <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log handler or medium info is null", K(ret), KP(medium_info_),
-        KP(clog_buf), K(clog_len), K(tablet_handle_ptr_));
   } else if (OB_FAIL(tablet_handle_ptr_->get_obj()->set(
       ObMediumCompactionInfoKey(medium_info_->medium_snapshot_),
       *medium_info_,
@@ -411,7 +396,6 @@ int ObMediumCompactionInfoList::init(common::ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     allocator_ = &allocator;
     is_inited_ = true;
@@ -426,13 +410,10 @@ int ObMediumCompactionInfoList::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(input_list)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(input_list));
   } else if (OB_UNLIKELY(!input_list->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input medium info list is invalid", K(ret), KPC(input_list));
   } else {
     allocator_ = &allocator;
     set_basic_info(*input_list);
@@ -450,11 +431,9 @@ int ObMediumCompactionInfoList::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!extra_medium_info.is_valid()
                          || extra_medium_info.last_compaction_type_ >= ObMediumCompactionInfo::COMPACTION_TYPE_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid extra medium info", K(ret), K(extra_medium_info));
   } else {
     allocator_ = &allocator;
     ObMediumCompactionInfo *medium_info = nullptr;
@@ -463,12 +442,10 @@ int ObMediumCompactionInfoList::init(
       const ObMediumCompactionInfo *src_medium_info = medium_info_array.at(i);
       if (OB_ISNULL(src_medium_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, medium info is null", K(ret), K(i), KP(src_medium_info));
       } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, medium_info))) {
       } else if (OB_FAIL(medium_info->init(allocator, *src_medium_info))) {
       } else if (OB_UNLIKELY(!medium_info_list_.add_last(medium_info))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to add last", K(ret), KPC(medium_info));
       }
 
       if (OB_FAIL(ret)) {
@@ -513,10 +490,8 @@ int ObMediumCompactionInfoList::serialize(char *buf, const int64_t buf_len, int6
   int64_t new_pos = pos;
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium info list is invalid", K(ret), KPC(this));
   } else if (OB_FAIL(extra_info_.serialize(buf, buf_len, new_pos))) {
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, new_pos, medium_info_list_.get_size()))) {
   } else {
@@ -543,28 +518,23 @@ int ObMediumCompactionInfoList::deserialize(
   int64_t list_count = 0;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(nullptr == buf || data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(data_len), K(pos));
   } else if (FALSE_IT(allocator_ = &allocator)) { // set allocator to call reset() when deserialize failed
   } else if (OB_FAIL(extra_info_.deserialize(buf, data_len, new_pos))) {
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, new_pos, &list_count))) {
   } else if (OB_UNLIKELY(list_count < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected list count", K(ret), K(list_count));
   } else if (list_count > 0) {
     void *alloc_buf = nullptr;
     for (int i = 0; OB_SUCC(ret) && i < list_count; ++i) {
       ObMediumCompactionInfo *new_info = nullptr;
       if (OB_ISNULL(alloc_buf = allocator.alloc(sizeof(ObMediumCompactionInfo)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret));
       } else if (FALSE_IT(new_info = new (alloc_buf) ObMediumCompactionInfo())) {
       } else if (OB_FAIL(new_info->deserialize(allocator, buf, data_len, new_pos))) {
       } else if (!medium_info_list_.add_last(new_info)) {
         ret = OB_ERR_SYS;
-        LOG_WARN("failed to add into medium info list", K(ret), KPC(new_info));
       } else {
       }
 
@@ -579,7 +549,6 @@ int ObMediumCompactionInfoList::deserialize(
     reset();
   } else if (OB_UNLIKELY(!inner_is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium info list is invalid", K(ret), KPC(this));
     reset();
   } else {
     is_inited_ = true;
@@ -634,7 +603,6 @@ int ObMediumCompactionInfoList::get_max_sync_medium_scn(int64_t &max_sync_medium
   max_sync_medium_scn = 0;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium list is invalid", KR(ret), KPC(this));
   } else if (FALSE_IT(max_sync_medium_scn = get_last_compaction_scn())) {
   } else if (!medium_info_list_.is_empty()) {
     max_sync_medium_scn = MAX(max_sync_medium_scn,
@@ -652,7 +620,6 @@ int ObMediumCompactionInfoList::get_specific_medium_reason(
 
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium list is invalid", KR(ret), KPC(this));
   } else {
     bool is_found = false;
     DLIST_FOREACH_NORET(info, get_list()) {

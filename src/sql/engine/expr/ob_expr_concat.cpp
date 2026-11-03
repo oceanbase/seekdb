@@ -62,7 +62,6 @@ int ObExprConcat::calc(common::ObObj &result,
     result.set_varchar(obj1);
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null allocator", K(ret), K(allocator));
   } else {
     char *buf = NULL;
     if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(this_len + other_len)))) {
@@ -86,7 +85,6 @@ int ObExprConcat::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num <= 0)) {
     ret = OB_INVALID_ARGUMENT_NUM;
-    LOG_WARN("invalid argument number", K(ret), K(param_num));
   }
 
   CK (OB_NOT_NULL(type_ctx.get_session()));
@@ -173,7 +171,6 @@ static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
                 input_iter.get_inner_ret() : OB_INVALID_DATA;
-          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
         }
       }
     }
@@ -228,7 +225,6 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       expr_datum.set_null();
       // BUGFIX: issue id 49051626
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("size overflow", K(ret), K(res_len), K(max_len));
     } else if (expr.arg_cnt_ == null_cnt || (null_cnt > 0)) {
       // input are all null or has null in mysql mode
       expr_datum.set_null();
@@ -239,7 +235,6 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       char *buf = expr.get_str_res_mem(ctx, res_len);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(res_len));
       } else {
         int64_t off = 0;
         for (int64_t i = 0; i < expr.arg_cnt_; i++) {

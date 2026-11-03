@@ -29,10 +29,8 @@ int ObSqlProcessor::run()
   run_timestamp_ = ObTimeUtility::current_time();
   if (OB_FAIL(setup_packet_sender())) {
     deseri_succ = false;
-    LOG_WARN("setup packet sender fail", K(ret));
   } else if (OB_FAIL(deserialize())) {
     deseri_succ = false;
-    LOG_WARN("deserialize argument fail", K(ret));
   } else if (OB_FAIL(before_process())) {
   } else {
     req_->set_trace_point(ObRequest::OB_REQUEST_SQL_PROCESSOR_RUN);
@@ -49,7 +47,6 @@ int ObSqlProcessor::run()
 
   if (deseri_succ && OB_UNLIKELY(OB_SUCCESS != (tmp_ret_2 = after_process(ret)))) {
     ret = (OB_SUCCESS != ret) ? ret : tmp_ret_2;
-    LOG_WARN("after process fail", K(ret), K(tmp_ret_2));
   }
 
   cleanup();

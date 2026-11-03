@@ -1,0 +1,15 @@
+# Keep untrusted unit names off the stack, including diagnostic error paths.
+--source mysql_test/test_suite/geometry/t/import_default_srs_data_mysql.inc
+SET @long_unit = REPEAT('x', 8 * 1024 * 1024);
+SELECT LENGTH(@long_unit) AS long_unit_bytes;
+--error 3882
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)'), ST_GEOMFROMTEXT('POINT(1 1)'), @long_unit);
+--error 3902
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)',4326), ST_GEOMFROMTEXT('POINT(1 1)',4326), @long_unit);
+--error 3902
+SELECT ST_LENGTH(ST_GEOMFROMTEXT('LINESTRING(0 0,0 1)',4326), @long_unit);
+SET @long_unit = NULL;
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)'), ST_GEOMFROMTEXT('POINT(3 4)')) AS distance;
+SELECT ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)',4326), ST_GEOMFROMTEXT('POINT(1 1)',4326), 'metre') = ST_DISTANCE(ST_GEOMFROMTEXT('POINT(0 0)',4326), ST_GEOMFROMTEXT('POINT(1 1)',4326)) AS metre_matches_default;
+SELECT ST_LENGTH(ST_GEOMFROMTEXT('LINESTRING(0 0,0 1)',4326), 'metre') = ST_LENGTH(ST_GEOMFROMTEXT('LINESTRING(0 0,0 1)',4326)) AS length_metre_matches_default;
+SELECT 1 AS server_alive;

@@ -1,5 +1,3 @@
-"""Generated source inventory for Storage."""
-
 STORAGE_TABLET_AUTOINCREMENT_STATE_SOURCES = [
     "tablet/ob_tablet_autoincrement_state.cpp",
 ]
@@ -35,8 +33,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/access/ob_i_sample_iterator.cpp",
             "src/storage/access/ob_block_sample_iterator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_access_1",
@@ -63,8 +59,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/access/ob_where_optimizer.cpp",
             "src/storage/access/ob_advance_scan_helper.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_allocator_0",
@@ -78,8 +72,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/allocator/ob_tx_data_allocator.cpp",
             "src/storage/allocator/ob_vector_allocator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_blocksstable_0",
@@ -113,8 +105,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/ob_data_macro_block_merge_writer.cpp",
             "src/storage/blocksstable/ob_micro_block_cache.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_blocksstable_1",
@@ -140,7 +130,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/ob_logic_macro_id.cpp",
             "src/storage/blocksstable/ob_sstable_printer.cpp",
             "src/storage/blocksstable/ob_storage_cache_suite.cpp",
-            "src/storage/blocksstable/ob_super_block_buffer_holder.cpp",
             "src/storage/blocksstable/ob_storage_datum.cpp",
             "src/storage/blocksstable/ob_datum_row.cpp",
             "src/storage/blocksstable/ob_datum_rowkey.cpp",
@@ -148,8 +137,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/ob_datum_row_utils.cpp",
             "src/storage/blocksstable/ob_data_store_desc.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_blocksstable_2",
@@ -160,8 +147,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/ob_batch_datum_rows.cpp",
             "src/storage/ob_tablet_stat_mgr.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_blocksstable_encoding1_0",
@@ -187,8 +172,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/encoding/ob_integer_base_diff_decoder.cpp",
             "src/storage/blocksstable/encoding/ob_integer_base_diff_encoder.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_blocksstable_encoding2_0",
@@ -211,8 +194,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/encoding/neon/ob_dict_decoder_neon.cpp",
             "src/storage/blocksstable/encoding/neon/ob_raw_decoder_neon.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_blocksstable_index_block_0",
@@ -238,28 +219,17 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/index_block/ob_clustered_index_block_writer.cpp",
             "src/storage/blocksstable/index_block/ob_index_block_bare_iterator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_ckpt_0",
         language = "c++",
         srcs = [
-            "src/storage/slog_ckpt/ob_linked_macro_block_reader.cpp",
-            "src/storage/slog_ckpt/ob_linked_macro_block_struct.cpp",
-            "src/storage/slog_ckpt/ob_linked_macro_block_writer.cpp",
-            "src/storage/slog_ckpt/ob_server_checkpoint_reader.cpp",
-            "src/storage/slog_ckpt/ob_server_checkpoint_slog_handler.cpp",
-            "src/storage/slog_ckpt/ob_server_checkpoint_writer.cpp",
-            "src/storage/slog_ckpt/ob_startup_accel_task_handler.cpp",
-            "src/storage/slog_ckpt/ob_tablet_replay_create_handler.cpp",
-            "src/storage/slog_ckpt/ob_local_storage_checkpoint_reader.cpp",
-            "src/storage/slog_ckpt/ob_local_storage_checkpoint_slog_handler.cpp",
-            "src/storage/slog_ckpt/ob_local_storage_checkpoint_writer.cpp",
-            "src/storage/slog_ckpt/ob_server_snapshot_handler.cpp",
+            "src/storage/blockstore/ob_linked_macro_block_reader.cpp",
+            "src/storage/blockstore/ob_linked_macro_block_struct.cpp",
+            "src/storage/blockstore/ob_linked_macro_block_writer.cpp",
+            "src/storage/meta_store/ob_startup_accel_task_handler.cpp",
+            "src/storage/meta_store/tablet_loader.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_common_0",
@@ -281,6 +251,7 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/ob_i_store.cpp",
             "src/storage/ob_i_table.cpp",
             "src/storage/ob_i_tablet_memtable.cpp",
+            "src/storage/ob_iter_cache.cpp",
             "src/storage/ob_partition_range_spliter.cpp",
             "src/storage/ob_query_iterator_factory.cpp",
             "src/storage/ob_relative_table.cpp",
@@ -292,8 +263,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/ob_storage_clog_recorder.cpp",
             "src/storage/ob_storage_struct.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_common_1",
@@ -301,7 +270,6 @@ STORAGE_UNITY_GROUPS = [
         srcs = [
             "src/storage/ob_storage_table_guard.cpp",
             "src/storage/ob_storage_util.cpp",
-            "src/storage/ob_super_block_struct.cpp",
             "src/storage/ob_sync_tablet_seq_clog.cpp",
             "src/storage/ob_table_store_stat_mgr.cpp",
             "src/storage/ob_value_row_iterator.cpp",
@@ -309,8 +277,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/ob_protected_memtable_mgr_handle.cpp",
             "src/storage/ob_gc_upper_trans_helper.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_common_mixed_0",
@@ -333,8 +299,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/meta_mem/ob_storage_meta_mem_mgr.cpp",
             "src/storage/meta_mem/ob_storage_meta_obj_pool.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_compaction_0",
@@ -367,8 +331,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/compaction/ob_compaction_suggestion.cpp",
             "src/storage/compaction/ob_compaction_trans_cache.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_compaction_1",
@@ -391,8 +353,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/compaction/ob_schedule_status_cache.cpp",
             "src/storage/compaction/ob_mds_filter_info.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_scheduler_0",
@@ -403,8 +363,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/scheduler/ob_independent_dag.cpp",
             "src/storage/scheduler/ob_sys_task_stat.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_compaction_filter_0",
@@ -419,8 +377,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/compaction/ob_tablet_scheduler.cpp",
             "src/storage/compaction/ob_tablet_scheduler_task_mgr.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_ddl_0",
@@ -447,19 +403,15 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/ddl/ob_ddl_heart_beat_task.cpp",
             "src/storage/ddl/ob_ddl_seq_generator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_ddl_1",
         language = "c++",
         srcs = [
-            "src/storage/ddl/ob_i_direct_load_mgr.cpp",
             "src/storage/ddl/ob_direct_load_struct.cpp",
             "src/storage/ddl/ob_ddl_lock.cpp",
             "src/storage/ddl/ob_direct_insert.cpp",
-            "src/storage/ddl/ob_direct_load_mgr_v3.cpp",
-            "src/storage/ddl/ob_direct_load_mgr_utils.cpp",
+            "src/storage/ddl/ob_ddl_direct_load_utils.cpp",
             "src/storage/ddl/ob_tablet_slice_row_iterator.cpp",
             "src/storage/ddl/ob_ddl_independent_dag.cpp",
             "src/storage/ddl/ob_ddl_macro_block_writer.cpp",
@@ -476,8 +428,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/ddl/ob_ddl_merge_schedule.cpp",
             "src/storage/ddl/ob_hnsw_embedmgr.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_deadlock_0",
@@ -490,8 +440,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/deadlock/ob_lcl_scheme/ob_lcl_node.cpp",
             "src/storage/deadlock/ob_lcl_scheme/ob_lcl_utils.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_fts_0",
@@ -513,8 +461,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/fts/utils/unicode_utils.cpp",
             "src/storage/fts/utils/ob_ft_ngram_impl.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_ik_0",
@@ -537,8 +483,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/fts/dict/ob_ft_dict_table_iter.cpp",
             "src/storage/fts/dict/ob_ft_cache.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_lob_0",
@@ -558,7 +502,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/lob/ob_lob_persistent_iterator.cpp",
             "src/storage/lob/ob_lob_write_buffer.cpp",
             "src/storage/lob/ob_lob_cursor.cpp",
-            "src/storage/lob/ob_lob_location.cpp",
             "src/storage/lob/ob_lob_iterator.cpp",
             "src/storage/lob/ob_lob_handler.cpp",
             "src/storage/lob/ob_lob_meta_manager.cpp",
@@ -566,8 +509,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/lob/ob_lob_tablet_dml.cpp",
             "src/storage/lob/ob_lob_locator_struct.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_ls_0",
@@ -584,12 +525,9 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/ls/ob_ls_switch_checker.cpp",
             "src/storage/ls/ob_ls_tablet_service.cpp",
             "src/storage/ls/ob_ls_tx_service.cpp",
-            "src/storage/ls/ob_ls_saved_info.cpp",
             "src/storage/ls/ob_ls_reserved_snapshot_mgr.cpp",
             "src/storage/ls/ob_ls_storage_clog_handler.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_memtable_0",
@@ -609,8 +547,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/memtable/ob_row_conflict_handler.cpp",
             "src/storage/memtable/ob_concurrent_control.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_memtable_mvcc_0",
@@ -625,28 +561,18 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/memtable/mvcc/ob_mvcc_trans_ctx.cpp",
             "src/storage/memtable/mvcc/ob_tx_callback_list.cpp",
             "src/storage/memtable/mvcc/ob_query_engine.cpp",
-            "src/storage/memtable/mvcc/ob_btree_iter_cache.cpp",
             "src/storage/memtable/mvcc/ob_row_data.cpp",
             "src/storage/memtable/mvcc/ob_mvcc_define.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_meta_store_0",
         language = "c++",
         srcs = [
-            "src/storage/meta_store/ob_server_storage_meta_service.cpp",
-            "src/storage/meta_store/ob_server_storage_meta_persister.cpp",
-            "src/storage/meta_store/ob_server_storage_meta_replayer.cpp",
-            "src/storage/meta_store/ob_storage_meta_io_util.cpp",
-            "src/storage/meta_store/ob_local_storage_meta_persister.cpp",
-            "src/storage/meta_store/ob_local_storage_meta_replayer.cpp",
+            "src/storage/meta_store/storage_meta_service.cpp",
             "src/storage/meta_store/ob_local_storage_meta_service.cpp",
             "src/storage/meta_store/ob_server_runtime_meta.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_multi_data_source_0",
@@ -675,8 +601,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/multi_data_source/mds_key_serialize_util.cpp",
             "src/storage/multi_data_source/runtime_utility/mds_service.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_retrieval_0",
@@ -700,28 +624,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/retrieval/ob_spiv_daat_iter.cpp",
             "src/storage/retrieval/ob_spiv_dim_iter.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
-    ),
-    struct(
-        name = "ob_storage_slog_0",
-        language = "c++",
-        srcs = [
-            "src/storage/slog/ob_server_slog_writer.cpp",
-            "src/storage/slog/ob_storage_log_batch_header.cpp",
-            "src/storage/slog/ob_storage_log_entry.cpp",
-            "src/storage/slog/ob_storage_log_item.cpp",
-            "src/storage/slog/ob_storage_log_nop_log.cpp",
-            "src/storage/slog/ob_storage_log_reader.cpp",
-            "src/storage/slog/ob_storage_log_replayer.cpp",
-            "src/storage/slog/ob_storage_log_struct.cpp",
-            "src/storage/slog/ob_storage_log.cpp",
-            "src/storage/slog/ob_storage_log_write_buffer.cpp",
-            "src/storage/slog/ob_storage_log_writer.cpp",
-            "src/storage/slog/ob_storage_logger.cpp",
-        ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tablelock_0",
@@ -744,8 +646,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tablelock/ob_table_lock_live_detector.cpp",
             "src/storage/tablelock/ob_session_table_lock.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tablet_0",
@@ -780,8 +680,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tablet/ob_table_store_util.cpp",
             "src/storage/tablet/ob_tablet_table_store_flag.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tablet_1",
@@ -813,8 +711,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tablet/ob_tablet_ddl_complete_mds_helper.cpp",
             "src/storage/tablet/ob_tablet_ddl_complete_mds_data.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_throttle_0",
@@ -824,8 +720,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/throttle/ob_throttle_common.cpp",
             "src/storage/ob_tablet_autoinc_seq_service.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tmp_file_0",
@@ -855,8 +749,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tmp_file/ob_tmp_file_write_buffer_index_cache.cpp",
             "src/storage/tmp_file/ob_tmp_file_write_buffer_pool_entry_array.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_truncate_info_0",
@@ -872,8 +764,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/truncate_info/ob_mds_info_distinct_mgr.cpp",
             "src/storage/truncate_info/ob_truncate_info_kv_cache.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tx_0",
@@ -894,8 +784,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_trans_ctx_mgr_v4.cpp",
             "src/storage/tx/ob_trans_define.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tx_1",
@@ -904,6 +792,7 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_trans_define_v4.cpp",
             "src/storage/tx/ob_trans_end_trans_callback.cpp",
             "src/storage/tx/ob_trans_factory.cpp",
+            "src/storage/tx/tx_ctx_cache.cpp",
             "src/storage/tx/ob_trans_id_service.cpp",
             "src/storage/tx/ob_trans_memory_stat.cpp",
             "src/storage/tx/ob_defensive_check_mgr.cpp",
@@ -925,8 +814,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_tx_data_functor.cpp",
             "src/storage/tx/ob_tx_log.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tx_2",
@@ -941,8 +828,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_multi_data_source_printer.cpp",
             "src/storage/tx/ob_multi_data_source_tx_buffer_node.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tx_storage_0",
@@ -960,8 +845,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx_storage/ob_memstore_freezer_common.cpp",
             "src/storage/tx_storage/ob_memstore_freezer_local_dispatch.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_tx_table_0",
@@ -981,8 +864,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx_table/ob_tx_table_interface.cpp",
             "src/storage/tx_table/ob_tx_table_iterator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_vector_index_0",
@@ -992,8 +873,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blockstore/ob_object_reader_writer.cpp",
             "src/storage/ob_tablet_local_status.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_vector_type_0",
@@ -1012,8 +891,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/vector_type/ob_vector_cosine_similarity.cpp",
             "src/storage/vector_type/ob_vector_ip_similarity.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_storage_rebase_0",
@@ -1035,11 +912,8 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_tx_ctx.cpp",
             "src/storage/tx/ob_tx_print_time_guard.cpp",
             "src/storage/tx/ob_tx_timestamp_waiter.cpp",
-            "src/storage/ddl/ob_direct_insert_sstable_ctx.cpp",
             "src/storage/ddl/ob_tablet_copy_util.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
 ]
 
@@ -1051,13 +925,5 @@ STORAGE_SIMD_UNITY_GROUPS = [
             "src/storage/blocksstable/encoding/ob_raw_decoder_simd.cpp",
             "src/storage/blocksstable/encoding/ob_dict_decoder_simd.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
-]
-
-STORAGE_STANDALONE_SOURCES = [
-]
-
-STORAGE_EXTRA_SOURCES = [
 ]

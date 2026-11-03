@@ -71,7 +71,6 @@ int OMPKOK::add_system_var(const ObStringKV &system_var)
   int ret = OB_SUCCESS;
   if (system_var.key_.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input value", K(system_var), K(ret));
   } else if (OB_FAIL(system_vars_.push_back(system_var))) {
   }
   return ret;

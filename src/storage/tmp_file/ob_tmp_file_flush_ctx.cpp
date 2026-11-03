@@ -93,7 +93,6 @@ int ObTmpFileBatchFlushContext::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTmpFileBatchFlushContext init twice", KR(ret));
   } else if (OB_FAIL(file_ctx_hash_.create(256, ObMemAttr("TFileFLCtx")))) {
   } else {
     flush_failed_array_.set_attr(ObMemAttr("TFFlushFailArr"));
@@ -111,13 +110,10 @@ int ObTmpFileBatchFlushContext::prepare_flush_ctx(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBatchFlushContext not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(expect_flush_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(expect_flush_size));
   } else if (OB_ISNULL(prio_mgr) || OB_ISNULL(flush_monitor)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(prio_mgr), KP(flush_monitor));
   } else if (OB_FAIL(flush_failed_array_.reserve(MAX_COPY_FAIL_COUNT))) {
   } else if (OB_FAIL(iter_.init(prio_mgr))) {
   } else {
@@ -196,7 +192,6 @@ int ObTmpFileBatchFlushContext::RemoveFileOp::operator () (hash::HashMapPair<int
   ObSNTmpFileHandle &file_handle = kv.second.file_handle_;
   if (OB_ISNULL(file_handle.get())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("file handle is nullptr", KR(ret));
   } else {
     // remove all flush nodes for this file to prevent repeated flushing when flushing only data page or only meta page,
     // this avoids triggering a data page flush while waiting for I/O on meta pages, which could lead to new data items
@@ -327,7 +322,6 @@ int ObTmpFileFlushTask::prealloc_block_buf()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("prealloc block buf twice", KR(ret), KPC(this));
   } else if (OB_FAIL(ObTmpBlockCache::get_instance().prealloc_block(
                      ObTmpBlockCacheKey(block_index_), inst_handle_, kvpair_, block_handle_))) {
   }
@@ -342,13 +336,10 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
         flush_page_id_arr_.count() > ObTmpFileGlobal::BLOCK_PAGE_NUMS ||
         flush_page_id_arr_.count() != upper_align(data_length_, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE)){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid flush page id array size", KR(ret), K(flush_page_id_arr_.count()), KPC(this));
   } else if (flush_infos_.size() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("flush_infos_ is empty", KR(ret), KPC(this));
   } else if (OB_ISNULL(wbp_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("write buffer pool ptr is nullptr", KR(ret), KPC(this));
   } else if (OB_FAIL(prealloc_block_buf())) {
   } else {
     char* page_buf = nullptr;
@@ -361,7 +352,6 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
       int64_t cur_info_virtual_page_id = flush_info.flush_virtual_page_id_;
       if (copy_index != cur_info_disk_begin_id) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected flush info", KR(ret), K(i), K(copy_index), KPC(this));
       }
       while (OB_SUCC(ret) && copy_index < cur_info_disk_begin_id + cur_info_page_num
                           && copy_index < flush_page_id_arr_.count()) {
@@ -370,7 +360,6 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
         if (OB_FAIL(wbp_->read_page(cur_info_fd, page_id, ObTmpFilePageUniqKey(cur_info_virtual_page_id), page_buf, next_page_id))) {
         } else if (OB_UNLIKELY(!check_buf_range_valid(get_data_buf(), ObTmpFileGlobal::ALLOC_PAGE_SIZE))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid buffer range", KR(ret), KP(get_data_buf()), KPC(this));
         } else {
           // only copy the size we recorded if we need to flush the last page
           // since we do not hold last_page_lock and the last page may be appended
@@ -449,7 +438,6 @@ int ObTmpFileFlushTask::wait_macro_block_handle()
     } else {
       atomic_set_ret_code(ret);
       atomic_set_io_finished(true);
-      LOG_WARN("fail to wait macro block handle", KR(ret), KPC(this));
       ret = OB_SUCCESS;
     }
   } else {

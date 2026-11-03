@@ -30,10 +30,8 @@ int ObCompactBlockReader::CurRowInfo::init(const ChunkRowMeta *row_meta, const u
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row_meta) || OB_ISNULL(buf)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null pointer", K(ret), KP(row_meta), KP(buf));
   } else if (offset_width != BASE_OFFSET_SIZE && offset_width != EXTENDED_OFFSET_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("offset_width is invalid", K(ret), K(offset_width));
   } else {
     buf_ = buf;
     row_size_ = reinterpret_cast<const uint32_t*>(buf);
@@ -57,12 +55,10 @@ int ObCompactBlockReader::get_row(const ObChunkDatumStore::StoredRow *&sr)
   sr = nullptr;
   if (OB_ISNULL(cur_blk_) || OB_ISNULL(row_meta_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur block or row_meta is null", K(ret), KP(cur_blk_), KP(row_meta_));
   } else if (!blk_has_next_row()) {
     ret = OB_ITER_END;
   } else if (cur_pos_in_blk_ > cur_blk_->raw_size_ - sizeof(ObTempBlockStore::Block)) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("invalid index", K(ret), K(cur_pos_in_blk_), KP(cur_blk_), K(cur_row_in_blk_), K(cur_blk_->cnt_), K(row_meta_->column_offset_));
   } else {
     int64_t size = 0;
     sr = nullptr;
@@ -71,11 +67,8 @@ int ObCompactBlockReader::get_row(const ObChunkDatumStore::StoredRow *&sr)
     } else if (OB_FAIL(alloc_stored_row(tmp_sr, size))) {
     } else if (OB_ISNULL(tmp_sr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the sr is null", K(ret));
     } else if (cur_row_offset_width_ == BASE_OFFSET_SIZE && OB_FAIL(get_stored_row<uint16_t>(tmp_sr))){
-      LOG_WARN("fail to get stored row", K(ret));
     } else if (cur_row_offset_width_ == EXTENDED_OFFSET_SIZE && OB_FAIL(get_stored_row<uint32_t>(tmp_sr)))  {
-      LOG_WARN("fail to get stored row", K(ret));
     } else {
       sr = tmp_sr;
     }
@@ -92,11 +85,9 @@ int ObCompactBlockReader::get_stored_row(ObChunkDatumStore::StoredRow *&sr)
 
   if (OB_ISNULL(row_meta_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row meta shouldn't be null", K(ret), KP(row_meta_));
   } else if (OB_FAIL(row_info_.init(row_meta_, cur_row_offset_width_, &cur_blk_->payload_[cur_pos_in_blk_]))) {
   } else if (OB_ISNULL(row_info_.buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buf is null", K(ret));
   } else {
     const T *offset_array = reinterpret_cast<const T *>(row_info_.buf_ + HEAD_SIZE + row_info_.bitmap_size_);
     for (int64_t i = 0; OB_SUCC(ret) && i < row_meta_->col_cnt_; i++) {
@@ -114,7 +105,6 @@ int ObCompactBlockReader::get_stored_row(ObChunkDatumStore::StoredRow *&sr)
           len = offset_array[row_info_.cur_var_offset_pos_ +  1] - offset;
         } else {
           ret = OB_INDEX_OUT_OF_RANGE;
-          LOG_WARN("the var column idx in out of range", K(ret));
         }
         if (OB_SUCC(ret)) {
           // set datum->len_, use the pack_ to conver the NULL_FLAG
@@ -156,7 +146,6 @@ int ObCompactBlockReader::alloc_stored_row(ObChunkDatumStore::StoredRow *&sr, co
     sr_buffer_ = static_cast<char*>(store_->alloc(size));
     if (OB_ISNULL(sr_buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
     } else {
       sr_size_ = size;
     }
@@ -174,7 +163,6 @@ int ObCompactBlockReader::get_stored_row_size(int64_t &size)
   size = 0;
   if (OB_ISNULL(cur_blk_) || OB_ISNULL(row_meta_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur block or row_meta is null", K(ret), KP(cur_blk_), KP(row_meta_));
   } else if (OB_FAIL(ObCompactBlockReader::calc_stored_row_size(&cur_blk_->payload_[cur_pos_in_blk_], row_meta_, size))) {
   } else {
     cur_row_offset_width_ = *reinterpret_cast<const int8_t*>(cur_blk_->payload_ + cur_pos_in_blk_ + sizeof(uint32_t));
@@ -188,7 +176,6 @@ int ObCompactBlockReader::calc_stored_row_size(const char *compact_row, const Ch
   size = 0;
   if (OB_ISNULL(compact_row) || OB_ISNULL(row_meta)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur block or row_meta is null", K(ret), KP(compact_row), KP(row_meta));
   } else {
     int64_t bit_map_size = sql::ObBitVector::memory_size(row_meta->col_cnt_);
     uint32_t row_size = *reinterpret_cast<const uint32_t*>(compact_row);
@@ -196,7 +183,6 @@ int ObCompactBlockReader::calc_stored_row_size(const char *compact_row, const Ch
     int64_t var_column_cnt = row_meta->col_cnt_ - row_meta->fixed_cnt_;
     if (offset_width != BASE_OFFSET_SIZE && offset_width != EXTENDED_OFFSET_SIZE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the offset width is unexpected", K(ret));
     }
     if (OB_SUCC(ret)) {
       size = row_size - HEAD_SIZE - bit_map_size - offset_width * (var_column_cnt + 1)\

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
+#include "rust/config.h"
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_server_runtime.h"
@@ -71,7 +72,6 @@ int ObPxPools::get_or_create(int64_t group_id, ObPxPool *&pool)
       if (OB_FAIL(create_pool(group_id, pool))) {
       }
     } else {
-      LOG_WARN("fail get group id from hashmap", K(ret), K(group_id));
     }
   }
   return ret;
@@ -96,7 +96,6 @@ int ObPxPools::create_pool(int64_t group_id, ObPxPool *&pool)
         }
       }
     } else {
-      LOG_WARN("fail get group id from hashmap", K(ret), K(group_id));
     }
   }
   return ret;
@@ -118,7 +117,6 @@ int ObPxPools::ThreadRecyclePoolFunc::operator() (common::hash::HashMapPair<int6
   int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
-    LOG_WARN("pool is null", K(group_id));
   } else {
     IGNORE_RETURN pool->thread_recycle();
   }
@@ -131,7 +129,6 @@ int ObPxPools::StopPoolFunc::operator() (common::hash::HashMapPair<int64_t, ObPx
   int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
-    LOG_WARN("pool is null", K(group_id));
   } else {
     pool->stop();
     LOG_INFO("DEL_POOL_STEP_1: mark px pool stop succ!", K(group_id));
@@ -145,7 +142,6 @@ int ObPxPools::DeletePoolFunc::operator() (common::hash::HashMapPair<int64_t, Ob
   int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
-    LOG_WARN("pool is null", K(group_id));
   } else {
     pool->wait();
     LOG_INFO("DEL_POOL_STEP_2: wait pool empty succ!", K(group_id));
@@ -162,7 +158,6 @@ void ObPxPools::server_module_stop(ObPxPools *&pools)
   if (OB_ISNULL(pools)) {
     // ignore ret
     // pools will be null if it's creating runtime and failed.
-    LOG_WARN("pools is null");
   } else {
     common::SpinWLockGuard g(pools->lock_);
     StopPoolFunc stop_pool_func;
@@ -186,7 +181,7 @@ int ObPxPool::submit(const RunFuncT &func)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
-    queue_.set_limit(common::ObServerConfig::get_instance().server_task_queue_size);
+    queue_.set_limit(::oceanbase::config::server_task_queue_size());
     is_inited_ = true;
   }
   disable_recycle();
@@ -242,15 +237,11 @@ void ObPxPool::run1()
   int ret = OB_SUCCESS;
   ObDIActionGuard action_guard("PxPool", "PxWorker", "");
   set_px_thread_name();
-  auto *pm = common::ObPageManager::thread_local_instance();
-  if (OB_LIKELY(nullptr != pm)) {
-    pm->set_ctx(common::ObCtxIds::DEFAULT_CTX_ID);
-  }
   CLEAR_INTERRUPTABLE();
   LOG_INFO("run px pool", K(group_id_), K_(active_threads));
 
 	if (!is_inited_) {
-    queue_.set_limit(common::ObServerConfig::get_instance().server_task_queue_size);
+    queue_.set_limit(::oceanbase::config::server_task_queue_size());
     is_inited_ = true;
   }
 
@@ -336,7 +327,7 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
 
   if (OB_FAIL(ObServerRuntimeState::init())) {
   } else {
-    req_queue_.set_limit(GCONF.server_task_queue_size);
+    req_queue_.set_limit(config::server_task_queue_size());
     if (OB_FAIL(construct_module_init_ctx(meta, module_init_ctx_))) {
     } else {
       runtime_meta_ = meta;
@@ -373,7 +364,6 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx = OB_NEW(share::ObServerModuleInitCtx, ObMemAttr("ModuleInitCtx")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc ObServerModuleInitCtx failed", K(ret));
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(ctx->clog_dir_))) {
   } else {
     ctx->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.runtime_config_.resource_config_.log_disk_size();
@@ -381,7 +371,7 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
     ctx->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     ctx->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     ctx->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
-    ctx->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
+    ctx->palf_options_.enable_log_cache_ = config::_enable_log_cache();
     LOG_INFO("construct_module_init_ctx success", "palf_options", ctx->palf_options_.disk_options_
              );
   }
@@ -390,23 +380,7 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
 bool ObServerRuntime::is_hidden()
 {
   TCRLockGuard guard(meta_lock_);
-  return runtime_meta_.super_block_.is_hidden_;
-}
-
-void ObServerRuntime::set_create_status(const ObServerRuntimeCreateStatus status)
-{
-  TCWLockGuard guard(meta_lock_);
-  LOG_INFO("set create status",
-      "new_status", status,
-      "old_status", runtime_meta_.create_status_,
-      K_(runtime_meta));
-  runtime_meta_.create_status_ = status;
-}
-
-ObServerRuntimeMeta ObServerRuntime::get_runtime_meta()
-{
-  TCRLockGuard guard(meta_lock_);
-  return runtime_meta_;
+  return runtime_meta_.is_hidden_;
 }
 
 ObServerRuntimeConfig ObServerRuntime::get_runtime_config()
@@ -415,22 +389,16 @@ ObServerRuntimeConfig ObServerRuntime::get_runtime_config()
   return runtime_meta_.runtime_config_;
 }
 
-ObServerRuntimeSuperBlock ObServerRuntime::get_super_block()
-{
-  TCRLockGuard guard(meta_lock_);
-  return runtime_meta_.super_block_;
-}
-
 void ObServerRuntime::set_server_resources(const ObServerRuntimeConfig &runtime_config)
 {
   TCWLockGuard guard(meta_lock_);
   runtime_meta_.runtime_config_ = runtime_config;
 }
 
-void ObServerRuntime::set_server_super_block(const ObServerRuntimeSuperBlock &super_block)
+void ObServerRuntime::activate()
 {
   TCWLockGuard guard(meta_lock_);
-  runtime_meta_.super_block_ = super_block;
+  runtime_meta_.is_hidden_ = false;
 }
 
 ERRSIM_POINT_DEF(CREATE_MODULES_FAIL)
@@ -595,7 +563,7 @@ void ObServerRuntime::set_min_cpu(double cpu)
 
 int64_t ObServerRuntime::cpu_quota_concurrency() const
 {
-  return static_cast<int64_t>(GCONF.cpu_quota_concurrency);
+  return static_cast<int64_t>(config::cpu_quota_concurrency());
 }
 
 int64_t ObServerRuntime::min_worker_cnt() const
@@ -606,7 +574,7 @@ int64_t ObServerRuntime::min_worker_cnt() const
 
 int64_t ObServerRuntime::max_worker_cnt() const
 {
-  int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (GCONF.stack_size + (3 << 20) + (512 << 10)),
+  int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (config::stack_size() + (3 << 20) + (512 << 10)),
                   static_cast<int64_t>(150L));
   return cnt;
 }
@@ -747,8 +715,6 @@ void ObServerRuntime::handle_retry_req(bool need_clear)
     // if pop returns OB_SUCCESS, then the task must not be NULL.
     req = static_cast<rpc::ObRequest*>(task);
     if (OB_FAIL(recv_request(*req))) {
-      LOG_WARN("runtime patrol push req into common queue fail, "
-          "and the req well be destroyed", "req", *req, K(ret));
       on_translate_fail(req, ret);
     }
   }
@@ -832,8 +798,8 @@ void ObServerRuntime::check_parallel_servers_target()
   } else {
     val = ObCpuShareCalculator::resolve_parallel_servers_target(
         val,
-        static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
-        GCONF.px_workers_per_cpu_quota);
+        static_cast<int64_t>(::oceanbase::common::get_server_default_min_cpu()),
+        config::px_workers_per_cpu_quota());
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }
 }

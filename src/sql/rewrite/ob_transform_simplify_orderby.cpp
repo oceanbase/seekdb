@@ -54,7 +54,6 @@ int ObTransformSimplifyOrderby::transform_one_stmt(common::ObIArray<ObParentDMLS
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt", K(ret), K(stmt), K(ctx_), K(ctx_->session_info_));
   } else if (OB_FAIL(ctx_->session_info_->is_serial_set_order_forced(force_serial_set_order))) {
   } else if (OB_FAIL(remove_order_by_for_subquery(stmt, subquery_happened))) {
   } else if (OB_FAIL(remove_order_by_for_view_stmt(stmt, view_happened, force_serial_set_order))) {
@@ -82,7 +81,6 @@ int ObTransformSimplifyOrderby::remove_order_by_for_subquery(ObDMLStmt *stmt, bo
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null");
   } else {
     ObIArray<ObQueryRefRawExpr*> &subquery_exprs = stmt->get_subquery_exprs();
     ObSelectStmt *subquery = NULL;
@@ -91,12 +89,10 @@ int ObTransformSimplifyOrderby::remove_order_by_for_subquery(ObDMLStmt *stmt, bo
       ObQueryRefRawExpr *query_ref = subquery_exprs.at(i);
       if (OB_ISNULL(query_ref) || OB_ISNULL(subquery = query_ref->get_ref_stmt())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("subquery reference is invalid", K(ret), K(query_ref));
       } else if (!subquery->has_limit() &&
                  !subquery->is_contains_assignment() &&
                  subquery->has_order_by() &&
                  OB_FAIL(do_remove_stmt_order_by(subquery, happened))) {
-        LOG_WARN("do remove stmt order by failed", K(ret));
       } else {
         trans_happened |= happened;
       }
@@ -112,7 +108,6 @@ int ObTransformSimplifyOrderby::remove_order_by_for_view_stmt(ObDMLStmt *stmt, b
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   //select stmt cannot have window function,eg:
   // SELECT last_value(c1) OVER (PARTITION BY c2) FROM (SELECT * FROM t1 ORDER BY c1, c2)s
   // ORDER BY c1, c2;
@@ -132,13 +127,11 @@ int ObTransformSimplifyOrderby::remove_order_by_for_view_stmt(ObDMLStmt *stmt, b
       const TableItem * table_item = table_items.at(i);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("joined table is null", K(ret));
       } else if (!table_item->is_generated_table() &&
                  !table_item->is_lateral_table()) {
         /*do nothing*/
       } else if (OB_ISNULL(view_stmt = table_item->ref_query_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("view stmt is null", K(ret));
       } else if (view_stmt->is_contains_assignment() ||
                  (force_serial_set_order && view_stmt->is_set_stmt())) {
         // do nothing
@@ -149,14 +142,12 @@ int ObTransformSimplifyOrderby::remove_order_by_for_view_stmt(ObDMLStmt *stmt, b
                      select_stmt->has_order_by()) && !view_stmt->has_limit() &&
                      view_stmt->has_order_by() &&
                      OB_FAIL(do_remove_stmt_order_by(view_stmt, happened))) {
-            LOG_WARN("do remove stmt order by failed", K(ret));
           } else {
             trans_happened |= happened;
           }
         }
       } else if (!view_stmt->has_limit() && view_stmt->has_order_by() &&
                  OB_FAIL(do_remove_stmt_order_by(view_stmt, happened))) {
-        LOG_WARN("do remove stmt order by failed", K(ret));
       } else {
         trans_happened |= happened;
       }
@@ -172,13 +163,11 @@ int ObTransformSimplifyOrderby::do_remove_stmt_order_by(ObSelectStmt *select_stm
   ObSEArray<OrderItem, 4> new_order_items;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("select stmt is null", K(select_stmt), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_order_item_size(); ++i) {
     const OrderItem &order_item = select_stmt->get_order_item(i);
     if (OB_ISNULL(order_item.expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("order expr is null");
     } else if (order_item.expr_->has_flag(CNT_SUB_QUERY)) {
       // in case the subquery returns more than one rows,
       // we should keep the subquery which may returns error
@@ -201,7 +190,6 @@ int ObTransformSimplifyOrderby::remove_order_by_duplicates(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer passed to transform", K(ret));
   } else if (!stmt->is_sel_del_upd() ||
              (stmt->is_select_stmt() && (static_cast<ObSelectStmt*>(stmt)->has_rollup()))) {
     //do nothing
@@ -222,18 +210,15 @@ int ObTransformSimplifyOrderby::remove_order_by_duplicates(ObDMLStmt *stmt,
             ObRawExpr *op_expr = cond_exprs.at(j);
             if (OB_ISNULL(op_expr)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("null pointer in condtion exprs", K(ret));
             } else if (T_OP_EQ == op_expr->get_expr_type()) {
               if (op_expr->get_param_count() != 2) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("eq expr should have two param", K(ret));
               } else {
                 ObRawExpr *left_param = op_expr->get_param_expr(0);
                 ObRawExpr *right_param = op_expr->get_param_expr(1);
                 bool is_consistent = false;
                 if (OB_ISNULL(left_param) || OB_ISNULL(right_param)) {
                  ret = OB_ERR_UNEXPECTED;
-                 LOG_WARN("null pointer in condtion exprs", K(ret));
                 } else if (OB_FAIL(ObRelationalExprOperator::is_equal_transitive(
                                               left_param->get_result_type(),
                                               right_param->get_result_type(), is_consistent))) {
@@ -274,13 +259,11 @@ int ObTransformSimplifyOrderby::exist_item_by_expr(ObRawExpr *expr, ObIArray<Ord
   int64_t N = order_items.count();
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current order item expr is NULL", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < N && !is_exist; ++i) {
       OrderItem& this_item = order_items.at(i);
       if (OB_ISNULL(this_item.expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("order item expr is NULL", K(ret));
       } else if (this_item.expr_ == expr) {
         is_exist = true;
       } else if (this_item.expr_->same_as(*expr)) {
@@ -297,7 +280,6 @@ int ObTransformSimplifyOrderby::remove_order_by_for_set_stmt(ObDMLStmt *&stmt, b
   trans_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt", K(ret), K(stmt), K(ctx_), K(ctx_->session_info_));
   } else if (!(stmt->is_select_stmt() && static_cast<ObSelectStmt*>(stmt)->is_set_stmt())) {
     //not set stmt, do nothing
   } else if (force_serial_set_order && 
@@ -311,13 +293,11 @@ int ObTransformSimplifyOrderby::remove_order_by_for_set_stmt(ObDMLStmt *&stmt, b
       bool happened = false;
       if (OB_ISNULL(child_stmt = child_stmts.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("stmt is NULL", K(stmt), K(child_stmt), K(ret));
       } else if (child_stmt->is_contains_assignment()) {
         // do nothing
       } else if (!child_stmt->has_limit() &&
                  child_stmt->has_order_by() &&
                  OB_FAIL(do_remove_stmt_order_by(child_stmt, happened))) {
-        LOG_WARN("do remove stmt order by failed", K(ret));
       } else {
         trans_happened |= happened;
       }

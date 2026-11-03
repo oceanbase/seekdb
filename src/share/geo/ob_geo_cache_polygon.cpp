@@ -32,10 +32,8 @@ int ObRingsRtree::get_ring_strat_idx(int p_idx, int &start, int& end)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should be inited", K(ret));
   } else if (poly_count_ != ring_count_.size() || p_idx > poly_count_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong ring count", K(ret), K(poly_count_), K(ring_count_.size()), K(p_idx));
   } else {
     start = 0;
     end = 0;
@@ -48,7 +46,6 @@ int ObRingsRtree::get_ring_strat_idx(int p_idx, int &start, int& end)
     if (OB_FAIL(ret)) {
     } else if (start >= end || end > rtrees_.size()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("wrong range", K(ret), K(start), K(end), K(rtrees_.size()));
     }
   }
   return ret;
@@ -69,7 +66,6 @@ int ObCachedGeoPolygon::init_point_analyzer()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else if (OB_ISNULL(pAnalyzer_)) {
     segments_.reset();
     ObGeoSegmentCollectVisitor seg_visitor(&segments_);
@@ -78,7 +74,6 @@ int ObCachedGeoPolygon::init_point_analyzer()
       ObPointLocationAnalyzer *buf = static_cast<ObPointLocationAnalyzer *>(get_allocator()->alloc(sizeof(ObPointLocationAnalyzer)));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc point location analyzer failed", K(ret));
       } else {
         pAnalyzer_ = new(buf) ObPointLocationAnalyzer(this, seg_rtree_);
       }
@@ -92,12 +87,10 @@ int ObCachedGeoPolygon::alloc_rtree(ObSegRtree*& rtree_ptr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObSegRtree *buf = static_cast<ObSegRtree *>(get_allocator()->alloc(sizeof(ObSegRtree)));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc segment rtree failed", K(ret));
     } else {
       rtree_ptr = new(buf) ObSegRtree(this);
     }
@@ -145,7 +138,6 @@ int ObCachedGeoPolygon::polygon_init_rings_rtree(T_IBIN *geo)
       if (OB_FAIL(ret)) {
       } else if (rings_rtree_.rtrees_.size() - rtree_size_old != ring_size) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("check rtree size failed", K(rings_rtree_.rtrees_.size()), K(rtree_size_old), K(ring_size), K(ret));
       }
     }
   }
@@ -181,7 +173,6 @@ int ObCachedGeoPolygon::init_rings_rtree()
   if (rings_rtree_.inited_) {
   } else if (OB_ISNULL(origin_geo_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else if (origin_geo_->type() == ObGeoType::POLYGON) {
     rings_rtree_.poly_count_ = 1;
     if (origin_geo_->crs() == ObGeoCRS::Cartesian) {
@@ -212,12 +203,10 @@ int ObCachedGeoPolygon::init_line_analyzer()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else if (OB_ISNULL(lAnalyzer_)) {
     ObLineIntersectionAnalyzer *buf = static_cast<ObLineIntersectionAnalyzer *>(get_allocator()->alloc(sizeof(ObLineIntersectionAnalyzer)));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc line segment intersection analyzer failed", K(ret));
     } else {
       lAnalyzer_ = new(buf) ObLineIntersectionAnalyzer(this, rtree_);
       // collect line segments
@@ -305,7 +294,6 @@ int ObCachedGeoPolygon::get_point_position_in_polygon(int p_idx, const ObPoint2d
     for (int i = start; i < end && OB_SUCC(ret) && pos == ObPointLocation::INVALID; ++i) {
       if (OB_ISNULL(rings_rtree_.rtrees_[i])) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("rtree is null", K(ret), K(i));
       } else {
         ObPointLocationAnalyzer tmp_pAnalyzer(this, *rings_rtree_.rtrees_[i]);
         if (i == start) { 
@@ -345,7 +333,6 @@ int ObCachedGeoPolygon::inner_eval_intersects(ObGeometry& geo, ObGeoEvalCtx& gis
   if (OB_FAIL(geo.do_visit(vertex_coll))) {
   } else if (OB_FAIL(ObGeoTypeUtil::get_geo_dimension(&geo, dim))) {
   } else if (OB_ISNULL(pAnalyzer_) && OB_FAIL(init_point_analyzer())) {
-    LOG_WARN("fail to init_point_Analyzer", K(ret));
   } else {
     for (uint32_t i = 0; i < input_vertexes_.size() && OB_SUCC(ret) && !is_intersects; ++i) {
       if (OB_FAIL(pAnalyzer_->calculate_point_position(input_vertexes_[i]))) {
@@ -360,7 +347,6 @@ int ObCachedGeoPolygon::inner_eval_intersects(ObGeometry& geo, ObGeoEvalCtx& gis
   } else if (dim == ObGeoDimension::ZERO_DIMENSION || is_intersects) {
     res = is_intersects;
   } else if (OB_ISNULL(lAnalyzer_) && OB_FAIL(init_line_analyzer())) { // dim of geo is 1 or 2
-    LOG_WARN("fail to init_line_Analyzer", K(ret));
   } else if (OB_FAIL(lAnalyzer_->segment_intersection_query(&geo))) {
   } else if (lAnalyzer_->is_intersects()) {
     res = lAnalyzer_->is_intersects();
@@ -376,13 +362,11 @@ int ObCachedGeoPolygon::get_farthest_point_position(ObVertexes& vertexes, ObPoin
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pAnalyzer_) && OB_FAIL(init_point_analyzer())) {
-    LOG_WARN("fail to init_point_Analyzer", K(ret));
   } else {
     for (uint32_t i = 0; i < vertexes.size() && OB_SUCC(ret) && (farthest_position != ObPointLocation::EXTERIOR); ++i) {
       if (OB_FAIL(pAnalyzer_->calculate_point_position(vertexes[i]))) {
       } else if (pAnalyzer_->get_position() == ObPointLocation::INVALID) { 
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("wrong position.", K(i), K(ret));
       } else if (farthest_position == ObPointLocation::INVALID || farthest_position < pAnalyzer_->get_position()) {
         farthest_position = pAnalyzer_->get_position();
       }
@@ -460,9 +444,7 @@ int ObCachedGeoPolygon::inner_eval_contains(ObGeometry& geo, ObGeoEvalCtx& gis_c
     res = false;
   } else if (lAnalyzer_->is_intersects()) {
     if (eval_contains && OB_FAIL(ObCachedGeomBase::contains(geo, gis_context, res))) {
-      LOG_WARN("fail to check contains by base", K(ret));
     } else if (!eval_contains && OB_FAIL(ObCachedGeomBase::cover(geo, gis_context, res))) {
-      LOG_WARN("fail to check contains by base", K(ret));
     }
   } else if (dim == ObGeoDimension::TWO_DIMENSION) {
     bool any_point_in = false;
@@ -482,14 +464,11 @@ int ObCachedGeoPolygon::contains(ObGeometry& geo, ObGeoEvalCtx& gis_context, boo
   int ret = OB_SUCCESS;
   if (!is_inited_ && OB_FAIL(init())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else if (ObGeoTypeUtil::is_point(geo)) {
     if (!rings_rtree_.inited_ && OB_FAIL(init_rings_rtree())) {
-      LOG_WARN("fail to init rings rtree", K(ret));
     } else if (OB_FAIL(eval_point_contains(geo, res, false))) {
     }
   } else if (!check_valid_ && OB_FAIL(check_valid(gis_context))) {
-    LOG_WARN("cached polygon fail to check valid", K(ret));
   } else if (is_valid_) {
     if (OB_FAIL(inner_eval_contains(geo, gis_context, res, true))) {
     }
@@ -504,14 +483,11 @@ int ObCachedGeoPolygon::cover(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &
   int ret = OB_SUCCESS;
   if (!is_inited_ && OB_FAIL(init())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else if (ObGeoTypeUtil::is_point(geo)) {
     if (!rings_rtree_.inited_ && OB_FAIL(init_rings_rtree())) {
-      LOG_WARN("fail to init rings rtree", K(ret));
     } else if (OB_FAIL(eval_point_contains(geo, res, true))) {
     }
   } else if (!check_valid_ && OB_FAIL(check_valid(gis_context))) {
-    LOG_WARN("cached polygon fail to check valid", K(ret));
   } else if (is_valid_) {
     if (OB_FAIL(inner_eval_contains(geo, gis_context, res, false))) {
     }
@@ -525,14 +501,11 @@ int ObCachedGeoPolygon::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context, b
   int ret = OB_SUCCESS;
   if (ObGeoTypeUtil::is_point(geo)) {
     if (!rings_rtree_.inited_ && OB_FAIL(init_rings_rtree())) {
-      LOG_WARN("fail to init rings rtree", K(ret));
     } else if (OB_FAIL(eval_point_intersects(geo, res))) {
     }
   } else if (!is_inited_ && OB_FAIL(init())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached polygon must be inited", K(ret));
   } else if (!check_valid_ && OB_FAIL(check_valid(gis_context))) {
-    LOG_WARN("cached polygon fail to check valid", K(ret));
   } else if (is_valid_) {
     if (OB_FAIL(inner_eval_intersects(geo, gis_context, res))) {
     }

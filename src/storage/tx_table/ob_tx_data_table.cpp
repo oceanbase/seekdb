@@ -611,7 +611,6 @@ int ObTxDataTable::get_tx_data_in_sstable_(const transaction::ObTransID tx_id, O
   } else if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet handle", KR(ret), K(tablet_handle), K(tablet_id_));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
   } else {
     const ObSSTableArray &sstables = table_store_wrapper.get_member()->get_minor_sstables();
@@ -777,7 +776,6 @@ int ObTxDataTable::DEBUG_calc_with_all_sstables_(ObTableAccessContext &access_co
   if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet handle", KR(ret), K(tablet_handle), K(tablet_id_));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
   } else {
     const ObSSTableArray &sstables = table_store_wrapper.get_member()->get_minor_sstables();
@@ -994,7 +992,6 @@ int ObTxDataTable::update_calc_upper_trans_version_cache_(ObITable *table)
   if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet handle", KR(ret), K(tablet_handle), K(tablet_id_));
   } else {
     ObStorageMetaHandle sstable_handle;
     ObSSTable *sstable = static_cast<ObSSTable *>(table);
@@ -1228,7 +1225,6 @@ int ObTxDataTable::get_sstable_recycle_scn(share::SCN &recycle_scn)
   } else if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet should not be NULL", K(ret), KP(tablet));
   } else if (OB_FAIL(tablet->get_all_minor_sstables(iter))) {
   } else if (0 == iter.count()) {
     recycle_scn.set_min();
@@ -1238,14 +1234,12 @@ int ObTxDataTable::get_sstable_recycle_scn(share::SCN &recycle_scn)
       ObITable *table = nullptr;
       if (OB_FAIL(iter.get_next(table))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("fail to iterate minor tables", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
         }
       } else if (OB_ISNULL(table) || !table->is_sstable()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("minor sstable should not be NULL or table type is unexpected", K(ret), KP(table), K(iter));
       } else {
         ObSSTable *sstable = static_cast<ObSSTable *>(table);
         if (is_first_sstable) {

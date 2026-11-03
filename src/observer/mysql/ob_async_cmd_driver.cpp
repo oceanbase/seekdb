@@ -52,7 +52,7 @@ int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
   ObSqlEndTransCb &sql_end_cb = session_.get_mysql_end_trans_cb();
   ObEndTransCbPacketParam pkt_param;
   result.set_end_trans_async(true);
-  ObCurTraceId::TraceId *cur_trace_id = NULL;
+  const ObCurTraceId::TraceId *cur_trace_id = NULL;
   if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("current trace id is NULL", K(ret));
@@ -66,8 +66,6 @@ int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
     }
     if (!result.is_async_end_trans_submitted()) {
       retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
-      LOG_WARN("result set open failed, check if need retry",
-               K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
       ret = cli_ret;
     } else {
       LOG_ERROR("result set open failed, async end trans submmited, don't retry", K(ret));

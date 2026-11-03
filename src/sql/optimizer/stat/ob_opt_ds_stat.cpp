@@ -92,8 +92,6 @@ int ObOptDSStat::deep_copy(const ObOptDSStat &src, char *buf, const int64_t buf_
   if (!src.col_stats_.empty()) {
     if (OB_UNLIKELY(src.col_stats_.count() * sizeof(ObOptDSColStat) + pos > buf_len)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("buffer size is not enough", K(ret), K(src.col_stats_.count() * sizeof(ObOptDSColStat)),
-                                            K(pos), K(buf_len));
     } else {
       ObOptDSColStat *col_stats= new (buf + pos) ObOptDSColStat[src.col_stats_.count()];
       col_stats_ = ObArrayWrap<ObOptDSColStat>(col_stats, src.col_stats_.count());

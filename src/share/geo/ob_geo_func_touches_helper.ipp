@@ -74,7 +74,6 @@ static int eval_touches_mpt(const ObGeometry *mpt, const ObGeometry *geo, const 
   result = false;
   if (OB_ISNULL(mpt_bin) || OB_ISNULL(geo_bin)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("multipoint or linestring pointer is null", K(ret), K(mpt_bin), K(geo_bin));
   } else {
     // At least one point in g1 has to touch g2,
     // and none of the points in g1 may be within g2
@@ -106,7 +105,6 @@ static int eval_touches_with_point_strategy(
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     bg::strategy::within::geographic_winding<ObWkbGeogPoint> point_strategy(geog_sphere);
@@ -114,7 +112,6 @@ static int eval_touches_with_point_strategy(
     const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
     if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("multipoint or linestring pointer is null", K(ret), K(geo1), K(geo2));
     } else {
       result = bg::touches(*geo1, *geo2, point_strategy);
     }
@@ -137,7 +134,6 @@ static int eval_touches_without_strategy(const ObGeometry *g1, const ObGeometry 
   }
   if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("multipoint or linestring pointer is null", K(ret), K(geo1), K(geo2));
   } else {
     result = bg::touches(*geo1, *geo2);
   }
@@ -152,7 +148,6 @@ static int eval_touches_with_nonpoint_strategy(
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     bg::strategy::intersection::geographic_segments<> nonpoint_strategy(geog_sphere);
@@ -167,7 +162,6 @@ static int eval_touches_with_nonpoint_strategy(
     }
     if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("multipoint or linestring pointer is null", K(ret), K(geo1), K(geo2));
     } else {
       result = bg::touches(*geo1, *geo2, nonpoint_strategy);
     }
@@ -228,18 +222,14 @@ private:
       ObGeometry *mls_bin = NULL;
       if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
               *context.get_allocator(), mls1, mls_bin, context.get_srs()))) {
-        LOG_WARN("failed to convert geo tree to binary", K(ret));
       } else if (OB_FAIL(wkb_fn(mls_bin, g2, context, is_part_touches))) {
-        LOG_WARN("fail to eval wkb binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mpy1->is_empty()) {
       ObGeometry *mpy_bin = NULL;
       if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
               *context.get_allocator(), mpy1, mpy_bin, context.get_srs()))) {
-        LOG_WARN("failed to convert geo tree to binary", K(ret));
       } else if (OB_FAIL(wkb_fn(mpy_bin, g2, context, is_part_touches))) {
-        LOG_WARN("fail to eval wkb binary", K(ret));
       }
     }
     return ret;
@@ -256,42 +246,34 @@ private:
     is_part_touches = false;
     if (!is_part_touches && !mpy1->is_empty() && !mls2->is_empty()) {
       if (OB_FAIL(tree_fn(mpy1, mls2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mpy1->is_empty() && !mpy2->is_empty()) {
       if (OB_FAIL(tree_fn(mpy1, mpy2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mls1->is_empty() && !mls2->is_empty()) {
       if (OB_FAIL(tree_fn(mls1, mls2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mls1->is_empty() && !mpy2->is_empty()) {
       if (OB_FAIL(tree_fn(mls1, mpy2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mpt1->is_empty() && !mls2->is_empty()) {
       if (OB_FAIL(tree_fn(mpt1, mls2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mpt1->is_empty() && !mpy2->is_empty()) {
       if (OB_FAIL(tree_fn(mpt1, mpy2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mls1->is_empty() && !mpt2->is_empty()) {
       if (OB_FAIL(tree_fn(mls1, mpt2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     if (OB_SUCC(ret) && !is_part_touches && !mpy1->is_empty() && !mpt2->is_empty()) {
       if (OB_FAIL(tree_fn(mpy1, mpt2, context, is_part_touches))) {
-        LOG_WARN("fail to eval tree binary", K(ret));
       }
     }
     return ret;
@@ -331,7 +313,6 @@ private:
       const ObSrsItem *srs = context.get_srs();
       if (OB_ISNULL(srs)) {
         ret = OB_ERR_NULL_VALUE;
-        LOG_WARN("srs is null", K(ret));
       } else {
         bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
         bg::strategy::within::geographic_winding<ObWkbGeogPoint> point_strategy(geog_sphere);
@@ -419,16 +400,13 @@ private:
     ObGeoToTreeVisitor geo2_visitor(context.get_allocator());
     ObGeometry *g2_nconst = const_cast<ObGeometry *>(g2);
     if (OB_FAIL(g2_nconst->do_visit(geo2_visitor))) {
-      LOG_WARN("failed to do geo2 to_tree visit", K(ret));
     } else if (FALSE_IT(g2_tree = geo2_visitor.get_geometry())) {
     } else if (OB_ISNULL(g2_tree)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get g2 tree type", K(ret));
     } else {
       const ObSrsItem *srs = context.get_srs();
       if (OB_ISNULL(srs)) {
         ret = OB_ERR_NULL_VALUE;
-        LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
       } else {
         bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
         bg::strategy::within::geographic_winding<ObWkbGeogPoint> point_strategy(geog_sphere);
@@ -487,7 +465,6 @@ private:
           }
           default: {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid geometry type", K(ret), K(g2->type()));
           }
         }
       }
@@ -510,11 +487,9 @@ private:
     ObGeoToTreeVisitor geo2_visitor(context.get_allocator());
     ObGeometry *g2_nconst = const_cast<ObGeometry *>(g2);
     if (OB_FAIL(g2_nconst->do_visit(geo2_visitor))) {
-      LOG_WARN("failed to do geo2 to_tree visit", K(ret));
     } else if (FALSE_IT(g2_tree = geo2_visitor.get_geometry())) {
     } else if (OB_ISNULL(g2_tree)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get g2 tree type", K(ret));
     } else {
       switch (g2->type()) {
         case ObGeoType::POINT: {
@@ -567,7 +542,6 @@ private:
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid geometry type", K(ret), K(g2->type()));
         }
       }
     }
@@ -588,7 +562,6 @@ private:
     if (g1->type() == ObGeoType::GEOMETRYCOLLECTION
         && g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("g1 and g2 are both geometry collection", K(ret), K(g1->type()), K(g2->type()));
     } else if (g1->type() == ObGeoType::GEOMETRYCOLLECTION) {
       typename GcTreeType::sub_mpt_type *mpt1 = NULL;
       typename GcTreeType::sub_ml_type *mls1 = NULL;
@@ -600,26 +573,21 @@ private:
       bool is_part_touches = false;
       bool point_intersects = false;
       if (OB_FAIL(geo1->do_visit(tree_visitor))) {
-        LOG_WARN("failed to transform gc to tree", K(ret));
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator,
                   *static_cast<const GcTreeType *>(tree_visitor.get_geometry()),
                   mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to do gc split", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null geometry collection split", K(ret));
       } else if (!mpt1->is_empty() &&
                 (g2->type() == ObGeoType::POINT || g2->type() == ObGeoType::MULTIPOINT)) {
         ObGeometry *mpt_bin = NULL;
         if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                 *context.get_allocator(), mpt1, mpt_bin, context.get_srs()))) {
-          LOG_WARN("failed to convert geo tree to binary", K(ret));
         } else {
           ObGeoEvalCtx intersects_context(context.get_mem_ctx(), context.get_srs());
           intersects_context.append_geo_arg(mpt_bin);
           intersects_context.append_geo_arg(g2);
           if (OB_FAIL(ObGeoFuncIntersects::eval(intersects_context, point_intersects))) {
-            LOG_WARN("eval disjoint for intersects failed", K(ret));
           } else if (point_intersects) {
             result = false;
           }
@@ -628,24 +596,20 @@ private:
 
       if (point_intersects || OB_FAIL(ret)) {
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt1, mls1, mpy1))) {
-        LOG_WARN("fail to do gc union", K(ret));
       } else {
         // Check that at least one part of g1 touches at least one part of g2.
         if (OB_FAIL((is_part_touches_gc_other<GcTreeType>(
                 mpt1, mls1, mpy1, g2, context, is_part_touches, wkb_fn)))) {
-          LOG_WARN("fail to do is part touches gc other", K(ret));
         } else if (!is_part_touches) {
           result = false;
         } else if (OB_FAIL((is_part_joint_gc_other_cart<GcTreeType>(
                        mpt1, mls1, mpy1, g1, g2, context, result)))) {
-          LOG_WARN("fail to eval is part joint", K(ret));
         }
       }
     } else if (g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
       ret = eval_touches_gc_other_cart<GcTreeType>(g2, g1, context, result, wkb_fn);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("g1 and g2 are not geometry collection", K(ret), K(g1->type()), K(g2->type()));
     }
     return ret;
   }
@@ -660,7 +624,6 @@ private:
     if (g1->type() == ObGeoType::GEOMETRYCOLLECTION
         && g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("g1 and g2 are both geometry collection", K(ret), K(g1->type()), K(g2->type()));
     } else if (g1->type() == ObGeoType::GEOMETRYCOLLECTION) {
       typename GcTreeType::sub_mpt_type *mpt1 = NULL;
       typename GcTreeType::sub_ml_type *mls1 = NULL;
@@ -672,26 +635,21 @@ private:
       bool is_part_touches = false;
       bool point_intersects = false;
       if (OB_FAIL(geo1->do_visit(tree_visitor))) {
-        LOG_WARN("failed to transform gc to tree", K(ret));
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator,
                   *static_cast<const GcTreeType *>(tree_visitor.get_geometry()),
                   mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to do gc split", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null geometry collection split", K(ret));
       } else if (!mpt1->is_empty() &&
                 (g2->type() == ObGeoType::POINT || g2->type() == ObGeoType::MULTIPOINT)) {
         ObGeometry *mpt_bin = NULL;
         if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                 *context.get_allocator(), mpt1, mpt_bin, context.get_srs()))) {
-          LOG_WARN("failed to convert geo tree to binary", K(ret));
         } else {
           ObGeoEvalCtx intersects_context(context.get_mem_ctx(), context.get_srs());
           intersects_context.append_geo_arg(mpt_bin);
           intersects_context.append_geo_arg(g2);
           if (OB_FAIL(ObGeoFuncIntersects::eval(intersects_context, point_intersects))) {
-            LOG_WARN("eval disjoint for intersects failed", K(ret));
           } else if (point_intersects) {
             result = false;
           }
@@ -700,25 +658,21 @@ private:
 
       if (point_intersects || OB_FAIL(ret)) {
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt1, mls1, mpy1))) {
-        LOG_WARN("fail to do gc union", K(ret));
       } else {
         // Check that at least one part of g1 touches at least one part of g2.
         bool is_part_touches = false;
         if (OB_FAIL((is_part_touches_gc_other<GcTreeType>(
                 mpt1, mls1, mpy1, g2, context, is_part_touches, wkb_fn)))) {
-          LOG_WARN("fail to do is part touches gc other", K(ret));
         } else if (!is_part_touches) {
           result = false;
         } else if (OB_FAIL((is_part_joint_gc_other_geog<GcTreeType>(
                        mpt1, mls1, mpy1, g1, g2, context, result)))) {
-          LOG_WARN("fail to eval is part joint", K(ret));
         }
       }
     } else if (g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
       ret = eval_touches_gc_other_geog<GcTreeType>(g2, g1, context, result, wkb_fn);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("g1 and g2 are not geometry collection", K(ret), K(g1->type()), K(g2->type()));
     }
     return ret;
   }
@@ -733,7 +687,6 @@ private:
     if (g1->type() != ObGeoType::GEOMETRYCOLLECTION
         || g2->type() != ObGeoType::GEOMETRYCOLLECTION) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("g1 or g2 is not geometry collection", K(ret), K(g1->type()), K(g2->type()));
     } else {
       result = false;
       typename GcTreeType::sub_mpt_type *mpt1 = NULL;
@@ -741,10 +694,8 @@ private:
       typename GcTreeType::sub_mp_type *mpy1 = NULL;
       ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
       if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo1, mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to prepare gc", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null geometry collection split", K(ret));
       } else {
         typename GcTreeType::sub_mpt_type *mpt2 = NULL;
         typename GcTreeType::sub_ml_type *mls2 = NULL;
@@ -754,22 +705,18 @@ private:
         bool is_part_touches = false;
         bool is_part_joint = false;  // Check that the interiors of g1 and g2 are disjoint.
         if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo2, mpt2, mls2, mpy2))) {
-          LOG_WARN("failed to prepare gc", K(ret));
         } else if (OB_ISNULL(mpt2) || OB_ISNULL(mls2) || OB_ISNULL(mpy2)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null geometry collection split", K(ret));
         } else if (!mpt1->is_empty() && mls1->is_empty() && mpy1->is_empty() && !mpt2->is_empty()
                    && mls2->is_empty() && mpy2->is_empty()) {
           // MySQL return NULL, PG return false
           result = false;
         } else if (OB_FAIL((is_part_touches_gc_gc<GcTreeType>(
                        mpt1, mls1, mpy1, mpt2, mls2, mpy2, context, is_part_touches, tree_fn)))) {
-          LOG_WARN("fail to eval is part touches", K(ret));
         } else if (!is_part_touches) {
           result = false;
         } else if (OB_FAIL((is_part_joint_gc_gc<GcTreeType>(
                        mpt1, mls1, mpy1, mpt2, mls2, mpy2, context, is_part_joint)))) {
-          LOG_WARN("fail to eval is part joint", K(ret));
         } else {
           result = !is_part_joint;
         }

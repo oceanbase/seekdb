@@ -91,7 +91,6 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
     } else if (NULL != batch_rescan_ctl) {
       if (OB_ISNULL(param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected param", K(ret));
       } else {
         ObObjParam copy_res;
         int64_t expr_idx = 0;

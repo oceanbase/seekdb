@@ -29,7 +29,6 @@ int ObRawExprCheckDep::check_expr(const ObRawExpr &expr, bool &found)
   if (ObOptimizerUtil::find_item(dep_exprs_, &expr, &idx) && OB_INVALID_INDEX != idx) {
     if (OB_ISNULL(dep_indices_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dep_indices_ is NULL", K(ret));
     } else if (!dep_indices_->has_member(idx)) {
       if (OB_FAIL(dep_indices_->add_member(idx))) {
       }
@@ -48,7 +47,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
   } else {
     switch (expr.get_expr_class()) {
     case ObRawExpr::EXPR_CONST:
@@ -69,7 +67,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
         if (column->is_generated_column()) {
           if (OB_ISNULL(column->get_dependant_expr())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("virtual generated column has NULL dependant expr", K(expr), K(ret));
           } else if (OB_FAIL(SMART_CALL(check(*column->get_dependant_expr())))) {
           } else { /*do nothing*/ }
         }
@@ -92,7 +89,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
         for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
           if (OB_ISNULL(expr.get_param_expr(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get_param_expr is NULL", K(i), K(ret));
           } else if (OB_FAIL(SMART_CALL(check(*expr.get_param_expr(i))))) {
           } else {}
         }
@@ -112,7 +108,6 @@ int ObRawExprCheckDep::check(const ObIArray<ObRawExpr *> &exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     if (OB_ISNULL(exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null", K(ret));
     } else if (OB_FAIL(check(*exprs.at(i)))) {
     }
   }

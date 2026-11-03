@@ -135,7 +135,6 @@ int ObSliceIdxCalc::setup_slice_indexes(ObEvalCtx &ctx)
             * ctx.max_batch_size_));
     if (NULL == slice_indexes_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     }
   }
   return ret;
@@ -149,7 +148,6 @@ int ObSliceIdxCalc::setup_tablet_ids(ObEvalCtx &ctx)
                                              * ctx.max_batch_size_));
     if (OB_ISNULL(tablet_ids_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     }
   }
   return ret;
@@ -191,7 +189,6 @@ int ObRepartSliceIdxCalc::get_part_id_by_one_level_sub_ch_map(int64_t &part_id)
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected ch map", K(ret));
   }
   return ret;
 }
@@ -206,12 +203,10 @@ int ObRepartSliceIdxCalc::get_sub_part_id_by_one_level_first_ch_map(
         tablet_id = ObExprCalcPartitionId::NONE_PARTITION_ID;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get tablet id", K(ret), K(part2tablet_id_map_.size()));
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected ch map", K(ret));
   }
   return ret;
 }
@@ -222,7 +217,6 @@ int ObRepartSliceIdxCalc::get_tablet_id(ObEvalCtx &eval_ctx, int64_t &tablet_id,
   ObDatum *tablet_id_datum = NULL;
   if (OB_ISNULL(calc_part_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(calc_part_id_expr_), K(ret));
   } else if (OB_FAIL(calc_part_id_expr_->eval(eval_ctx, tablet_id_datum))) {
   } else if (ObExprCalcPartitionId::NONE_PARTITION_ID ==
                              (tablet_id = tablet_id_datum->get_int())) {
@@ -248,7 +242,6 @@ int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(calc_part_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid calc part id expr", K(ret));
   } else if (OB_FAIL(calc_part_id_expr_->eval_batch(eval_ctx, skip, batch_size))) {
   } else if (OB_FAIL(ObSliceIdxCalc::setup_tablet_ids(eval_ctx))) {
   } else {
@@ -322,7 +315,6 @@ int ObSlaveMapRepartIdxCalcBase::init()
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(task_idx_array)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task idx list is null", K(ret), K(tablet_id));
     } else if (OB_FAIL(const_cast<TaskIdxArray *>(task_idx_array)->push_back(task_idx))) {
     } else {
       LOG_TRACE("push task idx to task idx array",
@@ -369,7 +361,6 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*>
   } else if (part_ch_info_.part_ch_array_.size() <= 0) {
     // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
-    LOG_WARN("the size of part task channel map is zero", K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
   } else if (OB_FAIL(get_task_idx_by_tablet_id(tablet_id, slice_idx_array.at(0)))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -387,7 +378,6 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*>
         // Otherwise, an error will be reported to the client.
         ret = OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR;
       }
-      LOG_WARN("can't get the right partition", K(ret), K(tablet_id), K(slice_idx_array.at(0)), K(repart_type_));
     }
   }
   return ret;
@@ -402,7 +392,6 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr
   } else if (part_ch_info_.part_ch_array_.size() <= 0) {
     // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
-    LOG_WARN("the size of part task channel map is zero", K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids(eval_ctx, skip,
                                                                    batch_size, tablet_ids_))) {
   } else {
@@ -417,7 +406,6 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr
           } else {
             ret = OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR;
           }
-          LOG_WARN("can't get the right partition", K(ret), K(tablet_ids_[i]), K(repart_type_));
         }
       }
     }
@@ -432,15 +420,12 @@ int ObSlaveMapPkeyRandomIdxCalc::get_task_idx_by_tablet_id(int64_t tablet_id,
   int ret = OB_SUCCESS;
   if (ObSlaveMapRepartIdxCalcBase::part_to_task_array_map_.size() <= 0) {
     ret = OB_NOT_INIT;
-    LOG_WARN("part to task array is not inited", K(ret));
   } else {
     const ObSlaveMapRepartIdxCalcBase::TaskIdxArray *task_idx_array = ObSlaveMapRepartIdxCalcBase::part_to_task_array_map_.get(tablet_id);
     if (OB_ISNULL(task_idx_array)) {
       ret = OB_HASH_NOT_EXIST; // convert to hash error
-      LOG_WARN("the task idx array is null", K(ret), K(tablet_id));
     } else if (task_idx_array->count() <= 0){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the size of task idx array is zero", K(ret));
     } else {
       // random way from task idx array to find the result
       static const int64_t min = 0;
@@ -463,10 +448,8 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObEx
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
   } else if (task_count_ <= 0) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task_count not inited", K_(task_count), K(ret));
   } else if (px_repart_ch_map_.size() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid map size, affinity map should not be empty!", K_(task_count), K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
   } else if (OB_FAIL(px_repart_ch_map_.get_refactored(tablet_id, slice_idx_array.at(0)))) {
     if (OB_HASH_NOT_EXIST == ret && unmatch_row_dist_method_ == ObPQDistributeMethod::DROP) {
@@ -484,14 +467,11 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObEx
       int64_t task_idx = 0;
       if (OB_ISNULL(hash_dist_exprs_) || OB_UNLIKELY(0 == hash_dist_exprs_->count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("hash dist exprs is null", K(ret));
       } else if (OB_FAIL(slice_id_calc.get_slice_indexes_inner(*hash_dist_exprs_,
                                                                       eval_ctx, slice_idx_array,
                                                                       skip))) {
       }
     } else {
-      LOG_WARN("fail get affinitized taskid", K(ret), K(tablet_id),
-          K_(task_count), K_(unmatch_row_dist_method));
     }
   }
 
@@ -508,10 +488,8 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<Ob
   int64_t tablet_id = OB_INVALID_INDEX;
   if (task_count_ <= 0) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task_count not inited", K_(task_count), K(ret));
   } else if (px_repart_ch_map_.size() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid map size, affinity map should not be empty!", K_(task_count), K(ret));
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
   } else if (OB_FAIL(setup_tablet_ids(eval_ctx))) {
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids(eval_ctx, skip,
@@ -542,13 +520,10 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<Ob
                                           fast_calc_hash_slice_);
           if (OB_ISNULL(hash_dist_exprs_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("hash dist exprs is null", K(ret));
           } else if (OB_FAIL(slice_id_calc.calc_slice_idx(eval_ctx, task_count_,
                                                           slice_indexes_[i], &skip))) {
           }
         } else {
-          LOG_WARN("fail get affinitized taskid", K(ret), K(tablet_id),
-              K_(task_count), K_(unmatch_row_dist_method));
         }
       }
     }
@@ -564,7 +539,6 @@ int ObRepartSliceIdxCalc::init()
   int ret = OB_SUCCESS;
   if (px_repart_ch_map_.created()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("this map has been init twice", K(ret));
   } else if (OB_FAIL(build_repart_ch_map(px_repart_ch_map_))) {
   } else if (OB_FAIL(setup_one_side_one_level_info())) {
   }
@@ -578,7 +552,6 @@ int ObRepartSliceIdxCalc::setup_one_side_one_level_info()
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(calc_part_id_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected calc part id expr", K(ret));
   } else if (OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST == repart_type_) {
     if (OB_FAIL(build_part2tablet_id_map())) {
     }
@@ -733,7 +706,6 @@ int ObRandomSliceIdCalc::get_slice_indexes_inner(
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
   } else if (slice_cnt_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid slice count", K(ret), K(slice_cnt_));
   } else {
     slice_idx_array.at(0) = idx_ % slice_cnt_;
     idx_++;
@@ -750,7 +722,6 @@ int ObRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
   int ret = OB_SUCCESS;
   if (slice_cnt_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid slice count", K(ret), K(slice_cnt_));
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
   } else {
     for (int64_t i = 0; i < batch_size; i++) {
@@ -787,11 +758,8 @@ int ObHashSliceIdCalc::calc_slice_idx(ObEvalCtx &eval_ctx, int64_t slice_size,
   bool found_null = false;
   if (OB_ISNULL(hash_dist_exprs_) || OB_ISNULL(hash_funcs_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("hash func and expr not init", K(ret));
   } else if (n_keys_ > hash_dist_exprs_->count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: n_keys is invalid", K(ret),
-             K(n_keys_), K(hash_dist_exprs_->count()));
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   }
 
@@ -829,11 +797,8 @@ int ObHashSliceIdCalc::calc_hash_value(ObEvalCtx &eval_ctx, uint64_t &hash_val,
   ObDatum *datum = nullptr;
   if (OB_ISNULL(hash_dist_exprs_) || OB_ISNULL(hash_funcs_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("hash func and expr not init", K(ret));
   } else if (n_keys_ > hash_dist_exprs_->count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: n_keys is invalid", K(ret),
-      K(n_keys_), K(hash_dist_exprs_->count()));
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < n_keys_; ++i) {
@@ -869,19 +834,15 @@ int ObHashSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEv
   const ObDatumAccessContext *access_ctx = nullptr;
   if (n_keys_ > hash_dist_exprs_->count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: n_keys is invalid", K(ret),
-      K(n_keys_), K(hash_dist_exprs_->count()));
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
   } else {
     if (use_special_null_dist()) {
       if (nullptr == malloc_alloc_ && OB_FAIL(eval_ctx.exec_ctx_.get_malloc_allocator(malloc_alloc_))) {
-        LOG_WARN("failed to get alloc", K(ret));
       } else if (nullptr == null_bitmap_) {
         void *mem = nullptr;
         if (OB_ISNULL(mem = malloc_alloc_->alloc(ObBitVector::memory_size(eval_ctx.max_batch_size_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc bitmap", K(ret), K(eval_ctx.max_batch_size_));
         } else {
           null_bitmap_ = to_bit_vector(mem);
           null_bitmap_->reset(batch_size);
@@ -959,11 +920,9 @@ int ObSlaveMapPkeyRangeIdxCalc::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init())) {
   } else if (OB_UNLIKELY(nullptr == calc_part_id_expr_ || sort_exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(calc_part_id_expr_), K(sort_exprs_.count()));
   } else if (OB_FAIL(sort_key_.reserve(sort_exprs_.count()))) {
   } else if (OB_FAIL(build_partition_range_channel_map(part_range_map_))) {
   } else {
@@ -1069,7 +1028,6 @@ static int calc_ch_idx(const int64_t range_count, const int64_t ch_count, const 
   ch_idx = -1;
   if (OB_UNLIKELY(ch_count <= 0 || range_idx < 0 || range_idx >= range_count)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(range_count), K(ch_count), K(range_idx));
   } else if (range_count <= ch_count) {
     ch_idx = range_idx;
   } else {
@@ -1096,7 +1054,6 @@ bool ObSlaveMapPkeyRangeIdxCalc::Compare::operator()(
   } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)
              || OB_ISNULL(access_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(l), K(r));
   } else {
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
@@ -1124,18 +1081,14 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
   PartitionRangeChannelInfo *item = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(tablet_id <= 0)) {
     ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
-    LOG_WARN("can't get the right partition", K(ret), K(tablet_id), K(repart_type_));
   } else if (OB_UNLIKELY(sort_key.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(sort_key));
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   } else if (OB_FAIL(part_range_map_.get_refactored(tablet_id, item))) {
   } else if (OB_UNLIKELY(nullptr == item || item->tablet_id_ != tablet_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid range channel map", K(ret), K(tablet_id), KP(item));
   } else {
     sort_cmp_.set_access_ctx(access_ctx);
     ObPxTabletRange::RangeCut &range_cut = item->range_cut_;
@@ -1152,7 +1105,6 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
       if (OB_FAIL(calc_ch_idx(range_cut.count() + 1, item->channels_.count(), range_idx, ch_idx))) {
       } else if (ch_idx < 0 || ch_idx >= item->channels_.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid channel index", K(ret), K(ch_idx), K(*item));
       } else {
         task_idx = item->channels_.at(ch_idx);
       }
@@ -1172,10 +1124,8 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
   } else if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(exprs.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(exprs.count()));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
   } else {
     sort_key_.reuse();
@@ -1184,11 +1134,9 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
       ObDatum *cur_datum = nullptr;
       if (OB_ISNULL(cur_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("current expr is null", K(ret), KP(cur_expr));
       } else if (OB_FAIL(cur_expr->eval(eval_ctx, cur_datum))) {
       } else if (OB_ISNULL(cur_datum)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("current datum is null", K(ret), KP(cur_datum));
       } else if (OB_FAIL(sort_key_.push_back(*cur_datum))) {
       }
     }
@@ -1208,7 +1156,6 @@ int ObSlaveMapPkeyHashIdxCalc::init()
   if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init())) {
   } else if (affi_hash_map_.created()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("this map has been init twice", K(ret));
   } else if (OB_FAIL(build_affi_hash_map(affi_hash_map_))) {
   }
   return ret;
@@ -1240,7 +1187,6 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
   } else if (part_ch_info_.part_ch_array_.size() <= 0) {
     // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
-    LOG_WARN("the size of part task channel map is zero", K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
   } else if (OB_FAIL(get_task_idx_by_tablet_id(eval_ctx, tablet_id, slice_idx_array.at(0), skip))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -1265,8 +1211,6 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
       } else {
         // No corresponding partition found, return OB_NO_PARTITION_FOR_GIVEN_VALUE
         ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
-        LOG_WARN("can't get the right partition", K(ret), K(tablet_id),
-                 K(unmatch_row_dist_method_));
       }
     }
   }
@@ -1282,15 +1226,12 @@ int ObSlaveMapPkeyHashIdxCalc::get_task_idx_by_tablet_id(ObEvalCtx &eval_ctx,
   int64_t hash_idx = 0;
   if (part_to_task_array_map_.size() <= 0) {
     ret = OB_NOT_INIT;
-    LOG_WARN("part to task array is not inited", K(ret));
   } else {
     const TaskIdxArray *task_idx_array = part_to_task_array_map_.get(tablet_id);
     if (OB_ISNULL(task_idx_array)) {
       ret = OB_HASH_NOT_EXIST; // convert to hash error
-      LOG_WARN("the task idx array is null", K(ret), K(tablet_id));
     } else if (task_idx_array->count() <= 0){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the size of task idx array is zero", K(ret));
     } else if (OB_FAIL(hash_calc_.calc_slice_idx(eval_ctx,
                                                           task_idx_array->count(), 
                                                           hash_idx, 
@@ -1342,7 +1283,6 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
   } else if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected dist exprs", K(ret));
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
     slice_idx_array.at(0) = 0;
@@ -1356,7 +1296,6 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
     for (int i = 0; i < dist_exprs_->count() && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(dist_exprs_->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else if (OB_FAIL(dist_exprs_->at(i)->eval(eval_ctx, datum))) {
       } else if (OB_FAIL(sort_key.push_back(*datum))) {
       }
@@ -1387,7 +1326,6 @@ int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
   const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected dist exprs", K(ret));
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
   } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
@@ -1420,7 +1358,6 @@ int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
         for (int64_t i = 0; i < dist_exprs_->count() && OB_SUCC(ret); ++i) {
           if (OB_ISNULL(dist_exprs_->at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("null expr", K(ret));
           } else if (OB_FAIL(dist_exprs_->at(i)->eval(eval_ctx, datum))) {
           } else if (OB_FAIL(sort_key.push_back(*datum))) {
           }
@@ -1455,7 +1392,6 @@ bool ObRangeSliceIdCalc::Compare::operator()(
   } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)
              || OB_ISNULL(access_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(l), K(r));
   } else {
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
@@ -1482,19 +1418,15 @@ int ObWfHybridDistSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
   if (slice_id_calc_type_ <= SliceIdCalcType::INVALID
       || slice_id_calc_type_ >= SliceIdCalcType::MAX) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("slice_id_calc_type_ is invalid", K(ret), K(slice_id_calc_type_));
   } else if (SliceIdCalcType::BROADCAST == slice_id_calc_type_
              && OB_FAIL(broadcast_slice_id_calc_.get_slice_indexes_inner(
                         exprs, eval_ctx, slice_idx_array, skip))) {
-    LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
   } else if (SliceIdCalcType::RANDOM == slice_id_calc_type_
              && OB_FAIL(random_slice_id_calc_.get_slice_indexes_inner(
                         exprs, eval_ctx, slice_idx_array, skip))) {
-    LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
   } else if (SliceIdCalcType::HASH == slice_id_calc_type_
              && OB_FAIL(hash_slice_id_calc_.get_slice_indexes_inner(exprs, eval_ctx,
                         slice_idx_array, skip))) {
-    LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
   }
 
   return ret;
@@ -1512,7 +1444,6 @@ int ObNullAwareHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
   slice_idx_array.reuse();
   if (OB_ISNULL(hash_dist_exprs_) || OB_UNLIKELY(hash_dist_exprs_->empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null aware hash join shuffle keys should not be empty", K(ret), K(hash_dist_exprs_));
   } else if (OB_FAIL(calc_for_null_aware(*hash_dist_exprs_->at(0), task_cnt_, eval_ctx,
                                          slice_idx_array, processed, skip))) {
   } else if (processed) {
@@ -1546,13 +1477,10 @@ int ObNullAwareAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(
   slice_idx_array.reuse();
   if (task_count_ <= 0) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task_count not inited", K_(task_count), K(ret));
   } else if (OB_ISNULL(repartition_exprs_) || OB_UNLIKELY(repartition_exprs_->empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null aware hash join repartition exprs should not be empty", KP(repartition_exprs_));
   } else if (px_repart_ch_map_.size() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid map size, affinity map should not be empty!", K_(task_count), K(ret));
   } else if (OB_FAIL(calc_for_null_aware(*repartition_exprs_->at(0), task_count_, eval_ctx,
                                          slice_idx_array, processed, skip))) {
   } else if (processed) {
@@ -1573,8 +1501,6 @@ int ObHybridHashSliceIdCalcBase::check_if_popular_value(ObEvalCtx &eval_ctx, boo
     // assume not popular, do nothing
   } else if (OB_UNLIKELY(hash_calc_.hash_funcs_->count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only support 1 condition for hybrid hash for now. this may change later",
-             K(ret), K(hash_calc_.hash_funcs_->count()));
   } else if (OB_FAIL(hash_calc_.calc_hash_value(eval_ctx, hash_val, skip))) {
   } else {
     //  build a small hash table to accelerate the lookup.
@@ -1586,7 +1512,6 @@ int ObHybridHashSliceIdCalcBase::check_if_popular_value(ObEvalCtx &eval_ctx, boo
       } else if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS; // not popular value
       } else {
-        LOG_WARN("fail lookup hash map", K(ret));
       }
     } else {
       for (int64_t i = 0; i < popular_values_hash_->count(); ++i) {

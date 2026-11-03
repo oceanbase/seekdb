@@ -72,10 +72,8 @@ int ObTriggerColumnsInfo::init(int64_t count)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_) || 0 == count) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: allocator is null", K(ret), K(count));
   } else if (OB_ISNULL(flags_ = static_cast<Flags *>(allocator_->alloc(sizeof(Flags) * count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     capacity_ = count;
   }
@@ -92,7 +90,6 @@ int ObTriggerColumnsInfo::set_trigger_column(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(flags_) || 0 == capacity_ || count_ >= capacity_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: flags_ is null", K(ret), K(count_), KP(flags_));
   } else {
     flags_[count_].is_hidden_ = is_hidden;
     flags_[count_].is_update_ = is_update;
@@ -109,7 +106,7 @@ OB_SERIALIZE_MEMBER(ObForeignKeyCheckerCtdef,
                     calc_part_id_expr_,
                     part_id_dep_exprs_,
                     das_scan_ctdef_,
-                    loc_meta_,
+                    access_meta_,
                     is_part_table_,
                     tablet_id_,
                     rowkey_count_,
@@ -209,7 +206,7 @@ OB_SERIALIZE_MEMBER(ObDMLBaseCtDef,
 OB_SERIALIZE_MEMBER(ObMultiInsCtDef,
                     calc_part_id_expr_,
                     hint_part_ids_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObInsCtDef)
 {
@@ -242,7 +239,6 @@ OB_DEF_DESERIALIZE(ObInsCtDef)
     multi_ctdef_ = multi_ctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -272,7 +268,7 @@ OB_DEF_SERIALIZE_SIZE(ObInsCtDef)
 
 OB_SERIALIZE_MEMBER(ObMultiDelCtDef,
                     calc_part_id_expr_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObDelCtDef)
 {
@@ -307,7 +303,6 @@ OB_DEF_DESERIALIZE(ObDelCtDef)
     multi_ctdef_ = multi_ctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -339,7 +334,7 @@ OB_DEF_SERIALIZE_SIZE(ObDelCtDef)
 OB_SERIALIZE_MEMBER(ObMultiLockCtDef,
                     calc_part_id_expr_,
                     partition_cnt_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObLockCtDef)
 {
@@ -372,7 +367,6 @@ OB_DEF_DESERIALIZE(ObLockCtDef)
     multi_ctdef_ = multi_ctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -399,7 +393,7 @@ OB_SERIALIZE_MEMBER(ObMultiUpdCtDef,
                     calc_part_id_old_,
                     calc_part_id_new_,
                     is_enable_row_movement_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObUpdCtDef)
 {
@@ -458,7 +452,6 @@ OB_DEF_DESERIALIZE(ObUpdCtDef)
     dins_ctdef_ = dins_allocator.alloc();
     if (OB_ISNULL(ddel_ctdef_) || OB_ISNULL(dins_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc das ctdef failed", K(ret), K(ddel_ctdef_), K(dins_ctdef_));
     }
     OB_UNIS_DECODE(*ddel_ctdef_);
     OB_UNIS_DECODE(*dins_ctdef_);
@@ -468,7 +461,6 @@ OB_DEF_DESERIALIZE(ObUpdCtDef)
     dlock_ctdef_ = dlock_allocator.alloc();
     if (OB_ISNULL(dlock_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc das lock ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*dlock_ctdef_);
   }
@@ -477,7 +469,6 @@ OB_DEF_DESERIALIZE(ObUpdCtDef)
     multi_ctdef_ = mctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -565,7 +556,6 @@ OB_DEF_DESERIALIZE(ObMergeCtDef)
     ins_ctdef_ = ins_ctdef_allocator.alloc();
     if (OB_ISNULL(ins_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc ins_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*ins_ctdef_);
   }
@@ -575,7 +565,6 @@ OB_DEF_DESERIALIZE(ObMergeCtDef)
     upd_ctdef_ = upd_ctdef_allocator.alloc();
     if (OB_ISNULL(upd_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc upd_ctdef_ failed", K(ret));
     }
     OB_UNIS_DECODE(*upd_ctdef_);
   }
@@ -585,7 +574,6 @@ OB_DEF_DESERIALIZE(ObMergeCtDef)
     del_ctdef_ = ins_ctdef_allocator.alloc();
     if (OB_ISNULL(del_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc del_ctdef_ failed", K(ret));
     }
     OB_UNIS_DECODE(*del_ctdef_);
   }
@@ -631,10 +619,8 @@ OB_DEF_DESERIALIZE(ObReplaceCtDef)
   del_ctdef_ = del_ctdef_allocator.alloc();
   if (OB_ISNULL(del_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc del_ctdef_ failed", K(ret));
   } else if (OB_ISNULL(ins_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc ins_ctdef failed", K(ret));
   }
   OB_UNIS_DECODE(*ins_ctdef_);
   OB_UNIS_DECODE(*del_ctdef_);
@@ -666,10 +652,8 @@ OB_DEF_DESERIALIZE(ObInsertUpCtDef)
   upd_ctdef_ = upd_ctdef_allocator.alloc();
   if (OB_ISNULL(upd_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc upd_ctdef failed", K(ret));
   } else if (OB_ISNULL(ins_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc ins_ctdef failed", K(ret));
   }
   OB_UNIS_DECODE(*ins_ctdef_);
   OB_UNIS_DECODE(*upd_ctdef_);

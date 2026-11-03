@@ -52,7 +52,6 @@ int ObDtlFlowControl::init(int64_t chan_cnt)
   int ret = OB_SUCCESS;
   if (is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("init again", K(ret));
   } else if (OB_FAIL(chans_.reserve(chan_cnt))) {
   } else if (OB_FAIL(blocks_.reserve(chan_cnt))) {
   } else {
@@ -88,7 +87,6 @@ int ObDtlFlowControl::register_channel(ObDtlChannel* ch)
   } else if (OB_FAIL(blocks_.push_back(false))) {
   } else if (OB_ISNULL(chan_loop_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: channel loop is null", K(ret));
   } else {
     ch->set_dfc(this);
     ch->set_dfc_idx(chans_.count() - 1);
@@ -114,11 +112,9 @@ int ObDtlFlowControl::unregister_channel(ObDtlChannel* channel)
     channel->set_dfc(nullptr);
     if (OB_SUCCESS != (tmp_ret = chans_.remove(find_idx))) {
       ret = tmp_ret;
-      LOG_WARN("failed to remove channel", K(ret));
     }
   } else {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("channel not exist", K(channel), K(ret));
   }
   bool block = false;
   while (blocks_.count() > chans_.count()) {
@@ -137,7 +133,6 @@ int ObDtlFlowControl::unregister_all_channel()
   // Here cannot pop out at the same time, otherwise when cleaning the recv list, it will be cleaned according to ch
   for (int i = 0; i < chans_.count(); ++i) {
     if (nullptr == (ch = chans_.at(i))) {
-      LOG_WARN("failed to unregister channel", K(ret));
     } else if (OB_FAIL(ch->clean_recv_list())) {
     }
   }
@@ -146,7 +141,6 @@ int ObDtlFlowControl::unregister_all_channel()
     }
   }
   if (is_receive() && (0 != get_blocked_cnt() || 0 != get_total_buffer_cnt() || 0 != get_used())) {
-    LOG_WARN("unexpected dfc status", K(chans_.count()), K(ret), K(get_blocked_cnt()), K(get_total_buffer_cnt()), K(get_used()), K(get_accumulated_blocked_cnt()));
   }
   LOG_TRACE("unregister all channel", K(chans_.count()), K(ret), K(get_blocked_cnt()), K(get_total_buffer_cnt()), K(get_used()), K(get_accumulated_blocked_cnt()));
   return ret;
@@ -158,7 +152,6 @@ int ObDtlFlowControl::get_channel(int64_t idx, ObDtlChannel *&ch)
   ch = nullptr;
   if (0 > idx || idx >= chans_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get channel", K(ret));
   } else {
     ch = chans_.at(idx);
   }
@@ -204,13 +197,11 @@ int ObDtlFlowControl::block_channel(ObDtlChannel* ch)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("channel is null", K(ret));
   } else {
     int64_t idx = OB_INVALID_ID;
     if (OB_FAIL(find(ch, idx))) {
     } else if (is_block(idx)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("channel is blocked", K(ret), K(idx));
     } else {
       set_block(idx);
       ch->set_blocked();
@@ -226,7 +217,6 @@ int ObDtlFlowControl::unblock_channel(ObDtlChannel* ch)
   int64_t idx = OB_INVALID_ID;
   if (OB_FAIL(find(ch, idx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("channel is null", K(ret), K(idx), KP(ch->get_id()));
   } else {
     // Must wait for the response of this channel to return before processing the block message, otherwise it may lead to the unblocking msg arriving first, being processed, and then the response arriving
     // This way the channel's status is unblock, so the unblock state is not executed, when the response arrives later, it finds that the response sets the block state to is_block, and then it will never receive an unblocking msg
@@ -346,7 +336,6 @@ int ObDtlFlowControl::drain_all_channels()
   if (OB_NOT_NULL(ch_info_)) {
     if (ch_info_->transmit_task_layout_.total_task_cnt_ != chans_.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: ch info is null", K(ret), KP(ch_info_), K(chans_.count()));
     } else {
       ObDfcDrainAsynSender drain_asyn_sender(chans_, timeout_ts_);
       if (OB_FAIL(drain_asyn_sender.asyn_send())) {
@@ -385,7 +374,6 @@ int ObDtlFlowControl::final_check()
   int ret = OB_SUCCESS;
   if (0 != total_buffer_cnt_ || 0 != total_memory_size_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Expect 0 when run over", K(ret));
   }
   return ret;
 }

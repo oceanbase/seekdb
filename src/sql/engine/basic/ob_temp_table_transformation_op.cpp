@@ -65,10 +65,8 @@ int ObTempTableTransformationOp::inner_get_next_row()
       int64_t temp_table_count = ctx.get_temp_table_ctx().count();
       if (OB_ISNULL(children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child op is null");
       } else if (OB_FALSE_IT(ret = children_[i]->get_next_row())) {
       } else if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get next row.", K(ret));
       } else {
         ret = OB_SUCCESS;
         while(OB_SUCC(ret) && ctx.get_temp_table_ctx().count() <= temp_table_count) {
@@ -84,10 +82,8 @@ int ObTempTableTransformationOp::inner_get_next_row()
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(children_[get_child_cnt() - 1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child op is null");
   } else if (OB_FAIL(children_[get_child_cnt() - 1]->get_next_row())) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get next row.", K(ret));
     } else { /*do nothing.*/ }
   } else { /*do nothing.*/ }
   return ret;
@@ -103,7 +99,6 @@ int ObTempTableTransformationOp::inner_get_next_batch(const int64_t max_row_cnt)
     for (int64_t i = 0; OB_SUCC(ret) && i < get_child_cnt() - 1; ++i) {
       if (OB_ISNULL(children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child op is null");
       } else if (OB_FAIL(children_[i]->get_next_batch(max_row_cnt, child_brs))) {
       }
     }
@@ -112,7 +107,6 @@ int ObTempTableTransformationOp::inner_get_next_batch(const int64_t max_row_cnt)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(children_[get_child_cnt() - 1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child op is null");
   } else if (OB_FAIL(children_[get_child_cnt() - 1]->get_next_batch(
                  max_row_cnt, child_brs))) {
   } else { /*do nothing.*/
@@ -157,9 +151,7 @@ int ObTempTableTransformationOp::destory_local_interm_results(ObIArray<uint64_t>
                                                                             dtl_int_key))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_WARN("interm result may erased by DM", K(ret));
       } else {
-        LOG_WARN("failed to erase interm result info in manager.", K(ret));
       }
     }
   }

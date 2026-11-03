@@ -28,12 +28,9 @@ namespace common
 class ObReloadConfig
 {
 public:
-  explicit ObReloadConfig(ObServerConfig *conf): conf_(conf) {};
+  ObReloadConfig() = default;
   virtual ~ObReloadConfig() {}
   virtual int operator()();
-
-protected:
-  ObServerConfig *conf_;
 
 private:
   int reload_ob_logger_set();
@@ -43,9 +40,7 @@ private:
 inline int ObReloadConfig::operator()()
 {
   int ret = OB_SUCCESS;
-  if (OB_LIKELY(NULL != conf_)) {
-    reload_ob_logger_set();
-  }
+  reload_ob_logger_set();
   return ret;
 }
 

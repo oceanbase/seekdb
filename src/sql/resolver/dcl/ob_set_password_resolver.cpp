@@ -67,7 +67,6 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
   ObSetPasswordStmt *set_pwd_stmt = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Session info  and nodeshould not be NULL", KP(session_info_), KP(node), K(ret));
   } else if (OB_UNLIKELY(T_SET_PASSWORD != node->type_) ||
              OB_UNLIKELY(5 != node->num_child_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -107,7 +106,6 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
           LOG_WARN("empty user cannot be used by SET PASSWORD", K(ret));
         } else if (OB_ISNULL(user_hostname_node->children_[0])) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("username should not be NULL", K(ret));
         } else {
           user_name.assign_ptr(user_hostname_node->children_[0]->str_value_,
                         static_cast<int32_t>(user_hostname_node->children_[0]->str_len_));
@@ -152,7 +150,6 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
           const ParseNode *child_node = node->children_[3];
           if (OB_ISNULL(child_node)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("alter user ParseNode error", K(ret));
           } else if (T_TLS_OPTIONS == child_node->type_) {
             if (OB_FAIL(resolve_require_node(*child_node, user_name, host_name, ssl_type, infos))) {
             }
@@ -161,12 +158,9 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("alter user ParseNode error", K(ret), K(child_node->type_));
           }
         } else if (OB_ISNULL(node->children_[1]) || OB_ISNULL(node->children_[2])) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("The child 1 or child 2 should not be NULL",
-              K(ret), "child 1", node->children_[1], "child 2", node->children_[2]);
         } else {
           ObString password(static_cast<int32_t>(node->children_[1]->str_len_),
                             node->children_[1]->str_value_);
@@ -203,7 +197,6 @@ int ObSetPasswordResolver::resolve_require_node(const ParseNode &require_info,
       || OB_ISNULL(ssl_infos = require_info.children_[0])
       || OB_ISNULL(set_pwd_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Create user ParseNode error", K(ret), K(ssl_infos), K(set_pwd_stmt));
   } else {
     ssl_type = static_cast<ObSSLType>(static_cast<int32_t>(ObSSLType::SSL_TYPE_NONE) + (ssl_infos->type_ - T_TLS_NONE));
 
@@ -213,20 +206,16 @@ int ObSetPasswordResolver::resolve_require_node(const ParseNode &require_info,
       if (OB_UNLIKELY(ssl_infos->num_child_ <= 0)
           || OB_ISNULL(specified_ssl_infos = ssl_infos->children_[0])) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Create user ParseNode error", K(ret), K(ssl_infos->num_child_), KP(specified_ssl_infos));
       } else {
         bool check_repeat[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_MAX)] = {};
         for (int i = 0; i < specified_ssl_infos->num_child_ && OB_SUCC(ret); ++i) {
           ParseNode *ssl_info = specified_ssl_infos->children_[i];
           if (OB_ISNULL(ssl_info)) {
             ret = OB_ERR_PARSE_SQL;
-            LOG_WARN("The child of parseNode should not be NULL", K(ret), K(i));
           } else if (OB_UNLIKELY(ssl_info->num_child_ != 1)) {
             ret = OB_ERR_PARSE_SQL;
-            LOG_WARN("The num_child_is error", K(ret), K(i), K(ssl_info->num_child_));
           } else if (OB_UNLIKELY(check_repeat[ssl_info->type_ - T_TLS_CIPHER])) {
             ret = OB_ERR_DUP_ARGUMENT;
-            LOG_WARN("Option used twice in statement", K(ret), K(ssl_info->type_));
             LOG_USER_ERROR(OB_ERR_DUP_ARGUMENT, get_ssl_spec_type_str(static_cast<ObSSLSpecifiedType>(ssl_info->type_ - T_TLS_CIPHER)));
           } else {
             check_repeat[ssl_info->type_ - T_TLS_CIPHER] = true;
@@ -258,14 +247,11 @@ int ObSetPasswordResolver::resolve_resource_option_node(const ParseNode &resourc
   if (OB_ISNULL(set_pwd_stmt) || T_USER_RESOURCE_OPTIONS != resource_options.type_
       || OB_ISNULL(resource_options.children_)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid resource options argument", K(ret), K(set_pwd_stmt),
-              K(resource_options.type_), K(resource_options.children_));
   } else {
     for (int64_t i = 0; i < resource_options.num_child_; i++) {
       ParseNode *res_option = resource_options.children_[i];
       if (OB_ISNULL(res_option)) {
         ret = common::OB_INVALID_ARGUMENT;
-        LOG_WARN("null res option", K(ret), K(i));
       } else if (T_MAX_CONNECTIONS_PER_HOUR == res_option->type_) {
         uint64_t max_connections_per_hour = static_cast<uint64_t>(res_option->value_);
         max_connections_per_hour = max_connections_per_hour > MAX_CONNECTIONS ? MAX_CONNECTIONS
@@ -302,7 +288,6 @@ int ObSetPasswordResolver::check_role_as_user(ParseNode *user_hostname_node, boo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(user_hostname_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to check_role_as_user, user_hostname_node is NULL", K(ret));
   } else if (user_hostname_node->num_child_ > 0
              && OB_NOT_NULL(user_hostname_node->children_[0])
              && user_hostname_node->children_[0]->str_len_ > 0) {

@@ -196,15 +196,12 @@ int ObBlockMaxScoreIterator::get_next(const ObMaxScoreTuple *&max_score_tuple)
   max_score_tuple_.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_FAIL(stat_iter_.get_next(agg_row, endkey))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get next", K(ret));
     }
   } else if (OB_ISNULL(agg_row) || OB_ISNULL(endkey)
       || OB_UNLIKELY(agg_row->get_column_count() != block_max_scan_param_->stat_cols_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(ret), KP(agg_row), KP(endkey), KPC_(block_max_scan_param));
   } else if (OB_FAIL(calc_domain_id_range(*agg_row, *endkey))) {
   } else if (OB_FAIL(calc_max_score_(*agg_row, *scorer_, max_score_tuple_.max_score_))) {
   } else {
@@ -218,10 +215,8 @@ int ObBlockMaxScoreIterator::get_curr_max_score_tuple(const ObMaxScoreTuple *&ma
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(!max_score_tuple_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected invalid max score tuple", K(ret));
   } else {
     max_score_tuple = &max_score_tuple_;
   }
@@ -237,7 +232,6 @@ int ObBlockMaxScoreIterator::advance_to(const ObDatum &domain_id, const bool inc
   int cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_FAIL(advance_doc_id_.from_datum(domain_id))) {
   } else if (!max_score_tuple_.is_valid()) {
     id_in_range = false;
@@ -257,7 +251,6 @@ int ObBlockMaxScoreIterator::advance_to(const ObDatum &domain_id, const bool inc
   } else if (OB_FAIL(stat_iter_.advance_to(advance_rowkey_, inclusive))) {
   } else if (OB_FAIL(get_next(next_max_score_tuple))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get next", K(ret));
     }
   } else {
     has_been_advanced_ = true;
@@ -274,10 +267,8 @@ int ObBlockMaxScoreIterator::inner_init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_UNLIKELY(!block_max_scan_param.is_valid() || !scan_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(block_max_scan_param), K(scan_param));
   } else if (OB_FAIL(init_cmp_funcs(block_max_scan_param))) {
   } else if (OB_FAIL(init_advance_rowkey(block_max_scan_param, scan_param))) {
   } else if (OB_FAIL(block_stat_scan_param_.init(
@@ -300,7 +291,6 @@ int ObBlockMaxScoreIterator::inner_init(
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpectedranking type", K(ret), K(block_max_scan_param.ranking_type_));
       }
     }
   }
@@ -319,7 +309,6 @@ int ObBlockMaxScoreIterator::init_advance_rowkey(
   if (OB_ISNULL(iter_param.scan_allocator_)
     || OB_UNLIKELY(1 != scan_param.key_ranges_.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(iter_param), K(scan_param));
   } else {
     const ObRowkey &start_key = scan_param.key_ranges_.at(0).start_key_;
     if (OB_FAIL(advance_rowkey_.from_rowkey(start_key, *iter_param.scan_allocator_))) {
@@ -338,7 +327,6 @@ int ObBlockMaxScoreIterator::init_cmp_funcs(const ObBlockMaxScoreIterParam &bloc
   if (OB_FAIL(domain_id_cmp_.init(id_obj_meta))) {
   } else if (OB_ISNULL(dim_basic_funcs)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(ret), K(id_obj_meta), K(dim_obj_meta));
   } else {
     dim_cmp_ = dim_basic_funcs->null_first_cmp_;
   }
@@ -359,8 +347,6 @@ int ObBlockMaxScoreIterator::calc_domain_id_range(const ObDatumRow &agg_row, con
       || id_rowkey_idx >= endkey.get_datum_cnt()
       || dim_rowkey_idx >= endkey.get_datum_cnt())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(min_idx), K(max_idx), K(id_rowkey_idx),
-        K(dim_rowkey_idx), K(agg_row), K(endkey));
   } else {
     const ObDatum &min_datum = agg_row.storage_datums_[min_idx];
     const ObDatum &max_datum = agg_row.storage_datums_[max_idx];
@@ -368,7 +354,6 @@ int ObBlockMaxScoreIterator::calc_domain_id_range(const ObDatumRow &agg_row, con
     const ObDatum &rowkey_dim_datum = endkey.get_datum(dim_rowkey_idx);
     if (OB_UNLIKELY(min_datum.is_null() || max_datum.is_null() || rowkey_id_datum.is_null())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null domain id datum", K(ret), K(min_datum), K(max_datum), K(rowkey_id_datum));
     } else {
       // Min datum in last iterated range might not aligned with the upper bound of max score.
       // but since we scan doc id in ascending order, we can use current iter doc id datum to refine the min doc id semantic.
@@ -389,13 +374,10 @@ int ObBlockMaxScoreIterator::calc_domain_id_range(const ObDatumRow &agg_row, con
         if (OB_FAIL(scan_dim_datum.from_obj(scan_dim_obj))) {
         } else if (OB_UNLIKELY(rowkey_dim_datum.is_ext() || scan_dim_datum.is_ext())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected ext datum for dimension", K(ret), K(rowkey_dim_datum), K(scan_dim_datum));
         } else if (OB_FAIL(dim_cmp_(
                        rowkey_dim_datum, scan_dim_datum, cmp_ret, nullptr))) {
         } else if (OB_UNLIKELY(cmp_ret < 0)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected endkey dimension smaller than scan dimension",
-              K(ret), K(cmp_ret), K(rowkey_dim_datum), K(scan_dim_datum));
         } else {
           if (cmp_ret > 0) {
             // reached the end of the dimension
