@@ -99,11 +99,6 @@ int ObTransService::acquire_tx(const char* buf,
   } else {
     tx->flags_.SHADOW_ = true;
   }
-  if (tx) {
-    REC_TRANS_TRACE_EXT(&tx->get_tlog(), deserialize,
-                        OB_ID(addr), (void*)tx,
-                        OB_ID(txid), tx->tx_id_);
-  }
   return ret;
 }
 
@@ -222,11 +217,6 @@ int ObTransService::register_commit_retry_task_(ObTxDesc &tx, int64_t max_delay)
   if (OB_FAIL(ret)) {
   }
 #endif
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, register_timeout_task,
-                      OB_ID(ret), OB_SUCCESS != ret ? ret : saved_ret,
-                      OB_ID(arg), delay,
-                      OB_ID(ref), tx.get_ref());
   return ret;
 }
 
@@ -251,10 +241,6 @@ int ObTransService::unregister_commit_retry_task_(ObTxDesc &tx)
   } else {
     TRANS_LOG(WARN, "deregister timeout task fail", K(ret), K(tx));
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, unregister_timeout_task, OB_Y(ret),
-                      OB_ID(arg), is_registered,
-                      OB_ID(ref), tx.get_ref());
 
   return ret;
 }
@@ -301,10 +287,6 @@ int ObTransService::handle_tx_commit_timeout(ObTxDesc &tx, const int64_t delay)
   // it not safe and meaningless to access tx after commit_cb
   // has been called, the tx may has been reused or release
   // in the commit_cb
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, handle_timeout, OB_Y(ret),
-                      OB_ID(arg), delay,
-                      OB_ID(ref), tx.get_ref());
   TRANS_LOG(INFO, "handle tx commit timeout", K(ret), K(tx_id), K(ref_cnt), K(cb_executed));
   return ret;
 }
@@ -326,11 +308,9 @@ int ObTransService::handle_tx_commit_result(const ObTransID &tx_id,
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected tx state", K(ret),
                 K_(tx->state), K(tx_id), K(result), KPC(tx));
-      tx->print_trace_();
     } else if (tx->state_ > ObTxDesc::State::IN_TERMINATE) {
       TRANS_LOG(WARN, "tx has terminated", K_(tx->state),
                 K(tx_id), K(result), KPC(tx));
-      tx->print_trace_();
     } else {
       need_cb = true;
       ret = handle_tx_commit_result_(*tx, result, commit_version);
@@ -440,16 +420,6 @@ int ObTransService::handle_tx_commit_result_(ObTxDesc &tx,
     TRANS_LOG(INFO, "handle tx commit result", K(ret), K(ref_cnt_0), K(tx), K(commit_fin), K(result));
   }
 #endif
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, handle_tx_commit_result, OB_Y(ret),
-                      OB_ID(arg), result,
-                      OB_ID(is_finish), commit_fin,
-                      OB_ID(result), commit_out,
-                      OB_ID(state), tx.state_,
-                      OB_ID(tag1), ref_cnt_0,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(commit_version), commit_version,
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1328,7 +1298,6 @@ void ObTransService::force_release_tx_when_session_destroy(ObTxDesc &tx)
   {
     ObSpinLockGuard guard(tx.lock_);
     TRANS_LOG_RET(WARN, OB_SUCCESS, "txdesc will be released forcedly", K(tx));
-    tx.print_trace_();
   }
   ObTxDescMgr::force_release(tx);
 }
