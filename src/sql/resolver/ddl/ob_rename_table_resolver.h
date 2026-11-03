@@ -27,16 +27,13 @@ namespace sql
 
 class ObRenameTableResolver : public ObDDLResolver
 {
-  static const int64_t OLD_NAME_NODE = 0;
-  static const int64_t NEW_NAME_NODE = 1;
-  static const int64_t NAME_NODE_COUNT = 2;
 public:
   explicit ObRenameTableResolver(ObResolverParams &params);
   virtual ~ObRenameTableResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
   ObRenameTableStmt *get_rename_table_stmt() { return static_cast<ObRenameTableStmt*>(stmt_); };
 private:
-  int resolve_rename_action(const ParseNode &rename_action_node);
+  int resolve_rename_action(const peg::Node &rename_action_node);
   DISALLOW_COPY_AND_ASSIGN(ObRenameTableResolver);
 };
 

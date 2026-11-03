@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-#include "query/parser/ob_item_type.h"
+#include "query/engine/expr/ob_item_type.h"
 #include "ob_expr_operator.h"
 
 namespace oceanbase

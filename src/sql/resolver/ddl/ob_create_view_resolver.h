@@ -37,22 +37,13 @@ namespace sql
 {
 class ObCreateViewResolver : public ObCreateTableResolverBase
 {
-  static const int64_t VIEW_NODE = 0;
-  static const int64_t VIEW_COLUMNS_NODE = 1;
-  static const int64_t SELECT_STMT_NODE = 3;
-  static const int64_t IF_NOT_EXISTS_NODE = 4;
-  static const int64_t WITH_OPT_NODE = 5;
-  static const int64_t FORCE_VIEW_NODE = 6;
-  static const int64_t ROOT_NUM_CHILD = 7;
 
 public:
   explicit ObCreateViewResolver(ObResolverParams &params);
   virtual ~ObCreateViewResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
-  static int resolve_select_node_for_force_view(bool &add_undefined_columns,
-                                                ParseNode *select_stmt_node,
-                                                ObIArray<SelectItem> &select_items);
+  virtual int resolve(const peg::Node &statement);
+
   static int add_undefined_column_infos(ObIArray<SelectItem> &select_items,
                                         ObTableSchema &table_schema,
                                         const common::ObIArray<ObString> &column_list);
@@ -75,14 +66,14 @@ public:
 private:
   int check_privilege(ObCreateTableStmt *stmt,
                       ObSelectStmt *select_stmt);
-  int resolve_column_list(ParseNode *view_columns_node,
+  int resolve_column_list(rust::Slice<const peg::Node> view_columns,
                           common::ObIArray<common::ObString> &column_list);
 
   int check_view_stmt_col_name(ObSelectStmt &select_stmt,
                                ObArray<int64_t> &index_array,
                                common::hash::ObHashSet<ObString> &view_col_names);
   int check_view_columns(ObSelectStmt &select_stmt,
-                         ParseNode *view_columns_node,
+                         rust::Slice<const peg::Node> view_columns,
                          share::schema::ObErrorInfo &error_info,
                          const bool is_force_view,
                          bool &can_expand_star,

@@ -32,100 +32,73 @@ ObGetDiagnosticsResolver::~ObGetDiagnosticsResolver()
 {
 }
 
-int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
+int ObGetDiagnosticsResolver::resolve(const peg::Node &statement)
 {
   int ret = OB_SUCCESS;
-  ObGetDiagnosticsStmt *diagnostics_stmt = NULL;
-  ParseNode *is_condition = NULL;
-  ParseNode *is_current = NULL;
-  ParseNode *condition_node = NULL;
-  ParseNode *item_list = NULL;
-  ObString sel_sql;
+  ObGetDiagnosticsStmt *diagnostics = nullptr;
+  const bool condition = peg::diagnostics_has_condition(statement);
+  const bool stacked = peg::diagnostics_stacked(statement);
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(diagnostics_stmt = create_stmt<ObGetDiagnosticsStmt>())) {
+  } else if (OB_ISNULL(diagnostics = create_stmt<ObGetDiagnosticsStmt>())) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
-    LOG_WARN("failed to create select stmt");
-  } else if (FALSE_IT(params_.query_ctx_->set_literal_stmt_type(stmt::T_DIAGNOSTICS))) {
-  } else if (OB_UNLIKELY(parse_tree.num_child_ != 4)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(is_condition = parse_tree.children_[0]) ||
-             OB_ISNULL(is_current = parse_tree.children_[1]) ||
-             OB_ISNULL(item_list = parse_tree.children_[3])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (NULL == session_info_->get_pl_context() && is_current->value_ == 0) {
+  } else if (session_info_->get_pl_context() == nullptr && stacked) {
     ret = OB_ERR_GET_STACKED_DIAGNOSTICS;
-  } else if (FALSE_IT(condition_node = parse_tree.children_[2])) {
-  } else if (OB_FAIL(set_diagnostics_type(diagnostics_stmt, is_current->value_, is_condition->value_))) {
   } else {
-    if (1 == is_condition->value_) {/* indicates the statement for obtaining condition information */
-      CK(OB_NOT_NULL(condition_node));
-      ObRawExpr* condition_num = NULL;
-      if (OB_SUCC(ret) && NULL == session_info_->get_pl_context() && T_IDENT == condition_node->type_) {
-        ret = OB_ERR_BAD_FIELD_ERROR;
-        diagnostics_stmt->set_invalid_condition_name(ObString(condition_node->str_len_,
-                                                              condition_node->str_value_));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (T_INT == condition_node->type_ || T_QUESTIONMARK == condition_node->type_ 
-                || T_VARCHAR == condition_node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *condition_node, condition_num, NULL))) {
-        } else if (T_QUESTIONMARK == condition_node->type_) {
-          int64_t idx = strtoll(condition_node->str_value_, NULL, 10);
-          if (INT64_MAX == idx) {
-            ret = OB_SIZE_OVERFLOW;
-          } else if (OB_FAIL(diagnostics_stmt->add_origin_param_index(idx))) {
-          }
+    params_.query_ctx_->set_literal_stmt_type(stmt::T_DIAGNOSTICS);
+    OZ (set_diagnostics_type(diagnostics, !stacked, condition));
+    if (condition) {
+      const auto &number = peg::diagnostics_condition(statement);
+      ObRawExpr *expression = nullptr;
+      if (number.kind() == peg::NodeKind::Ident) {
+        ObString name;
+        const auto number_text = number.text();
+        OZ (ob_write_string(*allocator_, syntax_text(number_text), name));
+        if (OB_SUCC(ret)) {
+          diagnostics->set_invalid_condition_name(name);
+          ret = OB_ERR_BAD_FIELD_ERROR;
         }
-      } else if (T_USER_VARIABLE_IDENTIFIER == condition_node->type_) {
-        if (OB_FAIL(ObRawExprUtils::build_get_user_var(*params_.expr_factory_,
-                                                        ObString(condition_node->str_len_,
-                                                                condition_node->str_value_),
-                                                        condition_num,
-                                                        session_info_))) {
-        }
-      } else if (T_IDENT == condition_node->type_) {
-        diagnostics_stmt->set_invalid_condition_name(ObString(condition_node->str_len_,
-                                                              condition_node->str_value_));
-        ret = OB_ERR_BAD_FIELD_ERROR;
+      } else if (number.kind() == peg::NodeKind::UserVariable) {
+        const auto name = peg::variable_name(number);
+        OZ (ObRawExprUtils::build_get_user_var(*params_.expr_factory_,
+            syntax_text(name), expression, session_info_));
       } else {
-        ret = OB_ERR_UNEXPECTED;
+        OZ (ObResolverUtils::resolve_const_expr(params_, number, expression, nullptr));
+        if (number.kind() == peg::NodeKind::Parameter) {
+          const auto parameter = peg::diagnostics_parameter(number);
+          CK (parameter.valid);
+          OZ (diagnostics->set_origin_param_index(parameter.bind_index, parameter.local_index));
+        }
       }
-      if (OB_SUCC(ret) && OB_FAIL(diagnostics_stmt->add_param(condition_num))) {
-      }
+      OZ (diagnostics->add_param(expression));
     }
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < item_list->num_child_ ; ++i) {
-      ParseNode *item = item_list->children_[i];
-      ParseNode *var = NULL;
-      ParseNode *val = NULL;
-      ObRawExpr* info_expr = NULL;
-      if (OB_ISNULL(item) || item->num_child_ != 2 || 
-          OB_ISNULL(var = item->children_[0]) || OB_ISNULL(val = item->children_[1])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_IDENT == var->type_) {
+    for (const auto &item : peg::diagnostics_items(statement)) {
+      if (OB_FAIL(ret)) break;
+      const auto &target = peg::diagnostics_target(item);
+      const auto item_name = peg::diagnostics_item_name(item);
+      ObRawExpr *expression = nullptr;
+      if (target.kind() == peg::NodeKind::Ident) {
         ret = OB_ERR_SP_UNDECLARED_VAR;
-        LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, static_cast<int>(var->str_len_), var->str_value_);
-      } else if (T_QUESTIONMARK != var->type_ && T_USER_VARIABLE_IDENTIFIER != var->type_) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if ((T_QUESTIONMARK == var->type_) &&
-                 (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *var, info_expr, NULL)) ||
-                 OB_FAIL(diagnostics_stmt->add_origin_param_index(strtoll(var->str_value_, NULL, 10))))) {
-      } else if (T_USER_VARIABLE_IDENTIFIER == var->type_ &&
-                 OB_FAIL(ObRawExprUtils::build_get_user_var(*params_.expr_factory_,
-                                                      ObString(var->str_len_, var->str_value_),
-                                                      info_expr,
-                                                      session_info_))) {
-      } else if (OB_FAIL(diagnostics_stmt->add_param(info_expr))) {
-      } else if (OB_FAIL(diagnostics_stmt->add_info_argument(ObString(val->str_len_, val->str_value_)))) {
+        const auto target_text = target.text();
+        LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, static_cast<int>(target_text.size()), syntax_text(target_text).ptr());
+      } else if (target.kind() == peg::NodeKind::Parameter) {
+        OZ (ObResolverUtils::resolve_const_expr(params_, target, expression, nullptr));
+        const auto parameter = peg::diagnostics_parameter(target);
+        CK (parameter.valid);
+        OZ (diagnostics->set_origin_param_index(parameter.bind_index, parameter.local_index));
+      } else {
+        const auto name = peg::variable_name(target);
+        OZ (ObRawExprUtils::build_get_user_var(*params_.expr_factory_,
+            syntax_text(name), expression, session_info_));
       }
+      ObString name;
+      OZ (ob_write_string(*allocator_, syntax_text(item_name), name));
+      OZ (diagnostics->add_param(expression));
+      OZ (diagnostics->add_info_argument(name));
     }
   }
-
-  if (OB_ERR_BAD_FIELD_ERROR == ret) {/* In SQL environment, when using non-user/system variables as condition parameters, the get diagnostic statement can be successfully executed, but it will only report a warning at runtime */
-    ret = OB_SUCCESS;
-  }
-  
+  // A non-variable condition name becomes a warning when the statement executes.
+  if (ret == OB_ERR_BAD_FIELD_ERROR) ret = OB_SUCCESS;
   return ret;
 }
 

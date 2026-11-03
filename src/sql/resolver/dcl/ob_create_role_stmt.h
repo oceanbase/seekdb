@@ -40,8 +40,6 @@ public:
   const common::ObString &get_password() const { return password_; }
   void set_need_enc(bool need_enc) { need_enc_ = need_enc; }
   bool get_need_enc() const { return need_enc_; }
-  void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
-  const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return create_role_arg_; }
   common::ObIArray<common::ObString> &get_user_names() { return user_names_; }
@@ -54,7 +52,6 @@ private:
   common::ObString role_name_; 
   common::ObString password_;
   bool need_enc_;
-  common::ObString masked_sql_;
   obcall::ObCreateRoleArg create_role_arg_;
   //for mysql role
   bool if_not_exists_;

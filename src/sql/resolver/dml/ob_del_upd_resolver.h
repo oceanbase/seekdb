@@ -56,18 +56,18 @@ public:
   inline bool is_resolve_insert_update() { return is_resolve_insert_update_;}
 protected:
 
-  int resolve_assignments(const ParseNode &parse_node,
+  int resolve_assignments(rust::Slice<const peg::Node> assignments,
                           common::ObIArray<ObTableAssignment> &table_assigns,
                           ObStmtScope scope);
 
-  int resolve_column_and_values(const ParseNode &assign_list,
+  int resolve_column_and_values(rust::Slice<const peg::Node> assignments,
                                 ObIArray<ObColumnRefRawExpr *> &target_list,
                                 ObIArray<ObRawExpr *> &value_list);
   // Try add remove_const expr for const expr of select item.
   // Refer to comment of ObExprRemoveConst to see why we need this expr.
   int try_add_remove_const_epxr(ObSelectStmt &stmt);
 
-  int resolve_assign_columns(const ParseNode &assign_target,
+  int resolve_assign_columns(const peg::Node &assign_target,
                              ObIArray<ObColumnRefRawExpr *> &column_list);
 
   int resolve_additional_assignments(common::ObIArray<ObTableAssignment> &table_assigns,
@@ -139,8 +139,6 @@ protected:
 
   int view_pullup_special_column_exprs();
   int view_pullup_part_exprs();
-  int expand_record_to_columns(const ParseNode &record_node,
-                                              ObIArray<ObRawExpr *> &value_list);
   bool is_fk_parent_table(const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos, const uint64_t table_id);
   int resolve_check_constraints(const TableItem* table_item,
                                 common::ObIArray<ObRawExpr*> &check_exprs);
@@ -172,9 +170,9 @@ protected:
   int generate_autoinc_params(ObInsertTableInfo &table_info);
   int get_value_row_size(uint64_t &count);
 
-  int resolve_insert_columns(const ParseNode *node,
+  int resolve_insert_columns(rust::Slice<const peg::Node> columns,
                              ObInsertTableInfo& table_info);
-  int resolve_insert_values(const ParseNode *node,
+  int resolve_insert_values(rust::Slice<const peg::Node> rows,
                             ObInsertTableInfo& table_info);
   int check_column_value_pair(common::ObArray<ObRawExpr*> *value_row,
                               ObInsertTableInfo& table_info,
@@ -217,7 +215,7 @@ protected:
   int generate_insert_table_info(const TableItem &table_item,
                                  ObInsertTableInfo &table_info,
                                  bool add_column = true);
-  virtual int resolve_insert_update_assignment(const ParseNode *node, ObInsertTableInfo& table_info);
+  virtual int resolve_insert_update_assignment(rust::Slice<const peg::Node> assignments, ObInsertTableInfo& table_info);
   int add_relation_columns(ObIArray<ObTableAssignment> &table_assigns);
   virtual int replace_column_ref(common::ObArray<ObRawExpr*> *value_row,
                                  ObRawExpr *&expr,

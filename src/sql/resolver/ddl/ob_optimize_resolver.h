@@ -33,9 +33,8 @@ public:
     : ObDDLResolver(params)
   {}
   virtual ~ObOptimizeTableResolver() = default;
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
-  static const int64_t TABLE_LIST_NODE = 0;
   DISALLOW_COPY_AND_ASSIGN(ObOptimizeTableResolver);
 };
 

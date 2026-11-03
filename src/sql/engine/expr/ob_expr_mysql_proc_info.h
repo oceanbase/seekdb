@@ -106,15 +106,7 @@ private:
                                ObEvalCtx &ctx,
                                ObDatum &expr_datum,
                                ObString &value_str);
-  static int extract_create_node_from_routine_info(ObIAllocator &alloc,
-                                                   const ObRoutineInfo &routine_info,
-                                                   const sql::ObExecEnv &exec_env,
-                                                   ParseNode *&create_node);
 
-  static int extract_create_node_from_routine_info(ObIAllocator &alloc,
-                                                   const ObString &routine_body,
-                                                   const sql::ObExecEnv &exec_env,
-                                                   ParseNode *&create_node);
   static int calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
                                             ObEvalCtx &ctx,
                                             ObDatum &expr_datum);

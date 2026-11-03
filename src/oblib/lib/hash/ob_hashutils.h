@@ -83,15 +83,7 @@ inline int gettimeofday(struct timeval* tp, void* tzp) {
   }
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-struct _ParseNode;
-extern uint64_t parsenode_hash(const _ParseNode *node, int *ret);
-extern bool parsenode_equal(const _ParseNode *node1, const _ParseNode *node2, int *ret);
-#ifdef __cplusplus
-}
-#endif
+
 
 namespace oceanbase
 {
@@ -770,23 +762,9 @@ struct equal_to <const _key *>
   }
 };
 
-template <>
-struct equal_to <_ParseNode *>
-{
-  bool operator()(_ParseNode *a, _ParseNode *b) const
-  {
-    return parsenode_equal(a, b, NULL);
-  }
-};
 
-template <>
-struct equal_to <const _ParseNode *>
-{
-  bool operator()(const _ParseNode *a, const _ParseNode *b) const
-  {
-    return parsenode_equal(a, b, NULL);
-  }
-};
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <class _key>
@@ -859,24 +837,8 @@ struct hash_func <std::pair<uint64_t, uint64_t> >
   }
 };
 
-template <>
-struct hash_func <_ParseNode *>
-{
-  int operator() (const _ParseNode *key, uint64_t &res) const
-  {
-    res = parsenode_hash(key, NULL);
-    return OB_SUCCESS;
-  }
-};
-template <>
-struct hash_func <const _ParseNode *>
-{
-  int operator() (const _ParseNode *key, uint64_t &res) const
-  {
-    res = parsenode_hash(key, NULL);
-    return OB_SUCCESS;
-  }
-};
+
+
 
 #define _HASH_FUNC_SPEC(type) \
   template <> \

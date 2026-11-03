@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "ob_aggregate_processor.h"
 #include "share/ob_lob_access_utils.h"
 #include "sql/engine/expr/ob_expr_add.h"
@@ -6620,14 +6621,13 @@ int ObAggregateProcessor::get_ora_json_arrayagg_result(const ObAggrInfo &aggr_in
     if (ret != OB_ITER_END && ret != OB_SUCCESS) {
     } else {
       ret = OB_SUCCESS;
-      ParseNode parse_node;
-      parse_node.value_ = aggr_info.returning_type_;
+      CastTypeDescriptor type_descriptor(aggr_info.returning_type_);
 
-      ObObjType rsp_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-      ObCollationType rsp_cs_type = static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]);
-      int32_t rsp_len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+      ObObjType rsp_type = static_cast<ObObjType>(type_descriptor.type());
+      ObCollationType rsp_cs_type = static_cast<ObCollationType>(type_descriptor.collation());
+      int32_t rsp_len = type_descriptor.length();
 
-      if (!parse_node.value_) {
+      if (!type_descriptor.value()) {
         rsp_type = ObJsonType;
         rsp_cs_type = CS_TYPE_UTF8MB4_BIN;
         rsp_len = (ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length();
@@ -6917,16 +6917,16 @@ int ObAggregateProcessor::get_ora_json_objectagg_result(const ObAggrInfo &aggr_i
     if (ret != OB_ITER_END && ret != OB_SUCCESS) {
     } else {
       ret = OB_SUCCESS;
-      ParseNode parse_node;
+      CastTypeDescriptor type_descriptor;
       bool is_default_type = false;
 
-      parse_node.value_ = aggr_info.returning_type_;
-      ObObjType rsp_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-      ObCollationType rsp_cs_type = static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]);
-      int32_t rsp_len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+      type_descriptor = CastTypeDescriptor(aggr_info.returning_type_);
+      ObObjType rsp_type = static_cast<ObObjType>(type_descriptor.type());
+      ObCollationType rsp_cs_type = static_cast<ObCollationType>(type_descriptor.collation());
+      int32_t rsp_len = type_descriptor.length();
       //int64_t result_likely_size = j_obj.get_serialize_size();
 
-      if (!parse_node.value_) {
+      if (!type_descriptor.value()) {
         is_default_type = true;
         rsp_type = ObJsonType;
         rsp_cs_type = CS_TYPE_UTF8MB4_BIN;

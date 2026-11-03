@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
+#include "sql/syntax.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -137,19 +138,6 @@ int ObCreateTableResolver::add_hidden_tablet_seq_col()
   return ret;
 }
 
-// Set additional information for the temporary table
-int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, ParseNode *commit_option_node)
-{
-  int ret = OB_SUCCESS;
-  session_info_->set_has_temp_table_flag();
-  if (OB_FAIL(set_table_name(table_name_))) {
-  } else {
-    table_schema.set_table_type(TMP_TABLE);
-    table_schema.set_session_id(session_info_->get_sessid_for_table()); // Set session_id for cleanup judgment.
-  }
-  return ret;
-}
-
 int ObCreateTableResolver::set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -162,25 +150,18 @@ int ObCreateTableResolver::set_default_micro_index_clustered_(share::schema::ObT
   return ret;
 }
 
-int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
+int ObCreateTableResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  bool is_temporary_table = false;
-  ParseNode *create_table_node = const_cast<ParseNode*>(&parse_tree);
-  if (OB_ISNULL(create_table_node)
-      || T_CREATE_TABLE != create_table_node->type_
-      || (CREATE_TABLE_NUM_CHILD != create_table_node->num_child_ &&
-          CREATE_TABLE_AS_SEL_NUM_CHILD != create_table_node->num_child_)
-      || OB_ISNULL(create_table_node->children_)) {
+  if (parse_tree.kind() != peg::NodeKind::CreateTable) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument.", K(ret));
   } else {
+    const auto definition = peg::table_definition(parse_tree);
     ObCreateTableStmt *create_table_stmt = NULL;
     ObString table_name;
     ObString database_name;
     uint64_t database_id = OB_INVALID_ID;
-    ObSEArray<ObString, 8> pk_columns_name;
-    bool is_create_as_sel = (CREATE_TABLE_AS_SEL_NUM_CHILD == create_table_node->num_child_);
+    const bool is_create_as_sel = definition.select_mode != peg::TableSelectMode::None;
     
     if (OB_ISNULL(create_table_stmt = create_stmt<ObCreateTableStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -189,46 +170,21 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       create_table_stmt->set_allocator(*allocator_);
       stmt_ = create_table_stmt;
     }
-    // resolve temporary table option
-    if (OB_SUCC(ret)) {
-      if (NULL != create_table_node->children_[0]) {
-          switch (create_table_node->children_[0]->type_) {
-            case T_TEMPORARY:
-              if (create_table_node->children_[5] != NULL) { // Temporary table does not support partitioning
-                ret = OB_ERR_TEMPORARY_TABLE_WITH_PARTITION;
-              } else {
-                ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "MySQL compatible temporary table");
-              }
-              break;
-            default:
-              ret = OB_INVALID_ARGUMENT;
-              SQL_RESV_LOG(WARN, "invalid argument.",
-                           K(ret), K(create_table_node->children_[0]->type_));
-            }
+    if (OB_SUCC(ret) && definition.temporary) {
+      if (definition.has_partition) {
+        ret = OB_ERR_TEMPORARY_TABLE_WITH_PARTITION;
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "MySQL compatible temporary table");
       }
     }
-    //resolve if_not_exists
-    if (OB_SUCC(ret)) {
-      if (NULL != create_table_node->children_[1]) {
-        if (T_IF_NOT_EXISTS != create_table_node->children_[1]->type_) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid argument.",
-                       K(ret), K(create_table_node->children_[1]->type_));
-        } else {
-          if_not_exist_ = true;
-        }
-      }
-    }
+    if_not_exist_ = definition.if_not_exists;
     //resolve table_name
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(create_table_node->children_[2])) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "invalid argument.", K(ret));
-      } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
+      if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
         ret = OB_NOT_INIT;
         SQL_RESV_LOG(WARN, "session_info is null.", K(ret));
-      } else if (OB_FAIL(resolve_table_relation_node(create_table_node->children_[2], table_name, database_name,
+      } else if (OB_FAIL(resolve_table_relation_node(&definition.relation, table_name, database_name,
                                                      false))) {
       } else if ((ObString(OB_RECYCLEBIN_SCHEMA_NAME) == database_name
                   && ObSQLSessionInfo::USER_SESSION == session_info_->get_session_type())
@@ -265,44 +221,33 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       // mysql's behavior is if a column specifies a character set then use the specified one, otherwise use the table's character set
       // Therefore need to resolve table charset&collation before resolve_table_elements
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(resolve_table_charset_info(create_table_node->children_[4]))) {
-        } else if (is_create_as_sel) {
-          if (OB_NOT_NULL(create_table_node->children_[3]) && T_TABLE_ELEMENT_LIST != create_table_node->children_[3]->type_) {
-            ret = OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(create_table_node->children_[2]->type_));
-          } else { /* do nothing */ }
-        }  else if (OB_ISNULL(create_table_node->children_[3])) {
+        if (OB_FAIL(resolve_table_charset_info(definition.options))) {
+        } else if (!is_create_as_sel && definition.elements.empty()) {
           ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid argument.", K(ret));
-        } else if (T_TABLE_ELEMENT_LIST != create_table_node->children_[3]->type_) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(create_table_node->children_[3]->type_));
-        } else {
-          // do nothing
         }
 
         // resolve table organizations before resolve table elements
         if (OB_FAIL(ret)) {
           //do nothing
-        } else if (OB_FAIL(resolve_table_organization(create_table_node->children_[4]))) {
+        } else if (OB_FAIL(resolve_table_organization(definition.options))) {
         }
 
         //consider index can be defined before column, so column should be
-        //resolved firstly;avoid to rescan table_element_list_node, use a
+        //resolved firstly;avoid to rescan elements, use a
         //array named index_node_position_list to record the position of indexes
-        ParseNode *table_element_list_node = create_table_node->children_[3];
+        const auto elements = definition.elements;
         ObArray<int> index_node_position_list;
         ObArray<int> foreign_key_node_position_list;
         ObArray<int> table_level_constraint_list;
         if (OB_SUCC(ret)) {
           if (false == is_create_as_sel) {
-            if (OB_FAIL(resolve_table_elements(table_element_list_node, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_ALL))) {
+            if (OB_FAIL(resolve_table_elements(elements, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_ALL))) {
             }
           } else {
-            if (OB_FAIL(resolve_table_elements(table_element_list_node, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_COL_ONLY))) {
-            } else if (OB_FAIL(resolve_insert_mode(&parse_tree))) {
+            if (OB_FAIL(resolve_table_elements(elements, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_COL_ONLY))) {
+            } else if (OB_FAIL(resolve_insert_mode(definition.select_mode))) {
             } else if (OB_FAIL(resolve_table_elements_from_select(parse_tree))) {
-            } else if (OB_FAIL(resolve_table_elements(table_element_list_node, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_NON_COL))) {
+            } else if (OB_FAIL(resolve_table_elements(elements, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_NON_COL))) {
             }
           }
           if (OB_SUCC(ret)) {
@@ -320,19 +265,12 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(set_default_micro_index_clustered_(table_schema))) {
-            } else if (OB_FAIL(resolve_table_options(create_table_node->children_[4], false))) {
+            } else if (OB_FAIL(resolve_table_options(definition.options, false))) {
             } else if (OB_FAIL(set_table_option_to_schema(table_schema))) {
             } else if (OB_FAIL(check_max_row_data_length(table_schema))) {
             } else {
               table_schema.set_collation_type(collation_type_);
               table_schema.set_charset_type(charset_type_);
-              // No longer need this step. At the beginning of resolve, directly parse out the collation/charset information of the table, by the time column information is resolved, it can already be obtained
-              // Table's collation/charset information
-              //if (OB_FAIL(table_schema.fill_column_collation_info())) {
-              //  SQL_RESV_LOG(WARN, "fail to fill column collation info", K(ret), K(table_name_));
-              //} else {
-              //  //do nothing
-              //}
             }
           }
         }
@@ -341,8 +279,8 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
           if (OB_FAIL(resolve_partition_option(
-                      create_table_node->children_[5], table_schema,
-                      1 != create_table_node->reserved_))) {
+                      definition.has_partition ? &peg::table_definition_partition(parse_tree) : nullptr,
+                      table_schema))) {
           }
         }
 
@@ -366,21 +304,15 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
           table_schema.set_define_user_id(session_info_->get_priv_user_id());
           create_table_stmt->set_if_not_exists(if_not_exist_);
-          if (false == is_temporary_table && OB_NOT_NULL(create_table_node->children_[7])) {
-            ret = OB_ERR_PARSER_SYNTAX;
-            SQL_RESV_LOG(WARN, "on commit option can only be used for temp table", K(ret));
-          } else if (is_temporary_table && OB_FAIL(set_temp_table_info(table_schema, create_table_node->children_[7]))) {
-            SQL_RESV_LOG(WARN, "set temp table info failed", K(ret));
-          } else if (OB_FAIL(table_schema.set_table_name(table_name_))) {
+          if (OB_FAIL(table_schema.set_table_name(table_name_))) {
           } else {
             create_table_stmt->set_database_id(OB_INVALID_ID);
           }
         }
-        // put after parsing temporary table information settings, because it involves error checking for foreign key reference not supported by temporary tables
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(resolve_index(table_element_list_node, index_node_position_list))) {
-          } else if (OB_FAIL(resolve_foreign_key(table_element_list_node, foreign_key_node_position_list))) {
-          } else if (OB_FAIL(resolve_table_level_constraint_for_mysql(table_element_list_node, table_level_constraint_list))) {
+          if (OB_FAIL(resolve_index(elements, index_node_position_list))) {
+          } else if (OB_FAIL(resolve_foreign_key(elements, foreign_key_node_position_list))) {
+          } else if (OB_FAIL(resolve_table_level_constraint_for_mysql(elements, table_level_constraint_list))) {
           } else { /* do nothing */ }
         }
 
@@ -391,7 +323,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret) && is_create_as_sel) {
-      if (OB_FAIL(resolve_hints(create_table_node->children_[9],
+      if (OB_FAIL(resolve_hints(definition.hints,
                                *create_table_stmt,
                                create_table_stmt->get_create_table_arg().schema_))) {
       }
@@ -406,10 +338,10 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 // Check if the unique index and unique index are built on exactly the same (including order) columns or column families
 
 int ObCreateTableResolver::resolve_partition_option(
-    ParseNode *node, ObTableSchema &table_schema, const bool is_partition_option_node_with_opt)
+    const peg::Node *node, ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCreateTableResolverBase::resolve_partition_option(node, table_schema, is_partition_option_node_with_opt))) {
+  if (OB_FAIL(ObCreateTableResolverBase::resolve_partition_option(node, table_schema))) {
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(node)) {
     if (OB_FAIL(check_generated_partition_column(table_schema))) {
@@ -456,120 +388,66 @@ int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table
   return ret;
 }
 
-int ObCreateTableResolver::check_column_name_duplicate(const ParseNode *node)
+int ObCreateTableResolver::check_column_name_duplicate(rust::Slice<const peg::Node> elements)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "node is null.", K(ret));
-  } else if (OB_ISNULL(stmt_)
-      || T_TABLE_ELEMENT_LIST != node->type_
-      || OB_ISNULL(node->children_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-      ParseNode *element = node->children_[i];
-      if (OB_ISNULL(element)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_LIKELY(T_COLUMN_DEFINITION == element->type_)) {
-        if (OB_USER_ROW_MAX_COLUMNS_COUNT < column_name_set_.count()) {
-          ret = OB_ERR_TOO_MANY_COLUMNS;
-        } else if (element->num_child_ < COLUMN_DEFINITION_NUM_CHILD ||
-            OB_ISNULL(element->children_) || OB_ISNULL(element->children_[COLUMN_REF_NODE]) ||
-            T_COLUMN_REF != element->children_[COLUMN_REF_NODE]->type_ ||
-            COLUMN_DEF_NUM_CHILD != element->children_[COLUMN_REF_NODE]->num_child_) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          ParseNode *name_node = element->children_[COLUMN_REF_NODE]->children_[COLUMN_NAME_NODE];
-          if (OB_ISNULL(name_node)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (0 == name_node->str_len_) {
-            ret = OB_WRONG_COLUMN_NAME;
-            LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, (int)name_node->str_len_, name_node->str_value_);
-          } else {
-            ObString name(name_node->str_len_, name_node->str_value_);
-            ObCollationType cs_type = CS_TYPE_INVALID;
-            if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-            } else if (OB_FAIL(ObSQLUtils::check_column_name(cs_type, name))) {
-            } else {
-              ObColumnNameHashWrapper column_name_key(name);
-              if (OB_HASH_EXIST  == column_name_set_.exist_refactored(column_name_key)) {
-                ret = OB_ERR_COLUMN_DUPLICATE;
-                LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, name.length(), name.ptr());
-              } else {
-                if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
-                }
-              }
-            }
-          }
+  for (const auto &element : elements) {
+    if (OB_FAIL(ret)) {
+      break;
+    } else if (element.kind() == peg::NodeKind::ColumnDefinition) {
+      const auto &name_node = peg::column_definition(element).name;
+      const auto names = peg::name_parts(name_node);
+      const auto &name_part = names[names.size() - 1];
+      const auto name_part_text = name_part.text();
+      const ObString spelling(syntax_text(name_part_text));
+      ObString name;
+      ObCollationType cs_type = CS_TYPE_INVALID;
+      if (OB_USER_ROW_MAX_COLUMNS_COUNT < column_name_set_.count()) {
+        ret = OB_ERR_TOO_MANY_COLUMNS;
+      } else if (spelling.empty()) {
+        ret = OB_WRONG_COLUMN_NAME;
+        LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, spelling.length(), spelling.ptr());
+      } else if (OB_FAIL(ob_write_string(*allocator_, spelling, name))) {
+      } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+      } else if (OB_FAIL(ObSQLUtils::check_column_name(cs_type, name))) {
+      } else {
+        ObColumnNameHashWrapper key(name);
+        if (OB_HASH_EXIST == column_name_set_.exist_refactored(key)) {
+          ret = OB_ERR_COLUMN_DUPLICATE;
+          LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, name.length(), name.ptr());
+        } else if (OB_FAIL(column_name_set_.set_refactored(key))) {
         }
       }
     }
-    if (OB_SUCC(ret)) {
-      column_name_set_.reset();
-    }
+  }
+  if (OB_SUCC(ret)) {
+    column_name_set_.reset();
   }
   return ret;
 }
 
-int ObCreateTableResolver::resolve_primary_key_node(const ParseNode &pk_node,
+int ObCreateTableResolver::resolve_primary_key_node(const peg::Node &pk_node,
                                                     ObArray<ObColumnResolveStat> &stats)
 {
   int ret = OB_SUCCESS;
-
-  if (3 < pk_node.num_child_ || OB_ISNULL(pk_node.children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the num_child of primary_node is wrong.",
-                 K(ret), K(pk_node.num_child_), K(pk_node.children_));
-  } else {
-    ParseNode *column_list_node = pk_node.children_[0];
-    if (OB_ISNULL(column_list_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "column_list_node is null.", K(ret));
-    } else if (T_COLUMN_LIST != column_list_node->type_
-               || column_list_node->num_child_ <= 0
-               || OB_ISNULL(column_list_node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "unexpected.",
-                   K(ret), K(column_list_node->type_), K(column_list_node->num_child_));
-    } else {
-      ParseNode *key_node = NULL;
-      int64_t pk_data_length = 0;
-      for (int32_t i = 0; OB_SUCC(ret) && i < column_list_node->num_child_; ++i) {
-        if (OB_ISNULL(column_list_node->children_[i])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "column_list_node->children_[i] is null.", K(ret));
-        } else {
-          key_node = column_list_node->children_[i];
-          ObString key_name;
-          if (OB_ISNULL(key_node)) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "key_node is null.", K(ret));
-          } else {
-            key_name.assign_ptr(key_node->str_value_,static_cast<int32_t>(key_node->str_len_));
-            if (OB_FAIL(add_primary_key_part(key_name, stats, pk_data_length))) {
-            }
-          }
-        }
-      }
+  int64_t pk_data_length = 0;
+  for (const auto &column : peg::primary_key_columns(pk_node)) {
+    if (OB_FAIL(ret)) {
+      break;
+    } else if (const auto column_text = column.text();
+               OB_FAIL(add_primary_key_part(syntax_text(column_text),
+                                           stats, pk_data_length))) {
     }
-    if (OB_SUCC(ret) && NULL != pk_node.children_[1]) {
-      ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-      if (T_USING_HASH == pk_node.children_[1]->type_) {
-        create_table_stmt->set_index_using_type(share::schema::USING_HASH);
-      } else {
-        create_table_stmt->set_index_using_type(share::schema::USING_BTREE);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (NULL != pk_node.children_[2]) {
-        ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-        ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-        ObString pk_comment;
-        pk_comment.assign_ptr(pk_node.children_[2]->str_value_,static_cast<int32_t>(pk_node.children_[2]->str_len_));
-        if (OB_FAIL(table_schema.set_pk_comment(pk_comment))) {
-        }
-      }
+  }
+  if (OB_SUCC(ret)) {
+    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
+    create_table_stmt->set_index_using_type(peg::primary_key_method(pk_node) == peg::IndexMethod::Hash
+        ? share::schema::USING_HASH : share::schema::USING_BTREE);
+    if (peg::primary_key_has_comment(pk_node)) {
+      const auto &comment = peg::primary_key_comment(pk_node);
+      const auto comment_text = comment.text();
+      ret = create_table_stmt->get_create_table_arg().schema_.set_pk_comment(
+          syntax_text(comment_text));
     }
   }
   return ret;
@@ -599,7 +477,7 @@ int ObCreateTableResolver::get_resolve_stats_from_table_schema(
   return ret;
 }
 
-int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
+int ObCreateTableResolver::resolve_table_elements(rust::Slice<const peg::Node> elements,
                                                   ObArray<int> &index_node_position_list,
                                                   ObArray<int> &foreign_key_node_position_list,
                                                   ObArray<int> &table_level_constraint_list,
@@ -607,20 +485,14 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                                                           // Second parsing non-column
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-   // do nothing, create table t as select ... will come here
-  } else if (OB_ISNULL(stmt_)
-             || OB_ISNULL(session_info_)
-             || T_TABLE_ELEMENT_LIST != node->type_
-             || node->num_child_ < 1
-             || OB_ISNULL(node->children_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument",
-                 K(ret), K(node->type_), K(node->num_child_));
+  if (elements.empty()) {
+    // CREATE TABLE AS SELECT can omit column definitions.
+  } else if (OB_ISNULL(stmt_) || OB_ISNULL(session_info_)) {
+    ret = OB_NOT_INIT;
   } else {
     ObSEArray<ObString, 4> gen_col_expr_arr;
-    ParseNode *primary_node = NULL;
-    ParseNode *primary_node_in_heap_table = NULL;
+    const peg::Node *primary_node = NULL;
+    const peg::Node *primary_node_in_heap_table = NULL;
     ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
     uint64_t autoinc_column_id = 0;
     int64_t first_timestamp_index = -1;
@@ -640,18 +512,18 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     } else if (RESOLVE_NON_COL == resolve_rule) {
       if (OB_FAIL(get_resolve_stats_from_table_schema(table_schema, stats))) {
       }
-    } else if (OB_FAIL(check_column_name_duplicate(node))) {
+    } else if (OB_FAIL(check_column_name_duplicate(elements))) {
     }
     // To implement defining generated columns in any order, we need to traverse the node twice
     // First traversal, parse all column names, generate column_schema and store in resolved_cols
-    for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-      ParseNode *element = node->children_[i];
+    for (int32_t i = 0; OB_SUCC(ret) && i < elements.size(); ++i) {
+      const peg::Node *element = &elements[i];
       CK (OB_NOT_NULL(element));
       if (OB_FAIL(ret)) {
-      } else if ((RESOLVE_NON_COL == resolve_rule && T_COLUMN_DEFINITION == element->type_)
-                 || (RESOLVE_COL_ONLY == resolve_rule && T_COLUMN_DEFINITION != element->type_)) {
+      } else if ((RESOLVE_NON_COL == resolve_rule && peg::NodeKind::ColumnDefinition == element->kind())
+                 || (RESOLVE_COL_ONLY == resolve_rule && peg::NodeKind::ColumnDefinition != element->kind())) {
         //continue
-      } else if (OB_LIKELY(T_COLUMN_DEFINITION == element->type_)) {
+      } else if (OB_LIKELY(peg::NodeKind::ColumnDefinition == element->kind())) {
         ObColumnSchemaV2 column;
         
         ObColumnResolveStat stat;
@@ -662,7 +534,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           // column id set by user sql such as "c1 int comment 'manual' id 17"
         }
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(resolve_column_name(column, element))) {
+        } else if (OB_FAIL(resolve_column_name(column, *element))) {
         } else {
           OZ (resolved_cols.push_back(column));
         }
@@ -672,14 +544,14 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     int64_t resolved_cols_count = resolved_cols.count();
     // Second pass traversal, use resolved_cols to parse out all column schema and save to table_schema
     // And parse index etc
-    for (int32_t i = 0, ele_pos = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-      ParseNode *element = node->children_[i];
+    for (int32_t i = 0, ele_pos = 0; OB_SUCC(ret) && i < elements.size(); ++i) {
+      const peg::Node *element = &elements[i];
       CK (OB_NOT_NULL(element));
       if (OB_FAIL(ret)) {
-      } else if ((RESOLVE_NON_COL == resolve_rule && T_COLUMN_DEFINITION == element->type_)
-                 || (RESOLVE_COL_ONLY == resolve_rule && T_COLUMN_DEFINITION != element->type_)) {
+      } else if ((RESOLVE_NON_COL == resolve_rule && peg::NodeKind::ColumnDefinition == element->kind())
+                 || (RESOLVE_COL_ONLY == resolve_rule && peg::NodeKind::ColumnDefinition != element->kind())) {
         continue;
-      } else if (OB_LIKELY(T_COLUMN_DEFINITION == element->type_)) {
+      } else if (OB_LIKELY(peg::NodeKind::ColumnDefinition == element->kind())) {
         bool is_modify_column_visibility = false;
         const bool is_create_table_as = (RESOLVE_COL_ONLY == resolve_rule);
         CK (ele_pos >= 0 && ele_pos < resolved_cols_count);
@@ -689,7 +561,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           common::ObString pk_name;
           // ele_pos + 1, points to the next column_schema
           ++ele_pos;
-          if (OB_FAIL(resolve_column_definition(column, element, stat,
+          if (OB_FAIL(resolve_column_definition(column, *element, stat,
                                                 is_modify_column_visibility,
                                                 pk_name,
                                                 table_schema,
@@ -708,7 +580,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                           schema_checker_,
                                           params_.srs_provider_,
                                           params_.lob_read_service_,
-                                          NULL == element->children_[1]))) {
+                                          false))) {
           } else if (column.is_string_type() || is_lob_storage(column.get_data_type())) {
             int64_t length = 0;
             if (OB_FAIL(column.get_byte_length(length, false))) {
@@ -843,7 +715,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
             }
           }
         }
-      } else if (T_PRIMARY_KEY == element->type_) {
+      } else if (peg::NodeKind::PrimaryKey == element->kind()) {
         if (primary_key_set_in_heap_table) {
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
           SQL_RESV_LOG(WARN, "multiple primary key defined");
@@ -859,24 +731,22 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
           SQL_RESV_LOG(WARN, "multiple primary key defined");
         }
-      } else if(ObItemType::T_INDEX == element->type_) {
+      } else if(peg::NodeKind::Index == element->kind()) {
         if (OB_MAX_INDEX_PER_TABLE == index_node_position_list.count()) {
           ret = OB_ERR_TOO_MANY_KEYS;
           LOG_USER_ERROR(OB_ERR_TOO_MANY_KEYS, OB_MAX_INDEX_PER_TABLE);
         } else if (OB_FAIL(index_node_position_list.push_back(i))){
         } else { /*do nothing*/ }
-      } else if (T_FOREIGN_KEY == element->type_) {
+      } else if (peg::NodeKind::ForeignKey == element->kind()) {
         // FIXME: foreign key maximum quantity limit is the same as index quantity
         if (OB_MAX_INDEX_PER_TABLE == foreign_key_node_position_list.count()) {
           ret = OB_ERR_TOO_MANY_KEYS;
           LOG_USER_ERROR(OB_ERR_TOO_MANY_KEYS, OB_MAX_INDEX_PER_TABLE);
         } else if (OB_FAIL(foreign_key_node_position_list.push_back(i))){
         } else { /*do nothing*/ }
-      } else if (T_CHECK_CONSTRAINT == element->type_) {
+      } else if (peg::NodeKind::CheckConstraint == element->kind()) {
         if (OB_FAIL(table_level_constraint_list.push_back(i))) {
         }
-      } else if (T_EMPTY == element->type_) {
-        // compatible with mysql 5.7 check (expr), do nothing
       } else {
         // won't be here
         ret = OB_ERR_UNEXPECTED;
@@ -947,7 +817,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       } else if (NULL == primary_node_in_heap_table) {
         // do nothing
       // todo@lanyi This function should be placed in a separate document
-      } else if (OB_FAIL(resolve_primary_key_node_in_heap_table(primary_node_in_heap_table, stats, resolved_cols))) {
+      } else if (OB_FAIL(resolve_primary_key_node_in_heap_table(*primary_node_in_heap_table, stats))) {
       }
     }
   }
@@ -1009,63 +879,36 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
   }
   return ret;
 }
-int ObCreateTableResolver::resolve_insert_mode(const ParseNode *parse_tree)
+int ObCreateTableResolver::resolve_insert_mode(peg::TableSelectMode mode)
 {
-  int ret = OB_SUCCESS;
-  ParseNode *flag_node = NULL;
   ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
-  ObExecContext *exec_ctx = NULL;
-  ObSqlCtx *sql_ctx = NULL;
-  if (OB_ISNULL(parse_tree) ||
-      OB_ISNULL(create_table_stmt) ||
-      OB_ISNULL(params_.query_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (parse_tree->num_child_ != CREATE_TABLE_AS_SEL_NUM_CHILD){
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    flag_node = parse_tree->children_[10];
-    if (flag_node == NULL) {
-      create_table_stmt->set_insert_mode(0);
-    } else if (flag_node->type_ == T_IGNORE) {
-      create_table_stmt->set_insert_mode(1);
-    } else if (flag_node->type_ == T_REPLACE) {
-      create_table_stmt->set_insert_mode(2);
-    }
-  }
-  return ret;
+  create_table_stmt->set_insert_mode(mode == peg::TableSelectMode::Ignore ? 1 :
+                                     mode == peg::TableSelectMode::Replace ? 2 : 0);
+  return OB_SUCCESS;
 }
 // Parse column_list and query, then set the column names and data types of the new table based on opt_column_list (which may be absent) and the query
-int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &parse_tree)
+int ObCreateTableResolver::resolve_table_elements_from_select(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
   const ObTableSchema *base_table_schema = NULL;
-  ParseNode *sub_sel_node = parse_tree.children_[8];
+  const auto &query = peg::table_definition_query(parse_tree);
   ObSelectStmt *select_stmt = NULL;
   ObSelectResolver select_resolver(params_);
   select_resolver.params_.is_from_create_table_ = true;
-  select_resolver.params_.is_specified_col_name_ = parse_tree.num_child_ > 3 &&
-                                                   parse_tree.children_[3] != NULL &&
-                                                   T_TABLE_ELEMENT_LIST == parse_tree.children_[3]->type_;
+  select_resolver.params_.is_specified_col_name_ = !peg::table_definition(parse_tree).elements.empty();
   // select layer should not see the insert stmt's attributes from the upper layer, so the upper scope stmt should be empty
   select_resolver.set_parent_namespace_resolver(NULL);
   if (OB_NOT_NULL(params_.query_ctx_)
         && 0 != params_.query_ctx_->question_marks_count_
         && !params_.is_prepare_protocol_) {
     ret = OB_ERR_PARSER_SYNTAX;
-  } else if (OB_UNLIKELY(parse_tree.num_child_ <= 3 ||
-                         (parse_tree.children_[3] != NULL &&
-                          T_TABLE_ELEMENT_LIST != parse_tree.children_[3]->type_))) {
-    ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_) || OB_ISNULL(params_.param_list_)) {
     ret = OB_NOT_INIT;
     SQL_RESV_LOG(WARN, "ObCreateTableResolver is not init", K(params_.param_list_), K(allocator_),
                                                             K(session_info_), K(ret));
-  } else if (OB_ISNULL(sub_sel_node) || OB_UNLIKELY(T_SELECT != sub_sel_node->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid select node", K(sub_sel_node));
   } else if (OB_FAIL(set_table_name(table_name_))) {
-  } else if (OB_FAIL(select_resolver.resolve(*sub_sel_node))) {
+  } else if (OB_FAIL(select_resolver.resolve(query))) {
   } else {
     select_stmt = select_resolver.get_select_stmt();
     ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
@@ -1444,28 +1287,19 @@ int ObCreateTableResolver::set_storing_column()
 }
 
 int ObCreateTableResolver::resolve_table_level_constraint_for_mysql(
-    const ParseNode* node, ObArray<int>& constraint_position_list)
+    rust::Slice<const peg::Node> elements, ObArray<int>& constraint_position_list)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    // do nothing, create table t as select ... will come here
-  } else if (T_TABLE_ELEMENT_LIST != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(node->type_));
-  } else if (OB_ISNULL(stmt_)) {
+  if (OB_ISNULL(stmt_)) {
     ret = OB_NOT_INIT;
-    SQL_RESV_LOG(WARN, "stmt_ is null.", K(ret));
-  } else if (OB_ISNULL(node->children_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(node->children_));
   } else {
     ObCreateTableStmt* create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
     ObSEArray<ObConstraint, 4>& csts = create_table_stmt->get_create_table_arg().constraint_list_;
     for (int64_t i = 0; OB_SUCC(ret) && i < constraint_position_list.size(); ++i) {
-      if (OB_UNLIKELY(constraint_position_list.at(i) >= node->num_child_)) {
+      if (OB_UNLIKELY(constraint_position_list.at(i) >= elements.size())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(constraint_position_list.at(i)));
-      } else if (OB_FAIL(resolve_check_constraint_node(*node->children_[constraint_position_list.at(i)], csts))) {
+      } else if (OB_FAIL(resolve_check_constraint_node(elements[constraint_position_list.at(i)], csts))) {
       } else { /*do nothing*/
       }
     }
@@ -1474,21 +1308,12 @@ int ObCreateTableResolver::resolve_table_level_constraint_for_mysql(
 }
 
 int ObCreateTableResolver::resolve_index(
-    const ParseNode *node,
+    rust::Slice<const peg::Node> elements,
     ObArray<int> &index_node_position_list)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    // do nothing, create table t as select ... will come here
-  } else if (T_TABLE_ELEMENT_LIST != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(node->type_));
-  } else if (OB_ISNULL(stmt_)) {
+  if (OB_ISNULL(stmt_)) {
     ret = OB_NOT_INIT;
-    SQL_RESV_LOG(WARN, "stmt_ is null.", K(ret));
-  } else if (OB_ISNULL(node->children_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(node->children_));
   } else {
     vec_index_col_ids_.reset();
     has_vec_index_ = false;
@@ -1497,10 +1322,10 @@ int ObCreateTableResolver::resolve_index(
       reset();
       index_attributes_set_ = OB_DEFAULT_INDEX_ATTRIBUTES_SET;
       index_arg_.reset();
-      if (OB_UNLIKELY(index_node_position_list.at(i) >= node->num_child_)) {
+      if (OB_UNLIKELY(index_node_position_list.at(i) >= elements.size())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(index_node_position_list.at(i)));
-      } else if (OB_FAIL(resolve_index_node(node->children_[index_node_position_list.at(i)]))) {
+      } else if (OB_FAIL(resolve_index_node(elements[index_node_position_list.at(i)]))) {
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret) && (has_fts_index_ || has_multivalue_index_ || has_vec_index_)) {
@@ -1513,25 +1338,14 @@ int ObCreateTableResolver::resolve_index(
   return ret;
 }
 
-int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
+int ObCreateTableResolver::resolve_index_node(const peg::Node &node)
 {
   int ret = OB_SUCCESS;
-  ObString uk_name;
   bool is_index_part_specified = false;
-  if (OB_ISNULL(node)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "node is null.", K(ret));
-  } else if ((ObItemType::T_INDEX != node->type_ && ObItemType::T_COLUMN_DEFINITION != node->type_)
-          && (is_organization_set_to_heap() && ObItemType::T_PRIMARY_KEY != node->type_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid arguments.", K(ret), K(node->type_), K(node->num_child_));
-  } else if (OB_ISNULL(stmt_) || OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)){
+  if (OB_ISNULL(stmt_) || OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)){
     ret = OB_NOT_INIT;
     SQL_RESV_LOG(WARN, "stmt or session_info or schema_checker is null.",
                  K(ret), KP(session_info_), KP(stmt_), K_(schema_checker));
-  } else if (OB_ISNULL(node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "node->children_ is null.", K(ret));
   } else {
     index_arg_.reset();
     ObColumnSortItem sort_item;
@@ -1541,309 +1355,259 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
     ObTableSchema &tbl_schema = create_table_stmt->get_create_table_arg().schema_;
     int64_t vec_index_col_id = 0;
     bool process_heap_table_primary_key = false;
-    if(ObItemType::T_INDEX == node->type_) {
-      //if index_name is not specified, new index_name will be generated
-      //by the first_column_name, so resolve the index_column_list_node firstly.
-      if (NULL == node->children_[1] || T_INDEX_COLUMN_LIST != node->children_[1]->type_) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "invalid index column list.", K(ret));
-      } else {
-        int64_t index_data_length = 0;
-        index_keyname_ = static_cast<INDEX_KEYNAME>(node->value_);
-        ParseNode *index_column_list_node = node->children_[1];
-        if (index_column_list_node->num_child_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
-          ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
-          LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
-        } else if (OB_ISNULL(index_column_list_node->children_)) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "children_ is null.", K(ret));
-        } else { /*do nothing*/ }
-
-        ParseNode *index_column_node = NULL;
-        bool is_ctxcat_added = false;
-        bool cnt_func_index_mysql = false;
-        bool is_multi_value_index = false;
-        const bool is_vec_index = (index_keyname_ == INDEX_KEYNAME::VEC_KEY);
-        const bool is_fts_index = (index_keyname_ == INDEX_KEYNAME::FTS_KEY);
-        if (OB_FAIL(ret)) {
-        } else if (OB_ISNULL(session_info_)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (is_vec_index && index_column_list_node->num_child_ >= 2) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
-        }
-        for (int32_t i = 0; OB_SUCC(ret) && i < index_column_list_node->num_child_; ++i) {
-          ObString &column_name = sort_item.column_name_;
-          if (NULL == index_column_list_node->children_[i]
-              || T_SORT_COLUMN_KEY != index_column_list_node->children_[i]->type_) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "invalid index_column_list_node.", K(ret));
-          } else {
-            index_column_node = index_column_list_node->children_[i];
-          }
-          if (OB_SUCC(ret)) {
-            if (OB_ISNULL(index_column_node->children_)
-                || index_column_node->num_child_ != 3
-                || OB_ISNULL(index_column_node->children_[0])) {
-              ret = OB_ERR_UNEXPECTED;
-              SQL_RESV_LOG(WARN, "invalid index_column_node.", K(ret),
-                          K(index_column_node->num_child_),
-                          K(index_column_node->children_),
-                          K(index_column_node->children_[0]));
-            } else {
-              //column_name
-              if (index_column_node->children_[0]->type_ != T_IDENT) {
-                sort_item.is_func_index_ = true;
-                cnt_func_index_mysql = true;
-              } else {
-                sort_item.is_func_index_ = false;
-              }
-              column_name.assign_ptr(
-                  const_cast<char *>(index_column_node->children_[0]->str_value_),
-                  static_cast<int32_t>(index_column_node->children_[0]->str_len_));
-              if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_index_type(column_name,
-                                                                        is_multi_value_index,
-                                                                        reinterpret_cast<int*>(&index_keyname_)))) {
-              } else if (is_multi_value_index
-                         && NULL != index_column_node->children_[2]
-                         && 1 != index_column_node->children_[2]->is_empty_) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "ASC/DESC for multivalue index is");
-              } else if (NULL != index_column_node->children_[1]) {
-                sort_item.prefix_len_ = static_cast<int32_t>(index_column_node->children_[1]->value_);
-                if (0 == sort_item.prefix_len_) {
-                  ret = OB_KEY_PART_0;
-                  LOG_USER_ERROR(OB_KEY_PART_0, column_name.length(), column_name.ptr());
-                }
-              } else {
-                sort_item.prefix_len_ = 0;
-              }
-            }
-          }
-          if (OB_SUCC(ret)) {
-            if (sort_item.is_func_index_) {
-              ObRawExpr *expr = NULL;
-              if (is_multi_value_index) {
-                ObColumnSchemaV2 *budy_column_schema = NULL;
-                bool force_rebuild = true;
-                if (OB_FAIL(ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column(
-                                                                                  *allocator_,
-                                                                                  sort_item,
-                                                                                  *params_.expr_factory_,
-                                                                                  *session_info_,
-                                                                                  tbl_schema,
-                                                                                  schema_checker_,
-                                                                                  force_rebuild,
-                                                                                  column_schema,
-                                                                                  budy_column_schema))) {
-                } else if (OB_ISNULL(column_schema) || OB_ISNULL(budy_column_schema)) {
-                  ret = OB_ERR_UNEXPECTED;
-                } else {
-                  ObColumnNameHashWrapper column_name_key(column_schema->get_column_name_str());
-                  if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
-                  } else {
-                    ObColumnSortItem budy_sort_item;
-                    budy_sort_item.is_func_index_ = true;
-                    budy_sort_item.column_name_ = budy_column_schema->get_column_name_str();
-
-                    ObColumnNameHashWrapper budy_column_name_key(budy_column_schema->get_column_name_str());
-                    if (OB_FAIL(column_name_set_.set_refactored(budy_column_name_key))) {
-                    } else if (OB_FAIL(add_sort_column(budy_sort_item))) {
-                    }
-                  }
-                }
-              } else if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
-                                                                      column_name,
-                                                                      *params_.expr_factory_,
-                                                                      *session_info_,
-                                                                      tbl_schema,
-                                                                      expr,
-                                                                      schema_checker_,
-                                                                      ObResolverUtils::CHECK_FOR_FUNCTION_INDEX))) {
-              } else if (!expr->is_column_ref_expr()) {
-                //real index expr, so generate hidden generated column in data table schema
-                if (ob_is_geometry(expr->get_data_type()) || static_cast<int64_t>(INDEX_KEYNAME::SPATIAL_KEY) == node->value_) {
-                  ret = OB_ERR_SPATIAL_FUNCTIONAL_INDEX;
-                } else if (ob_is_collection_sql_type(expr->get_data_type()) || static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) == node->value_) {
-                  ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
-                } else if (OB_FAIL(ObIndexBuilderUtil::generate_ordinary_generated_column(*expr,
-                                                                                   *session_info_,
-                                                                                   tbl_schema,
-                                                                                   column_schema,
-                                                                                   schema_checker_->get_schema_guard()))) {
-                } else {
-                  ObColumnNameHashWrapper column_name_key(column_schema->get_column_name_str());
-                  sort_item.column_name_ = column_schema->get_column_name_str();
-                  sort_item.is_func_index_ = false;
-                  if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
-                  }
-                }
-              } else {
-                ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
-              }
-            } else {
-              if (NULL == (column_schema = tbl_schema.get_column_schema(column_name))) {
-                ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
-                LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
-              }
-            }
-            if (OB_FAIL(ret)) {
-            } else if (is_vec_index) {
-              vec_index_col_id = column_schema->get_column_id();
-              if (ObVectorIndexUtil::has_multi_index_on_same_column(vec_index_col_ids_, vec_index_col_id)) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "more than one vector index on same column is");
-              } else if (OB_FAIL(set_vec_column_name(column_schema->get_column_name()))) {
-              }
-            }
-            if (OB_SUCC(ret)) {
-              if (OB_ISNULL(session_info_)) {
-                ret = OB_NOT_INIT;
-              }  else if (sort_item.prefix_len_ > column_schema->get_data_length()) {
-                ret = OB_WRONG_SUB_KEY;
-                SQL_RESV_LOG(WARN, "prefix length is longer than column length", K(sort_item), K(column_schema->get_data_length()), K(ret));
-              } else if (ob_is_collection_sql_type(column_schema->get_data_type())
-                  && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector column index but not vector index is");
-              } else if (column_schema->is_key_forbid_lob() && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != node->value_ && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
-                if (column_schema->is_hidden()) {
-                  //functional index in mysql mode
-                  ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
-                } else if(sort_item.prefix_len_ <= 0) {
-                  ret = OB_ERR_WRONG_KEY_COLUMN;
-                  LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
-                }
-              } else if (OB_FAIL(resolve_spatial_index_constraint(*column_schema,
-                  index_column_list_node->num_child_, node->value_, false/*false*/,
-                  NULL != index_column_node->children_[2] && 1 != index_column_node->children_[2]->is_empty_))) {
-              } else if (OB_FAIL(resolve_vec_index_constraint(*column_schema,
-                                                              node->value_,
-                                                              node->children_[2]))) {
-              } else if (OB_FAIL(resolve_fts_index_constraint(*column_schema,
-                                                              node->value_))) {
-              } else if (OB_FAIL(resolve_multivalue_index_constraint(*column_schema, index_keyname_))) {
-              }
-
-              if (OB_SUCC(ret) && ob_is_string_type(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
-                int64_t length = 0;
-                if (OB_FAIL(column_schema->get_byte_length(length, false))) {
-                } else if (sort_item.prefix_len_ > 0) {
-                  length = length * sort_item.prefix_len_ / column_schema->get_data_length();
-                } else { /*do nothing*/ }
-
-                if (OB_SUCC(ret)) {
-                  if ((index_data_length += length) > OB_MAX_USER_ROW_KEY_LENGTH
-                      && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != node->value_
-                      && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
-                    // text or varchar column is bigger than 16k will be blocked
-                    ret = OB_ERR_TOO_LONG_KEY_LENGTH;
-                    LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
-                  } else if (length <= 0) {
-                    ret = OB_ERR_WRONG_KEY_COLUMN;
-                    LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
-                  } else {
-                    // do nothing
-                  }
-                }
-              }
-            }
-            if (OB_SUCC(ret)) {
-              //column_order
-              {
-                // Compatible with mysql5.7, descending index does not take effect and does not report an error
-                sort_item.order_type_ = common::ObOrderType::ASC;
-              }
-              ObColumnNameHashWrapper column_key(column_name);
-              if (OB_HASH_NOT_EXIST == column_name_set_.exist_refactored(column_key)) {
-                ret = OB_ERR_BAD_FIELD_ERROR;
-                LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
-                               table_name_.length(), table_name_.ptr());
-              } else {
-                if (0 == i) {
-                  first_column_name.assign_ptr(
-                      const_cast<char *>(index_column_node->children_[0]->str_value_),
-                      static_cast<int32_t>(index_column_node->children_[0]->str_len_));
-                }
-              }
-            }
-
-            if (OB_SUCC(ret)) {
-              if (OB_FAIL(add_sort_column(sort_item))) {
-              } else { /*do nothing*/ }
-            }
-          }
-          if (OB_SUCC(ret)) {
-            if (NULL != node->children_[3]) {
-              if (T_USING_BTREE == node->children_[3]->type_) {
-                index_arg_.index_using_type_ = USING_BTREE;
-              } else {
-                index_arg_.index_using_type_ = USING_HASH;
-              }
-            }
-          }
-        }
-
-        if (OB_SUCC(ret) && cnt_func_index_mysql) {
-          first_column_name = ObString::make_string("functional_index");
-        }
+    if (peg::NodeKind::Index == node.kind()) {
+      const auto definition = peg::index_definition(node);
+      const auto columns = definition.columns;
+      int64_t index_data_length = 0;
+      index_keyname_ = index_keyname(definition.kind);
+      if (columns.size() > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
+        ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
+        LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
       }
-    } else if (is_organization_set_to_heap() && ObItemType::T_PRIMARY_KEY == node->type_) {
-      if (OB_FAIL(resolve_single_column_primary_key_node(node->children_[0], tbl_schema, process_heap_table_primary_key, first_column_name))) {
+      bool cnt_func_index_mysql = false;
+      bool is_multi_value_index = false;
+      const bool is_vec_index = (index_keyname_ == INDEX_KEYNAME::VEC_KEY);
+      if (OB_FAIL(ret)) {
+      } else if (OB_ISNULL(session_info_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (is_vec_index && columns.size() >= 2) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
       }
-    } else {
-      //unique [key]
-      if (T_COLUMN_DEFINITION != node->type_) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(node->type_));
-      } else if (NULL == node->children_[0]
-                 || T_COLUMN_REF != node->children_[0]->type_
-                 || COLUMN_DEF_NUM_CHILD != node->children_[0]->num_child_) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "invalid argument.", K(ret));
-      } else if (OB_ISNULL(node->children_[0]->children_) || OB_ISNULL(node->children_[0]->children_[2])) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "node->ch[0]->ch[2] is null.", K(ret));
-      } else {
-        index_keyname_ = UNIQUE_KEY;
+      for (int32_t i = 0; OB_SUCC(ret) && i < columns.size(); ++i) {
+        const auto &index_column = columns[i];
+        const auto &expression = peg::index_column_expression(index_column);
         ObString &column_name = sort_item.column_name_;
-        column_name.assign_ptr(
-            const_cast<char *>(node->children_[0]->children_[2]->str_value_),
-            static_cast<int32_t>(node->children_[0]->children_[2]->str_len_));
-        if (NULL == (column_schema = tbl_schema.get_column_schema(column_name))) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-          LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
-              table_name_.length(), table_name_.ptr());
-        } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
-          int64_t length = 0;
-          if (OB_FAIL(column_schema->get_byte_length(length, false))) {
-          } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
-            ret = OB_ERR_TOO_LONG_KEY_LENGTH;
-            LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
-          } else if (length <= 0) {
-            ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
-          } else {
-            // do nothing
+        sort_item.is_func_index_ = expression.kind() != peg::NodeKind::Ident;
+        cnt_func_index_mysql |= sort_item.is_func_index_;
+        const auto expression_text = expression.text();
+        const ObString spelling = sort_item.is_func_index_
+            ? params_.syntax_->source(expression)
+            : syntax_text(expression_text);
+        if (OB_FAIL(ob_write_string(*allocator_, spelling, column_name))) {
+        } else if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_index_type(column_name,
+                             is_multi_value_index, reinterpret_cast<int *>(&index_keyname_)))) {
+        } else if (is_multi_value_index && peg::index_column_has_direction(index_column)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "ASC/DESC for multivalue index is");
+        } else if (peg::index_column_has_prefix(index_column)) {
+          sort_item.prefix_len_ = static_cast<int32_t>(peg::index_column_prefix(index_column));
+          if (sort_item.prefix_len_ == 0) {
+            ret = OB_KEY_PART_0;
+            LOG_USER_ERROR(OB_KEY_PART_0, column_name.length(), column_name.ptr());
           }
+        } else {
+          sort_item.prefix_len_ = 0;
         }
-        if (OB_SUCC(ret) && is_organization_set_to_heap()) {
-          ParseNode *attrs_node = node->children_[2];
-          bool has_pk = false;
-          HEAP_VAR(ObCreateIndexStmt, create_index_stmt) {
-            ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
-            for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
-              ObCreateIndexArg &create_index_arg = index_arg_list.at(i);
-              has_pk |= INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == create_index_arg.index_type_;
+        if (OB_SUCC(ret)) {
+          if (sort_item.is_func_index_) {
+            ObRawExpr *expr = NULL;
+            if (is_multi_value_index) {
+              ObColumnSchemaV2 *budy_column_schema = NULL;
+              bool force_rebuild = true;
+              if (OB_FAIL(ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column(
+                                                                                *allocator_,
+                                                                                sort_item,
+                                                                                expression,
+                                                                                params_.syntax_->source(),
+                                                                                *params_.expr_factory_,
+                                                                                *session_info_,
+                                                                                tbl_schema,
+                                                                                schema_checker_,
+                                                                                force_rebuild,
+                                                                                column_schema,
+                                                                                budy_column_schema))) {
+              } else if (OB_ISNULL(column_schema) || OB_ISNULL(budy_column_schema)) {
+                ret = OB_ERR_UNEXPECTED;
+              } else {
+                ObColumnNameHashWrapper column_name_key(column_schema->get_column_name_str());
+                if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
+                } else {
+                  ObColumnSortItem budy_sort_item;
+                  budy_sort_item.is_func_index_ = true;
+                  budy_sort_item.column_name_ = budy_column_schema->get_column_name_str();
+
+                  ObColumnNameHashWrapper budy_column_name_key(budy_column_schema->get_column_name_str());
+                  if (OB_FAIL(column_name_set_.set_refactored(budy_column_name_key))) {
+                  } else if (OB_FAIL(add_sort_column(budy_sort_item))) {
+                  }
+                }
+              }
+            } else if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
+                                                                    expression,
+                                                                    params_.syntax_->source(),
+                                                                    *params_.expr_factory_,
+                                                                    *session_info_,
+                                                                    tbl_schema,
+                                                                    expr,
+                                                                    schema_checker_,
+                                                                    ObResolverUtils::CHECK_FOR_FUNCTION_INDEX))) {
+            } else if (!expr->is_column_ref_expr()) {
+              //real index expr, so generate hidden generated column in data table schema
+              if (ob_is_geometry(expr->get_data_type()) || static_cast<int64_t>(INDEX_KEYNAME::SPATIAL_KEY) == index_keyname(definition.kind)) {
+                ret = OB_ERR_SPATIAL_FUNCTIONAL_INDEX;
+              } else if (ob_is_collection_sql_type(expr->get_data_type()) || static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) == index_keyname(definition.kind)) {
+                ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
+              } else if (OB_FAIL(ObIndexBuilderUtil::generate_ordinary_generated_column(*expr,
+                                                                                 *session_info_,
+                                                                                 tbl_schema,
+                                                                                 column_schema,
+                                                                                 schema_checker_->get_schema_guard()))) {
+              } else {
+                ObColumnNameHashWrapper column_name_key(column_schema->get_column_name_str());
+                sort_item.column_name_ = column_schema->get_column_name_str();
+                sort_item.is_func_index_ = false;
+                if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
+                }
+              }
+            } else {
+              ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
+            }
+          } else {
+            if (NULL == (column_schema = tbl_schema.get_column_schema(column_name))) {
+              ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
+              LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
             }
           }
           if (OB_FAIL(ret)) {
-          } else if (attrs_node != NULL && !has_pk) {
-            for (int64_t i = 0; OB_SUCC(ret) && i < attrs_node->num_child_; ++i) {
-              ParseNode *attr_node = attrs_node->children_[i];
-              if (T_CONSTR_PRIMARY_KEY == attr_node->type_) {
-                process_heap_table_primary_key = true;
+          } else if (is_vec_index) {
+            vec_index_col_id = column_schema->get_column_id();
+            if (ObVectorIndexUtil::has_multi_index_on_same_column(vec_index_col_ids_, vec_index_col_id)) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "more than one vector index on same column is");
+            } else if (OB_FAIL(set_vec_column_name(column_schema->get_column_name()))) {
+            }
+          }
+          if (OB_SUCC(ret)) {
+            if (OB_ISNULL(session_info_)) {
+              ret = OB_NOT_INIT;
+            }  else if (sort_item.prefix_len_ > column_schema->get_data_length()) {
+              ret = OB_WRONG_SUB_KEY;
+              SQL_RESV_LOG(WARN, "prefix length is longer than column length", K(sort_item), K(column_schema->get_data_length()), K(ret));
+            } else if (ob_is_collection_sql_type(column_schema->get_data_type())
+                && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != index_keyname(definition.kind)) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector column index but not vector index is");
+            } else if (column_schema->is_key_forbid_lob() && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != index_keyname(definition.kind) && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != index_keyname(definition.kind)) {
+              if (column_schema->is_hidden()) {
+                //functional index in mysql mode
+                ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
+              } else if(sort_item.prefix_len_ <= 0) {
+                ret = OB_ERR_WRONG_KEY_COLUMN;
+                LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
               }
+            } else if (OB_FAIL(resolve_spatial_index_constraint(*column_schema,
+                columns.size(), index_keyname(definition.kind), false/*false*/,
+                peg::index_column_has_direction(index_column)))) {
+            } else if (OB_FAIL(resolve_vec_index_constraint(*column_schema,
+                                                            index_keyname(definition.kind),
+                                                            definition.options))) {
+            } else if (OB_FAIL(resolve_fts_index_constraint(*column_schema,
+                                                            index_keyname(definition.kind)))) {
+            } else if (OB_FAIL(resolve_multivalue_index_constraint(*column_schema, index_keyname_))) {
+            }
+
+            if (OB_SUCC(ret) && ob_is_string_type(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
+              int64_t length = 0;
+              if (OB_FAIL(column_schema->get_byte_length(length, false))) {
+              } else if (sort_item.prefix_len_ > 0) {
+                length = length * sort_item.prefix_len_ / column_schema->get_data_length();
+              } else { /*do nothing*/ }
+
+              if (OB_SUCC(ret)) {
+                if ((index_data_length += length) > OB_MAX_USER_ROW_KEY_LENGTH
+                    && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != index_keyname(definition.kind)
+                    && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != index_keyname(definition.kind)) {
+                  // text or varchar column is bigger than 16k will be blocked
+                  ret = OB_ERR_TOO_LONG_KEY_LENGTH;
+                  LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
+                } else if (length <= 0) {
+                  ret = OB_ERR_WRONG_KEY_COLUMN;
+                  LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
+                } else {
+                  // do nothing
+                }
+              }
+            }
+          }
+          if (OB_SUCC(ret)) {
+            //column_order
+            {
+              // Compatible with mysql5.7, descending index does not take effect and does not report an error
+              sort_item.order_type_ = common::ObOrderType::ASC;
+            }
+            ObColumnNameHashWrapper column_key(column_name);
+            if (OB_HASH_NOT_EXIST == column_name_set_.exist_refactored(column_key)) {
+              ret = OB_ERR_BAD_FIELD_ERROR;
+              LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
+                             table_name_.length(), table_name_.ptr());
+            } else {
+              if (0 == i) {
+                first_column_name = column_name;
+              }
+            }
+          }
+
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(add_sort_column(sort_item))) {
+            } else { /*do nothing*/ }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          index_arg_.index_using_type_ = definition.method == peg::IndexMethod::Hash
+              ? USING_HASH : USING_BTREE;
+        }
+      }
+
+      if (OB_SUCC(ret) && cnt_func_index_mysql) {
+        first_column_name = ObString::make_string("functional_index");
+      }
+    } else if (is_organization_set_to_heap() && peg::NodeKind::PrimaryKey == node.kind()) {
+      if (OB_FAIL(resolve_single_column_primary_key_node(peg::primary_key_columns(node), tbl_schema, process_heap_table_primary_key, first_column_name))) {
+      }
+    } else {
+      index_keyname_ = UNIQUE_KEY;
+      const auto definition = peg::column_definition(node);
+      const auto names = peg::name_parts(definition.name);
+      const auto &name = names[names.size() - 1];
+      ObString &column_name = sort_item.column_name_;
+      const auto name_text = name.text();
+      if (OB_FAIL(ob_write_string(*allocator_, syntax_text(name_text), column_name))) {
+        return ret;
+      }
+      if (NULL == (column_schema = tbl_schema.get_column_schema(column_name))) {
+        ret = OB_ERR_BAD_FIELD_ERROR;
+        LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
+            table_name_.length(), table_name_.ptr());
+      } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
+        int64_t length = 0;
+        if (OB_FAIL(column_schema->get_byte_length(length, false))) {
+        } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
+          ret = OB_ERR_TOO_LONG_KEY_LENGTH;
+          LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
+        } else if (length <= 0) {
+          ret = OB_ERR_WRONG_KEY_COLUMN;
+          LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
+        } else {
+          // do nothing
+        }
+      }
+      if (OB_SUCC(ret) && is_organization_set_to_heap()) {
+        const auto attributes = definition.attributes;
+        bool has_pk = false;
+        HEAP_VAR(ObCreateIndexStmt, create_index_stmt) {
+          ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+          for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
+            ObCreateIndexArg &create_index_arg = index_arg_list.at(i);
+            has_pk |= INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == create_index_arg.index_type_;
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (!has_pk) {
+          for (int64_t i = 0; OB_SUCC(ret) && i < attributes.size(); ++i) {
+            const auto &attribute = attributes[i];
+            if (peg::NodeKind::ColumnPrimaryKey == attribute.kind()) {
+              process_heap_table_primary_key = true;
             }
           }
         }
@@ -1859,21 +1623,15 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
     if (OB_SUCC(ret)) {
       has_index_using_type_ = false;
       if (OB_FAIL(resolve_index_name(
-          ObItemType::T_INDEX == node->type_ ? node->children_[0] : NULL,
-          first_column_name,
-          (UNIQUE_KEY == index_keyname_ || MULTI_UNIQUE_KEY == index_keyname_) ? true : false,
-          uk_name))) {
-      } else if (ObItemType::T_INDEX == node->type_ && OB_FAIL(resolve_table_options(node->children_[2], true))) {
+          peg::NodeKind::Index == node.kind() && peg::index_definition(node).has_name
+              ? &peg::index_definition_name(node) : nullptr,
+          first_column_name))) {
+      } else if (peg::NodeKind::Index == node.kind() && OB_FAIL(resolve_table_options(peg::index_definition(node).options, true))) {
         SQL_RESV_LOG(WARN, "resolve index options failed", K(ret));
       }
       if (OB_SUCC(ret)) {
-        if (ObItemType::T_INDEX == node->type_ && NULL != node->children_[4]) {
-          if (1 != node->children_[4]->num_child_ || T_PARTITION_OPTION != node->children_[4]->type_) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "invalid partition option for index");
-          } else if (OB_ISNULL(node->children_[4]->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (LOCAL_INDEX == index_scope_) {
+        if (peg::NodeKind::Index == node.kind() && peg::index_definition(node).has_partition) {
+          if (LOCAL_INDEX == index_scope_) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify partition option of local index");
           } else if (NOT_SPECIFIED == index_scope_) {
@@ -1903,7 +1661,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
         index_arg_.index_key_ = static_cast<int64_t>(index_keyname_);
         if (OB_FAIL(create_index_arg.assign(index_arg_))) {
         } else if (is_index_part_specified) {
-          if (OB_FAIL(resolve_index_partition_node(node->children_[4]->children_[0], &create_index_stmt))) {
+          if (OB_FAIL(resolve_index_partition_node(peg::index_definition_partition(node), &create_index_stmt))) {
           } else {
             resolve_result.get_part_fun_exprs() = create_index_stmt.get_part_fun_exprs();
             resolve_result.get_part_values_exprs() = create_index_stmt.get_part_values_exprs();
@@ -1970,10 +1728,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
 }
 
 int ObCreateTableResolver::resolve_index_name(
-    const ParseNode *node,
-    const ObString &first_column_name,
-    bool is_unique,
-    ObString &uk_name)
+    const peg::Node *node,
+    const ObString &first_column_name)
 {
   int ret =OB_SUCCESS;
   name_generated_type_ = GENERATED_TYPE_USER;
@@ -1982,12 +1738,10 @@ int ObCreateTableResolver::resolve_index_name(
     } else {
       name_generated_type_ = GENERATED_TYPE_SYSTEM;
     }
-  } else if (T_IDENT != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "node_type is wrong.", K(ret));
+  } else if (const auto node_text = node->text();
+             OB_FAIL(ob_write_string(*allocator_,
+      syntax_text(node_text), index_name_))) {
   } else {
-    int32_t len = static_cast<int32_t>(node->str_len_);
-    index_name_.assign_ptr(node->str_value_, len);
     //check duplicate for index_name
     ObIndexNameHashWrapper index_key(index_name_);
     if (OB_HASH_EXIST == (ret = current_index_name_set_.exist_refactored(index_key))) {
@@ -2021,28 +1775,13 @@ int ObCreateTableResolver::resolve_index_name(
   return ret;
 }
 
-int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
+int ObCreateTableResolver::resolve_table_charset_info(rust::Slice<const peg::Node> options) {
   int ret = OB_SUCCESS;
-  if (NULL != node) {
-    if (T_TABLE_OPTION_LIST != node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid argument.", K(ret));
-    } else {
-      ParseNode *option_node = NULL;
-      int32_t num = node->num_child_;
-      for (int32_t i = 0; OB_SUCC(ret) && i < num; ++i) {
-        option_node = node->children_[i];
-        if (OB_ISNULL(option_node)) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "invalid argument.", K(ret), K(option_node));
-        } else if (T_CHARSET == option_node->type_
-            && OB_FAIL(resolve_table_option(option_node, false))) {
-          SQL_RESV_LOG(WARN, "resolve failed", K(ret));
-        } else if (T_COLLATION == option_node->type_
-                   && OB_FAIL(resolve_table_option(option_node, false))) {
-          SQL_RESV_LOG(WARN, "resolve failed", K(ret));
-        } else { /*do nothing*/ }
-      }
+  for (const auto &option : options) {
+    if (OB_FAIL(ret)) {
+      break;
+    } else if ((option.kind() == peg::NodeKind::TableCharset || option.kind() == peg::NodeKind::Collation)
+               && OB_FAIL(resolve_table_option(option, false))) {
     }
   }
 
@@ -2158,173 +1897,122 @@ int ObCreateTableResolver::check_building_domain_index_legal()
   return ret;
 }
 
-int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNode *element, common::ObArray<ObColumnResolveStat> &stats,
-                                                                  ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> &resolved_cols)
+int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const peg::Node &element,
+                                                                  ObArray<ObColumnResolveStat> &stats)
 {
   int ret = OB_SUCCESS;
-  int64_t resolved_cols_count = resolved_cols.count();
-  if ((3 < element->num_child_ )
-      || OB_ISNULL(element->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the num_child of the parse node is wrong.",
-                 K(ret), K(element->num_child_), K(element->children_));
-  } else {
-    ParseNode *column_list_node = element->children_[0];
-    if (OB_ISNULL(column_list_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "column_list_node is null.", K(ret));
-    } else if (T_COLUMN_LIST != column_list_node->type_
-               || column_list_node->num_child_ <= 0
-               || OB_ISNULL(column_list_node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "unexpected.",
-                   K(ret), K(column_list_node->type_), K(column_list_node->num_child_));
-    } else {
-      ParseNode *key_node = nullptr;
-      for (int32_t i = 0; OB_SUCC(ret) && i < column_list_node->num_child_; ++i) {
-        if (OB_ISNULL(column_list_node->children_[i])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "column_list_node->children_[i] is null.", K(ret));
-        } else {
-          key_node = column_list_node->children_[i];
-          if (OB_ISNULL(key_node)) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "key_node is null.", K(ret));
-            break;
-          }
-          ObString column_name;
-          column_name.assign_ptr(const_cast<char *>(key_node->str_value_), static_cast<int32_t>(key_node->str_len_));
-          ObColumnSchemaV2 *col = NULL;
-          ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-          ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-          int64_t length = 0;
-          int64_t index_data_length = 0;
+  const auto columns = peg::primary_key_columns(element);
+  for (const auto &column : columns) {
+    if (OB_FAIL(ret)) {
+      break;
+    }
+    const auto column_text = column.text();
+    const ObString column_name(syntax_text(column_text));
+    ObColumnSchemaV2 *col = NULL;
+    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
+    ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
+    int64_t length = 0;
+    int64_t index_data_length = 0;
 
-          if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(create_table_stmt)) {
-            ret = OB_NOT_INIT;
-            SQL_RESV_LOG(WARN, "stmt is null", KP(create_table_stmt), K(ret));
-          } else if (OB_ISNULL(session_info_)) {
-            ret = OB_NOT_INIT;
-            SQL_RESV_LOG(WARN, "session is null", KP(session_info_), K(ret));
-          } else if (OB_ISNULL(col = table_schema.get_column_schema(column_name))) {
-            ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
-            LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
-            SQL_RESV_LOG(WARN, "column does not exists", K(ret), K(column_name));
-          } else if (OB_FAIL(check_add_column_as_pk_allowed(*col))) {
-          } else if (ob_is_collection_sql_type(col->get_data_type())) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "create primary key on vector column is");
-          } else if (column_list_node->num_child_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
-            ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
-            LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
-          } else if (OB_FALSE_IT(col->add_column_flag(HEAP_TABLE_PRIMARY_KEY_FLAG))
-                  || OB_FALSE_IT(col->set_nullable(false))
-                  || OB_FALSE_IT(col->set_rowkey_position(0))){
-          } else if (col->is_string_lob() || !col->is_string_type()) {
-            /* do nothing */
-          } else if (OB_FAIL(col->get_byte_length(length, false))) {
-          } else if ((index_data_length += length) > OB_MAX_USER_ROW_KEY_LENGTH) {
-            ret = OB_ERR_TOO_LONG_KEY_LENGTH;
-            LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
-          } else if (index_data_length <= 0) {
-            ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
-          }
-          ObColumnResolveStat *stat = NULL;
-          for (int64_t i = 0; NULL == stat && OB_SUCC(ret) && i < stats.count(); ++i) {
-            if (stats.at(i).column_id_ == col->get_column_id()) {
-              stat = &stats.at(i);
-            }
-          }
-          if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(stat)) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "fail to find column stat", K(ret), K(column_name));
-          } else if (stat->is_set_null_ || (stat->is_set_default_value_ && col->get_cur_default_value().is_null())) {
-            ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
-          }
-        }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(create_table_stmt)) {
+      ret = OB_NOT_INIT;
+      SQL_RESV_LOG(WARN, "stmt is null", KP(create_table_stmt), K(ret));
+    } else if (OB_ISNULL(session_info_)) {
+      ret = OB_NOT_INIT;
+      SQL_RESV_LOG(WARN, "session is null", KP(session_info_), K(ret));
+    } else if (OB_ISNULL(col = table_schema.get_column_schema(column_name))) {
+      ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
+      LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
+      SQL_RESV_LOG(WARN, "column does not exists", K(ret), K(column_name));
+    } else if (OB_FAIL(check_add_column_as_pk_allowed(*col))) {
+    } else if (ob_is_collection_sql_type(col->get_data_type())) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "create primary key on vector column is");
+    } else if (columns.size() > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
+      ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
+      LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
+    } else if (OB_FALSE_IT(col->add_column_flag(HEAP_TABLE_PRIMARY_KEY_FLAG))
+            || OB_FALSE_IT(col->set_nullable(false))
+            || OB_FALSE_IT(col->set_rowkey_position(0))){
+    } else if (col->is_string_lob() || !col->is_string_type()) {
+      /* do nothing */
+    } else if (OB_FAIL(col->get_byte_length(length, false))) {
+    } else if ((index_data_length += length) > OB_MAX_USER_ROW_KEY_LENGTH) {
+      ret = OB_ERR_TOO_LONG_KEY_LENGTH;
+      LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
+    } else if (index_data_length <= 0) {
+      ret = OB_ERR_WRONG_KEY_COLUMN;
+      LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
+    }
+    ObColumnResolveStat *stat = NULL;
+    for (int64_t i = 0; NULL == stat && OB_SUCC(ret) && i < stats.count(); ++i) {
+      if (stats.at(i).column_id_ == col->get_column_id()) {
+        stat = &stats.at(i);
       }
     }
-    if (OB_SUCC(ret) && NULL != element->children_[1]) {
-      ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-      if (T_USING_HASH == element->children_[1]->type_) {
-        create_table_stmt->set_index_using_type(share::schema::USING_HASH);
-      } else {
-        create_table_stmt->set_index_using_type(share::schema::USING_BTREE);
-      }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(stat)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_RESV_LOG(WARN, "fail to find column stat", K(ret), K(column_name));
+    } else if (stat->is_set_null_ || (stat->is_set_default_value_ && col->get_cur_default_value().is_null())) {
+      ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
     }
-    if (OB_SUCC(ret)) {
-      if (NULL != element->children_[2]) {
-        ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-        ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-        ObString pk_comment;
-        pk_comment.assign_ptr(element->children_[2]->str_value_,static_cast<int32_t>(element->children_[2]->str_len_));
-        if (OB_FAIL(table_schema.set_pk_comment(pk_comment))) {
-        }
-      }
+  }
+  if (OB_SUCC(ret)) {
+    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
+    create_table_stmt->set_index_using_type(peg::primary_key_method(element) == peg::IndexMethod::Hash
+        ? share::schema::USING_HASH : share::schema::USING_BTREE);
+    if (peg::primary_key_has_comment(element)) {
+      const auto &comment = peg::primary_key_comment(element);
+      const auto comment_text = comment.text();
+      ret = create_table_stmt->get_create_table_arg().schema_.set_pk_comment(
+          syntax_text(comment_text));
     }
   }
   return ret;
 }
 
-int ObCreateTableResolver::resolve_single_column_primary_key_node(const ParseNode *column_list_node, ObTableSchema &tbl_schema,
+int ObCreateTableResolver::resolve_single_column_primary_key_node(rust::Slice<const peg::Node> columns, ObTableSchema &tbl_schema,
                                                                   bool &process_heap_table_primary_key, ObString &first_column_name)
 {
   int ret = OB_SUCCESS;
   process_heap_table_primary_key = true;
-  if (OB_ISNULL(column_list_node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "column_list_node is null.", K(ret));
-  } else if (T_COLUMN_LIST != column_list_node->type_
-            || column_list_node->num_child_ <= 0
-            || OB_ISNULL(column_list_node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "unexpected.",
-                K(ret), K(column_list_node->type_), K(column_list_node->num_child_));
-  } else {
-    ParseNode *key_node = nullptr;
-    index_keyname_ = UNIQUE_KEY;
-    ObColumnSchemaV2 *column_schema = NULL;
-    for (int32_t i = 0; OB_SUCC(ret) && i < column_list_node->num_child_; ++i) {
-      if (OB_ISNULL(column_list_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "column_list_node->children_[i] is null.", K(ret));
+  index_keyname_ = UNIQUE_KEY;
+  ObColumnSchemaV2 *column_schema = nullptr;
+  for (size_t i = 0; OB_SUCC(ret) && i < columns.size(); ++i) {
+    ObColumnSortItem sort_item;
+    ObString &column_name = sort_item.column_name_;
+    const auto column_text = columns[i].text();
+    if (OB_FAIL(ob_write_string(*allocator_,
+        syntax_text(column_text), column_name))) {
+      break;
+    }
+    if (NULL == (column_schema = tbl_schema.get_column_schema(column_name))) {
+      ret = OB_ERR_BAD_FIELD_ERROR;
+      LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
+          table_name_.length(), table_name_.ptr());
+    } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
+      int64_t length = 0;
+      if (OB_FAIL(column_schema->get_byte_length(length, false))) {
+      } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
+        ret = OB_ERR_TOO_LONG_KEY_LENGTH;
+        LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
+      } else if (length <= 0) {
+        ret = OB_ERR_WRONG_KEY_COLUMN;
+        LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
       } else {
-        ObColumnSortItem sort_item;
-        ObString &column_name = sort_item.column_name_;
-        key_node = column_list_node->children_[i];
-        column_name.assign_ptr(
-          const_cast<char *>(key_node->str_value_),
-          static_cast<int32_t>(key_node->str_len_));
-        if (NULL == (column_schema = tbl_schema.get_column_schema(column_name))) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-          LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
-              table_name_.length(), table_name_.ptr());
-        } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
-          int64_t length = 0;
-          if (OB_FAIL(column_schema->get_byte_length(length, false))) {
-          } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
-            ret = OB_ERR_TOO_LONG_KEY_LENGTH;
-            LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
-          } else if (length <= 0) {
-            ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
-          } else {
-            // do nothing
-          }
-        }
+        // do nothing
+      }
+    }
 
-        if (OB_SUCC(ret)) {
-          if (0 == i) {
-            first_column_name = sort_item.column_name_;
-          }
+    if (OB_SUCC(ret)) {
+      if (0 == i) {
+        first_column_name = sort_item.column_name_;
+      }
 
-          sort_item.order_type_ = common::ObOrderType::ASC;
-          if (OB_FAIL(add_sort_column(sort_item))) {
-          }
-        }
+      sort_item.order_type_ = common::ObOrderType::ASC;
+      if (OB_FAIL(add_sort_column(sort_item))) {
       }
     }
   }

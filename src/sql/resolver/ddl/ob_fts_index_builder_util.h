@@ -25,6 +25,7 @@ namespace oceanbase { namespace sql { class ObSchemaChecker; class ObSqlSchemaGu
 #include "data_plane/fts/ob_doc_id.h"
 #include "data_plane/fts/ob_fts_literal.h"
 namespace oceanbase { namespace sql { class ObRawExpr; class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
+namespace oceanbase::sql::peg { struct Node; }
 
 namespace oceanbase
 {
@@ -313,6 +314,18 @@ public:
  static int build_and_generate_multivalue_column(
    ObIAllocator &allocator,
    obcall::ObColumnSortItem& sort_item,
+   sql::ObRawExprFactory &expr_factory,
+   const sql::ObSQLSessionInfo &session_info,
+   ObTableSchema &table_schema,
+   sql::ObSchemaChecker *schema_checker,
+   bool force_rebuild,
+   schema::ObColumnSchemaV2 *&gen_col,
+   schema::ObColumnSchemaV2 *&budy_col);
+ static int build_and_generate_multivalue_column(
+   ObIAllocator &allocator,
+   obcall::ObColumnSortItem &sort_item,
+   const sql::peg::Node &expression,
+   const ObString &source,
    sql::ObRawExprFactory &expr_factory,
    const sql::ObSQLSessionInfo &session_info,
    ObTableSchema &table_schema,

@@ -23,7 +23,7 @@
 #include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "query/engine/ob_serializable_function.h"
-#include "query/parser/ob_item_type.h"
+#include "query/engine/expr/ob_item_type.h"
 #include "lib/utility/ob_common_utility.h"
 #include "share/vector/ob_eval_bound.h"
 

@@ -48,7 +48,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/share:log_protocol",
     "//src/pl:pl_interface",
     "//src/pl:pl_internal_headers",
-    "//src/pl:_generated_pl_parser_headers",
     "//src/query:ai_endpoint_admin",
     "//src/query:ai_endpoint_resolver",
     "//src/query:change_stream_service",
@@ -378,7 +377,7 @@ _CORE_LINK_DEPS = [
 cc_library(
     name = "observer_embedded_runtime",
     deps = _CORE_LINK_DEPS + _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS + [
-        "//src/sql/parser:sql_server_parser",
+        "//src/query:item_type_names",
     ],
     tags = ["manual"],
     visibility = ["//src/wasm:__pkg__"],
@@ -390,7 +389,7 @@ _TAIL_LINK_DEPS = select({
     "@platforms//os:linux": ["//src/oblib:malloc_hook_objects"],
     "//conditions:default": [],
 }) + [
-    "//src/sql/parser:sql_server_parser",
+    "//src/query:item_type_names",
     "//src/oblib:oblib_objects",
     "//src/oblib:ob_malloc_objects",
 ]
@@ -540,11 +539,11 @@ final_link(
         _CORE_LINK_DEPS +
         select({
             "@platforms//os:macos": [
-                "//src/sql/parser:sql_server_parser",
+                "//src/query:item_type_names",
             ],
             "//conditions:default": [
                 "//src/oblib:malloc_hook_objects",
-                "//src/sql/parser:sql_server_parser",
+                "//src/query:item_type_names",
             ],
         })
     ) + select({

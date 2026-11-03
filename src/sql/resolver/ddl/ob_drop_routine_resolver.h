@@ -32,7 +32,7 @@ public:
   explicit ObDropProcedureResolver(ObResolverParams &params) : ObDDLResolver(params) {}
   virtual ~ObDropProcedureResolver() {}
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   // types and constants
 private:
@@ -50,7 +50,7 @@ public:
   explicit ObDropFunctionResolver(ObResolverParams &params) : ObDDLResolver(params) {}
   virtual ~ObDropFunctionResolver() {}
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropFunctionResolver);
 };

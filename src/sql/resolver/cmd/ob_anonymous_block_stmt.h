@@ -22,7 +22,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
 #include "share/schema/ob_table_schema.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 namespace oceanbase
 {
@@ -34,7 +34,7 @@ class ObAnonymousBlockStmt : public ObCMDStmt
 public:
   explicit ObAnonymousBlockStmt(common::ObIAllocator *name_pool)
     : ObCMDStmt(name_pool, stmt::T_ANONYMOUS_BLOCK),
-      body_(NULL),
+      syntax_(),
       sql_(),
       statement_id_(OB_INVALID_ID),
       is_prepare_protocol_(false),
@@ -44,7 +44,7 @@ public:
   }
   ObAnonymousBlockStmt()
     : ObCMDStmt(stmt::T_ANONYMOUS_BLOCK),
-      body_(NULL),
+      syntax_(),
       sql_(),
       statement_id_(OB_INVALID_ID),
       is_prepare_protocol_(false),
@@ -54,8 +54,8 @@ public:
   }
   virtual ~ObAnonymousBlockStmt() {}
 
-  inline const ParseNode *get_body() const { return body_; }
-  inline void set_body(ParseNode *body) { body_ = body; }
+  const ParsedSql &syntax() const { return syntax_; }
+  void set_syntax(ParsedSql &&syntax) { syntax_ = std::move(syntax); }
 
   inline const ObString &get_sql() const { return sql_;}
   inline void set_sql(const ObString &sql) { sql_ = sql; }
@@ -70,7 +70,6 @@ public:
   int add_param(const common::ObObjParam& param);
   virtual obcall::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
 
-  int resolve_inout_param(ParseNode &block_node, ObAnonymousBlockStmt &stmt);
   const ObBitSet<>& get_out_idx() const { return out_idx_; }
   ObBitSet<>& get_out_idx() { return out_idx_; }
 
@@ -80,7 +79,7 @@ public:
                K_(is_prepare_protocol));
 
 private:
-  ParseNode *body_;
+  ParsedSql syntax_;
   ObString sql_;
   uint64_t statement_id_;
   bool is_prepare_protocol_;

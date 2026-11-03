@@ -20,7 +20,7 @@
 #include "share/ob_ex_rpc.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
-#include "sql/parser/ob_parser.h"
+#include "sql/syntax.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
@@ -4014,140 +4014,93 @@ int ObDbmsStats::parse_method_opt(sql::ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObParser parser(*allocator,
-                    ctx.get_my_session()->get_sql_mode(),
-                    ctx.get_my_session()->get_charsets4parser());
+                    ctx.get_my_session()->get_sql_mode());
     ParseMode parse_mode = METHOD_OPT_MODE;
-    ParseResult parse_result;
-    const ParseNode *for_stmt = NULL;
-    if (OB_FAIL(parser.parse(method_opt, parse_result, parse_mode))) {
-    } else if (OB_ISNULL(parse_result.result_tree_) ||
-              OB_ISNULL(for_stmt = parse_result.result_tree_->children_[0])) {
+    ParsedSql syntax;
+    if (OB_FAIL(parser.parse(method_opt, syntax, parse_mode))) {
+    } else if (OB_ISNULL(syntax.statement()) ||
+               syntax.statement()->kind() != peg::NodeKind::StatsOptions) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(for_stmt->type_ != T_METHOD_OPT_LIST) ||
-              OB_UNLIKELY(for_stmt->num_child_ < 1)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    ObSEArray<ObString, 4> all_for_col;
-    for (int64_t i = 0; OB_SUCC(ret) && i < for_stmt->num_child_; ++i) {
-      ParseNode *child_node = for_stmt->children_[i];
-      if (OB_ISNULL(child_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_FOR_ALL == child_node->type_) {
-        if (OB_FAIL(parser_for_all_clause(child_node, column_params, is_async_gather, use_size_auto))) {
-        } else {/*do nothing*/}
-      } else if (T_FOR_COLUMNS == child_node->type_) {
-        if (OB_FAIL(parser_for_columns_clause(child_node, column_params, all_for_col))) {
-        } else {/*do nothing*/}
-      } else {
-        ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObSEArray<ObString, 4> all_for_col;
+      for (const auto &clause : peg::statistics_clauses(*syntax.statement())) {
+        if (OB_FAIL(ret)) {
+          break;
+        } else if (peg::statistics_scope(clause) == peg::StatisticsScope::Columns) {
+          ret = parser_for_columns_clause(clause, column_params, all_for_col);
+        } else {
+          ret = parser_for_all_clause(clause, column_params, is_async_gather, use_size_auto);
+        }
       }
     }
   }
   return ret;
 }
 
-int ObDbmsStats::parser_for_all_clause(const ParseNode *for_all_node,
+int ObDbmsStats::parser_for_all_clause(const peg::Node &clause,
                                        ObIArray<ObColumnStatParam> &column_params,
                                        const bool is_async_gather,
                                        bool &use_size_auto)
 {
   int ret = OB_SUCCESS;
   use_size_auto = false;
-  if (OB_ISNULL(for_all_node) || OB_UNLIKELY(for_all_node->type_ != T_FOR_ALL)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    MethodOptColConf for_all_conf;
-    MethodOptSizeConf size_conf;
-    ParseNode *first  = NULL;
-    if (OB_UNLIKELY(2 != for_all_node->num_child_) ||
-        OB_ISNULL(first  = for_all_node->children_[0]) ||
-        OB_UNLIKELY(first->type_ != T_INT) ||
-        OB_UNLIKELY(first->value_ < 0 || first->value_ > 2)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (first->value_ == 0) {
-      for_all_conf = FOR_ALL;
-    } else if (first->value_ == 1) {
-      for_all_conf = FOR_INDEXED;
-    } else if (first->value_ == 2) {
-      for_all_conf = FOR_HIDDEN;
-    }
-    if (OB_SUCC(ret) && NULL != for_all_node->children_[1]) {
-      if (OB_FAIL(parse_size_clause(for_all_node->children_[1], size_conf))) {
-      } else {
-        use_size_auto = size_conf.is_auto();
-        
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < column_params.count(); ++i) {
-      ObColumnStatParam &col_param = column_params.at(i);
-      if (!is_match_column_option(col_param, for_all_conf)) {
-        // do nothing
-      } else if (!col_param.is_valid_opt_col() || col_param.is_text_column()) {
-        // do nothing
-      } else if (OB_FAIL(compute_bucket_num(column_params.at(i), size_conf))) {
-      }
+  MethodOptColConf for_all_conf = FOR_ALL;
+  MethodOptSizeConf size_conf;
+  switch (peg::statistics_scope(clause)) {
+    case peg::StatisticsScope::All: for_all_conf = FOR_ALL; break;
+    case peg::StatisticsScope::Indexed: for_all_conf = FOR_INDEXED; break;
+    case peg::StatisticsScope::Hidden: for_all_conf = FOR_HIDDEN; break;
+    default: ret = OB_INVALID_ARGUMENT; break;
+  }
+  if (OB_SUCC(ret) && OB_FAIL(parse_size_clause(clause, size_conf))) {
+  } else if (OB_SUCC(ret)) {
+    use_size_auto = size_conf.is_auto();
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < column_params.count(); ++i) {
+    ObColumnStatParam &col_param = column_params.at(i);
+    if (!is_match_column_option(col_param, for_all_conf)) {
+    } else if (!col_param.is_valid_opt_col() || col_param.is_text_column()) {
+    } else if (OB_FAIL(compute_bucket_num(col_param, size_conf))) {
     }
   }
   return ret;
 }
 
-int ObDbmsStats::parser_for_columns_clause(const ParseNode *for_col_node,
+int ObDbmsStats::parser_for_columns_clause(const peg::Node &clause,
                                            ObIArray<ObColumnStatParam> &column_params,
                                            ObIArray<ObString> &record_cols)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(for_col_node) ||
-      OB_UNLIKELY(for_col_node->type_ != T_FOR_COLUMNS || for_col_node->num_child_ < 1)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    MethodOptSizeConf default_size_conf;
-    for (int64_t i = 0; OB_SUCC(ret) && i < for_col_node->num_child_; ++i) {
-      ParseNode *for_col_item = NULL;
-      ObSEArray<ObString, 4> for_col_list;
-      MethodOptSizeConf size_conf(default_size_conf);
-      if (OB_ISNULL(for_col_item = for_col_node->children_[i]) ||
-          OB_UNLIKELY(for_col_item->type_ != T_FOR_COLUMN_ITEM || for_col_item->num_child_ != 2)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (NULL == for_col_item->children_[0]) {
-        if (i == 0) {
-          if (NULL == for_col_item->children_[1]) {
-            /*do nothing*/
-          } else if (OB_FAIL(parse_size_clause(for_col_item->children_[1], default_size_conf))) {
-          } else {/*do nothing*/}
-        } else {
-          ret = OB_ERR_PARSER_SYNTAX;
-        }
-      } else if (OB_UNLIKELY(T_EXTENSION == for_col_item->children_[0]->type_)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "gather stats for multi columns");
-      } else if (OB_FAIL(parse_for_columns(for_col_item->children_[0],
-                                           column_params,
-                                           for_col_list,
-                                           record_cols))) {
-      } else if (NULL == for_col_item->children_[1]) {
-        if (i < for_col_node->num_child_ - 1) {
-          ParseNode *tmp_for_col_item = NULL;
-           if (OB_ISNULL(tmp_for_col_item = for_col_node->children_[i + 1]) ||
-               OB_UNLIKELY(tmp_for_col_item->type_ != T_FOR_COLUMN_ITEM ||
-                           tmp_for_col_item->num_child_ != 2)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (tmp_for_col_item->children_[0] != NULL) {
-            /*do nothing*/
-          } else if (OB_FAIL(parse_size_clause(tmp_for_col_item->children_[1], size_conf))) {
-          } else {
-            ++ i;
-          }
-        }
-      } else if (OB_FAIL(parse_size_clause(for_col_item->children_[1], size_conf))) {
-      } else {/*do nothing*/}
-      for (int64_t j = 0; OB_SUCC(ret) && j < column_params.count(); ++j) {
-        ObColumnStatParam &col_param = column_params.at(j);
-        if (!is_match_column_option(col_param, for_col_list)) {
-          // do nothing
-        } else if (!col_param.is_valid_opt_col()) {
-          // do nothing
-        } else if (OB_FAIL(compute_bucket_num(column_params.at(j), size_conf))) {
-        }
+  MethodOptSizeConf default_size_conf;
+  const auto columns = peg::statistics_columns(clause);
+  for (size_t i = 0; OB_SUCC(ret) && i < columns.size(); ++i) {
+    const auto &column = columns[i];
+    ObSEArray<ObString, 4> for_col_list;
+    MethodOptSizeConf size_conf(default_size_conf);
+    if (peg::statistics_column_kind(column) == peg::StatisticsColumnKind::Default) {
+      if (i == 0) {
+        ret = parse_size_clause(column, default_size_conf);
+      } else {
+        ret = OB_ERR_PARSER_SYNTAX;
+      }
+    } else if (peg::statistics_column_kind(column) == peg::StatisticsColumnKind::Extension) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "gather stats for multi columns");
+    } else if (OB_FAIL(parse_for_columns(column, column_params, for_col_list, record_cols))) {
+    } else if (peg::statistics_size(column) != peg::StatisticsSizeKind::Omitted) {
+      ret = parse_size_clause(column, size_conf);
+    } else if (i + 1 < columns.size() &&
+               peg::statistics_column_kind(columns[i + 1]) == peg::StatisticsColumnKind::Default) {
+      if (OB_FAIL(parse_size_clause(columns[i + 1], size_conf))) {
+      } else {
+        ++i;
+      }
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < column_params.count(); ++j) {
+      ObColumnStatParam &col_param = column_params.at(j);
+      if (!is_match_column_option(col_param, for_col_list)) {
+      } else if (!col_param.is_valid_opt_col()) {
+      } else if (OB_FAIL(compute_bucket_num(col_param, size_conf))) {
       }
     }
   }
@@ -4203,56 +4156,58 @@ bool ObDbmsStats::is_match_column_option(ObColumnStatParam &param,
 }
 
 //specify number of histogram buckets. must be in the range [1,2048].
-int ObDbmsStats::parse_size_clause(const ParseNode *node, MethodOptSizeConf &size_opt)
+int ObDbmsStats::parse_size_clause(const peg::Node &clause, MethodOptSizeConf &size_opt)
 {
   int ret = OB_SUCCESS;
+  const auto kind = peg::statistics_size(clause);
   int64_t value = 0;
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (node->type_ != T_INT && node->type_ != T_NUMBER) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (node->type_ == T_INT) {
-    value = node->value_;
-  } else {
-    number::ObNumber nmb;
-    int16_t precision = PRECISION_UNKNOWN_YET;
-    int16_t scale = SCALE_UNKNOWN_YET;
-    ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
-    if (OB_FAIL(nmb.from(node->str_value_, static_cast<int32_t>(node->str_len_),
-                         calc_buf, &precision, &scale))) {
-      if (OB_INTEGER_PRECISION_OVERFLOW == ret) {
-      } else if (OB_NUMERIC_OVERFLOW == ret) {
-        LOG_WARN("numeric overflow");
-      } else {
-      }
-    } else if (OB_FAIL(nmb.extract_valid_int64_with_round(value))) {
-    } else {/*do nothing*/}
-  }
-  if (OB_SUCC(ret)) {
-    if (node->reserved_ == 1 && (value < 1 || value > 2048)) {
-       ret = OB_ERR_INVALID_SIZE_SPECIFIED;
+  if (kind == peg::StatisticsSizeKind::Count) {
+    const auto literal = peg::expression_literal(peg::statistics_bucket_count(clause));
+    if (literal.kind == peg::LiteralKind::Integer) {
+      value = literal.integer;
+    } else if (literal.kind != peg::LiteralKind::Decimal) {
+      ret = OB_INVALID_ARGUMENT;
     } else {
-      size_opt.mode_ = node->reserved_;
-      size_opt.val_ = value;
+      number::ObNumber nmb;
+      int16_t precision = PRECISION_UNKNOWN_YET;
+      int16_t scale = SCALE_UNKNOWN_YET;
+      ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
+      if (OB_FAIL(nmb.from(syntax_text(literal.text).ptr(), static_cast<int32_t>(literal.text.size()),
+                           calc_buf, &precision, &scale))) {
+      } else if (OB_FAIL(nmb.extract_valid_int64_with_round(value))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (value < 1 || value > 2048) {
+        ret = OB_ERR_INVALID_SIZE_SPECIFIED;
+      } else {
+        size_opt.set_manual(value);
+      }
+    }
+  } else if (kind != peg::StatisticsSizeKind::Omitted) {
+    size_opt.mode_ = 0;
+    switch (kind) {
+      case peg::StatisticsSizeKind::Auto: size_opt.val_ = 0; break;
+      case peg::StatisticsSizeKind::Repeat: size_opt.val_ = 1; break;
+      case peg::StatisticsSizeKind::SkewOnly: size_opt.val_ = 2; break;
+      default: ret = OB_ERR_UNEXPECTED; break;
     }
   }
   return ret;
 }
 
-int ObDbmsStats::parse_for_columns(const ParseNode *node,
+int ObDbmsStats::parse_for_columns(const peg::Node &column,
                                    const ObIArray<ObColumnStatParam> &column_params,
                                    common::ObIArray<ObString> &cols,
                                    common::ObIArray<ObString> &record_cols)
 {
   int ret = OB_SUCCESS;
   cols.reuse();
-  if (OB_ISNULL(node) ||
-      OB_UNLIKELY(node->type_ != T_COLUMN_REF || node->num_child_ != 3) ||
-      OB_ISNULL(node->children_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(check_is_valid_col(node->children_[1]->str_value_, column_params, record_cols))) {
-  } else if (OB_FAIL(cols.push_back(node->children_[1]->str_value_))) {
-  } else if (OB_FAIL(record_cols.push_back(node->children_[1]->str_value_))) {
+  const auto name = peg::statistics_column_name(column);
+  const ObString column_name(syntax_text(name));
+  if (OB_FAIL(check_is_valid_col(column_name, column_params, record_cols))) {
+  } else if (OB_FAIL(cols.push_back(column_name))) {
+  } else if (OB_FAIL(record_cols.push_back(column_name))) {
   }
   return ret;
 }

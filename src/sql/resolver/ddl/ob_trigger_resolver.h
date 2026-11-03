@@ -43,7 +43,7 @@ public:
   {}
   virtual ~ObTriggerResolver()
   {}
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
   static int analyze_trigger(ObSchemaGetterGuard &schema_guard,
                              ObSQLSessionInfo *session_info,
                              ObPlanCache &plan_cache,
@@ -55,30 +55,25 @@ public:
                              const ObString &db_name,
                              ObIArray<ObDependencyInfo> &dep_infos);
 private:
-  int resolve_create_trigger_stmt(const ParseNode &parse_node,
+  int resolve_create_trigger_stmt(const peg::Node &parse_node,
                                   obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_drop_trigger_stmt(const ParseNode &parse_node,
+  int resolve_drop_trigger_stmt(const peg::Node &parse_node,
                                 obcall::ObDropTriggerArg &trigger_arg);
-  int resolve_alter_trigger_stmt(const ParseNode &parse_node,
-                                 obcall::ObAlterTriggerArg &trigger_arg);
-  int resolve_trigger_source(const ParseNode &parse_node,
+  int resolve_trigger_source(const peg::Node &parse_node,
                              obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_simple_dml_trigger(const ParseNode &parse_node,
+  int resolve_simple_dml_trigger(const peg::Node &parse_node,
                                  obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_trigger_body(const ParseNode &parse_node,
+  int resolve_trigger_body(const peg::Node &parse_node,
                            obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_sp_definer(const ParseNode *parse_node,
+  int resolve_sp_definer(const peg::Node *parse_node,
                          obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_schema_name(const ParseNode &parse_node,
+  int resolve_schema_name(const peg::Node &parse_node,
                           common::ObString &database_name,
                           common::ObString &schema_name);
-  int resolve_alter_clause(const ParseNode &alter_clause,
-                           share::schema::ObTriggerInfo &tg_info,
-                           bool &is_set_status);
   int fill_package_info(share::schema::ObTriggerInfo &trigger_info);
 
   int resolve_base_object(obcall::ObCreateTriggerArg &trigger_arg, bool search_public_schema);
-  int resolve_order_clause(const ParseNode *parse_node, obcall::ObCreateTriggerArg &trigger_arg);
+  int resolve_order_clause(const peg::Node &definition, obcall::ObCreateTriggerArg &trigger_arg);
   int get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt);
 
 private:

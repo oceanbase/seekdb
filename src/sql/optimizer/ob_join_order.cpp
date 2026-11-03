@@ -28,6 +28,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
+#include "rust/sql_parser.h"
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
@@ -16623,60 +16624,39 @@ int ObJoinOrder::get_query_tokens_by_boolean_mode(ObMatchFunRawExpr *match_expr,
     } else if (OB_FAIL(ObCharset::tolower(cs_type, search_text_string, str_dest, *allocator_))){
     }
 
-    void *buf = nullptr;
-    FtsParserResult *fts_parser;
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(FtsParserResult)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      fts_parser = static_cast<FtsParserResult *>(buf);
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(buf = allocator_->alloc(str_dest.length() + 1))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      MEMSET(buf, 0, str_dest.length() + 1);
-      MEMCPY(buf, str_dest.ptr(), str_dest.length());
-    }
-    if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(fts_parse_docment(static_cast<char *>(buf), str_dest.length(), allocator_, fts_parser))) {
-    } else if (FTS_OK != fts_parser->ret_) {
-      if (FTS_ERROR_MEMORY == fts_parser->ret_) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (FTS_ERROR_SYNTAX == fts_parser->ret_) {
+    if (OB_SUCC(ret)) {
+      const auto parsed = peg::parse_search_query(rust::Slice<const uint8_t>(
+          reinterpret_cast<const uint8_t *>(str_dest.ptr()), str_dest.length()));
+      if (!parsed->error().empty()) {
         ret = OB_ERR_PARSER_SYNTAX;
-      } else if (FTS_ERROR_OTHER == fts_parser->ret_) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    } else if (OB_ISNULL(fts_parser->root_)) {
-      // do nothing
-    } else {
-      FtsNode *node = fts_parser->root_;
-      ObFtsEvalNode *parant_node =nullptr;
-      hash::ObHashMap<ObString, int32_t> tokens_map;
-      const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
-      ObArray<ObString> query_token;
-      bool dummy_has_duplicate_boolean_tokens = false;
-      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-      } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, node, cs_type, *allocator_, query_token, tokens_map, dummy_has_duplicate_boolean_tokens))) {
-      } else {
-        for (hash::ObHashMap<ObString, int32_t>::const_iterator iter = tokens_map.begin();
-            OB_SUCC(ret) && iter != tokens_map.end();
-            ++iter) {
-          const ObString &token = iter->first;
-          ObString token_string;
-          ObConstRawExpr *token_expr = NULL;
-          if (OB_FAIL(ob_write_string(*allocator_, token, token_string))) {
-          } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*OPT_CTX.get_exec_ctx()->get_expr_factory(),
-                                                                    ObVarcharType, 
-                                                                    token_string, 
-                                                                    cs_type, 
-                                                                    token_expr))) {
-          } else if (OB_FAIL(query_tokens.push_back(token_expr))) {
+      } else if (!parsed->root().children().empty()) {
+        ObFtsEvalNode *parant_node =nullptr;
+        hash::ObHashMap<ObString, int32_t> tokens_map;
+        const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
+        ObArray<ObString> query_token;
+        bool dummy_has_duplicate_boolean_tokens = false;
+        if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+        } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, parsed->root(), cs_type, *allocator_, query_token, tokens_map, dummy_has_duplicate_boolean_tokens))) {
+        } else {
+          for (hash::ObHashMap<ObString, int32_t>::const_iterator iter = tokens_map.begin();
+              OB_SUCC(ret) && iter != tokens_map.end();
+              ++iter) {
+            const ObString &token = iter->first;
+            ObString token_string;
+            ObConstRawExpr *token_expr = NULL;
+            if (OB_FAIL(ob_write_string(*allocator_, token, token_string))) {
+            } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*OPT_CTX.get_exec_ctx()->get_expr_factory(),
+                                                                      ObVarcharType,
+                                                                      token_string,
+                                                                      cs_type,
+                                                                      token_expr))) {
+            } else if (OB_FAIL(query_tokens.push_back(token_expr))) {
+            }
           }
         }
-        allocator_->free(buf);
-        parant_node->release();
+        if (OB_NOT_NULL(parant_node)) {
+          parant_node->release();
+        }
       }
     }
   }

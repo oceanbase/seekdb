@@ -21,7 +21,6 @@
 #include "sql/resolver/dml/ob_insert_stmt.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
-#include "sql/parser/parse_malloc.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/das/ob_domain_id.h"
 
@@ -70,7 +69,7 @@ ObDelUpdResolver::~ObDelUpdResolver()
   // TODO Auto-generated destructor stub
 }
 
-int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
+int ObDelUpdResolver::resolve_assignments(rust::Slice<const peg::Node> assignments,
                                           ObIArray<ObTableAssignment> &table_assigns,
                                           ObStmtScope scope)
 {
@@ -81,7 +80,7 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
   if (OB_ISNULL(stmt) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("resolver invalid status", K(stmt), KP_(params_.expr_factory));
-  } else if (OB_FAIL(resolve_column_and_values(parse_node, column_list, value_list))) {
+  } else if (OB_FAIL(resolve_column_and_values(assignments, column_list, value_list))) {
   } else {
   // Process the paired value
     ObAssignment assignment;
@@ -179,69 +178,21 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
   return ret;
 }
 
-int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
+int ObDelUpdResolver::resolve_column_and_values(rust::Slice<const peg::Node> assignments,
                                                 ObIArray<ObColumnRefRawExpr *> &target_list,
                                                 ObIArray<ObRawExpr *> &value_list)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(T_ASSIGN_LIST != assign_list.type_ || assign_list.num_child_ < 1)) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    if (1 == assign_list.num_child_ && T_OBJ_ACCESS_REF == assign_list.children_[0]->type_) {
-      //update set ROW=record extended usage
-      CK (OB_NOT_NULL(get_stmt()));
-      if (OB_SUCC(ret)) {
-        if (!get_stmt()->is_update_stmt()) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          ObUpdateStmt *stmt = static_cast<ObUpdateStmt*>(get_stmt());
-          if (1 != stmt->get_table_size()) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (params_.secondary_namespace_ == NULL) {
-            TableItem *table_item = stmt->get_table_item(0);
-            CK (OB_NOT_NULL(table_item));
-            if (OB_SUCC(ret)) {
-              ObString row = ObString::make_string("row");
-              ObString table_name = table_item->get_table_name().length() > 0 ?
-                                        table_item->get_table_name() : ObString::make_string(" ");
-              ret = OB_ERR_BAD_FIELD_ERROR; // use bad field error for ROW pseudo column in this path.
-              LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, row.length(), row.ptr(), table_name.length(), table_name.ptr());
-            }
-          } else {
-            TableItem *table_item = stmt->get_table_item(0);
-            const share::schema::ObTableSchema *table_schema = NULL;
-            ObArray<ColumnItem> column_items;
-            CK (OB_NOT_NULL(table_item));
-            if (table_item->is_basic_table()) {
-              OZ (resolve_all_basic_table_columns(*table_item, false, &column_items));
-            } else if (table_item->is_generated_table() || table_item->is_temp_table()) {
-              OZ (resolve_all_generated_table_columns(*table_item, column_items));
-            }
-            for (int64_t i = 0; OB_SUCC(ret) && i < column_items.count(); ++i) {
-              OZ (target_list.push_back(column_items.at(i).get_expr()));
-            }
-            OZ (expand_record_to_columns(*assign_list.children_[0], value_list));
-            if (OB_SUCC(ret) && target_list.count() != value_list.count()) {
-              ret = OB_ERR_TOO_MANY_VALUES;
-            }
-          }
-        }
-      }
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < assign_list.num_child_; ++i) {
-        ParseNode *left_node = NULL;
-        ParseNode *right_node = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && i < assignments.size(); ++i) {
+        const auto &assignment = assignments[i];
         ObRawExpr *value_expr = NULL;
         ObSEArray<ObColumnRefRawExpr *, 4> columns;
         ObSEArray<ObRawExpr *, 4> values;
-        if (OB_ISNULL(assign_list.children_[i]) ||
-            OB_ISNULL(left_node = assign_list.children_[i]->children_[0]) ||
-            OB_ISNULL(right_node = assign_list.children_[i]->children_[1])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(resolve_assign_columns(*left_node, columns))) {
-        } else if (OB_FAIL(resolve_sql_expr(*right_node, value_expr))) {
+        if (OB_FAIL(resolve_assign_columns(peg::assignment_target(assignment), columns))) {
+        } else if (OB_FAIL(resolve_sql_expr(peg::assignment_value(assignment), value_expr))) {
         } else if (columns.count() == 1) {
           if (value_expr->is_query_ref_expr()) {
             // update t1 set (c1) = (select c1 from t2), c2 = 5;
@@ -309,7 +260,6 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
           }
         }
       }
-    }
   }
   return ret;
 }
@@ -361,30 +311,19 @@ int ObDelUpdResolver::process_values_function(ObRawExpr *&expr)
   return OB_SUCCESS;
 }
 
-int ObDelUpdResolver::resolve_assign_columns(const ParseNode &assign_target,
+int ObDelUpdResolver::resolve_assign_columns(const peg::Node &assign_target,
                                              ObIArray<ObColumnRefRawExpr *> &column_list)
 {
   int ret = OB_SUCCESS;
-  bool is_column_list = false;
-  int64_t column_count = 1;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (assign_target.type_ != T_COLUMN_LIST &&
-      assign_target.type_ != T_COLUMN_REF) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (assign_target.type_ == T_COLUMN_LIST) {
-    column_count = assign_target.num_child_;
-    is_column_list = true;
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
-    const ParseNode *col_node = (is_column_list ? assign_target.children_[i] :
-                                                  &assign_target);
+  } else {
     ObQualifiedName q_name;
     ObRawExpr *col_expr = NULL;
     ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
     if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
     } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(
-                         col_node, case_mode, q_name))) {
+                         assign_target, case_mode, *allocator_, q_name))) {
     } else if (q_name.is_star_) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -1564,81 +1503,6 @@ bool ObDelUpdResolver::is_fk_parent_table(const common::ObIArray<ObForeignKeyInf
   }
   return is_pk_table;
 }
-int ObDelUpdResolver::expand_record_to_columns(const ParseNode &record_node,
-                                               ObIArray<ObRawExpr *> &value_list)
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr *row_expr = NULL;
-  CK(T_OBJ_ACCESS_REF == record_node.type_,
-     OB_NOT_NULL(params_.secondary_namespace_),
-     OB_NOT_NULL(params_.allocator_),
-     OB_NOT_NULL(params_.expr_factory_));
-  OZ (pl::ObPLResolver::resolve_raw_expr(record_node,
-                                         *params_.allocator_,
-                                         *params_.expr_factory_,
-                                         *params_.secondary_namespace_,
-                                         params_.is_prepare_protocol_,
-                                         row_expr));
-  if (OB_SUCC(ret) && NULL != row_expr) {
-    if (row_expr->is_obj_access_expr()) {
-      ObObjAccessRawExpr &access_expr = *static_cast<ObObjAccessRawExpr*>(row_expr);
-      pl::ObPLDataType composite_type;
-      OZ (access_expr.get_final_type(composite_type));
-      if (!composite_type.is_record_type()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "SET ROW isn't record type");
-      } else {
-        const pl::ObRecordType *record_type = NULL;
-        const pl::ObUserDefinedType *user_type = NULL;
-        ParseNode *column_node = NULL;
-        const ParseNode *member_node = &record_node;
-        int64_t multi_level_count = 0;
-        while (NULL != member_node && member_node->num_child_ > 1 && NULL != member_node->children_[1]) {
-          if (NULL != member_node->children_[0] &&
-              T_IDENT == member_node->children_[0]->type_ &&
-              T_OBJ_ACCESS_REF == member_node->children_[1]->type_) {
-            // do nothing
-          } else {
-            multi_level_count++;
-          }
-          member_node = member_node->children_[1];
-        }
-        if (multi_level_count > 0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "mutil level record reference");
-        } else if (OB_ISNULL(column_node = new_terminal_node(allocator_, T_IDENT))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (OB_ISNULL(member_node->children_[1] = new_non_terminal_node(allocator_,
-                                                                    T_OBJ_ACCESS_REF,
-                                                                    2,
-                                                                    column_node,
-                                                                    nullptr))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else { /*do nothing*/ }
-
-        OZ (params_.secondary_namespace_->get_user_type(composite_type.get_user_type_id(),
-                                                        user_type, NULL/*no use*/));
-        CK (OB_NOT_NULL(user_type));
-        OX (record_type = static_cast<const pl::ObRecordType*>(user_type));
-
-        for (int64_t i = 0; OB_SUCC(ret) && i < record_type->get_member_count(); ++i) {
-          ObRawExpr* column_expr = NULL;
-          column_node->str_value_ = parse_strndup(record_type->get_record_member_name(i)->ptr(),
-                                  record_type->get_record_member_name(i)->length(), allocator_);
-          column_node->str_len_ = record_type->get_record_member_name(i)->length();
-          OZ (resolve_sql_expr(record_node, column_expr));
-          OZ (column_expr->formalize(session_info_));
-          OZ (value_list.push_back(column_expr));
-        }
-      }
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "SET ROW isn't record type");
-    }
-  }
-  return ret;
-}
-
 // input: target table item of dml.
 // This function get check constraints from table_item and add into dml_stmt.
 int ObDelUpdResolver::resolve_check_constraints(const TableItem* table_item,
@@ -2120,7 +1984,7 @@ int ObDelUpdResolver::get_value_row_size(uint64_t& value_row_size)
   return ret;
 }
 
-int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
+int ObDelUpdResolver::resolve_insert_columns(rust::Slice<const peg::Node> columns,
                                              ObInsertTableInfo& table_info)
 {
   int ret = OB_SUCCESS;
@@ -2131,25 +1995,17 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
     LOG_WARN("invalid insert stmt", K(del_upd_stmt), K_(session_info), K_(schema_checker));
   } else if (OB_ISNULL(table_item = del_upd_stmt->get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (NULL != node && T_COLUMN_LIST == node->type_) {
-    ParseNode *column_node = NULL;
+  } else if (!columns.empty()) {
     is_column_specify_ = true;
-    if (OB_ISNULL(node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("invalid node children", K(node->children_));
-    }
-    for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      column_node = node->children_[i];
+    for (const peg::Node &column_node : columns) {
+      if (OB_FAIL(ret)) { break; }
       ObQualifiedName column_ref;
       ObRawExpr *ref_expr = NULL;
       ObColumnRefRawExpr *column_expr = NULL;
       ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
       bool is_duplicate = false;
-      if (OB_ISNULL(column_node)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid node children", K(column_node));
-      } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(column_node, case_mode, column_ref))) {
+      if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
+      } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(column_node, case_mode, *allocator_, column_ref))) {
       } else if (OB_FAIL(resolve_basic_column_ref(column_ref, ref_expr))) {
         report_user_error_msg(ret, ref_expr, column_ref);
       } else if (OB_ISNULL(ref_expr)) {
@@ -2226,7 +2082,7 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
   }
   return ret;
 }
-int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
+int ObDelUpdResolver::resolve_insert_values(rust::Slice<const peg::Node> rows,
                                             ObInsertTableInfo& table_info)
 {
   int ret = OB_SUCCESS;
@@ -2237,11 +2093,10 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
   bool is_all_default = false;
   bool is_update_view = false;
   TableItem* table_item = NULL;
-  if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(node) || OB_ISNULL(session_info_) ||
-      T_VALUE_LIST != node->type_ || OB_ISNULL(node->children_) || OB_ISNULL(del_upd_stmt->get_query_ctx())) {
+  if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(session_info_) || OB_ISNULL(del_upd_stmt->get_query_ctx())) {
     ret = OB_INVALID_ARGUMENT;
   }
-  if (FAILEDx(table_info.values_vector_.reserve(node->num_child_ * table_info.values_desc_.count()))) {
+  if (FAILEDx(table_info.values_vector_.reserve(rows.size() * table_info.values_desc_.count()))) {
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_need_match_all_params(table_info.values_desc_,
@@ -2281,119 +2136,99 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
     //move generated columns behind basic columns before resolve values
     OZ (adjust_values_desc_position(table_info, value_idxs));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-    ParseNode *vector_node = node->children_[i];
-    if (OB_ISNULL(vector_node) || OB_ISNULL(vector_node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("invalid node children", K(i), K(node));
-    } else if (vector_node->num_child_ != table_info.values_desc_.count()
-        && !(1 == vector_node->num_child_  && T_EMPTY == vector_node->children_[0]->type_)
-        && !(1 == node->num_child_ && T_OBJ_ACCESS_REF == vector_node->type_)) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < rows.size(); i++) {
+    const auto values = peg::row_elements(rows[i]);
+    if (!values.empty() && values.size() != table_info.values_desc_.count()) {
       ret = OB_ERR_COULUMN_VALUE_NOT_MATCH;
-      LOG_USER_ERROR(OB_ERR_COULUMN_VALUE_NOT_MATCH, i+1);
-      LOG_WARN("Column count doesn't match value count",
-               "num_child", vector_node->num_child_,
-               "vector_count", table_info.values_desc_.count());
+      LOG_USER_ERROR(OB_ERR_COULUMN_VALUE_NOT_MATCH, i + 1);
     }
     if (OB_SUCC(ret)) {
-      if (T_OBJ_ACCESS_REF == vector_node->type_) {
-        if (NULL != params_.secondary_namespace_) {
-          OZ (expand_record_to_columns(*vector_node, value_row));
+      if (OB_FAIL(value_row.reserve(values.size()))) {
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && j < values.size(); ++j) {
+        ObRawExpr *expr = NULL;
+        ObRawExpr *tmp_expr = NULL;
+        const ObColumnRefRawExpr *column_expr = table_info.values_desc_.at(j);
+        const peg::Node &value_node = values[value_idxs.at(j)];
+        if (OB_ISNULL(column_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (value_node.kind() == peg::NodeKind::Missing) {
         } else {
-          ret = OB_UNIMPLEMENTED_FEATURE;
-        }
-      } else {
-        if (OB_FAIL(value_row.reserve(vector_node->num_child_))) {
-        }
-        for (int32_t j = 0; OB_SUCC(ret) && j < vector_node->num_child_; j++) {
-          ObRawExpr *expr = NULL;
-          ObRawExpr *tmp_expr = NULL;
-          const ObColumnRefRawExpr *column_expr = NULL;
-          //for case: values(), read the first child
-          const ParseNode *value_node = (1 == vector_node->num_child_) ? vector_node->children_[0] : vector_node->children_[value_idxs.at(j)];
-          if (OB_ISNULL(value_node)
-              || OB_ISNULL(column_expr = table_info.values_desc_.at(j))) {
+          uint64_t column_id = column_expr->get_column_id();
+          ObDefaultValueUtils utils(del_upd_stmt, &params_, this);
+          bool is_generated_column = false;
+          if (OB_FAIL(resolve_sql_expr(value_node, expr))) {
+          } else if (OB_ISNULL(expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("inalid children node", K(j), K(vector_node));
-          } else if (T_EMPTY == value_node->type_) {
-            //nothing todo
-          } else {
-            uint64_t column_id = column_expr->get_column_id();
-            ObDefaultValueUtils utils(del_upd_stmt, &params_, this);
-            bool is_generated_column = false;
-            if (OB_FAIL(resolve_sql_expr(*value_node, expr))) {
-            } else if (OB_ISNULL(expr)) {
+            LOG_ERROR("fail to resolve sql expr", K(ret), K(expr));
+          } else if (T_DEFAULT == expr->get_expr_type()) {
+            ColumnItem *column_item = NULL;
+            if (OB_ISNULL(column_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_,
+                                                                                   column_id))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_ERROR("fail to resolve sql expr", K(ret), K(expr));
-            } else if (T_DEFAULT == expr->get_expr_type()) {
-              ColumnItem *column_item = NULL;
-              if (OB_ISNULL(column_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_,
-                                                                                     column_id))) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get column item by id failed", K(table_info.table_id_), K(column_id));
-              } else  if (column_expr->is_generated_column()) {
-                // default keyword appeared in the generated column corresponding to values, we uniformly replace default with the expression corresponding to the generated column
-                //The following unified processing logic will replace the column in values
-                if (OB_FAIL(copy_schema_expr(*params_.expr_factory_,
-                                             column_item->expr_->get_dependant_expr(),
-                                             expr))) {
-                }
-              } else if (OB_FAIL(utils.resolve_default_expr(*column_item, expr, T_INSERT_SCOPE))) {
+              LOG_WARN("get column item by id failed", K(table_info.table_id_), K(column_id));
+            } else  if (column_expr->is_generated_column()) {
+              // default keyword appeared in the generated column corresponding to values, we uniformly replace default with the expression corresponding to the generated column
+              //The following unified processing logic will replace the column in values
+              if (OB_FAIL(copy_schema_expr(*params_.expr_factory_,
+                                           column_item->expr_->get_dependant_expr(),
+                                           expr))) {
               }
-            } else if (OB_FAIL(check_basic_column_generated(column_expr, del_upd_stmt,
-                                                            is_generated_column))) {
-            } else if (is_generated_column) {
-              ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
-              ColumnItem *orig_col_item = NULL;
-              if (NULL != (orig_col_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_, column_id))
-                  && orig_col_item->expr_ != NULL) {
-                const ObString &column_name = orig_col_item->expr_->get_column_name();
-                const ObString &table_name = orig_col_item->expr_->get_table_name();
-                LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
-                              column_name.length(), column_name.ptr(), table_name.length(), table_name.ptr());
-              }
+            } else if (OB_FAIL(utils.resolve_default_expr(*column_item, expr, T_INSERT_SCOPE))) {
             }
-            const ObIArray<ObColumnRefRawExpr*> &dep_cols = table_info.part_generated_col_dep_cols_;
-            if (OB_SUCC(ret) && 0 != dep_cols.count()) {
-              ColumnItem *col_item = NULL;
-              for (int64_t i = 0; OB_SUCC(ret) && i < dep_cols.count(); ++i) {
-                const ObColumnRefRawExpr *col_ref = dep_cols.at(i);
-                CK(OB_NOT_NULL(col_ref));
-                CK(OB_NOT_NULL(col_item = del_upd_stmt->get_column_item_by_id(
-                                          col_ref->get_table_id(),
-                                          col_ref->get_column_id())));
-                if (OB_SUCC(ret)) {
-                  if (NULL == col_item->default_value_expr_) {
-                    OZ(utils.resolve_default_expr(*col_item, col_item->default_value_expr_,
-                                                  T_INSERT_SCOPE));
-                  }
+          } else if (OB_FAIL(check_basic_column_generated(column_expr, del_upd_stmt,
+                                                          is_generated_column))) {
+          } else if (is_generated_column) {
+            ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
+            ColumnItem *orig_col_item = NULL;
+            if (NULL != (orig_col_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_, column_id))
+                && orig_col_item->expr_ != NULL) {
+              const ObString &column_name = orig_col_item->expr_->get_column_name();
+              const ObString &table_name = orig_col_item->expr_->get_table_name();
+              LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
+                            column_name.length(), column_name.ptr(), table_name.length(), table_name.ptr());
+            }
+          }
+          const ObIArray<ObColumnRefRawExpr*> &dep_cols = table_info.part_generated_col_dep_cols_;
+          if (OB_SUCC(ret) && 0 != dep_cols.count()) {
+            ColumnItem *col_item = NULL;
+            for (int64_t i = 0; OB_SUCC(ret) && i < dep_cols.count(); ++i) {
+              const ObColumnRefRawExpr *col_ref = dep_cols.at(i);
+              CK(OB_NOT_NULL(col_ref));
+              CK(OB_NOT_NULL(col_item = del_upd_stmt->get_column_item_by_id(
+                                        col_ref->get_table_id(),
+                                        col_ref->get_column_id())));
+              if (OB_SUCC(ret)) {
+                if (NULL == col_item->default_value_expr_) {
+                  OZ(utils.resolve_default_expr(*col_item, col_item->default_value_expr_,
+                                                T_INSERT_SCOPE));
                 }
               }
             }
+          }
 
-            tmp_expr = expr;
-            // mysql support insert into xx values(expr, ...), expr contains column_ref
-            // which has default values in column schema, replace column ref to const value here
-            // eg: CREATE TABLE t1(f1 VARCHAR(100) DEFAULT 'test',id int primary key);
-            //     INSERT INTO t1 VALUES(SUBSTR(f1, 1, 3),1);
-            //     select * from t1;
-            //      f1  id
-            //      tes 1
-            if (OB_SUCC(ret)) {
-              if (tmp_expr->has_flag(CNT_COLUMN)) {
-                if (OB_FAIL(replace_column_ref(&value_row, tmp_expr,
-                                               column_expr->is_generated_column()))) {
-                } else {
-                }
+          tmp_expr = expr;
+          // mysql support insert into xx values(expr, ...), expr contains column_ref
+          // which has default values in column schema, replace column ref to const value here
+          // eg: CREATE TABLE t1(f1 VARCHAR(100) DEFAULT 'test',id int primary key);
+          //     INSERT INTO t1 VALUES(SUBSTR(f1, 1, 3),1);
+          //     select * from t1;
+          //      f1  id
+          //      tes 1
+          if (OB_SUCC(ret)) {
+            if (tmp_expr->has_flag(CNT_COLUMN)) {
+              if (OB_FAIL(replace_column_ref(&value_row, tmp_expr,
+                                             column_expr->is_generated_column()))) {
+              } else {
               }
             }
-            if (OB_SUCC(ret)) {
-              if (OB_FAIL(tmp_expr->formalize(session_info_))) {
-              } else if (OB_FAIL(value_row.push_back(tmp_expr))) {
-              }
+          }
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(tmp_expr->formalize(session_info_))) {
+            } else if (OB_FAIL(value_row.push_back(tmp_expr))) {
             }
-          } //end else
-        } //end for
+          }
+        }
       }
     }
     if (OB_SUCC(ret)) {
@@ -2882,13 +2717,11 @@ int ObDelUpdResolver::add_select_list_for_set_stmt(ObSelectStmt &select_stmt)
   return ret;
 }
 
-int ObDelUpdResolver::resolve_insert_update_assignment(const ParseNode *node, ObInsertTableInfo& table_info)
+int ObDelUpdResolver::resolve_insert_update_assignment(rust::Slice<const peg::Node> assignments, ObInsertTableInfo& table_info)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObTableAssignment, 2> tables_assign;
-  if (OB_ISNULL(node) || T_ASSIGN_LIST != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(resolve_assignments(*node, tables_assign, T_UPDATE_SCOPE))) {
+  if (OB_FAIL(resolve_assignments(assignments, tables_assign, T_UPDATE_SCOPE))) {
   } else if (OB_FAIL(resolve_additional_assignments(tables_assign, T_INSERT_SCOPE))) {
   } else if (tables_assign.count() != 1) {
     ret = OB_ERR_UNEXPECTED;

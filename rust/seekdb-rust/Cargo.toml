@@ -19,6 +19,7 @@ number-parser = { path = "../number-parser" }
 config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }
+sql-parser = { path = "../sql-parser" }
 regex-engine = { path = "../regex-engine" }
 spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }

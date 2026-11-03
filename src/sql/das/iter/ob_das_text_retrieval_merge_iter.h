@@ -124,7 +124,6 @@ public:
   virtual int set_merge_iters(const ObIArray<ObDASIter *> &retrieval_iters);
   const ObIArray<ObString> &get_query_tokens() { return query_tokens_; }
   bool is_taat_mode() { return RetrievalProcType::TAAT == processing_type_; }
-  static int build_query_tokens(const ObDASIRScanCtDef *ir_ctdef, ObDASIRScanRtDef *ir_rtdef, common::ObIAllocator &alloc, ObArray<ObString> &query_tokens, ObFtsEvalNode *&root_node);
   virtual int set_rangkey_and_selector(const common::ObIArray<std::pair<ObDocIdExt, int>> &virtual_rangkeys);
   void set_boolean_compute_node(ObFtsEvalNode *root_node) { root_node_ = root_node;}
 protected:

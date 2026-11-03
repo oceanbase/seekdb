@@ -28,31 +28,22 @@ using namespace pl;
 namespace sql
 {
 
-int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
+int ObCreatePackageResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   bool need_reset_default_database = false;
   uint64_t old_database_id = OB_INVALID_ID;
   ObSqlString old_database_name;
-  CK (T_PACKAGE_CREATE == parse_tree.type_);
-  CK (CREATE_PACKAGE_NODE_CHILD_COUNT == parse_tree.num_child_);
-  CK (OB_NOT_NULL(parse_tree.children_));
+  CK (peg::NodeKind::CreatePackage == parse_tree.kind());
+  CK (OB_NOT_NULL(params_.syntax_));
   CK (OB_NOT_NULL(session_info_));
-  if (OB_SUCC(ret) &&
-      false) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "not supported package in mysql mode");
-  }
   if (OB_SUCC(ret)) {
     bool resolve_success = true;
     HEAP_VAR(ObPLPackageAST, package_ast, *allocator_) {
       ObPLPackageGuard package_guard{};
       ObCreatePackageStmt *stmt = NULL;
-      ParseNode *package_block_node = NULL ;
-      ParseNode *sp_name_node = NULL;
-      ParseNode *package_name_node = NULL;
-      ParseNode *package_stmts_node = NULL;
-      ParseNode *package_clause_node = NULL;
+      const peg::Node &package_block_node = peg::package_definition(parse_tree);
+      const peg::Node &sp_name_node = peg::package_name(package_block_node);
       ObString db_name;
       ObString package_name;
       bool is_invoker_right = false;
@@ -70,18 +61,11 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
                             *params_.expr_factory_,
                             NULL,
                             false) {
-      CK (OB_NOT_NULL(package_block_node = parse_tree.children_[0]));
-      CK (T_PACKAGE_BLOCK == package_block_node->type_);
-      CK (OB_UNLIKELY(PACKAGE_BLOCK_NODE_CHILD_COUNT == package_block_node->num_child_));
-      CK (OB_NOT_NULL(package_block_node->children_));
-      CK (OB_NOT_NULL(sp_name_node = package_block_node->children_[0]));
-      OX (package_clause_node = package_block_node->children_[1]);
-      OX (package_stmts_node = package_block_node->children_[2]);
-      OX (package_name_node = package_block_node->children_[3]);
-      OZ (ObResolverUtils::resolve_sp_name(*session_info_, *sp_name_node, db_name, package_name));
+      OZ (ObResolverUtils::resolve_sp_name(*session_info_, peg::name_parts(sp_name_node),
+                                          *allocator_, db_name, package_name));
       CK (OB_NOT_NULL(schema_checker_));
       //Resolve package clause: invoker right and accessible by
-      OZ (resolve_invoke_accessible(package_clause_node,
+      OZ (resolve_invoke_accessible(peg::routine_characteristics(package_block_node),
                                     is_invoker_right,
                                     has_accessible_by));
       if (OB_SUCC(ret)) {
@@ -104,7 +88,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
       }
 
       //NOTE: null package stmts is possible
-      if (OB_SUCC(ret) && OB_NOT_NULL(package_stmts_node)) {
+      if (OB_SUCC(ret)) {
         uint64_t db_id = OB_INVALID_ID;
         uint64_t package_id = OB_INVALID_ID;
         const ObPackageInfo *package_spec_info = NULL;
@@ -119,12 +103,11 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           db_id = package_spec_info->get_database_id();
           package_id = package_spec_info->get_package_id();
         }
-        CK (T_PACKAGE_STMTS == package_stmts_node->type_);
         OZ (package_ast.init(db_name, package_name, PL_PACKAGE_SPEC,
                              db_id, package_id, OB_INVALID_VERSION, NULL));
         OZ (resolver.init(package_ast));
         if (OB_SUCC(ret)
-            && OB_FAIL(resolver.resolve(package_stmts_node, package_ast))) {
+            && OB_FAIL(resolver.resolve(*params_.syntax_, package_ast))) {
           LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "PACKAGE",
                         db_name.length(), db_name.ptr(), package_name.length(), package_name.ptr());
           resolve_success = ObPLResolver::is_object_not_exist_error(ret) ? true : false;
@@ -133,9 +116,10 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         }
       }
       //NOTE: null package name is possible
-      if (OB_SUCC(ret) && OB_NOT_NULL(package_name_node)) {
-        ObString opt_package_name(package_name_node->str_len_, package_name_node->str_value_);
-        CK (T_IDENT == package_name_node->type_);
+      if (OB_SUCC(ret) && peg::package_has_end_name(package_block_node)) {
+        const auto &end_name = peg::package_end_name(package_block_node);
+        const auto end_name_text = end_name.text();
+        ObString opt_package_name(syntax_text(end_name_text));
         if (OB_SUCC(ret)
             && OB_UNLIKELY(0 != package_name.case_compare(opt_package_name))) {
           ret = OB_ERR_SP_LILABEL_MISMATCH;
@@ -149,9 +133,9 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         } else {
           obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
           ObPackageInfo &package_info = create_package_arg.package_info_;
-          ObString package_block(static_cast<int32_t>(package_block_node->str_len_), package_block_node->str_value_);
-          create_package_arg.is_replace_ = static_cast<bool>(parse_tree.int32_values_[0]);
-          create_package_arg.is_editionable_ = !static_cast<bool>(parse_tree.int32_values_[1]);
+          ObString package_block = params_.syntax_->source(package_block_node);
+          create_package_arg.is_replace_ = peg::package_replace(parse_tree);
+          create_package_arg.is_editionable_ = true;
           create_package_arg.db_name_ = db_name;
           
           package_info.set_owner_id(session_info_->get_user_id());
@@ -278,44 +262,27 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_clause_node,
-                                       bool &is_invoker_right,
-                                       bool &has_accessible_by)
+int ObCreatePackageResolver::resolve_invoke_accessible(rust::Slice<const peg::Node> clauses,
+                                                       bool &is_invoker_right,
+                                                       bool &has_accessible_by)
 {
   int ret = OB_SUCCESS;
-  bool has_sp_invoker_clause = false;
-  bool has_accessible_by_clause = false;
-  if (OB_NOT_NULL(package_clause_node)) {
-    CK (T_SP_CLAUSE_LIST == package_clause_node->type_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < package_clause_node->num_child_; ++i) {
-      const ParseNode *node = package_clause_node->children_[i];
-      if (OB_NOT_NULL(node)) {
-        if (T_SP_INVOKE == node->type_) {
-          if (has_sp_invoker_clause) {
-            ret = OB_ERR_PARSER_SYNTAX;
-            LOG_WARN("at most one declaration for 'AUTHID' is permitted",
-                      K(ret), K(node->type_), K(has_sp_invoker_clause));
-          } else {
-            has_sp_invoker_clause = true;
-            if (1 == node->value_) {
-              is_invoker_right = true;
-            }
-          }
-        } else if (T_SP_ACCESSIBLE_BY == node->type_) {
-          if (has_accessible_by_clause) {
-            ret = OB_ERR_PARSER_SYNTAX;
-          } else {
-            has_accessible_by_clause = true;
-            has_accessible_by = true;
-          }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specified invoker clause");
-        }
-      }
+  bool has_invoker_clause = false;
+  has_accessible_by = false;
+  for (const auto &clause : clauses) {
+    if (OB_FAIL(ret)) {
+      break;
+    } else if (clause.kind() != peg::NodeKind::InvokeRights) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "specified invoker clause");
+    } else if (has_invoker_clause) {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_WARN("at most one declaration for AUTHID is permitted", K(ret));
+    } else {
+      has_invoker_clause = true;
+      is_invoker_right = peg::routine_invoker_rights(clause);
     }
   }
-
   return ret;
 }
 
@@ -434,15 +401,15 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
   return ret;
 }
 
-int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
+int ObCreatePackageBodyResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObCreatePackageStmt *stmt = NULL;
-  ParseNode *package_body_block_node = NULL;
+  const peg::Node &package_body_block_node = peg::package_definition(parse_tree);
   ObString db_name;
   ObString package_name;
 
-  CK (OB_NOT_NULL(parse_tree.children_));
+  CK (OB_NOT_NULL(params_.syntax_));
   CK (OB_NOT_NULL(session_info_));
   CK (OB_NOT_NULL(schema_checker_));
   CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
@@ -450,14 +417,8 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
   CK (OB_NOT_NULL(params_.allocator_));
   CK (OB_NOT_NULL(params_.session_info_));
   CK (OB_NOT_NULL(params_.sql_proxy_));
-  CK (OB_LIKELY(T_PACKAGE_CREATE_BODY == parse_tree.type_));
-  CK (OB_LIKELY(CREATE_PACKAGE_BODY_NODE_CHILD_COUNT == parse_tree.num_child_));
+  CK (OB_LIKELY(peg::NodeKind::CreatePackageBody == parse_tree.kind()));
 
-  if (OB_SUCC(ret) &&
-      false) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "package in mysql mode");
-  }
 
   if (OB_SUCC(ret)
       && OB_ISNULL(stmt = create_stmt<ObCreatePackageStmt>())) {
@@ -465,21 +426,17 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
   }
 
   if (OB_SUCC(ret)) {
-    ParseNode *sp_name_node = NULL;
-    ParseNode *package_name_node = NULL;
-    CK (OB_NOT_NULL(package_body_block_node = parse_tree.children_[0]));
-    CK (OB_LIKELY(T_PACKAGE_BODY_BLOCK == package_body_block_node->type_));
-    CK (OB_LIKELY(PACKAGE_BODY_BLOCK_NODE_CHILD_COUNT == package_body_block_node->num_child_));
-    CK (OB_NOT_NULL(package_body_block_node->children_));
-    CK (OB_NOT_NULL(sp_name_node = package_body_block_node->children_[0]));
-    OZ (ObResolverUtils::resolve_sp_name(*session_info_, *sp_name_node, db_name, package_name));
+    const peg::Node &sp_name_node = peg::package_name(package_body_block_node);
+    OZ (ObResolverUtils::resolve_sp_name(*session_info_, peg::name_parts(sp_name_node),
+                                        *allocator_, db_name, package_name));
 
     // check end label
     if (OB_SUCC(ret)
-        && OB_NOT_NULL(package_name_node = package_body_block_node->children_[3])) {
+        && peg::package_has_end_name(package_body_block_node)) {
       ObString end_package_name;
-      CK (OB_LIKELY(T_IDENT == package_name_node->type_));
-      OX (end_package_name = ObString(package_name_node->str_len_, package_name_node->str_value_));
+      const auto &end_name = peg::package_end_name(package_body_block_node);
+      const auto end_name_text = end_name.text();
+      end_package_name = syntax_text(end_name_text);
       if (OB_SUCC(ret)
           && OB_UNLIKELY(0 != package_name.case_compare(end_package_name))) {
         ret = OB_ERR_SP_LILABEL_MISMATCH;
@@ -500,14 +457,11 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
     //syntax and semantic analysis
     bool is_invoker_right = false;
-    if (OB_SUCC(ret)
-        && OB_NOT_NULL(package_body_block_node->str_value_)
-        && OB_LIKELY(package_body_block_node->str_len_ > 0)) {
+    if (OB_SUCC(ret)) {
       WITH_CONTEXT(memory_context) {
         ObIAllocator &tmp_allocator = memory_context->get_arena_allocator();
         HEAP_VARS_2((ObPLPackageAST, package_spec_ast, tmp_allocator),
                     (ObPLPackageAST, package_body_ast, tmp_allocator)) {
-          ObString package_body_src(package_body_block_node->str_len_, package_body_block_node->str_value_);
           ObPLPackageGuard package_guard{};
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
           ObPLBuilder builder(tmp_allocator,
@@ -555,7 +509,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                     OB_INVALID_VERSION,
                                     &package_spec_ast));
 
-          OZ (builder.analyze_package(package_body_src,
+          OZ (builder.analyze_package(*params_.syntax_,
                                     &(package_spec_ast.get_body()->get_namespace()),
                                     package_body_ast,
                                     false));
@@ -617,11 +571,10 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
       ObPackageInfo &package_info = create_package_arg.package_info_;
-      ObString package_body_block(static_cast<int32_t>(package_body_block_node->str_len_),
-                                      package_body_block_node->str_value_);
+      ObString package_body_block = params_.syntax_->source(package_body_block_node);
 
-      create_package_arg.is_replace_ = static_cast<bool>(parse_tree.int32_values_[0]);
-      create_package_arg.is_editionable_ = !static_cast<bool>(parse_tree.int32_values_[1]);
+      create_package_arg.is_replace_ = peg::package_replace(parse_tree);
+      create_package_arg.is_editionable_ = true;
       create_package_arg.db_name_ = db_name;
 
       

@@ -4168,9 +4168,9 @@ int ObBasicSessionInfo::check_tx_read_only_privilege(const ObSqlTraits &sql_trai
       ? data_plane::tx_desc_is_read_only(tx_desc_)
       : get_tx_read_only();
   if (!sql_traits.is_readonly_stmt_
-      && sql_traits.stmt_type_ != ObItemType::T_SP_CALL_STMT
-      && sql_traits.stmt_type_ != ObItemType::T_SP_ANONYMOUS_BLOCK
-      && sql_traits.stmt_type_ != ObItemType::T_EXPLAIN) {
+      && sql_traits.stmt_type_ != stmt::T_CALL_PROCEDURE
+      && sql_traits.stmt_type_ != stmt::T_ANONYMOUS_BLOCK
+      && sql_traits.stmt_type_ != stmt::T_EXPLAIN) {
     if (sql_traits.is_cause_implicit_commit_ && !sql_traits.is_commit_stmt_) {
       if (sys_vars_cache_.get_tx_read_only()) {
         // should implicit commit current transaction before report error

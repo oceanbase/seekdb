@@ -123,7 +123,6 @@ int ObExprJsonUnquote::eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, ObD
   bool is_null = false;
 
   if (OB_FAIL(temp_allocator.eval_arg(arg, ctx, json_datum))) {
-    ret = OB_ERR_INVALID_DATATYPE;
   } else if (OB_FAIL(calc(ctx, *json_datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &temp_allocator, j_buf, is_null))) {
   } else if (is_null) {
     res.set_null();

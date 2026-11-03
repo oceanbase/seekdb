@@ -19,7 +19,6 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/ob_rpc_struct.h"
-#include "sql/parser/parse_node.h"
 #include "sql/ob_sql_utils.h"
 
 namespace oceanbase
@@ -40,16 +39,14 @@ ObForkDatabaseResolver::~ObForkDatabaseResolver()
 {
 }
 
-int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
+int ObForkDatabaseResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObForkDatabaseStmt *fork_database_stmt = NULL;
 
   if (OB_ISNULL(session_info_) ||
       OB_ISNULL(allocator_) ||
-      T_FORK_DATABASE != parse_tree.type_ ||
-      MAX_NODE != parse_tree.num_child_ ||
-      OB_ISNULL(parse_tree.children_)) {
+      peg::NodeKind::ForkDatabase != parse_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else if (OB_ISNULL(fork_database_stmt = create_stmt<ObForkDatabaseStmt>())) {
@@ -65,26 +62,15 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     obcall::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
-    ParseNode *dst_database_node = parse_tree.children_[DST_DATABASE_NODE];
-    ParseNode *src_database_node = parse_tree.children_[SRC_DATABASE_NODE];
+    const auto &destination = peg::fork_destination(parse_tree);
+    const auto &source = peg::fork_source(parse_tree);
     ObString dst_database_name;
     ObString src_database_name;
-
-    if (OB_ISNULL(dst_database_node) || OB_ISNULL(src_database_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
-    } else if (T_IDENT != dst_database_node->type_ || T_IDENT != src_database_node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid parse tree node type!", K(ret),
-                   K(dst_database_node->type_), K(src_database_node->type_));
-    } else {
-      // Get destination database name
-      dst_database_name.assign_ptr(dst_database_node->str_value_,
-                                   static_cast<int32_t>(dst_database_node->str_len_));
-      // Get source database name
-      src_database_name.assign_ptr(src_database_node->str_value_,
-                                   static_cast<int32_t>(src_database_node->str_len_));
-
+    const auto destination_text = destination.text();
+    OZ (ob_write_string(*allocator_, syntax_text(destination_text), dst_database_name));
+    const auto source_text = source.text();
+    OZ (ob_write_string(*allocator_, syntax_text(source_text), src_database_name));
+    if (OB_SUCC(ret)) {
       // Check and convert database names
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       if (OB_FAIL(session_info_->get_name_case_mode(mode))) {

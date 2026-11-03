@@ -31,6 +31,7 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_collection_construct.h"
 #include "sql/engine/expr/ob_expr_object_construct.h"
+#include "sql/engine/expr/cast_type_descriptor.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -711,9 +712,7 @@ int ObRawExpr::get_geo_cast_result_type(ObGeoType& geo_type) const
     if (!value.is_int()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ParseNode parse_node;
-      parse_node.value_ = value.get_int();
-      geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
+      geo_type = CastTypeDescriptor(value.get_int()).geometry_type();
     }
   }
   return ret;
@@ -4198,17 +4197,16 @@ int ObSysFunRawExpr::get_cast_type_name(char *buf, int64_t buf_len, int64_t &pos
     if (!value.is_int()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ParseNode node;
-      node.value_ = value.get_int();
-      ObObjType dest_type = static_cast<ObObjType>(node.int16_values_[0]);
-      ObCollationType coll_type = static_cast<ObCollationType>(node.int16_values_[1]);
+      const CastTypeDescriptor descriptor(value.get_int());
+      ObObjType dest_type = descriptor.type();
+      ObCollationType coll_type = descriptor.collation();
       int32_t length = 0;
       int16_t precision = 0;
       int16_t scale = 0;
       const char *type_str = inner_obj_type_str(dest_type);
       if (ob_is_string_tc(dest_type)) {
-        length = node.int32_values_[1] < 0 ?
-            static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH) : node.int32_values_[1];
+        length = descriptor.length() < 0 ?
+            static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH) : descriptor.length();
         if (OB_FAIL(BUF_PRINTF("%s(%d)", type_str, length))) {
         }
       } else if(ob_is_text_tc(dest_type) || ob_is_json_tc(dest_type) || ob_is_geometry_tc(dest_type)) {
@@ -4217,8 +4215,8 @@ int ObSysFunRawExpr::get_cast_type_name(char *buf, int64_t buf_len, int64_t &pos
         if (OB_FAIL(BUF_PRINTF("%s(%d)", type_str, length))) {
         }
       } else {
-        precision = node.int16_values_[2];
-        scale = node.int16_values_[3];
+        precision = descriptor.precision();
+        scale = descriptor.scale();
         if (OB_FAIL(BUF_PRINTF("%s(%d, %d)", type_str, precision, scale))) {
         }
       }

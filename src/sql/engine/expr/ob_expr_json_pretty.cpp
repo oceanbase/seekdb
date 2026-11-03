@@ -102,7 +102,6 @@ int ObExprJsonPretty::eval_json_pretty(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   bool is_null = false;
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, j_datum))) {
-    ret = OB_ERR_INVALID_DATATYPE;
   } else if (OB_FAIL(calc(ctx, *j_datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, j_buf, is_null))) {
   } else if (is_null) {
     res.set_null();

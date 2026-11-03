@@ -18,7 +18,7 @@
 #define OCEANBASE_SRC_SQL_ENGINE_PREPARE_OB_DEALLOCATE_EXECUTOR_H_
 
 #include "lib/container/ob_vector.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "share/statement/ob_stmt_type.h"
 
 

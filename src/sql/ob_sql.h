@@ -94,6 +94,8 @@ public:
 };
 
 // this class is the main interface for sql module
+class ParsedSql;
+
 class ObSql : public ObIPLSqlRuntime,
               public ObIPreparedStatementRuntime,
               public ObISqlExecutionIdProvider
@@ -387,13 +389,13 @@ private:
   // @param result[out]        - the id of the explain plan text column
   // @retval OB_SUCCESS execute success
   // @retval OB_SOME_ERROR special errno need to handle
-  int generate_stmt(ParseResult &parse_result,
+  int generate_stmt(ParsedSql &parsed,
                     ObPlanCacheCtx *pc_ctx,
                     ObSqlCtx &context,
                     ObIAllocator &allocator,
                     ObResultSet &result,
                     ObStmt *&basic_stmt,
-                    ParseResult *outline_parse_result = NULL);
+                    const ParsedSql *outline = NULL);
 
   // Generate Physical Plan for given syntax tree
   // called by handle_text_query
@@ -404,13 +406,13 @@ private:
   // @param context[in]        sql context
   // @param allocator[in]      memory allocator
   // @param result[out]        result set include physical plan generated
-  int generate_physical_plan(ParseResult &parse_result,
+  int generate_physical_plan(ParsedSql &parsed,
                              ObPlanCacheCtx *pc_ctx,
                              ObSqlCtx &context,
                              ObResultSet &result,
                              const bool is_begin_commit_stmt,
                              const PlanCacheMode mode,
-                             ParseResult *outline_parse_result = NULL);
+                             const ParsedSql *outline = NULL);
 
   int generate_plan(ParseResult &parse_result,
                     ObPlanCacheCtx *pc_ctx,
@@ -446,7 +448,7 @@ private:
                        const ObString &signature_sql,
                        const ObString &signature_format_sql,
                        ObOutlineState &outline_state,
-                       ParseResult &outline_parse_result);
+                       ParsedSql &outline);
 
   int get_outline_data(ObPlanCacheCtx &pc_ctx,
                        const ObString &signature_sql,
@@ -466,20 +468,20 @@ private:
   int parser_and_check(const ObString &outlined_stmt,
                        ObExecContext &exec_ctx,
                        ObPlanCacheCtx &pc_ctx,
-                       ParseResult &parse_result,
+                       ParsedSql &parsed,
                        int get_plan_err,
                        bool &add_plan_to_pc,
                        bool &is_enable_transform_tree);
   int handle_parser(const ObString &outlined_stmt,
                        ObExecContext &exec_ctx,
                        ObPlanCacheCtx &pc_ctx,
-                       ParseResult &parse_result,
+                       ParsedSql &parsed,
                        int get_plan_err,
                        bool &add_plan_to_pc,
                        bool &is_enable_transform_tree);
 
   int check_batched_multi_stmt_after_parser(ObPlanCacheCtx &pc_ctx,
-                                            ParseResult &parse_result,
+                                            ParsedSql &parsed,
                                             bool add_plan_to_pc,
                                             bool &is_valid);
   int check_batched_multi_stmt_after_resolver(ObPlanCacheCtx &pc_ctx,
@@ -502,7 +504,7 @@ private:
                           ObSqlCtx &context);
   void generate_sql_id(ObPlanCacheCtx &pc_ctx,
                            bool add_plan_to_pc,
-                           ParseResult &parse_result,
+                           ParsedSql &parsed,
                            ObString &signature_sql,
                            ObString &signature_format_sql,
                            int err_code);
@@ -531,7 +533,7 @@ private:
                              ParamStore &fixed_param_store);
 
   int handle_text_execute(const ObStmt *basic_stmt, ObSqlCtx &sql_ctx, ObResultSet &result);
-  int check_read_only_privilege(ParseResult &parse_result,
+  int check_read_only_privilege(ParsedSql &parsed,
                                 ObExecContext &exec_ctx,
                                 ObSchemaGetterGuard &schema_guard,
                                 ObSqlTraits &sql_traits);

@@ -29,24 +29,14 @@ public:
   explicit ObVariableSetResolver(ObResolverParams &params);
   virtual ~ObVariableSetResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
-  int resolve_value_expr(ParseNode &val_node, ObRawExpr *&value_expr);
+  virtual int resolve(const peg::Node &parse_tree);
+  int resolve_value_expr(const peg::Node &val_node, ObRawExpr *&value_expr);
   int resolve_subquery_info(const ObIArray<ObSubQueryInfo> &subquery_info, ObRawExpr *&value_expr);
 private:
-  int resolve_set_names(const ParseNode &parse_tree);
+  int resolve_set_names(const peg::Node &parse_tree);
   DISALLOW_COPY_AND_ASSIGN(ObVariableSetResolver);
 };
 
-class ObAlterSessionSetResolver : public ObStmtResolver
-{
-public:
-  explicit ObAlterSessionSetResolver(ObResolverParams &params);
-  virtual ~ObAlterSessionSetResolver();
-
-  virtual int resolve(const ParseNode &parse_tree);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAlterSessionSetResolver);
-};
 
 }
 }
