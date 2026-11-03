@@ -808,9 +808,12 @@ dependencies = [
 name = "http-client"
 version = "0.1.0"
 dependencies = [
+ "aws-lc-sys",
  "curl",
  "curl-sys",
  "cxx",
+ "rustls",
+ "rustls-ffi",
 ]
 
 [[package]]
