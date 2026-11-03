@@ -1,71 +1,89 @@
 set(CPACK_GENERATOR "DEB")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEB_COMPONENT_INSTALL ON)
-set(CPACK_COMPONENTS_IGNORE_GROUPS ON)
 set(CPACK_DEB_MAIN_COMPONENT "server")
-set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+set(CPACK_DEBIAN_SERVER_DEBUGINFO_PACKAGE ON)
 
 include(cmake/Pack.cmake)
 
-set(CPACK_DEBIAN_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
-set(CPACK_DEBIAN_SERVER_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
-set(CPACK_DEBIAN_LIBS_PACKAGE_NAME "${CPACK_PACKAGE_NAME}-libs")
-set(CPACK_DEBIAN_PACKAGE_VERSION
-  "${CPACK_PACKAGE_VERSION}-${SEEKDB_PACKAGE_RELEASE}")
+# rename server package name
+set(CPACK_DEBIAN_SERVER_PACKAGE_NAME ${CPACK_PACKAGE_NAME})
+set(CPACK_DEBIAN_PACKAGE_RELEASE ${OB_RELEASEID})
+
+find_program(LSB_RELEASE_EXEC lsb_release)
+if(LSB_RELEASE_EXEC)
+  execute_process(
+    COMMAND ${LSB_RELEASE_EXEC} -is
+    OUTPUT_VARIABLE DEBIAN_NAME
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  string(TOLOWER "${DEBIAN_NAME}" DEBIAN_NAME)
+  execute_process(
+    COMMAND ${LSB_RELEASE_EXEC} -rs
+    OUTPUT_VARIABLE DEBIAN_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+endif(LSB_RELEASE_EXEC)
+if(DEBIAN_NAME AND DEBIAN_VERSION)
+  set(CPACK_DEBIAN_PACKAGE_RELEASE "${CPACK_DEBIAN_PACKAGE_RELEASE}${DEBIAN_NAME}${DEBIAN_VERSION}")
+endif()
+
+if (OB_DISABLE_LSE)
+  ob_insert_nonlse_to_package_version(${CPACK_DEBIAN_PACKAGE_RELEASE} CPACK_DEBIAN_PACKAGE_RELEASE)
+  message(STATUS "CPACK_DEBIAN_PACKAGE_RELEASE: ${CPACK_DEBIAN_PACKAGE_RELEASE}")
+endif()
+
+set(CPACK_DEBIAN_PACKAGE_NAME ${CPACK_PACKAGE_NAME})
+set(CPACK_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION})
+set(CPACK_PACKAGE_CONTACT "${OceanBase_HOMEPAGE_URL}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OceanBase")
 set(CPACK_DEBIAN_PACKAGE_SECTION "database")
-set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${OceanBase_HOMEPAGE_URL}")
-set(CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS
-  "libaio1 | libaio1t64, systemd")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "Optional")
 
-configure_file(
-  "${CMAKE_SOURCE_DIR}/tools/systemd/profile/pre_install.sh.template"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/preinst"
-  @ONLY)
-configure_file(
-  "${CMAKE_SOURCE_DIR}/tools/systemd/profile/post_install.sh.template"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postinst"
-  @ONLY)
-configure_file(
-  "${CMAKE_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh.template"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/prerm"
-  @ONLY)
-configure_file(
-  "${CMAKE_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh.template"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postrm"
-  @ONLY)
-file(CHMOD
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/preinst"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postinst"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/prerm"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postrm"
-  PERMISSIONS
-    OWNER_READ OWNER_WRITE OWNER_EXECUTE
-    GROUP_READ GROUP_EXECUTE
-    WORLD_READ WORLD_EXECUTE)
+# systemd define on deb
+set(LIBAIO_DEPENDENCY "libaio1")
+if(OB_AIO AND OB_AIO STREQUAL "libaio1t64")
+  set(LIBAIO_DEPENDENCY "${OB_AIO}")
+endif()
+set(CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "${LIBAIO_DEPENDENCY}, systemd")
 
-set(CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/preinst"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postinst"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/prerm"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postrm")
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh.template
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/preinst
+              @ONLY)
 
-install(PROGRAMS
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/preinst"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postinst"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/prerm"
-  "${SEEKDB_PACKAGE_PROFILE_DIR}/postrm"
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh.template
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/postinst
+              @ONLY)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh.template
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/prerm
+              @ONLY)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh.template
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/postrm
+              @ONLY)
+
+set(CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA 
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/postinst 
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/prerm
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/postrm)
+
+# add the deb post and pre script
+install(FILES
+  tools/systemd/profile/postinst
+  tools/systemd/profile/prerm
+  tools/systemd/profile/postrm
   DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
-message(STATUS "CPack generator: DEB")
-message(STATUS "CPack components: ${CPACK_COMPONENTS_ALL}")
-
+# install cpack to make everything work
 include(CPack)
 
+#add deb target to create DEBS
 add_custom_target(deb
-  COMMAND "${CMAKE_CPACK_COMMAND}" -G DEB
-    --config "${CMAKE_BINARY_DIR}/CPackConfig.cmake"
-  DEPENDS seekdb generate_syspack_source
-  USES_TERMINAL
-  VERBATIM)
+  COMMAND +make package
+  DEPENDS
+  observer
+  ob_error
+  ${BITCODE_TO_ELF_LIST}
+  )

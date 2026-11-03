@@ -3,7 +3,11 @@ set(CPACK_GENERATOR "RPM")
 set(CPACK_COMPONENTS_IGNORE_GROUPS 1)
 set(CPACK_RPM_COMPONENT_INSTALL ON)
 # use "server" as main component so its RPM filename won't have "server"
-set(CPACK_RPM_MAIN_COMPONENT "server")
+if (BUILD_CDC_ONLY)
+  set(CPACK_RPM_MAIN_COMPONENT "cdc")
+else()
+  set(CPACK_RPM_MAIN_COMPONENT "server")
+endif()
 # let rpmbuild determine rpm filename
 set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
 set(CMAKE_INSTALL_LIBDIR "lib64")
@@ -33,7 +37,11 @@ list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr")
 set(CPACK_RPM_PACKAGE_GROUP "Applications/Databases")
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION})
 set(CPACK_RPM_PACKAGE_LICENSE "Apache 2.0")
-set(DEBUG_INSTALL_POST "mv $RPM_BUILD_ROOT/../server/usr/bin/obshell %{_builddir}/obshell; %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir}; mv %{_builddir}/obshell $RPM_BUILD_ROOT/../server/usr/bin/obshell; %{nil}")
+if (NOT BUILD_CDC_ONLY OR OB_BUILD_STANDALONE)
+  set(DEBUG_INSTALL_POST "mv $RPM_BUILD_ROOT/../server/usr/bin/obshell %{_builddir}/obshell; %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir}; mv %{_builddir}/obshell $RPM_BUILD_ROOT/../server/usr/bin/obshell; %{nil}")
+else()
+  set(DEBUG_INSTALL_POST "%{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir};%{nil}")
+endif()
 set(CPACK_RPM_SPEC_MORE_DEFINE
   "%global _missing_build_ids_terminate_build 0
 %global _find_debuginfo_opts -g
@@ -49,36 +57,50 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
 set(CPACK_RPM_SERVER_PACKAGE_REQUIRES "libaio, systemd")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh.template
-              ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_install.sh
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh
               @ONLY)
-set(CPACK_RPM_SERVER_PRE_INSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_install.sh)
+set(CPACK_RPM_SERVER_PRE_INSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh.template
-              ${SEEKDB_PACKAGE_PROFILE_DIR}/post_install.sh
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh
               @ONLY)
-set(CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/post_install.sh)
+set(CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh.template
-              ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_uninstall.sh
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh
               @ONLY)
-set(CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_uninstall.sh)
+set(CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh.template
-              ${SEEKDB_PACKAGE_PROFILE_DIR}/post_uninstall.sh
+              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh
               @ONLY)
-set(CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/post_uninstall.sh)
+set(CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh)
 
 # add the rpm post and pre script
-install(PROGRAMS
-  ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_install.sh
-  ${SEEKDB_PACKAGE_PROFILE_DIR}/post_install.sh
-  ${SEEKDB_PACKAGE_PROFILE_DIR}/post_uninstall.sh
-  ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_uninstall.sh
+install(FILES
+  tools/systemd/profile/pre_install.sh
+  tools/systemd/profile/post_install.sh
+  tools/systemd/profile/post_uninstall.sh
+  tools/systemd/profile/pre_uninstall.sh
   DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
-add_custom_target(bitcode_to_elf ALL
-  DEPENDS ${BITCODE_TO_ELF_LIST})
+if (BUILD_CDC_ONLY)
+  message(STATUS "oceanbase build cdc only") 
+  set(CPACK_COMPONENTS_ALL cdc)
+  set(CPACK_PACKAGE_NAME "seekdb-cdc")
+else()
+  add_custom_target(bitcode_to_elf ALL
+    DEPENDS ${BITCODE_TO_ELF_LIST})
+endif()
+
+if (OB_BUILD_STANDALONE)
+  message(STATUS "oceanbase standalone build")
+  set(CPACK_PACKAGE_NAME "oceanbase-standalone")
+  set(CPACK_COMPONENTS_ALL server libs)
+  # specify relocatable paths
+  set(CPACK_RPM_RELOCATION_PATHS "/usr/bin")
+endif()
 
 # add software package info
 set(RPM_DIST "")
@@ -89,13 +111,14 @@ execute_process(
   ERROR_QUIET
 )
 
-set(CPACK_FULL_PACKAGE_NAME
+set(CPACK_FULL_PACKAGE_NAME 
   "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}${RPM_DIST}.${ARCHITECTURE}.rpm")
 
 message(STATUS "Cpack Components:${CPACK_COMPONENTS_ALL}")
 
-# Avoid CPack's Makefile preinstall rebuild; the package target owns the build.
-set(CPACK_CMAKE_GENERATOR "Ninja")
+# refs https://stackoverflow.com/questions/48711342/what-does-the-cpack-preinstall-target-do
+# see https://cmake.org/cmake/help/latest/module/CPack.html
+set(CPACK_CMAKE_GENERATOR "Ninja") # this disables a rebuild i.e. "CPack: - Run preinstall target for..." which seems to be only done for "Unix Makefiles"
 
 # install cpack to make everything work
 include(CPack)

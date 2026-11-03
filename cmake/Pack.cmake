@@ -4,19 +4,8 @@ set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
 set(CPACK_COMPONENTS_ALL server)
 
-if(NOT DEFINED SEEKDB_PACKAGE_VERSION OR SEEKDB_PACKAGE_VERSION STREQUAL "")
-  set(SEEKDB_PACKAGE_VERSION "${OceanBase_VERSION}")
-endif()
-if(NOT DEFINED OB_RELEASEID OR OB_RELEASEID STREQUAL "")
-  set(OB_RELEASEID "1")
-endif()
-set(SEEKDB_PACKAGE_NAME "seekdb")
-set(SEEKDB_PACKAGE_RELEASE "${OB_RELEASEID}")
-set(SEEKDB_PACKAGE_PROFILE_DIR "${CMAKE_BINARY_DIR}/package/profile")
-file(MAKE_DIRECTORY "${SEEKDB_PACKAGE_PROFILE_DIR}")
-
-set(CPACK_PACKAGE_NAME "${SEEKDB_PACKAGE_NAME}")
-set(CPACK_PACKAGE_VERSION "${SEEKDB_PACKAGE_VERSION}")
+set(CPACK_PACKAGE_NAME "seekdb")
+set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${OceanBase_VERSION_PATCH}")
@@ -133,6 +122,8 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
     COMPONENT server)
 
   install(FILES
+    src/share/parameter/default_parameter.json
+    src/share/system_variable/default_system_variable.json
     ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
     ${INSTALL_EXTRA_FILES}
     DESTINATION etc
@@ -145,14 +136,25 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
     DESTINATION share/admin
     COMPONENT server)
 
+  # Help -> share/help/
+  install(FILES
+    src/sql/fill_help_tables-ob.sql
+    DESTINATION share/help
+    COMPONENT server)
+
   # Timezone -> share/timezone/
   install(FILES
     tools/timezone_V1.log
+    tools/timezone.data
+    tools/timezone_name.data
+    tools/timezone_trans.data
+    tools/timezone_trans_type.data
     DESTINATION share/timezone
     COMPONENT server)
 
   # SRS -> share/srs/
   install(FILES
+    tools/spatial_reference_systems.data
     tools/default_srs_data_mysql.sql
     DESTINATION share/srs
     COMPONENT server)
@@ -202,10 +204,9 @@ else()
   #   usr/share/seekdb/             - admin, timezone, srs, help
   ##############################################################################
 
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
-    ${SEEKDB_PACKAGE_PROFILE_DIR}/telemetry.sh
-    @ONLY)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh
+  @ONLY)
 
   set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
       "/usr" "/usr/lib" "/usr/lib/systemd" "/usr/lib/systemd/system" "/usr/libexec" "/etc"
@@ -217,6 +218,13 @@ else()
     deps/3rd/home/admin/oceanbase/bin/obshell
     DESTINATION usr/bin
     COMPONENT server)
+
+  if (OB_BUILD_STANDALONE)
+    install(PROGRAMS
+    deps/3rd/home/admin/oceanbase/bin/obshell
+    DESTINATION usr/bin
+    COMPONENT server)
+  endif()
 
   # Install systemd service to /usr/lib/systemd/system
   install(FILES
@@ -234,12 +242,14 @@ else()
   install(PROGRAMS
     tools/systemd/profile/seekdb_systemd_start
     tools/systemd/profile/seekdb_systemd_stop
-    ${SEEKDB_PACKAGE_PROFILE_DIR}/telemetry.sh
+    tools/systemd/profile/telemetry.sh
     DESTINATION usr/libexec/seekdb/scripts
     COMPONENT server)
 
   # Install configuration files to /etc/seekdb
   install(FILES
+    src/share/parameter/default_parameter.json
+    src/share/system_variable/default_system_variable.json
     ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
     ${INSTALL_EXTRA_FILES}
     tools/systemd/profile/seekdb.cnf
@@ -255,14 +265,25 @@ else()
     DESTINATION usr/share/seekdb/admin
     COMPONENT server)
 
+  # Install help files to /usr/share/seekdb/help
+  install(FILES
+    src/sql/fill_help_tables-ob.sql
+    DESTINATION usr/share/seekdb/help
+    COMPONENT server)
+
   # Install timezone files to /usr/share/seekdb/timezone
   install(FILES
     tools/timezone_V1.log
+    tools/timezone.data
+    tools/timezone_name.data
+    tools/timezone_trans.data
+    tools/timezone_trans_type.data
     DESTINATION usr/share/seekdb/timezone
     COMPONENT server)
 
   # Install SRS files to /usr/share/seekdb/srs
   install(FILES
+    tools/spatial_reference_systems.data
     tools/default_srs_data_mysql.sql
     DESTINATION usr/share/seekdb/srs
     COMPONENT server)
