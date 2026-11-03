@@ -1,0 +1,79 @@
+# owner: seekdb-taskA
+# owner group: storage
+# tags: fts
+# description: fts BMW/topk regression. Freezes the client-visible semantics of
+#   the LIMIT-pushdown (topk/BMW) path used by query_limit: MATCH + LIMIT
+#   without ORDER BY (the topk output is the relevance order truncated by
+#   LIMIT, so the row order is part of the frozen semantics), the
+#   COUNT-over-subquery-LIMIT shape used by the benchmark, relevance-ordered
+#   output via ORDER BY MATCH, single-token and multi-token LIMIT cases with
+#   hit counts below / equal to / above LIMIT, and the empty hit set edge.
+#   All outputs are deterministic doc ids and counts; the whole case must be
+#   byte-stable across repeated runs.
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_bmw_topk_regression;
+--enable_warnings
+
+create table fts_bmw_topk_regression(
+    id bigint auto_increment primary key,
+    title varchar(256) not null,
+    content text not null,
+    title_en varchar(256) not null,
+    content_en text not null,
+    fulltext key fts_bmw_cn(title, content) with parser ik PARSER_PROPERTIES=(ik_mode='smart'),
+    fulltext key fts_bmw_content(content) with parser ik PARSER_PROPERTIES=(ik_mode='smart'),
+    fulltext key fts_bmw_en(title_en, content_en) with parser beng PARSER_PROPERTIES=(min_token_size=3,max_token_size=84)
+);
+
+insert into fts_bmw_topk_regression(title, content, title_en, content_en) values
+('倒排索引基础', '倒排索引把文档切分成词项并建立映射，检索系统依赖倒排索引完成召回。', 'inverted index basics', 'the inverted index maps terms to documents for retrieval'),
+('倒排索引结构', '倒排索引由词典与倒排链组成，倒排链记录词项出现的文档编号。', 'inverted structure', 'the dictionary and posting lists form the inverted index structure'),
+('倒排索引压缩', '倒排索引压缩使用差值编码降低存储，压缩后的倒排索引读取更快。', 'index compression', 'difference encodings compress the posting lists of the inverted index'),
+('倒排索引查询', '查询时倒排索引按词项取倒排链，多条倒排链归并得到结果。', 'index query', 'queries fetch posting lists from the inverted index and merge them'),
+('倒排索引构建', '构建倒排索引先分词再排序，倒排索引的构建是离线流水线。', 'index build', 'building the inverted index tokenizes and sorts documents offline'),
+('倒排索引演进', '倒排索引从静态结构演进为动态可更新结构，倒排索引支持实时插入。', 'index evolution', 'the inverted index evolves from static to dynamic structures'),
+('分词器与索引', '分词器把句子切成词项，词项是倒排索引的基本单元。', 'tokenizer terms', 'the tokenizer splits sentences into terms for the index'),
+('稳定检索平台', '稳定检索平台依赖稳定的倒排索引与可靠的分词流程。', 'stable platform', 'a stable retrieval platform needs a reliable inverted index'),
+('稳定缓存层', '缓存层让稳定检索的响应更快，稳定的缓存策略减少回源。', 'stable cache', 'a stable cache layer speeds up stable retrieval responses'),
+('量子计算概览', '量子计算与经典计算并行发展，量子计算使用量子比特。', 'quantum overview', 'quantum computing uses qubits alongside classical computing'),
+('量子计算算法', '量子算法在量子计算模型下加速特定问题求解。', 'quantum algorithms', 'quantum algorithms speed up specific problems on quantum machines'),
+('融合检索展望', '倒排索引与向量索引融合是检索系统的未来方向。', 'hybrid outlook', 'hybrid retrieval combines inverted and vector indexes');
+
+--echo ========= multi token match + limit without order by: rows and order =========
+select id from fts_bmw_topk_regression where match(content) against('倒排索引 分词器') limit 6;
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('倒排索引 分词器') limit 4) t;
+select id from fts_bmw_topk_regression where match(content) against('倒排索引 分词器') limit 3 offset 2;
+--echo ========= benchmark shape: count over subquery limit =========
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('倒排索引 tokenizer') limit 20) t;
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('倒排索引 分词器') limit 3) t;
+--echo ========= hits above limit =========
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 4;
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 4) t;
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 5 offset 4;
+--echo ========= hits equal to limit =========
+select id from fts_bmw_topk_regression where match(content) against('稳定') limit 4;
+select count(*) from fts_bmw_topk_regression where match(content) against('稳定');
+--echo ========= hits below limit =========
+select id from fts_bmw_topk_regression where match(content) against('量子计算') limit 6;
+select count(*) from fts_bmw_topk_regression where match(content) against('量子计算');
+--echo ========= single token with limit and offset =========
+select id from fts_bmw_topk_regression where match(content) against('缓存') limit 2;
+select id from fts_bmw_topk_regression where match(content) against('缓存') limit 5;
+--echo ========= order by match relevance + limit =========
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') order by match(content) against('倒排索引') desc limit 5;
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') order by match(content) against('倒排索引') desc, id limit 4;
+select id from fts_bmw_topk_regression where match(content) against('倒排索引 分词器') order by match(content) against('倒排索引 分词器') desc limit 6;
+--echo ========= english beng path with limit =========
+select id from fts_bmw_topk_regression where match(title_en, content_en) against('inverted index') limit 4;
+select count(*) from (select id from fts_bmw_topk_regression where match(title_en, content_en) against('inverted index') limit 3) t;
+select id from fts_bmw_topk_regression where match(title_en, content_en) against('quantum computing') limit 5;
+--echo ========= empty hit set with limit =========
+select id from fts_bmw_topk_regression where match(content) against('zzzqqq') limit 5;
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('zzzqqq') limit 5) t;
+select count(*) from fts_bmw_topk_regression where match(content) against('zzzqqq');
+--echo ========= title+content combined index with limit =========
+select id from fts_bmw_topk_regression where match(title, content) against('倒排索引') limit 5;
+select count(*) from fts_bmw_topk_regression where match(title, content) against('倒排索引');
+
+drop table fts_bmw_topk_regression;
