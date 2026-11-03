@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -350,8 +351,73 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt && threshold > 1) {
+        bool is_small = false;
+        if (OB_FAIL(check_small_distinct_integer_inlist(in_list, param_store, threshold, is_small))) {
+          LOG_WARN("failed to estimate distinct integer IN values", K(ret));
+        } else if (is_small) {
+          // Keep every original operand. This only chooses the native IN evaluation
+          // path, so parameterized plans remain correct when bind values change.
+          is_enable = false;
+        }
+      }
     }
   }
+  return ret;
+}
+
+int ObInListResolver::check_small_distinct_integer_inlist(const ParseNode &in_list,
+                                                         const ParamStore *param_store,
+                                                         const int64_t threshold,
+                                                         bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  bool supported = true;
+  bool has_null = false;
+  is_small = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> values;
+  if (OB_FAIL(values.create(threshold, "InlistDistinct", "InlistDistinct"))) {
+    LOG_WARN("failed to create IN value set", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_
+                       && values.size() + (has_null ? 1 : 0) < threshold; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      bool is_null = false;
+      if (OB_ISNULL(node)) {
+        supported = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_NULL == node->type_) {
+        is_null = true;
+      } else if (T_QUESTIONMARK == node->type_ && OB_NOT_NULL(param_store)
+                 && node->value_ >= 0 && node->value_ < param_store->count()) {
+        const ObObjParam &param = param_store->at(node->value_);
+        if (param.is_int()) {
+          value = param.get_int();
+        } else if (param.is_null()) {
+          is_null = true;
+        } else {
+          supported = false;
+        }
+      } else {
+        // Preserve existing costing for strings, unsigned values, mixed types,
+        // expressions, and unresolved prepare-time parameters.
+        supported = false;
+      }
+      if (supported && is_null) {
+        has_null = true;
+      } else if (supported) {
+        const int hash_ret = values.set_refactored(value, 0);
+        if (hash_ret != OB_SUCCESS && hash_ret != OB_HASH_EXIST) {
+          ret = hash_ret;
+          LOG_WARN("failed to count distinct IN values", K(ret));
+        }
+      }
+    }
+    is_small = supported && values.size() + (has_null ? 1 : 0) < threshold;
+  }
+  values.destroy();
   return ret;
 }
 
