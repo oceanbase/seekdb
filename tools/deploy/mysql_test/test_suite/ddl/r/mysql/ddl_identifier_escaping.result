@@ -1,0 +1,43 @@
+DROP TABLE IF EXISTS ddl_identifier_escaping;
+DROP TABLE IF EXISTS ddl_identifier_redefinition;
+CREATE TABLE ddl_identifier_escaping (
+id INT PRIMARY KEY,
+`a``b` INT,
+`e``num` ENUM('one', 'two'),
+`s``et` SET('one', 'two')
+);
+INSERT INTO ddl_identifier_escaping VALUES
+(1, 10, 'one', 'one'), (2, 20, 'two', 'one,two'), (3, NULL, NULL, NULL);
+CREATE UNIQUE INDEX uq_id ON ddl_identifier_escaping (id);
+CREATE UNIQUE INDEX uq_plain ON ddl_identifier_escaping (`a``b`);
+CREATE UNIQUE INDEX uq_enum ON ddl_identifier_escaping (`e``num`);
+CREATE UNIQUE INDEX uq_set ON ddl_identifier_escaping (`s``et`);
+SELECT id, `a``b`, `e``num`, `s``et`
+FROM ddl_identifier_escaping FORCE INDEX (uq_enum) ORDER BY id;
+id	a`b	e`num	s`et
+1	10	one	one
+2	20	two	one,two
+3	NULL	NULL	NULL
+INSERT INTO ddl_identifier_escaping VALUES (4, NULL, NULL, NULL);
+INSERT INTO ddl_identifier_escaping VALUES (5, 10, NULL, NULL);
+ERROR 23000: Duplicate entry '10' for key 'uq_plain'
+INSERT INTO ddl_identifier_escaping VALUES (6, 30, 'one', NULL);
+ERROR 23000: Duplicate entry '1' for key 'uq_enum'
+INSERT INTO ddl_identifier_escaping VALUES (7, 30, NULL, 'one');
+ERROR 23000: Duplicate entry '1' for key 'uq_set'
+SELECT COUNT(*) AS row_count FROM ddl_identifier_escaping;
+row_count
+4
+DROP TABLE ddl_identifier_escaping;
+CREATE TABLE ddl_identifier_redefinition (
+`key``id` INT PRIMARY KEY,
+`v``alue` VARCHAR(20),
+new_key INT NOT NULL
+);
+INSERT INTO ddl_identifier_redefinition VALUES (1, 'first', 11), (2, 'second', 22);
+ALTER TABLE ddl_identifier_redefinition DROP PRIMARY KEY, ADD PRIMARY KEY (new_key);
+SELECT `key``id`, `v``alue`, new_key FROM ddl_identifier_redefinition ORDER BY new_key;
+key`id	v`alue	new_key
+1	first	11
+2	second	22
+DROP TABLE ddl_identifier_redefinition;
