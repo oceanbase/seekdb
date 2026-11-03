@@ -179,7 +179,8 @@ int probe_local_io(const char *directory, LocalIOConfig &config)
   }
   // Keep the descriptor returned by exclusive creation. Remove its name before
   // any I/O so an interrupted probe does not leave a file in the log directory.
-#ifndef _WIN32
+  // OPFS does not allow removing files with an open synchronous access handle.
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
   if (::unlink(path.c_str()) < 0) {
     error = errno;
   }
@@ -228,6 +229,11 @@ int probe_local_io(const char *directory, LocalIOConfig &config)
   if (::close(fd) < 0 && error == 0) {
     error = errno;
   }
+#ifdef __EMSCRIPTEN__
+  if (::unlink(path.c_str()) < 0 && error == 0) {
+    error = errno;
+  }
+#endif
   if (error == 0) {
     config = detected;
   }
