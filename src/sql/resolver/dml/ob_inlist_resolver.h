@@ -25,6 +25,7 @@ namespace sql
 class ObValuesTableDef;
 class ObDMLResolver;
 class ObQueryRefRawExpr;
+class ObQueryCtx;
 struct DistinctObjMeta;
 struct InListRewriteInfo;
 
@@ -89,7 +90,8 @@ public:
                                          const ObStmt *stmt,
                                          common::ObIAllocator &alloc,
                                          bool &is_question_mark,
-                                         bool &is_enable);
+                                         bool &is_enable,
+                                         const ParseNode *&compact_in_list);
   // try to merge IN nodes under root_node (which is an AND/OR node)
   // if merge does not happen, the ret_node is root_node
   // if merge happened, the merged node will be a new node with merged children, and if:
@@ -101,6 +103,12 @@ public:
                                const ParseNode *&ret_node);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
+  static int try_compact_integer_inlist(const ParseNode &in_list,
+                                        const int64_t threshold,
+                                        const ParamStore *param_store,
+                                        ObQueryCtx *query_ctx,
+                                        common::ObIAllocator &alloc,
+                                        const ParseNode *&compact_in_list);
   static int get_inlist_rewrite_info(const ParseNode &in_list,
                                      const int64_t column_cnt,
                                      int64_t col_idx,
