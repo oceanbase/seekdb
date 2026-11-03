@@ -133,6 +133,28 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 // class ObAddWord
 
 
+namespace
+{
+// set_or_update() callback: adds this occurrence's count to the existing map
+// entry in place. It never touches the stored key, so the key bytes that were
+// materialized into the parse allocator stay stable. ObHashMap::set_or_update
+// hands the callback the whole (key, value) pair (the hashtable's default
+// pre_proc is the identity on the pair), hence the pair parameter.
+class WordCountUpdater
+{
+public:
+  explicit WordCountUpdater(const int64_t word_freq) : word_freq_(word_freq)
+  {}
+  int operator()(common::hash::HashMapPair<ObFTWord, int64_t> &pair)
+  {
+    pair.second += word_freq_;
+    return OB_SUCCESS;
+  }
+private:
+  int64_t word_freq_;
+};
+}  // anonymous namespace
+
 template <class MapType>
 ObAddWordT<MapType>::ObAddWordT(
     const ObFTParserProperty &property,
@@ -227,51 +249,38 @@ template <class MapType>
 int ObAddWordT<MapType>::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!flag_.groupby_word()) {
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-      // First insertion of a distinct word: the token bytes may live in a
-      // parser-owned buffer that is reused by the next get_next_token() call
-      // (e.g. the beng normalizer buffer). Materialize the key into the parse
-      // allocator once per distinct word instead of once per occurrence.
-      // With the casedown flag on, `word` is already a fresh copy produced by
-      // casedown_word() in this parse allocator (it can never alias the
-      // transient token buffer), so it serves as the map key directly and the
-      // extra per-distinct-word memcpy is skipped. Any other producer still
-      // goes through dup_word(). Note OB_FAIL() assigns the callee's return
-      // value to ret; the direct-key path must clear the OB_HASH_NOT_EXIST
-      // left behind by get_refactored() explicitly.
-      ObFTWord stable_word;
-      if (flag_.casedown()) {
-        stable_word = word;
-        ret = OB_SUCCESS;
-      } else if (OB_FAIL(dup_word(word, stable_word))) {
-        // ret already carries the dup_word failure
-      } else {
-        ret = OB_SUCCESS;
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(word_map_.set_refactored(stable_word, word_count, 1/*overwrite*/))) {
-        } else {
-        }
-      }
-    } else {
-      // Update the aggregate in place. set_refactored() with the cover flag
-      // replaces the whole (key, value) pair, which would re-point the stored
-      // key at the transient token buffer and corrupt it after reuse.
-      word_count += word_freq;
-      int64_t *count_ptr = word_map_.get(word);
-      if (OB_ISNULL(count_ptr)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        *count_ptr = word_count;
+    // Single map operation per token: set_or_update() hashes the key once and
+    // either inserts (key, 1) for a distinct word or runs the in-place update
+    // callback for a repeated one. The previous get-then-set flow hashed the
+    // same key twice on every token (insert: get + set, update: get + get).
+    //
+    // The token bytes may live in a parser-owned buffer that is reused by the
+    // next get_next_token() call (e.g. the beng normalizer buffer), so the key
+    // is materialized into the parse allocator before it can be stored. With
+    // the casedown flag on, `word` is already a fresh copy produced by
+    // casedown_word() in this parse allocator (it can never alias the
+    // transient token buffer), so it serves as the map key directly and the
+    // per-word memcpy is skipped. Any other producer still goes through
+    // dup_word(); on the update path the copied bytes are simply left unused
+    // in the parse arena, which is reset wholesale at the end of the call.
+    // set_or_update() never re-points the stored key on the update path, so
+    // the aggregation result is identical to the previous flow and the map
+    // insertion order (hence the TOKENIZE output order) is unchanged.
+    ObFTWord stable_word;
+    if (flag_.casedown()) {
+      stable_word = word;
+    } else if (OB_FAIL(dup_word(word, stable_word))) {
+      // ret already carries the dup_word failure
+    }
+    if (OB_SUCC(ret)) {
+      WordCountUpdater updater(word_freq);
+      if (OB_FAIL(word_map_.set_or_update(stable_word, 1/*initial word count*/, updater))) {
       }
     }
   }

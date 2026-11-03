@@ -379,7 +379,15 @@ int ObFTParseHelper::segment_dispatch(
   } else if (OB_ISNULL(cs = common::ObCharset::get_charset(type))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    words.reuse();
+    // Clear the map only when it can hold data from a previous segment()
+    // call. Every current caller creates the map right before segment(), so
+    // the per-bucket walk below is pure overhead on the tokenize hot path (up
+    // to 997 buckets per call); an empty map is already in the cleared state
+    // (all bucket heads NULL, size 0), so skipping reuse() here is
+    // observationally identical for every caller.
+    if (OB_UNLIKELY(0 != words.size())) {
+      words.reuse();
+    }
     ObAddWordT<MapType> add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
     if (OB_FAIL(segment_tokens(
                     parser_property_,
