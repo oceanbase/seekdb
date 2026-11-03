@@ -60,6 +60,7 @@ public:
       int64_t &scanned_rows, bool &complete, int64_t &peak_memory) override;
 private:
   int begin(const common::ObIArray<GraphElementIdentity> &sources);
+  int64_t retained_wrapper_memory() const;
 
   IGraphExpandAccess &child_;
   GraphAdjacencyCache cache_;

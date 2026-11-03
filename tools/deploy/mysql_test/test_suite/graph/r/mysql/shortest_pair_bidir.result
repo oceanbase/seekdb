@@ -164,4 +164,14 @@ SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_probe MATCH ANY SHORTEST
 COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
 distance
 2
+retained_cache_and_probe_memory_share_one_work_area
+SELECT s.binding_id,g.distance FROM shortest_probe_seed s,LATERAL (
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(shortest_probe MATCH ANY SHORTEST
+(a IS node WHERE a.k=s.source_key)-[e IS link]->{1,3}
+(b IS node WHERE b.k=s.goal_key) COLUMNS(COUNT(e.id) AS hops)) p
+HAVING COUNT(*)>0) g ORDER BY s.binding_id;
+binding_id	distance
+1	2
+2	2
+3	2
 DROP TABLE plan_table;
