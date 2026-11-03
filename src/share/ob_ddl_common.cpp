@@ -541,6 +541,55 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+namespace
+{
+// Maximum size of the escaped form of an identifier produced below. Column
+// names are bounded by OB_MAX_COLUMN_NAME_LENGTH (128), so 512 always leaves
+// room for the doubled form plus the terminator; the bound is still checked
+// defensively at run time.
+static const int64_t DDL_IDENTIFIER_ESCAPE_BUF_LEN = 512;
+
+// Escape a MySQL identifier by doubling every backtick in it, so that a column
+// name coming from a user schema cannot terminate the backtick-quoted
+// identifier that ObDDLUtil::generate_column_name_str() emits.
+//
+// The helper deliberately lives inside share: shared DDL code must stay
+// independent of the upper sql module, which is why this does not call
+// sql::ObSQLUtils (see issue #1469).
+int escape_ddl_identifier(
+    const ObString &identifier,
+    char *buf,
+    const int64_t buf_size,
+    ObString &escaped)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(identifier.ptr()) || OB_UNLIKELY(identifier.length() < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid identifier to escape", K(ret), K(identifier.length()));
+  } else {
+    int64_t pos = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < identifier.length(); ++i) {
+      // one byte for the character itself, one for its optional backtick copy
+      // and one for the trailing terminator.
+      if (OB_UNLIKELY(pos + 3 > buf_size)) {
+        ret = OB_SIZE_OVERFLOW;
+        LOG_WARN("escaped identifier does not fit into the buffer", K(ret), K(identifier.length()));
+      } else {
+        buf[pos++] = identifier[i];
+        if ('`' == identifier[i]) {
+          buf[pos++] = '`';
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      buf[pos] = '\0';
+      escaped.assign_ptr(buf, static_cast<ObString::obstr_size_t>(pos));
+    }
+  }
+  return ret;
+}
+}  // namespace
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -550,29 +599,39 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
-  // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
-    }
-  }
-  // append original column name
-  if (OB_SUCC(ret) && with_origin_name) {
-    if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+  // Escape the column name before it is quoted: otherwise a column name that
+  // contains a backtick would close the quoted identifier early and change the
+  // shape of the generated DDL statement (issue #1469).
+  char escaped_name_buf[DDL_IDENTIFIER_ESCAPE_BUF_LEN];
+  ObString escaped_name;
+  if (OB_FAIL(escape_ddl_identifier(column_name_info.column_name_, escaped_name_buf,
+      sizeof(escaped_name_buf), escaped_name))) {
+    LOG_WARN("failed to escape the column name of a DDL statement", K(ret));
+  } else {
+    // append comma
+    if (with_comma) {
+      if (OB_FAIL(sql_string.append_fmt(", "))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
     }
-  }
-  // append AS
-  if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+    // append original column name
+    if (OB_SUCC(ret) && with_origin_name) {
+      if (column_name_info.is_enum_set_need_cast_) {
+        // Enum and set values are cast to unsigned before being appended to a macro block.
+        if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_name.length(), escaped_name.ptr(), split_char))) {
+        }
+      } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_name.length(), escaped_name.ptr(), split_char))) {
+      }
     }
-  }
-  // append alias column name
-  if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    // append AS
+    if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
+      if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+      }
+    }
+    // append alias column name
+    if (OB_SUCC(ret) && with_alias_name) {
+      if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
+          escaped_name.length(), escaped_name.ptr(), split_char))) {
+      }
     }
   }
   return ret;
