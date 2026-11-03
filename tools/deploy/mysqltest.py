@@ -263,10 +263,7 @@ def discover_cases(repo_root, suites=(), test_set=(), include_excluded=False,
     mysql_test_dir = repo_root / "tools" / "deploy" / "mysql_test"
     test_dir = mysql_test_dir / "t"
     result_dir = mysql_test_dir / "r" / "mysql"
-    suite_dirs = (
-        mysql_test_dir / "test_suite",
-        repo_root / "test" / "mysqltest" / "test_suite",
-    )
+    suite_dir = mysql_test_dir / "test_suite"
     if not test_dir.is_dir():
         raise RunnerError("mysqltest case directory does not exist: {}".format(test_dir))
     excluded_cases = set(load_excluded_case_names(config_path))
@@ -280,20 +277,19 @@ def discover_cases(repo_root, suites=(), test_set=(), include_excluded=False,
             name, test_file, result_dir / (name + ".result")
         )
 
-    for suite_dir in suite_dirs:
-        if suite_dir.is_dir():
-            for test_file in sorted(suite_dir.glob("*/t/*.test")):
-                if not test_file.is_file():
-                    continue
-                suite_name = test_file.parent.parent.name
-                name = "{}.{}".format(suite_name, test_file.stem)
-                if name in available_cases:
-                    raise RunnerError("duplicate mysqltest case name: {}".format(name))
-                available_cases[name] = MysqltestCase(
-                    name,
-                    test_file,
-                    test_file.parent.parent / "r" / "mysql" / (test_file.stem + ".result"),
-                )
+    if suite_dir.is_dir():
+        for test_file in sorted(suite_dir.glob("*/t/*.test")):
+            if not test_file.is_file():
+                continue
+            suite_name = test_file.parent.parent.name
+            name = "{}.{}".format(suite_name, test_file.stem)
+            if name in available_cases:
+                raise RunnerError("duplicate mysqltest case name: {}".format(name))
+            available_cases[name] = MysqltestCase(
+                name,
+                test_file,
+                test_file.parent.parent / "r" / "mysql" / (test_file.stem + ".result"),
+            )
 
     unknown_exclusions = sorted(excluded_cases - set(available_cases))
     if unknown_exclusions:
@@ -306,13 +302,13 @@ def discover_cases(repo_root, suites=(), test_set=(), include_excluded=False,
     suites = selection_values(suites)
     requested_cases = selection_values(test_set)
     known_suites = {case.test_file.parent.parent.name for case in available_cases.values()
-                    if case.test_file.parent.parent.parent in suite_dirs}
+                    if case.test_file.parent.parent.parent == suite_dir}
     unknown_suites = sorted(suites - known_suites)
     if unknown_suites:
         raise RunnerError("unknown mysqltest suites: {}".format(", ".join(unknown_suites)))
     candidates = {
         name: case for name, case in available_cases.items()
-        if not suites or (case.test_file.parent.parent.parent in suite_dirs
+        if not suites or (case.test_file.parent.parent.parent == suite_dir
                           and case.test_file.parent.parent.name in suites)
     }
     if requested_cases:

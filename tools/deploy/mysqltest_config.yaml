@@ -1,6 +1,6 @@
 version: 2.0
-# GitHub CI mysqltest discovery uses blacklist mode: every discovered case
-# under tools/deploy/mysql_test or test/mysqltest is run unless excluded below.
+# GitHub CI mysqltest discovery uses blacklist mode: every case under
+# tools/deploy/mysql_test is run unless listed in exclude-set below.
 runtime_configs:
   psmall:
     exclude-set:
