@@ -186,7 +186,9 @@ fn utf16_to_byte(text: &str, start: i64) -> Result<usize> {
     if units == start {
         Ok(text.len())
     } else {
-        Err(err(ARGUMENT, "start position exceeds input"))
+        // Preserve SQL error 1139 for positions beyond the input. Other
+        // invalid arguments, including a split surrogate pair, remain 1210.
+        Err(err(GENERIC, "start position exceeds input"))
     }
 }
 
