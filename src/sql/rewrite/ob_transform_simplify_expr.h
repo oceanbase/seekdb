@@ -182,6 +182,7 @@ private:
   int do_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObIArray<ObRawExpr*> &exprs);
   int pull_similar_expr(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int recursive_pull_similar(ObDMLStmt *stmt, ObRawExpr* &expr, bool &trans_happened);
+  int convert_integer_or_equalities_to_in(ObRawExpr *&expr, bool &trans_happened);
   int do_pull_similar(ObDMLStmt *stmt,
                       ObRawExpr* &expr,
                       ObIArray<ObRawExpr*> &exprs,
