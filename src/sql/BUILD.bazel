@@ -205,6 +205,27 @@ cc_library(
     visibility = ["//src/sql:__subpackages__"],
 )
 
+# The AI function unittests drive the provider adapters and the prompt template
+# substitution directly. Those are SQL internals reached from outside the module,
+# so this target is the only seam exposing them (the same shape as
+# //src/storage:tx_replay_test_headers).
+cc_library(
+    name = "ai_func_test_headers",
+    testonly = True,
+    hdrs = [
+        "engine/expr/ob_expr_ai/ob_ai_func.h",
+        "engine/expr/ob_expr_ai/ob_ai_func_utils.h",
+    ],
+    deps = [
+        ":sql_runtime_interface",
+        "//src/oblib:oblib_base",
+        "//src/share:ai_endpoint_interface",
+        "//src/share:json_access",
+    ],
+    tags = ["manual"],
+    visibility = ["//unittest/sql/engine/expr:__pkg__"],
+)
+
 _SQL_RUNTIME_UNITY_GROUPS = groups_without(
     SQL_UNITY_GROUPS,
     OPTIMIZER_GROUP_NAMES,

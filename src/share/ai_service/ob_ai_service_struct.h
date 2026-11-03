@@ -81,6 +81,10 @@ public:
                K_(parameters),
                K_(request_transform_fn),
                K_(response_transform_fn));
+public:
+  // Providers which are usually deployed as a private service and accept
+  // requests without an api key (e.g. a local Ollama instance).
+  static bool is_provider_without_access_key(const ObString &provider);
 private:
   static const ObString DEFAULT_SCOPE;
   static bool is_valid_provider(const ObString &provider);
