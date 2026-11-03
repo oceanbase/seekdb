@@ -32,6 +32,144 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+namespace
+{
+struct IntegerBound
+{
+  ObRawExpr *column_ = NULL;
+  ObRawExpr *endpoint_ = NULL;
+  bool upper_ = false;
+  bool strict_ = false;
+};
+
+bool extract_integer_bound(ObRawExpr &expr, IntegerBound &bound)
+{
+  ObItemType type = expr.get_expr_type();
+  if (2 != expr.get_param_count()
+      || (T_OP_LT != type && T_OP_LE != type && T_OP_GT != type && T_OP_GE != type)) {
+    return false;
+  }
+  ObRawExpr *column = expr.get_param_expr(0);
+  ObRawExpr *endpoint = expr.get_param_expr(1);
+  if (endpoint->is_column_ref_expr()) {
+    std::swap(column, endpoint);
+    switch (type) {
+      case T_OP_LT: type = T_OP_GT; break;
+      case T_OP_LE: type = T_OP_GE; break;
+      case T_OP_GT: type = T_OP_LT; break;
+      case T_OP_GE: type = T_OP_LE; break;
+      default: break;
+    }
+  }
+  // Restrict implication to comparisons without casts or numeric coercion.
+  if (!column->is_column_ref_expr() || !ob_is_int_tc(column->get_data_type())
+      || !endpoint->is_const_raw_expr() || !endpoint->is_static_const_expr()
+      || !ob_is_int_tc(endpoint->get_data_type())
+      || static_cast<ObConstRawExpr *>(endpoint)->is_dynamic_eval_questionmark()) {
+    return false;
+  }
+  bound.column_ = column;
+  bound.endpoint_ = endpoint;
+  bound.upper_ = T_OP_LT == type || T_OP_LE == type;
+  bound.strict_ = T_OP_LT == type || T_OP_GT == type;
+  return true;
+}
+
+int check_bound_implication(ObTransformerCtx &ctx,
+                            const IntegerBound &strong,
+                            const IntegerBound &weak,
+                            bool &implies)
+{
+  int ret = OB_SUCCESS;
+  // At equal endpoints, an inclusive bound cannot imply a strict bound.
+  const bool inclusive = strong.strict_ || !weak.strict_;
+  const ObItemType op = strong.upper_
+      ? (inclusive ? T_OP_LE : T_OP_LT)
+      : (inclusive ? T_OP_GE : T_OP_GT);
+  ObRawExpr *constraint = NULL;
+  implies = false;
+  if (OB_FAIL(ObTransformUtils::compare_const_expr_result(
+      &ctx, *strong.endpoint_, op, *weak.endpoint_, implies))) {
+  } else if (implies) {
+    // Literal constants can be automatically parameterized. Keep the implication
+    // as a plan-cache condition so reversing their values cannot reuse this plan.
+    if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
+        *ctx.expr_factory_, ctx.session_info_, op, constraint,
+        strong.endpoint_, weak.endpoint_))) {
+    } else if (OB_FAIL(ObTransformUtils::add_param_bool_constraint(&ctx, constraint, true))) {
+    }
+  }
+  return ret;
+}
+} // namespace
+
+int ObTransformPreProcess::remove_redundant_ann_bounds(ObDMLStmt &stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  ObIArray<ObRawExpr *> &conditions = stmt.get_condition_exprs();
+  const ObHint *no_rewrite_hint = stmt.get_stmt_hint().get_no_rewrite_hint();
+  bool enabled = true;
+  if (!stmt.has_vec_approx() || conditions.count() < 2
+      || stmt.get_query_ctx()->get_global_hint().disable_query_transform()) {
+    // Preprocessing also runs when optional transformations are disabled.
+  } else if (NULL != no_rewrite_hint) {
+    // Preserve the explicit opt-out in the generated outline, scoped to this
+    // query block. Replay must skip the same reduction and consume this hint.
+    ObTransHint *outline_hint = NULL;
+    ObString qb_name;
+    const ObQueryHint &query_hint = stmt.get_query_ctx()->get_query_hint();
+    if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite_hint))) {
+    } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_NO_REWRITE, outline_hint))) {
+    } else if (OB_FAIL(stmt.get_qb_name(qb_name))) {
+    } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(outline_hint))) {
+    } else {
+      outline_hint->set_qb_name(qb_name);
+      if (query_hint.has_outline_data()
+          && query_hint.is_valid_outline_transform(ctx_->trans_list_loc_, no_rewrite_hint)) {
+        ++ctx_->trans_list_loc_;
+      }
+    }
+  } else if (OB_FAIL(ctx_->session_info_->is_transformation_enabled(enabled))) {
+  } else if (enabled) {
+    // Preprocessing must make the same reduction when replaying an outline.
+    // Otherwise EXPLAIN sees different predicates and parameter constraints.
+    // flatten_conditions has exposed only this query block's AND conjuncts.
+    // Leave OR subtrees, join conditions, ordering and Top-K boundaries intact.
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      IntegerBound kept;
+      if (!extract_integer_bound(*conditions.at(i), kept)) {
+        continue;
+      }
+      for (int64_t j = i + 1; OB_SUCC(ret) && j < conditions.count();) {
+        IntegerBound next;
+        bool drop_next = false;
+        bool drop_kept = false;
+        if (!extract_integer_bound(*conditions.at(j), next)
+            || kept.upper_ != next.upper_
+            || !kept.column_->same_as(*next.column_)) {
+          ++j;
+        } else if (OB_FAIL(check_bound_implication(*ctx_, kept, next, drop_next))) {
+        } else if (!drop_next
+                   && OB_FAIL(check_bound_implication(*ctx_, next, kept, drop_kept))) {
+        } else if (!drop_next && !drop_kept) {
+          ++j;
+        } else {
+          if (drop_kept) {
+            conditions.at(i) = conditions.at(j);
+            kept = next;
+          }
+          if (OB_FAIL(conditions.remove(j))) {
+          } else {
+            trans_happened = true;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                               ObDMLStmt *&stmt,
                                               bool &trans_happened)
@@ -56,6 +194,13 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         OPT_TRACE("flatten condition:", is_happened);
       }
     }  
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(remove_redundant_ann_bounds(*stmt, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("remove redundant ANN bounds:", is_happened);
+      }
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {
