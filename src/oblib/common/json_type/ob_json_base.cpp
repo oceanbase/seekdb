@@ -494,18 +494,35 @@ int ObIJsonBase::calc_json_hash_value(uint64_t seed, hash_algo algorithm, uint64
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator;
   ObString binary;
-  const json::HashCapability capability(algorithm);
   if (OB_FAIL(const_cast<ObIJsonBase *>(this)->get_raw_binary(binary, &allocator))) {
-  } else {
-    const json::HashResult hashed = json::hash_binary(
-        {reinterpret_cast<const uint8_t *>(binary.ptr()), static_cast<size_t>(binary.length())}, seed, capability);
-    if (hashed.platform_error != OB_SUCCESS) { ret = hashed.platform_error; }
-    else if (hashed.status != json::Status::Ok) { ret = OB_ERR_UNEXPECTED; }
-    else { result = hashed.value; }
+  } else if (OB_FAIL(hash_json_binary(binary, seed, algorithm, result))) {
   }
   return ret;
 }
 
+int hash_json_binary(const ObString &input, uint64_t seed, hash_algo algorithm, uint64_t &result)
+{
+  const json::HashCapability capability(algorithm);
+  const json::HashResult hashed = json::hash_binary(
+      {reinterpret_cast<const uint8_t *>(input.ptr()), static_cast<size_t>(input.length())}, seed, capability);
+  const int ret = hashed.platform_error != OB_SUCCESS ? hashed.platform_error
+      : hashed.status != json::Status::Ok ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+  if (ret == OB_SUCCESS) { result = hashed.value; }
+  return ret;
+}
+
+int compare_json_binary(const ObString &left, const ObString &right, int &result)
+{
+  const json::OrderResult ordered = json::order_binary(
+      {reinterpret_cast<const uint8_t *>(left.ptr()), static_cast<size_t>(left.length())},
+      {reinterpret_cast<const uint8_t *>(right.ptr()), static_cast<size_t>(right.length())});
+  result = ordered.order;
+  return ordered.platform_error != OB_SUCCESS ? ordered.platform_error
+      : ordered.status == json::Status::Ok ? OB_SUCCESS
+      : ordered.status == json::Status::UnsupportedComparison ? OB_OP_NOT_ALLOW
+      : ordered.status == json::Status::NumericOverflow ? OB_NUMERIC_OVERFLOW
+      : OB_ERR_UNEXPECTED;
+}
 int ObIJsonBase::compare(const ObIJsonBase &other, int &res, bool is_path) const
 {
   int ret = OB_SUCCESS;
@@ -527,15 +544,7 @@ int ObIJsonBase::compare(const ObIJsonBase &other, int &res, bool is_path) const
     if (OB_FAIL(const_cast<ObIJsonBase *>(this)->get_raw_binary(left, &allocator))) {
     } else if (OB_FAIL(const_cast<ObIJsonBase &>(other).get_raw_binary(right, &allocator))) {
     } else {
-      const json::OrderResult result = json::order_binary(
-          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(left.ptr()), left.length()),
-          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(right.ptr()), right.length()));
-      res = result.order;
-      ret = result.platform_error != OB_SUCCESS ? result.platform_error
-          : result.status == json::Status::Ok ? OB_SUCCESS
-          : result.status == json::Status::UnsupportedComparison ? OB_OP_NOT_ALLOW
-          : result.status == json::Status::NumericOverflow ? OB_NUMERIC_OVERFLOW
-          : OB_ERR_UNEXPECTED;
+      ret = compare_json_binary(left, right, res);
     }
   }
   return ret;

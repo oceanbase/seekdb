@@ -276,6 +276,22 @@ pub(crate) fn compare_values(
     ) {
         let a = left.number()?;
         let b = right.number()?;
+        use crate::Number::{I64, U64};
+        match (&a, &b) {
+            (I64(a), I64(b)) => return Ok(a.cmp(b)),
+            (U64(a), U64(b)) => return Ok(a.cmp(b)),
+            (I64(a), U64(b)) => return Ok(if *a < 0 {
+                std::cmp::Ordering::Less
+            } else {
+                (*a as u64).cmp(b)
+            }),
+            (U64(a), I64(b)) => return Ok(if *b < 0 {
+                std::cmp::Ordering::Greater
+            } else {
+                a.cmp(&(*b as u64))
+            }),
+            _ => {}
+        }
         if let (crate::Number::F64(a), crate::Number::F64(b)) = (&a, &b) {
             return Ok(a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         }

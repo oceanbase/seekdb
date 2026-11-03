@@ -2619,3 +2619,25 @@ fn merge_binary_strings_keep_invalid_utf8_bytes_and_duplicate_last_values() {
     let merger = MergeAccumulator::new(MergeMode::Preserve).push_prepared(MergeArgument::from_document(document).unwrap()).unwrap();
     assert_eq!(merger.finish().unwrap().unwrap(), crate::parse_binary(br#"{"key":[false]}"#, Default::default()).unwrap());
 }
+
+#[test]
+fn numeric_order_preserves_signed_and_unsigned_integer_boundaries() {
+    use crate::construction::Scalar;
+    fn no_temporal(_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>) -> Result<std::cmp::Ordering, ()> {
+        unreachable!()
+    }
+    let values: Vec<(Vec<u8>, i128)> = [i64::MIN, -1, 0, 1, 127, 256, i64::MAX]
+        .into_iter().map(|value| (Scalar::Signed(value).encode().unwrap(), value as i128))
+        .chain([0, 1, 127, 256, i64::MAX as u64, i64::MAX as u64 + 1, u64::MAX]
+            .into_iter().map(|value| (Scalar::Unsigned(value).encode().unwrap(), value as i128)))
+        .collect();
+    for (a, expected_a) in &values {
+        for (b, expected_b) in &values {
+            let a = BinaryDocument::new(a.as_slice()).unwrap();
+            let b = BinaryDocument::new(b.as_slice()).unwrap();
+            let actual = crate::compare::order(a.root().unwrap(), b.root().unwrap(),
+                &mut no_temporal).unwrap();
+            assert_eq!(actual, expected_a.cmp(expected_b));
+        }
+    }
+}

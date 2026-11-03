@@ -1058,12 +1058,9 @@ struct DatumJsonHashCalculator : public DefHashMethod<T>
     } else if (OB_FAIL(str_iter.init(0, options, &allocator))) {
     } else if (OB_FAIL(str_iter.get_full_data(j_bin_str))) {
     } else {
-      ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &allocator);
-      ObIJsonBase *j_base = &j_bin;
       if (j_bin_str.length() == 0) {
         res = seed;
-      } else if (OB_FAIL(j_bin.reset_iter())) {
-      } else if (OB_FAIL(j_base->calc_json_hash_value(seed, T::hash, res))) {
+      } else if (OB_FAIL(hash_json_binary(j_bin_str, seed, T::hash, res))) {
       }
     }
     return ret;

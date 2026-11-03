@@ -351,6 +351,9 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObIJsonBase);
 };
 
+int compare_json_binary(const ObString &left, const ObString &right, int &result);
+int hash_json_binary(const ObString &input, uint64_t seed, hash_algo algorithm, uint64_t &result);
+
 class ObJsonBaseFactory
 {
 public:
