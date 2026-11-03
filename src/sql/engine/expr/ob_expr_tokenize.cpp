@@ -136,7 +136,7 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
 {
   int ret = OB_SUCCESS;
   ObString str;
-  ObIJsonBase *val;
+  ObIJsonBase *val = nullptr;
 
   if (OB_UNLIKELY(nullptr == obj)) {
     ret = OB_INVALID_ARGUMENT;
@@ -187,7 +187,7 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
   } else {
     ret = OB_INVALID_ARGUMENT;
     ObSqlString message;
-    message.append_fmt("config: %s", str.ptr());
+    message.append_fmt("config: %.*s", str.length(), str.ptr());
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, message.ptr());
   }
   return ret;

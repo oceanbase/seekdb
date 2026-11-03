@@ -1103,9 +1103,9 @@ int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
     ret = OB_INVALID_ARGUMENT;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < array->element_count(); i++) {
-      ObIJsonBase *array_value_item;
+      ObIJsonBase *array_value_item = nullptr;
       ObString config_name;
-      ObIJsonBase *config_value;
+      ObIJsonBase *config_value = nullptr;
       if (OB_FAIL(array->get_array_element(i, array_value_item))) {
       } else if (array_value_item->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
