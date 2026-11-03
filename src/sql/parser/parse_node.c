@@ -877,7 +877,9 @@ ParseNode *push_back_child(void *malloc_pool, int *error_code, ParseNode *left_n
                            T_SET_UNION == left_node->type_ ||
                            T_SET_UNION_ALL == left_node->type_ ||
                            T_VALUE_VECTOR == left_node->type_ || 
-                           T_VALUE_LIST == left_node->type_))) {
+                           T_VALUE_LIST == left_node->type_ ||
+                           T_READ_FILE_ARGS == left_node->type_ ||
+                           T_COPY_OPTIONS == left_node->type_))) {
     *error_code = OB_PARSER_ERR_UNEXPECTED;
   } else {
     int64_t capacity = get_need_reserve_capacity(left_node->num_child_ + 1);

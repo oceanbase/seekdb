@@ -20,6 +20,9 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_table_executor.h"
+#include "sql/session/ob_inner_sql_connection.h"
+#include "observer/ob_inner_sql_connection.h"
+#include "query/api/query/session/ob_inner_sql_connection_access.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/runtime/ob_query_runtime_environment.h"
@@ -39,6 +42,7 @@
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
+#include "sql/engine/dml/ob_ai_column_dml.h"
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "share/ob_structured_event_logger.h"
@@ -751,8 +755,92 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obcall::ObExchangeP
   return ret;
 }
 
+int ObAlterTableExecutor::execute_ai_column_retry(ObExecContext &ctx, ObAlterTableStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
+  const ObAlterTableStmt::AiColumnRetryInfo &info = stmt.get_ai_column_retry();
+  ObSqlString sql;
+  ObIInnerSQLConnection *inner_conn = NULL;
+  common::sqlclient::ObISQLConnectionGuard conn_guard;
+  int64_t affected_rows = 0;
+  ObString request_id;
+  ObString state_column_name;
+  ObString request_column_name;
+  if (OB_ISNULL(session)) {
+    ret = OB_NOT_INIT;
+  } else if (stmt.get_alter_table_action_count() > 1) {
+    // retry targets exactly one AI column and cannot be mixed with another
+    // alter action of the statement
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "combining AI COLUMN RETRY with another ALTER action");
+  } else if (OB_FAIL(ObAiColumnDml::gen_request_id(ctx.get_allocator(), request_id))) {
+    LOG_WARN("fail to generate the request id of the retry", K(ret));
+  } else if (OB_FAIL(ObAiColumnDml::build_hidden_col_name(info.column_name_, "__ai_state_",
+                                                          ctx.get_allocator(), state_column_name))
+             || OB_FAIL(ObAiColumnDml::build_hidden_col_name(info.column_name_, "__ai_request_",
+                                                             ctx.get_allocator(), request_column_name))) {
+    LOG_WARN("fail to build the hidden column names of the retry", K(ret));
+  } else if (OB_FAIL(sql.append_fmt("UPDATE `%.*s`.`%.*s` SET `%.*s` = NULL, `%.*s` = '%.*s', `%.*s` = ",
+                                    stmt.get_database_name().length(), stmt.get_database_name().ptr(),
+                                    stmt.get_table_name().length(), stmt.get_table_name().ptr(),
+                                    info.column_name_.length(), info.column_name_.ptr(),
+                                    state_column_name.length(), state_column_name.ptr(),
+                                    static_cast<int32_t>(STRLEN(ObAiColumnDml::STATE_PENDING)),
+                                    ObAiColumnDml::STATE_PENDING,
+                                    request_column_name.length(), request_column_name.ptr()))) {
+  } else if (info.rowkey_expr_.empty()) {
+    // the table has no row key, the request id of the statement is used as is
+    ret = sql.append_fmt("'%.*s'", request_id.length(), request_id.ptr());
+  } else {
+    // every row must own an unique request id, the row key of the row is
+    // appended to the request id of the statement
+    ret = sql.append_fmt("concat('%.*s', ':', %.*s)",
+                         request_id.length(), request_id.ptr(),
+                         info.rowkey_expr_.length(), info.rowkey_expr_.ptr());
+  }
+  if (OB_FAIL(ret)) {
+  } else if (info.has_where_ && OB_FAIL(sql.append_fmt(" WHERE %.*s",
+                                                       info.where_text_.length(), info.where_text_.ptr()))) {
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_owned_session(
+                     false /*use_static_engine*/, 0 /*group_id*/, conn_guard))) {
+  } else if (OB_ISNULL(inner_conn = as_inner_sql_connection(conn_guard.get_ptr()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the connection of the ai column retry is not an inner connection", K(ret));
+  } else {
+    // the retry runs on an inner session: the hidden columns of the ai columns
+    // are visible there and the write protection is waived for the internal
+    // invalidation of the result column
+    ObSQLSessionInfo *retry_session =
+        query::ObInnerSQLConnectionAccess::get_session(conn_guard.get_ptr());
+    if (OB_ISNULL(retry_session)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the session of the ai column retry is null", K(ret));
+    } else {
+      const ObSQLSessionInfo::AiColumnInternalMode saved_mode =
+          retry_session->get_ai_column_internal_mode();
+      retry_session->set_ai_column_internal_mode(ObSQLSessionInfo::AI_COL_MODE_INVALIDATE);
+      if (OB_FAIL(inner_conn->start_transaction(false))) {
+        LOG_INFO("fail to start the transaction of the ai column retry", K(ret));
+      } else if (OB_FAIL(inner_conn->execute_write(sql.ptr(), affected_rows))) {
+        LOG_INFO("fail to execute the ai column retry", K(ret), K(sql));
+        (void)inner_conn->rollback();
+      } else if (OB_FAIL(inner_conn->commit())) {
+        LOG_INFO("fail to commit the ai column retry", K(ret), K(affected_rows));
+      } else {
+        LOG_INFO("the ai column retry is committed", K(affected_rows), K(sql));
+      }
+      retry_session->set_ai_column_internal_mode(saved_mode);
+    }
+  }
+  return ret;
+}
+
 int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
 {
+  if (stmt.has_ai_column_retry()) {
+    return execute_ai_column_retry(ctx, stmt);
+  }
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObAlterTableArg &alter_table_arg = stmt.get_alter_table_arg();

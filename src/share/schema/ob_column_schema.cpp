@@ -94,6 +94,11 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
       }
     }
 
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(deep_copy_str(src_schema.ai_spec_text_, ai_spec_text_))) {
+      }
+    }
+
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
     }
@@ -128,6 +133,7 @@ int64_t ObColumnSchemaV2::get_convert_size() const
     convert_size += extended_type_info_.at(i).length() + 1;
   }
   convert_size += local_session_vars_.get_deep_copy_size();
+  convert_size += ai_spec_text_.length() + 1;
   return convert_size;
 }
 
@@ -188,6 +194,7 @@ void ObColumnSchemaV2::reset()
   skip_index_attr_.reset();
   lob_chunk_size_ = OB_DEFAULT_LOB_CHUNK_SIZE;
   local_session_vars_.reset();
+  ai_spec_text_.reset();
   ObSchema::reset();
 }
 
@@ -235,7 +242,8 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
                 sub_type_,
                 skip_index_attr_,
                 lob_chunk_size_,
-                local_session_vars_);
+                local_session_vars_,
+                ai_spec_text_);
   }
 
   return ret;
@@ -295,7 +303,8 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
                 sub_type_,
                 skip_index_attr_,
                 lob_chunk_size_,
-                local_session_vars_);
+                local_session_vars_,
+                ai_spec_text_);
   }
   return ret;
 }
@@ -340,7 +349,8 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
               sub_type_,
               skip_index_attr_,
               lob_chunk_size_,
-              local_session_vars_);
+              local_session_vars_,
+              ai_spec_text_);
   return len;
 }
 

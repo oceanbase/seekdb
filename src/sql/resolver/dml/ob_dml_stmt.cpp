@@ -194,6 +194,8 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   } else if (OB_FAIL(part_names_.assign(other.part_names_))) {
   } else if (is_values_table() &&
              OB_FAIL(deep_copy_values_table_def(*other.values_table_def_, expr_copier, allocator))) {
+  } else if (is_file_table() &&
+             OB_FAIL(deep_copy_file_table_def(*other.file_table_def_, expr_copier, allocator))) {
   } else { /* do nothing */ }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(other.sample_info_)) {
@@ -1558,7 +1560,8 @@ int ObDMLStmt::formalize_stmt_expr_reference(ObRawExprFactory *expr_factory,
       } else if (table_item->is_function_table() ||
                  table_item->is_json_table() ||
                  table_item->for_update_ ||
-                 table_item->is_values_table()) {
+                 table_item->is_values_table() ||
+                 table_item->is_file_table()) {
         if (OB_FAIL(set_sharable_expr_reference(*column_item.expr_, ExplicitedRefType::REF_BY_NORMAL))) {
         } else if (table_item->is_json_table()) {
           if (NULL != column_item.default_value_expr_ 
@@ -4462,6 +4465,67 @@ int TableItem::deep_copy_values_table_def(const ObValuesTableDef& table_def,
   } else {
     values_table_def_ = new (tmp) ObValuesTableDef();
     if (OB_FAIL(values_table_def_->deep_copy(table_def, expr_copier, allocator))) {
+    }
+  }
+  return ret;
+}
+
+int TableItem::deep_copy_file_table_def(const ObFileTableDef& table_def,
+                                        ObIRawExprCopier &expr_copier,
+                                        ObIAllocator* allocator)
+{
+  int ret = OB_SUCCESS;
+  void* tmp = nullptr;
+  UNUSED(expr_copier);
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(tmp = allocator->alloc(sizeof(ObFileTableDef)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    file_table_def_ = new (tmp) ObFileTableDef();
+    if (OB_FAIL(file_table_def_->deep_copy(table_def, expr_copier, allocator))) {
+    }
+  }
+  return ret;
+}
+
+int ObFileTableDef::deep_copy(const ObFileTableDef &other,
+                              ObIRawExprCopier &expr_copier,
+                              ObIAllocator *allocator)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(expr_copier);
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ob_write_string(*allocator, other.file_path_, file_path_, true/*c_style*/))) {
+  } else {
+    format_ = other.format_;
+    file_size_ = other.file_size_;
+    file_mtime_ = other.file_mtime_;
+    row_cnt_ = other.row_cnt_;
+    csv_format_ = other.csv_format_;
+    // deep copy the strings referenced by the format
+    if (OB_FAIL(ob_write_string(*allocator, other.csv_format_.field_term_str_,
+                                csv_format_.field_term_str_))) {
+    } else if (OB_FAIL(ob_write_string(*allocator, other.csv_format_.line_term_str_,
+                                       csv_format_.line_term_str_))) {
+    } else if (OB_FAIL(ob_write_string(*allocator, other.csv_format_.line_start_str_,
+                                       csv_format_.line_start_str_))) {
+    } else if (other.csv_format_.null_if_.count() > 0 &&
+               OB_FAIL(csv_format_.null_if_.allocate_array(*allocator,
+                                                           other.csv_format_.null_if_.count()))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < other.csv_format_.null_if_.count(); ++i) {
+        if (OB_FAIL(ob_write_string(*allocator, other.csv_format_.null_if_.at(i),
+                                    csv_format_.null_if_.at(i)))) {
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.columns_.count(); ++i) {
+      ObFileScanColMeta meta = other.columns_.at(i);
+      if (OB_FAIL(ob_write_string(*allocator, other.columns_.at(i).name_, meta.name_))) {
+      } else if (OB_FAIL(columns_.push_back(meta))) {
+      }
     }
   }
   return ret;

@@ -20,6 +20,7 @@
 #include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_partition_sql_helper.h"
+#include "share/schema/ob_ai_column_sql_service.h"
 #include "share/ob_timezone_mgr.h"
 
 namespace oceanbase
@@ -809,6 +810,11 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
         }
       }
     }
+  }
+  // the metadata rows of the AI columns of the dropped table are removed
+  if (OB_SUCC(ret) && !is_truncate_table
+      && OB_FAIL(ObAiColumnSqlService::delete_ai_column_meta(sql_client, table_id))) {
+    LOG_WARN("fail to delete ai column meta", K(ret), K(table_id));
   }
   return ret;
 }
@@ -3218,6 +3224,7 @@ int ObTableSqlService::gen_column_dml_without_check(
                          || (OB_FAIL(dml.add_column("skip_index_attr", column.get_skip_index_attr().get_packed_value())))
                          || (OB_FAIL(dml.add_column("lob_chunk_size", column.get_lob_chunk_size())))
                          || (OB_FAIL(dml.add_column("local_session_vars", ObHexEscapeSqlStr(local_session_var))))
+                         || (OB_FAIL(dml.add_column("ai_spec", ObHexEscapeSqlStr(column.get_ai_spec_text()))))
                          || OB_FAIL(dml.add_gmt_create())
                          || OB_FAIL(dml.add_gmt_modified()))) {
     }

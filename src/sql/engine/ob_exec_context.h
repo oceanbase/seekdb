@@ -415,6 +415,12 @@ public:
   //get the parent execute context in nested sql
   ObExecContext *get_parent_ctx() { return parent_ctx_; }
   int64_t get_nested_level() const { return nested_level_; }
+  //the nested sql statements of the asynchronous AI column feature (the
+  //invalidation of a stale result and the bookkeeping of its task) must
+  //skip the end-of-statement nested session check, the flag is set on the
+  //outer statement execution context and checked along the parent chain
+  void set_ai_invalidation_sql(bool v) { is_ai_invalidation_sql_ = v; }
+  bool is_ai_invalidation_sql() const { return is_ai_invalidation_sql_; }
   /**
    * @brief set sql proxy
    */
@@ -921,6 +927,7 @@ protected:
   //such as the mutating option checking or nested sql constraining checking
   ObExecContext *parent_ctx_;
   int64_t nested_level_; //the number of recursive SQL levels
+  bool is_ai_invalidation_sql_; //the nested sql of the asynchronous AI column feature
   bool is_ps_prepare_stage_;
   // indicate if eval_tmp_allocator_ is used
   bool tmp_alloc_used_;

@@ -44,6 +44,7 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_explain_note.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
+#include "sql/optimizer/ob_log_file_table_scan.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/optimizer/ob_log_expand.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -3518,6 +3519,10 @@ int ObLogPlan::create_plan_tree_from_path(Path *path,
     } else if (path->is_values_table_path()) {
       ValuesTablePath *values_table_path = static_cast<ValuesTablePath *>(path);
       if (OB_FAIL(allocate_values_table_path(values_table_path, op))) {
+      } else { /* Do nothing */ }
+    } else if (path->is_file_table_path()) {
+      FileTablePath *file_table_path = static_cast<FileTablePath *>(path);
+      if (OB_FAIL(allocate_file_table_path(file_table_path, op))) {
       } else { /* Do nothing */ }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -11783,6 +11788,41 @@ int ObLogPlan::check_storage_distinct_pushdown(const ObIArray<ObRawExpr*> &disti
       } else if (filters.at(i)->has_flag(ObExprInfoFlag::CNT_PL_UDF)) {
         can_push = false;
       }
+    }
+  }
+  return ret;
+}
+
+int ObLogPlan::allocate_file_table_path(FileTablePath *file_table_path,
+                                        ObLogicalOperator *&out_access_path_op)
+{
+  int ret = OB_SUCCESS;
+  ObLogFileTableScan *file_op = NULL;
+  TableItem *table_item = NULL;
+  ObFileTableDef *table_def = NULL;
+  if (OB_ISNULL(file_table_path) || OB_ISNULL(get_stmt()) ||
+      OB_ISNULL(table_item = get_stmt()->get_table_item_by_id(file_table_path->table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid file table path", K(ret));
+  } else if (OB_UNLIKELY(!table_item->is_file_table()) ||
+             OB_ISNULL(table_def = file_table_path->table_def_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid file table item", K(ret));
+  } else if (OB_ISNULL(file_op = static_cast<ObLogFileTableScan*>(get_log_op_factory().
+                                   allocate(*this, LOG_FILE_TABLE_SCAN)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate file table scan operator", K(ret));
+  } else {
+    file_op->set_table_id(file_table_path->table_id_);
+    file_op->set_table_name(table_item->get_table_name());
+    file_op->set_file_table_def(table_def);
+    file_op->set_file_path(table_def->file_path_);
+    if (OB_FAIL(append(file_op->get_filter_exprs(), file_table_path->filter_))) {
+      LOG_WARN("failed to append filter exprs", K(ret));
+    } else if (OB_FAIL(file_op->compute_property(file_table_path))) {
+      LOG_WARN("failed to compute property", K(ret));
+    } else {
+      out_access_path_op = file_op;
     }
   }
   return ret;

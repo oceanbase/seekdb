@@ -2028,6 +2028,9 @@ typedef enum ObItemType
   T_TRACE_FORMAT = 4539,
   T_TG_ALTER_OPTIONS = 4540,
 
+  // marks a relation factor that reads from a local file
+  T_EXTERNAL_FILE_LOCATION = 4541,
+
   // for formatted file clauses
   T_EXTERNAL_FILE_FORMAT = 4542,
   T_EXTERNAL_FILE_FORMAT_TYPE = 4543,
@@ -2274,6 +2277,17 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_FLUSH_PRIVILEGES = 4920,
+  T_READ_FILE_FUNCTION = 4921,
+  T_COPY = 4922,
+  T_COPY_OPTIONS = 4923,
+  T_COPY_OPTION = 4924,
+  T_READ_FILE_ARGS = 4925,
+  T_READ_FILE_NAMED_ARG = 4926,
+  T_AI_COLUMN = 4927,
+  T_AI_COLUMN_OPTIONS = 4928,
+  T_COLUMN_RETRY_AI = 4929,
+  T_SHOW_AI_COLUMNS = 4930,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

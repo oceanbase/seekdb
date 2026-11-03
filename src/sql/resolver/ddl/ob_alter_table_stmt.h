@@ -48,6 +48,29 @@ public:
   void inc_alter_table_action_count() { ++alter_table_action_count_; }
 
 
+  // Information of an "ALTER TABLE ... RETRY AI COLUMN <col> [WHERE ...]" action.
+  // The action is executed locally: the matched rows are invalidated and new
+  // AI generation tasks are created for them.
+  struct AiColumnRetryInfo
+  {
+    AiColumnRetryInfo()
+      : column_id_(common::OB_INVALID_ID),
+        state_column_id_(common::OB_INVALID_ID),
+        has_where_(false)
+    {}
+    uint64_t column_id_;        // the AI result column to regenerate
+    uint64_t state_column_id_;  // hidden column holding the generation status
+    common::ObString column_name_;
+    common::ObString where_text_;  // rewritten where clause (status -> state column)
+    // the expression of the columns that identify one row of the table, it is
+    // appended to the request id so that every row owns an unique request id
+    common::ObString rowkey_expr_;
+    bool has_where_;
+  };
+  bool has_ai_column_retry() const { return ai_column_retry_.column_id_ != common::OB_INVALID_ID; }
+  AiColumnRetryInfo &get_ai_column_retry() { return ai_column_retry_; }
+  const AiColumnRetryInfo &get_ai_column_retry() const { return ai_column_retry_; }
+
   bool is_alter_system() const { return is_alter_system_; }
   void set_is_alter_system(const bool flag) { is_alter_system_ = flag; }
 
@@ -108,6 +131,7 @@ private:
   obcall::ObAlterTableArg alter_table_arg_;
   bool is_comment_table_;
   bool is_alter_system_;
+  AiColumnRetryInfo ai_column_retry_;
   common::ObSArray<obcall::ObCreateIndexArg*> index_arg_list_;
   common::ObIAllocator *fts_arg_allocator_;
   bool is_alter_triggers_;

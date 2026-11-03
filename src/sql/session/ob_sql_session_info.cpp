@@ -149,6 +149,8 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       is_table_name_hidden_(false),
       piece_cache_(NULL),
       is_load_data_exec_session_(false),
+      ai_column_internal_mode_(AI_COL_MODE_NONE),
+      ai_column_publish_request_id_(),
       pl_exact_err_msg_(),
       is_varparams_sql_prepare_(false),
       got_server_conn_res_(false),

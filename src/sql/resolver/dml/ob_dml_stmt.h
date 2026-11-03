@@ -32,6 +32,7 @@
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "query/vector/ob_vector_index_param.h"
+#include "sql/engine/basic/ob_file_scan_utils.h"
 
 namespace oceanbase
 {
@@ -129,6 +130,32 @@ struct ObValuesTableDef {
                        K(access_type_), K(is_const_), K(column_types_));
 };
 
+struct ObFileTableDef {
+  ObFileTableDef()
+    : file_path_(),
+      format_(ObFileScanFormat::CSV),
+      csv_format_(),
+      file_size_(-1),
+      file_mtime_(-1),
+      row_cnt_(0),
+      columns_() {}
+  int deep_copy(const ObFileTableDef &other,
+                ObIRawExprCopier &expr_copier,
+                ObIAllocator *allocator);
+  // absolute path of the file, resolved through realpath() at resolve time
+  ObString file_path_;
+  ObFileScanFormat format_;
+  // csv options, the strings are allocated from the statement allocator
+  ObCSVGeneralFormat csv_format_;
+  // file change detection
+  int64_t file_size_;
+  int64_t file_mtime_;
+  // estimated row count, used by the optimizer
+  int64_t row_cnt_;
+  common::ObSEArray<ObFileScanColMeta, 8, common::ModulePageAllocator, true> columns_;
+  TO_STRING_KV(K_(file_path), K_(file_size), K_(file_mtime), K_(row_cnt));
+};
+
 struct TableItem
 {
   TableItem()
@@ -155,6 +182,7 @@ struct TableItem
     json_table_def_ = nullptr;
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
+    file_table_def_ = NULL;
     sample_info_ = nullptr;
   }
 
@@ -189,6 +217,7 @@ struct TableItem
     TEMP_TABLE,
     JSON_TABLE,
     VALUES_TABLE,
+    FILE_TABLE,
     LATERAL_TABLE,
   };
 
@@ -224,6 +253,7 @@ struct TableItem
   bool is_function_table() const { return FUNCTION_TABLE == type_; }
   bool is_json_table() const { return JSON_TABLE == type_; }  // json_table_def_->table_type_ == MulModeTableType::OB_ORA_JSON_TABLE_TYPE
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
+  bool is_file_table() const { return FILE_TABLE == type_; }//file-as-database table function: read_csv(...)
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
   bool is_extended_all_or_user_sys_view() const
@@ -263,6 +293,9 @@ struct TableItem
   int deep_copy_values_table_def(const ObValuesTableDef& table_def,
                                  ObIRawExprCopier &expr_copier,
                                  ObIAllocator* allocator);
+  int deep_copy_file_table_def(const ObFileTableDef& table_def,
+                               ObIRawExprCopier &expr_copier,
+                               ObIAllocator* allocator);
   virtual bool has_for_update() const { return for_update_; }
   // if real table id, it is valid for all threads,
   // else if generated id, it is unique just during the thread session
@@ -303,6 +336,8 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
+  // file-as-database table (read_csv / read_json / read_parquet / glob)
+  ObFileTableDef *file_table_def_;
   // sample scan infos
   SampleInfo *sample_info_;
 };

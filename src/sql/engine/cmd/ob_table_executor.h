@@ -111,6 +111,9 @@ public:
   virtual ~ObAlterTableExecutor();
   int execute(ObExecContext &ctx, ObAlterTableStmt &stmt);
 private:
+  // "ALTER TABLE ... RETRY AI COLUMN" is a local data operation: the matched
+  // rows are invalidated and new AI generation tasks are created for them.
+  int execute_ai_column_retry(ObExecContext &ctx, ObAlterTableStmt &stmt);
   static const int64_t TIME_INTERVAL_PER_PART_US = 50 * 1000; // 50ms
   static const int64_t MAX_WAIT_CHECK_SCHEMA_VERSION_INTERVAL_US = 120LL * 1000000LL; // 120s
   static const int64_t MIN_WAIT_CHECK_SCHEMA_VERSION_INTERVAL_US = 20LL * 1000000LL; // 20s

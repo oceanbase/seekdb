@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_operator.h"
+#include "share/schema/ob_ai_column_sql_service.h"
 #include "share/ob_autoincrement_service.h"
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -578,6 +579,10 @@ int ObDDLOperator::create_table(ObTableSchema &table_schema,
       OB_FAIL(ObVectorIndexUtil::add_dbms_vector_jobs(trans,
                                                       table_schema.get_table_id(),
                                                       table_schema.get_exec_env()))) {
+  }
+  // publish the metadata rows of the AI columns of the new table
+  if (OB_SUCC(ret) && OB_FAIL(ObAiColumnSqlService::sync_ai_column_meta(trans, table_schema, NULL))) {
+    RS_LOG(WARN, "fail to sync ai column meta", K(ret), K(table_schema.get_table_id()));
   }
   return ret;
 }

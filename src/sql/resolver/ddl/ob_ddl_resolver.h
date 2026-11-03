@@ -28,6 +28,7 @@
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
+#include "share/schema/ob_ai_column_spec.h"
 
 namespace oceanbase
 {
@@ -452,6 +453,32 @@ public:
       const ObString &part_func_expr_str,
       ObIAllocator &allocator,
       ObIArray<ObString> &partkey_strs);
+protected:
+  // AI column (AI COLUMN) support -------------------------------------------
+  struct PendingAiColumn {
+    share::schema::ObAiColumnSpec spec_;
+    common::ObString result_name_;
+    common::ObString state_name_;
+    common::ObString request_name_;
+    common::ObString spec_name_;
+  };
+  // Resolve `AI COLUMN (<expr>) [WITH (...)]` attached to a column definition:
+  // validates the AI function call and options, derives the typed system
+  // prompt, collects dependency columns and stages the three hidden companion
+  // columns in pending_ai_columns_ (ids assigned by apply_pending_ai_columns).
+  int resolve_ai_column_definition(share::schema::ObColumnSchemaV2 &column,
+                                   ParseNode *ai_node,
+                                   const ObTableSchema &table_schema);
+  // Assign hidden column ids, write the spec JSON into the result column's
+  // orig_default_value and hand the hidden columns to the caller (which adds
+  // them to the schema being built).
+  int apply_pending_ai_columns(share::schema::ObColumnSchemaV2 &result_column,
+                               ObIArray<share::schema::ObColumnSchemaV2> *out_hidden_cols);
+  // Id generator for AI hidden columns. CREATE TABLE overrides this with its
+  // column id counter; ALTER leaves ids to the rootservice side.
+  virtual uint64_t gen_ai_hidden_column_id() { return common::OB_INVALID_ID; }
+  bool has_pending_ai_column() const { return pending_ai_columns_.count() > 0; }
+  ObSEArray<PendingAiColumn, 2> pending_ai_columns_;
 protected:
   static int append_vec_hnsw_args(
       const ObPartitionResolveResult &resolve_result,

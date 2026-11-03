@@ -291,6 +291,12 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_multivalue_generated_column() const { return column_flags_ & MULTIVALUE_INDEX_GENERATED_COLUMN_FLAG; }
   inline bool is_multivalue_generated_array_column() const { return column_flags_ & MULTIVALUE_INDEX_GENERATED_ARRAY_COLUMN_FLAG; }
   inline bool is_domain_index_column() const { return is_vec_index_column() || is_fulltext_column() || is_multivalue_generated_column() || is_multivalue_generated_array_column(); }
+  /* asynchronous AI column */
+  inline bool is_ai_result_column() const { return column_flags_ & AI_RESULT_COLUMN_FLAG; }
+  inline bool is_ai_state_column() const { return column_flags_ & AI_STATE_COLUMN_FLAG; }
+  inline bool is_ai_request_column() const { return column_flags_ & AI_REQUEST_COLUMN_FLAG; }
+  inline bool is_ai_result_spec_column() const { return column_flags_ & AI_RESULT_SPEC_COLUMN_FLAG; }
+  inline bool is_ai_hidden_column() const { return is_ai_state_column() || is_ai_request_column() || is_ai_result_spec_column(); }
   inline bool has_generated_column_deps() const { return column_flags_ & GENERATED_DEPS_CASCADE_FLAG; }
   inline bool is_invisible_column() const { return column_flags_ & INVISIBLE_COLUMN_FLAG; }
   inline bool has_column_flag(int64_t flag) const { return column_flags_ & flag; }
@@ -346,6 +352,11 @@ int assign(const ObColumnSchemaV2 &src_schema);
 
   inline share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
   inline const share::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
+  // Specification of an asynchronous AI column (JSON text). It is kept apart
+  // from the default value: the result column of an AI column has no default
+  // value at all, the specification describes how the value is generated.
+  inline const common::ObString &get_ai_spec_text() const { return ai_spec_text_; }
+  inline int set_ai_spec_text(const common::ObString &spec) { return deep_copy_str(spec, ai_spec_text_); }
   int is_same_collection_column(const ObColumnSchemaV2 &other, bool &is_same) const;
   DECLARE_VIRTUAL_TO_STRING;
 private:
@@ -398,6 +409,7 @@ private:
   ObSkipIndexColumnAttr skip_index_attr_;
   int64_t lob_chunk_size_;
   share::ObLocalSessionVar local_session_vars_;
+  common::ObString ai_spec_text_;
 };
 
 inline int32_t ObColumnSchemaV2::get_data_length() const

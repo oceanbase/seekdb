@@ -238,6 +238,9 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/basic/ob_select_into_op.cpp",
             "src/sql/engine/basic/ob_select_into_basic.cpp",
             "src/sql/engine/basic/ob_external_file_writer.cpp",
+            "src/sql/engine/basic/ob_file_csv_reader.cpp",
+            "src/sql/engine/basic/ob_file_scan_utils.cpp",
+            "src/sql/engine/basic/ob_file_table_scan_op.cpp",
             "src/sql/engine/basic/ob_temp_table_access_op.cpp",
             "src/sql/engine/basic/ob_temp_table_insert_op.cpp",
             "src/sql/engine/basic/ob_temp_table_transformation_op.cpp",
@@ -316,6 +319,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_dml_0",
         language = "c++",
         srcs = [
+            "src/sql/engine/dml/ob_ai_column_dml.cpp",
             "src/sql/engine/dml/ob_conflict_checker.cpp",
             "src/sql/engine/dml/ob_dml_ctx_define.cpp",
             "src/sql/engine/dml/ob_dml_service.cpp",
@@ -1021,6 +1025,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_table_0",
         language = "c++",
         srcs = [
+            "src/sql/engine/table/ob_ai_column_strict_read.cpp",
             "src/sql/engine/table/ob_block_sample_scan_op.cpp",
             "src/sql/engine/table/ob_row_sample_scan_op.cpp",
             "src/sql/engine/table/ob_table_partition_ranges.cpp",
@@ -1226,6 +1231,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_stat_collector.cpp",
             "src/sql/optimizer/ob_log_optimizer_stats_gathering.cpp",
             "src/sql/optimizer/ob_dynamic_sampling.cpp",
+            "src/sql/optimizer/ob_log_file_table_scan.cpp",
             "src/sql/optimizer/ob_log_values_table_access.cpp",
             "src/sql/optimizer/ob_log_expand.cpp",
         ],

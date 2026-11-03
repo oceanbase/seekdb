@@ -71,6 +71,8 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateTableResolver);
   // function members
   uint64_t gen_column_id();
+  // AI hidden columns take ids from the same counter as the user columns
+  uint64_t gen_ai_hidden_column_id() override { return gen_column_id(); }
   uint64_t gen_udt_set_id();
   int64_t get_primary_key_size() const;
   int add_primary_key_part(const common::ObString &column_name, common::ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);

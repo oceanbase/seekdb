@@ -102,6 +102,8 @@
 #include "sql/engine/expand/ob_expand_vec_op.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
+#include "sql/optimizer/ob_log_file_table_scan.h"
+#include "sql/engine/basic/ob_file_table_scan_op.h"
 
 namespace oceanbase
 {
@@ -1737,6 +1739,75 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
       } else if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs()))) {
       } else {
         spec.rows_ = table_def->row_cnt_;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObStaticEngineCG::generate_spec(ObLogFileTableScan &op,
+                                    ObFileTableScanSpec &spec,
+                                    const bool in_root_job)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(in_root_job);
+  ObFileTableDef *table_def = op.get_file_table_def();
+  ObIAllocator &allocator = phy_plan_->get_allocator();
+  if (OB_ISNULL(table_def)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("file table def is null", K(ret));
+  } else if (OB_FAIL(ob_write_string(allocator, table_def->file_path_, spec.file_path_,
+                                     true/*c_style*/))) {
+    LOG_WARN("failed to deep copy file path", K(ret));
+  } else if (OB_FAIL(ob_write_string(allocator, table_def->csv_format_.field_term_str_,
+                                     spec.field_term_,
+                                     true/*c_style*/))) {
+    LOG_WARN("failed to deep copy field terminator", K(ret));
+  } else if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_column_exprs().count()))) {
+    LOG_WARN("failed to prepare allocate column exprs", K(ret));
+  } else if (OB_FAIL(spec.column_indexs_.prepare_allocate(op.get_column_exprs().count()))) {
+    LOG_WARN("failed to prepare allocate column indexes", K(ret));
+  } else {
+    const ObIArray<ObColumnRefRawExpr *> &column_exprs = op.get_column_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs.count(); ++i) {
+      ObColumnRefRawExpr *col_expr = column_exprs.at(i);
+      if (OB_ISNULL(col_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("column expr is null", K(ret), K(i));
+      } else if (OB_FAIL(mark_expr_self_produced(col_expr))) {
+        LOG_WARN("failed to mark expr self produced", K(ret));
+      } else {
+        ObExpr *rt_expr = NULL;
+        if (OB_FAIL(generate_rt_expr(*col_expr, rt_expr))) {
+          LOG_WARN("failed to generate rt expr", K(ret));
+        } else if (OB_ISNULL(rt_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          spec.column_exprs_.at(i) = rt_expr;
+          spec.column_indexs_.at(i) = col_expr->get_column_id() - OB_APP_MIN_COLUMN_ID;
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ObCSVGeneralFormat &format = table_def->csv_format_;
+    spec.format_ = static_cast<int32_t>(table_def->format_);
+    spec.column_count_ = static_cast<int64_t>(table_def->columns_.count());
+    spec.row_count_ = table_def->row_cnt_;
+    spec.file_size_ = table_def->file_size_;
+    spec.file_mtime_ = table_def->file_mtime_;
+    spec.field_enclosed_char_ = format.field_enclosed_char_;
+    spec.field_escaped_char_ = format.field_escaped_char_;
+    spec.cs_type_ = static_cast<int32_t>(format.cs_type_);
+    spec.skip_header_lines_ = format.skip_header_lines_;
+    spec.parse_header_ = format.parse_header_;
+    spec.skip_blank_lines_ = format.skip_blank_lines_;
+    spec.trim_space_ = format.trim_space_;
+    spec.empty_field_as_null_ = format.empty_field_as_null_;
+    if (format.null_if_.count() > 0) {
+      if (OB_FAIL(ob_write_string(allocator, format.null_if_.at(0), spec.null_str_,
+                                  true/*c_style*/))) {
+        LOG_WARN("failed to deep copy null literal", K(ret));
       }
     }
   }
@@ -6149,6 +6220,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_VALUES_TABLE_ACCESS: {
       type = PHY_VALUES_TABLE_ACCESS;
+      break;
+    }
+    case log_op_def::LOG_FILE_TABLE_SCAN: {
+      type = PHY_FILE_TABLE_SCAN;
       break;
     }
     case log_op_def::LOG_EXPAND: {

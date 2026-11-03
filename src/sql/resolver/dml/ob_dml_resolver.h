@@ -205,6 +205,16 @@ public:
   int resolve_joined_table_item(const ParseNode &parse_node, JoinedTable *&joined_table);
   int resolve_function_table_item(const ParseNode &table_node,
                                   TableItem *&table_item);
+  // OB-P:a4L9E_IDIyEM2Ol_ZvDXqw
+  // resolve a file-as-database table function: read_csv / read_json / read_parquet / glob
+  int disable_file_table_plan_cache();
+  int resolve_file_table_item(const ParseNode &table_node,
+                              const ParseNode *alias_node,
+                              TableItem *&table_item);
+  int resolve_file_table_args(const ParseNode &args_node,
+                              common::ObIArray<ObFileSqlArg> &args,
+                              ObString &file_path);
+  int gen_file_table_column_items(TableItem &table_item);
   int resolve_json_table_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);

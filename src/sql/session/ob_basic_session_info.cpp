@@ -2949,6 +2949,27 @@ int ObBasicSessionInfo::is_select_index_enabled(bool &select_index_enabled) cons
 
 int ObBasicSessionInfo::set_autocommit(bool autocommit)
 {
+  int ret = OB_SUCCESS;
+  // The effective autocommit value is kept in the sys var cache for fast access,
+  // but the sys var object has to be materialized and kept in sync with it as well.
+  // System variables are materialized lazily, and when a plan is dispatched to a
+  // parallel worker the whole session is serialized: the serialization reads the
+  // value of every modified sys var from its sys var object. A variable that only
+  // lives in the cache leaves the slot empty and makes the whole session
+  // serialization fail with OB_ERR_UNEXPECTED.
+  int64_t store_idx = -1;
+  if (OB_SUCC(share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_AUTOCOMMIT, store_idx))
+      && store_idx >= 0 && get_sys_var_count() > store_idx) {
+    if (OB_FAIL(ensure_sys_var_loaded(SYS_VAR_AUTOCOMMIT))) {
+      // keep the old behavior if the sys var cannot be loaded
+      LOG_WARN("failed to load autocommit sys var", K(ret));
+    } else if (!OB_ISNULL(sys_vars_[store_idx])) {
+      ObObj val;
+      val.set_int(autocommit ? 1 : 0);
+      val.set_collation_type(ObCharset::get_system_collation());
+      sys_vars_[store_idx]->set_value(val);
+    }
+  }
   sys_vars_cache_.set_autocommit(autocommit);
   return sys_var_inc_info_.add_sys_var_id(SYS_VAR_AUTOCOMMIT);
 }
@@ -3364,11 +3385,28 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
   // split function, make stack checker happy
   [&](){
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(serialization::encode(buf, buf_len, pos, sys_var_ids.count()))) {
-    }
+    // System variables are materialized lazily, so a variable which was only
+    // recorded in the sys var cache may have no sys var object yet. There is no
+    // value to transfer for such a variable, skip it instead of failing the whole
+    // session serialization. The very same rule is applied by
+    // ObBasicSessionInfo::get_serialize_size to keep both sides symmetric.
+    ObSEArray<ObSysVarClassType, 128> ser_sys_var_ids;
     for (int64_t i = 0; OB_SUCC(ret) && i < sys_var_ids.count(); ++i) {
       int64_t sys_var_idx = -1;
       if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(sys_var_ids.at(i), sys_var_idx))) {
+      } else if (sys_var_idx < 0 || get_sys_var_count() <= sys_var_idx) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("sys var idx is invalid", K(sys_var_idx), K(get_sys_var_count()), K(ret));
+      } else if (OB_ISNULL(sys_vars_[sys_var_idx])) {
+        LOG_WARN("skip sys var without sys var object", K(sys_var_idx));
+      } else if (OB_FAIL(ser_sys_var_ids.push_back(sys_var_ids.at(i)))) {
+      } else {}
+    }
+    if (OB_SUCC(ret) && OB_FAIL(serialization::encode(buf, buf_len, pos, ser_sys_var_ids.count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < ser_sys_var_ids.count(); ++i) {
+      int64_t sys_var_idx = -1;
+      if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(ser_sys_var_ids.at(i), sys_var_idx))) {
       } else if (sys_var_idx < 0 || get_sys_var_count() <= sys_var_idx) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("sys var idx is invalid", K(sys_var_idx), K(get_sys_var_count()), K(ret));
@@ -3785,11 +3823,25 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
     len += serialization::encoded_length(actual_ser_user_var_count);
   }
   if (OB_SUCC(ret)) {
-    len += serialization::encoded_length(sys_var_ids.count());
+    // Keep the same rule as ObBasicSessionInfo::serialize: a sys var without a
+    // materialized sys var object has no value to transfer and is skipped.
+    ObSEArray<ObSysVarClassType, 128> ser_sys_var_ids;
     for (int64_t i = 0; OB_SUCC(ret) && i < sys_var_ids.count(); ++i) {
       int64_t sys_var_idx = -1;
       ObSysVarClassType &type = sys_var_ids.at(i);
       if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(type, sys_var_idx))) {
+      } else if (sys_var_idx < 0 || get_sys_var_count() <= sys_var_idx) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("sys var idx is invalid", K(sys_var_idx), K(get_sys_var_count()), K(ret));
+      } else if (OB_ISNULL(sys_vars_[sys_var_idx])) {
+        LOG_WARN("skip sys var without sys var object", K(sys_var_idx));
+      } else if (OB_FAIL(ser_sys_var_ids.push_back(type))) {
+      } else {}
+    }
+    len += serialization::encoded_length(ser_sys_var_ids.count());
+    for (int64_t i = 0; OB_SUCC(ret) && i < ser_sys_var_ids.count(); ++i) {
+      int64_t sys_var_idx = -1;
+      if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(ser_sys_var_ids.at(i), sys_var_idx))) {
       } else if (sys_var_idx < 0 || get_sys_var_count() <= sys_var_idx) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("sys var idx is invalid", K(sys_var_idx), K(get_sys_var_count()), K(ret));

@@ -18,6 +18,7 @@
 #include "config_bridge.h"
 #include "ob_schema_service_sql_impl.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/schema/ob_ai_column_spec.h"
 #include "share/ob_share_util.h"
 // TODO, move basic structs to ob_schema_struct.h
 #include "observer/schema/ob_schema_retrieve_utils.h"
@@ -6435,6 +6436,21 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
           }
           col_schema->add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
         }
+      }
+    }
+  } else if (column.is_ai_result_column()) {
+    // restore the dependency set of an asynchronous AI column from its spec
+    ObString spec_text = column.get_ai_spec_text();
+    if (!spec_text.empty()) {
+      ObAiColumnSpec spec;
+      if (OB_SUCC(spec.parse(spec_text, allocator))) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < spec.dep_column_cnt_; ++i) {
+          if (OB_FAIL(column.add_cascaded_column_id(spec.dep_column_ids_[i]))) {
+            LOG_WARN("fail to add ai column dependency", K(ret), K(spec.dep_column_ids_[i]));
+          }
+        }
+      } else {
+        LOG_WARN("fail to parse ai column spec", K(ret), K(spec_text));
       }
     }
   }

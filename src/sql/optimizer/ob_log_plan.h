@@ -69,6 +69,7 @@ class FunctionTablePath;
 class JsonTablePath;
 class TempTablePath;
 class CteTablePath;
+class FileTablePath;
 class ObJoinOrder;
 class ObOptimizerContext;
 class ObLogJoin;
@@ -578,6 +579,9 @@ public:
 
   int allocate_values_table_path(ValuesTablePath *values_table_path,
                                  ObLogicalOperator *&out_access_path_op);
+
+  int allocate_file_table_path(FileTablePath *file_table_path,
+                               ObLogicalOperator *&out_access_path_op);
 
   int allocate_json_table_path(JsonTablePath *json_table_path,
                                    ObLogicalOperator *&out_access_path_op);

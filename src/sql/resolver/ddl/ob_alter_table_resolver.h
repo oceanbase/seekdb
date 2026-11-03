@@ -125,6 +125,11 @@ private:
   int resolve_add_primary(const ParseNode &node);
   int resolve_alter_primary(const ParseNode &action_node_list, const ParseNode &node);
   int generate_index_arg(obcall::ObCreateIndexArg &index_arg, const bool is_unique_key);
+  // AI column support: write the spec into the result column and register the
+  // three hidden companion columns as additional ADD COLUMN actions.
+  int apply_ai_hidden_columns(share::schema::ObColumnSchemaV2 &result_column);
+  // Resolve an "ALTER TABLE ... RETRY AI COLUMN <col> [WHERE ...]" action.
+  int resolve_retry_ai_column(const ParseNode &node);
   int resolve_alter_table_column_definition(share::schema::AlterColumnSchema &column,
                                             ParseNode *node, ObColumnResolveStat &stat,
                                             bool &is_modify_column_visibility,

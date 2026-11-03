@@ -199,6 +199,8 @@ int ObService::init(common::ObMySQLProxy &sql_proxy)
     FLOG_WARN("init tsc timestamp failed", KR(ret));
   } else if (OB_FAIL(schema_release_task_.init(schema_updater_))) {
     FLOG_WARN("init schema release task failed", KR(ret));
+  } else if (OB_FAIL(ai_column_worker_sched_.init(sql_proxy))) {
+    FLOG_WARN("init ai column worker scheduler failed", KR(ret));
   } else {
     inited_ = true;
   }
@@ -216,6 +218,11 @@ int ObService::start()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("ob_service is not inited", KR(ret), K_(inited));
+  }
+  // the asynchronous AI column worker publishes the generated results of the
+  // ai columns in the background
+  if (OB_SUCC(ret) && OB_FAIL(ai_column_worker_sched_.start())) {
+    FLOG_WARN("start ai column worker scheduler failed", KR(ret));
   }
   FLOG_INFO("[OBSERVICE_NOTICE] start ob_service end", KR(ret));
   if (OB_FAIL(ret)) {
@@ -248,6 +255,9 @@ void ObService::stop()
     FLOG_INFO("begin to stop schema updater");
     schema_updater_.stop();
     FLOG_INFO("schema updater stopped");
+    FLOG_INFO("begin to stop ai column worker");
+    ai_column_worker_sched_.stop();
+    FLOG_INFO("ai column worker stopped");
 
   }
   FLOG_INFO("[OBSERVICE_NOTICE] observice finish stop", K_(stopped));
@@ -265,6 +275,9 @@ void ObService::wait()
     FLOG_INFO("begin to wait schema updater");
     schema_updater_.wait();
     FLOG_INFO("wait schema updater success");
+    FLOG_INFO("begin to wait ai column worker");
+    ai_column_worker_sched_.wait();
+    FLOG_INFO("wait ai column worker success");
 
   }
   FLOG_INFO("[OBSERVICE_NOTICE] wait ob_service end");
@@ -282,6 +295,7 @@ int ObService::destroy()
     FLOG_INFO("schema release task destroyed");
     FLOG_INFO("begin to destroy schema updater");
     schema_updater_.destroy();
+    ai_column_worker_sched_.destroy();
     FLOG_INFO("schema updater destroyed");
 
   }

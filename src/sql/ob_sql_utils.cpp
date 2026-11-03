@@ -3373,7 +3373,23 @@ bool ObSQLUtils::is_iter_uncommitted_row(ObExecContext *cur_ctx)
 
 bool ObSQLUtils::is_nested_sql(ObExecContext *cur_ctx)
 {
-  return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx);
+  return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx)
+      || is_ai_invalidation_nested_sql(cur_ctx);
+}
+
+bool ObSQLUtils::is_ai_invalidation_nested_sql(ObExecContext *cur_ctx)
+{
+  bool bret = false;
+  // The flag marks the statement that runs the invalidation, the statements
+  // nested inside it are the ones that must be treated as nested: the walk
+  // starts from the parent so that the invalidation statement itself keeps
+  // its own transaction control (commit and statement state).
+  ObExecContext *ctx = (nullptr == cur_ctx) ? nullptr : cur_ctx->get_parent_ctx();
+  while (ctx != nullptr && !bret) {
+    bret = ctx->is_ai_invalidation_sql();
+    ctx = ctx->get_parent_ctx();
+  }
+  return bret;
 }
 
 //bind current execute context to my session,

@@ -323,6 +323,16 @@ class ObValuesTableAccessSpec;
 class ObValuesTableAccessOp;
 REGISTER_OPERATOR(ObLogValuesTableAccess, PHY_VALUES_TABLE_ACCESS, ObValuesTableAccessSpec, ObValuesTableAccessOp, NOINPUT);
 
+class ObLogFileTableScan;
+class ObFileTableScanSpec;
+class ObFileTableScanOp;
+// OB-P:a4L9E_IDIyEM2Ol_ZvDXqw
+// The file table scan produces its columns row by row, just like the other
+// table function operators (VALUES TABLE, JSON TABLE).  It must not be
+// registered as a vectorized operator: the column values are written into the
+// expression datum directly, so a batch of rows would share one datum slot.
+REGISTER_OPERATOR(ObLogFileTableScan, PHY_FILE_TABLE_SCAN, ObFileTableScanSpec, ObFileTableScanOp, NOINPUT);
+
 class ObLogDelete;
 class ObTableDeleteSpec;
 class ObTableDeleteOp;

@@ -26,6 +26,7 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "share/schema/ob_table_sql_service.h"
+#include "share/schema/ob_ai_column_sql_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -210,6 +211,13 @@ int ObTableHelper::create_tables_(const ObString *ddl_stmt_str)
                 get_trans_(),
                 ddl_stmt_str,
                 true/*sync_schema_version_for_last_table*/))) {
+    }
+    // publish the metadata rows of the AI columns of the new tables
+    for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); i++) {
+      ObTableSchema &new_table = new_tables_.at(i);
+      if (OB_FAIL(ObAiColumnSqlService::sync_ai_column_meta(get_trans_(), new_table, NULL))) {
+        LOG_WARN("fail to sync ai column meta", K(ret), K(new_table.get_table_id()));
+      }
     }
   }
   return ret;

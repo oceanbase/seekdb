@@ -377,11 +377,17 @@ public:
   ObAIFuncPromptObjectUtils() {}
   virtual ~ObAIFuncPromptObjectUtils() {}
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
-  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
+  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object,
+                                              ObString& replaced_prompt_str, int64_t depth = 0);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
 private:
+  // Guards against pathological nesting; prompt objects are finite JSON trees
+  // so the recursion is bounded by this value rather than by the input.
+  static constexpr int64_t max_prompt_nesting_depth = 16;
+  static int expand_arg_value(ObIAllocator &allocator, ObJsonNode *arg_node,
+                              int64_t depth, ObString &arg_value);
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncPromptObjectUtils);
 };
 
