@@ -93,16 +93,22 @@ private:
               "ob_stop_word_list's number shouldn't be greater than DEFAULT_STOPWORD_BUCKET_NUM");
 };
 
-class ObAddWord final
+// ObAddWord is templated on the word map type so the per-call tokenize path
+// can run on the latch-free ObFTWordMap while the query-side callers keep
+// feeding their own ObFTWordMapLocked instances into
+// ObFTParseHelper::segment(). The method bodies are defined in
+// ob_fts_stop_word.cpp with explicit instantiations for both map flavors.
+template <class MapType>
+class ObAddWordT final
 {
 public:
-  ObAddWord(
+  ObAddWordT(
       const ObFTParserProperty &property,
       const ObObjMeta &meta,
       const ObAddWordFlag &flag,
       common::ObIAllocator &allocator,
-      ObFTWordMap &word_map);
-  ~ObAddWord() = default;
+      MapType &word_map);
+  ~ObAddWordT() = default;
   int process_word(
       const char *word,
       const int64_t word_len,
@@ -129,7 +135,7 @@ private:
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
-  ObFTWordMap &word_map_;
+  MapType &word_map_;
   int64_t min_max_word_cnt_;
   int64_t non_stopword_cnt_;
   int64_t stopword_cnt_;
@@ -137,6 +143,8 @@ private:
   int64_t max_token_size_;
   ObAddWordFlag flag_;
 };
+
+using ObAddWord = ObAddWordT<ObFTWordMap>;
 
 } // end namespace storage
 } // end namespace oceanbase

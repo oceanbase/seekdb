@@ -255,7 +255,8 @@ int ObFTParseData::get_dict_hub(ObFTDictHub *&hub)
 
 ////////////////////////////////////////////////////////////////////////////////
 // ObFTParseHelper
-int ObFTParseHelper::segment(
+template <class MapType>
+int ObFTParseHelper::segment_tokens(
     const ObFTParserProperty &property,
     const int64_t parser_version,
     const ObIFTParserDesc *parser_desc,
@@ -263,7 +264,7 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWordT<MapType> &add_word)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -358,12 +359,13 @@ void ObFTParseHelper::reset()
   is_inited_ = false;
 }
 
-int ObFTParseHelper::segment(
-    const ObObjMeta &meta,
+template <class MapType>
+int ObFTParseHelper::segment_dispatch(
+    const common::ObObjMeta &meta,
     const char *fulltext,
     const int64_t fulltext_len,
     int64_t &doc_length,
-    ObFTWordMap &words) const
+    MapType &words) const
 {
   int ret = OB_SUCCESS;
   const ObCharsetInfo *cs = nullptr;
@@ -378,8 +380,8 @@ int ObFTParseHelper::segment(
     ret = OB_ERR_UNEXPECTED;
   } else {
     words.reuse();
-    ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
-    if (OB_FAIL(segment(
+    ObAddWordT<MapType> add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
+    if (OB_FAIL(segment_tokens(
                     parser_property_,
                     parser_name_.get_parser_version(),
                     parser_desc_,
@@ -395,6 +397,26 @@ int ObFTParseHelper::segment(
   LOG_DEBUG("ft parse segment", K(ret), K(type), K(add_word_flag_), K(parser_name_),
       K(ObString(fulltext_len, fulltext)), K(words.size()));
   return ret;
+}
+
+int ObFTParseHelper::segment(
+    const ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    int64_t &doc_length,
+    ObFTWordMap &words) const
+{
+  return segment_dispatch(meta, fulltext, fulltext_len, doc_length, words);
+}
+
+int ObFTParseHelper::segment(
+    const ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    int64_t &doc_length,
+    ObFTWordMapLocked &words) const
+{
+  return segment_dispatch(meta, fulltext, fulltext_len, doc_length, words);
 }
 
 int ObFTParseHelper::check_is_the_same(
@@ -512,6 +534,38 @@ int ObFTParseHelper::set_add_word_flag(const ObIFTParserDesc &ftparser_desc)
   }
   return ret;
 }
+
+template int ObFTParseHelper::segment_dispatch<ObFTWordMap>(
+    const common::ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    int64_t &doc_length,
+    ObFTWordMap &words) const;
+template int ObFTParseHelper::segment_dispatch<ObFTWordMapLocked>(
+    const common::ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    int64_t &doc_length,
+    ObFTWordMapLocked &words) const;
+
+template int ObFTParseHelper::segment_tokens<ObFTWordMap>(
+    const ObFTParserProperty &property,
+    const int64_t parser_version,
+    const ObIFTParserDesc *parser_desc,
+    const ObCharsetInfo *cs,
+    const char *ft,
+    const int64_t ft_len,
+    common::ObIAllocator &allocator,
+    ObAddWordT<ObFTWordMap> &add_word);
+template int ObFTParseHelper::segment_tokens<ObFTWordMapLocked>(
+    const ObFTParserProperty &property,
+    const int64_t parser_version,
+    const ObIFTParserDesc *parser_desc,
+    const ObCharsetInfo *cs,
+    const char *ft,
+    const int64_t ft_len,
+    common::ObIAllocator &allocator,
+    ObAddWordT<ObFTWordMapLocked> &add_word);
 
 } // end namespace storage
 } // end namespace oceanbase

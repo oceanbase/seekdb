@@ -131,12 +131,15 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 
 ////////////////////////////////////////////////////////////////////////////////
 // class ObAddWord
-ObAddWord::ObAddWord(
+
+
+template <class MapType>
+ObAddWordT<MapType>::ObAddWordT(
     const ObFTParserProperty &property,
     const ObObjMeta &meta,
     const ObAddWordFlag &flag,
     common::ObIAllocator &allocator,
-    ObFTWordMap &word_map)
+    MapType &word_map)
   : word_meta_(meta),
     allocator_(allocator),
     word_map_(word_map),
@@ -149,7 +152,8 @@ ObAddWord::ObAddWord(
 {
 }
 
-int ObAddWord::process_word(
+template <class MapType>
+int ObAddWordT<MapType>::process_word(
     const char *word,
     const int64_t word_len,
     const int64_t char_cnt,
@@ -174,12 +178,14 @@ int ObAddWord::process_word(
   return ret;
 }
 
-bool ObAddWord::is_min_max_word(const int64_t c_len) const
+template <class MapType>
+bool ObAddWordT<MapType>::is_min_max_word(const int64_t c_len) const
 {
   return flag_.min_max_word() && (c_len < min_token_size_ || c_len > max_token_size_);
 }
 
-int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
+template <class MapType>
+int ObAddWordT<MapType>::casedown_word(const ObFTWord &src, ObFTWord &dst)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
@@ -201,7 +207,8 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   return ret;
 }
 
-int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
+template <class MapType>
+int ObAddWordT<MapType>::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ft_word.empty())) {
@@ -216,7 +223,8 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
   return ret;
 }
 
-int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
+template <class MapType>
+int ObAddWordT<MapType>::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
   int64_t word_count = 0;
@@ -270,7 +278,8 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
   return ret;
 }
 
-int ObAddWord::dup_word(const ObFTWord &src, ObFTWord &dst)
+template <class MapType>
+int ObAddWordT<MapType>::dup_word(const ObFTWord &src, ObFTWord &dst)
 {
   int ret = OB_SUCCESS;
   const ObString src_str = src.get_word().get_string();
@@ -285,6 +294,9 @@ int ObAddWord::dup_word(const ObFTWord &src, ObFTWord &dst)
   }
   return ret;
 }
+
+template class ObAddWordT<ObFTWordMap>;
+template class ObAddWordT<ObFTWordMapLocked>;
 
 } // end namespace storage
 } // end namespace oceanbase
