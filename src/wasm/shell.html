@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+Copyright (c) 2025 OceanBase.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Run real seekdb SQL and vector search in your browser with WebAssembly.">
+  <title>seekdb shell · WebAssembly</title>
+  <link rel="icon" href="data:,">
+  <link rel="modulepreload" href="./database.mjs">
+  <link rel="modulepreload" href="./runtime-host.mjs">
+  <link rel="modulepreload" href="./mysql-wire.mjs">
+  <link rel="modulepreload" href="./mysql-client.mjs">
+  <link rel="modulepreload" href="./mysql-transport.mjs">
+  <link rel="modulepreload" href="./mysql-auth.mjs">
+  <link rel="modulepreload" href="./database-worker.mjs">
+  <link rel="modulepreload" href="./worker-server.mjs">
+  <link rel="modulepreload" href="./seekdb_wasm_database.mjs">
+  <!-- shell.mjs starts the WASM fetch and streaming compilation early.
+       A separate fetch preload can download the same WASM twice in Safari. -->
+  <link rel="stylesheet" href="./shell.css">
+  <script type="module" src="./shell.mjs"></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="./shell.html" aria-label="seekdb shell home"><span class="brand-mark" aria-hidden="true"></span>seekdb</a>
+    <span id="version-label" class="wasm-label" aria-label="seekdb version" aria-live="polite"></span>
+    <nav aria-label="Resources">
+      <a href="https://www.seekdb.ai/" target="_blank" rel="noopener noreferrer">Website</a>
+      <a href="https://github.com/oceanbase/seekdb" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </nav>
+  </header>
+  <main class="terminal" aria-label="seekdb SQL shell">
+    <h1 class="sr-only">seekdb SQL shell</h1>
+    <div class="toolbar">
+      <div class="connection"><span id="status-dot" class="status-dot" data-state="loading"></span><strong id="database-name">seekdb</strong><span id="storage-badge" class="storage-badge">memory://</span></div>
+      <div class="toolbar-actions">
+        <details id="example-menu" class="menu">
+          <summary title="Choose an example to run">Examples</summary>
+          <div class="menu-items" role="group" aria-label="Examples">
+            <button type="button" data-example="hybrid" disabled>Hybrid Search</button>
+            <button type="button" data-example="fork" disabled>Fork Table</button>
+          </div>
+        </details>
+        <label class="storage-control" for="storage-mode">
+          <span class="sr-only">Storage mode</span>
+          <select id="storage-mode" aria-label="Storage mode" title="Choose persistent or temporary browser storage" disabled>
+            <option value="memory">Temporary (Memory)</option>
+            <option value="opfs">Persistent (OPFS)</option>
+          </select>
+        </label>
+        <button id="reset-button" type="button" title="Discard the temporary database and start a new in-memory instance">New Memory Instance</button>
+        <button id="clear-button" title="Clear output (Ctrl+L)">Clear</button>
+      </div>
+    </div>
+    <div id="runtime-status" class="runtime-status" data-state="loading" data-stage="engine" role="status" aria-live="polite" aria-atomic="true">
+      <div class="runtime-copy">
+        <strong id="status-stage">Loading engine</strong>
+        <span id="status-text">Checking WebAssembly support…</span>
+      </div>
+      <ol class="startup-steps" aria-label="Startup progress">
+        <li data-startup-step="engine" data-state="active"><span aria-hidden="true">1</span>Load engine</li>
+        <li data-startup-step="session"><span aria-hidden="true">2</span>Open SQL session</li>
+        <li data-startup-step="ready"><span aria-hidden="true">3</span>Ready</li>
+      </ol>
+    </div>
+    <aside class="session-notice" role="note">
+      <strong id="storage-notice-title">Temporary memory session.</strong>
+      <span id="storage-notice-text">Refresh or tab close clears this temporary database; your saved OPFS database is not affected.</span>
+    </aside>
+    <div id="terminal-scroll" class="terminal-scroll" tabindex="-1" aria-label="Terminal">
+      <section id="transcript" class="transcript" aria-label="SQL output">
+        <article class="welcome-panel">
+          <strong>Run your first query</strong>
+          <span>Choose an example or enter SQL below. Everything executes locally in the Web Worker.</span>
+          <div class="welcome-actions" aria-label="Quick start examples">
+            <button type="button" data-example="hybrid" disabled>Run Hybrid Search</button>
+            <button type="button" data-example="fork" disabled>Run Fork Table</button>
+          </div>
+        </article>
+      </section>
+    <form id="query-form" class="composer">
+      <label for="sql" class="prompt" id="prompt">seekdb&gt;</label>
+      <textarea id="sql" rows="1" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="SQL statement" placeholder="loading…" disabled></textarea>
+    </form>
+    </div>
+    <footer class="terminal-footer">
+      <span id="activity-time"></span>
+      <span id="engine-label">seekdb · wasm</span>
+    </footer>
+  </main>
+  <noscript>This shell needs JavaScript and a browser that supports WebAssembly threads.</noscript>
+</body>
+</html>
