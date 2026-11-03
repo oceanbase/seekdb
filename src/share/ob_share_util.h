@@ -38,6 +38,12 @@ typedef ObFixedLengthString<common::OB_SERVER_VERSION_LENGTH> ObBuildVersion;
 class ObShareUtil
 {
 public:
+  // Escape backticks in an identifier before it is enclosed in MySQL
+  // identifier quotes.  This helper is intentionally kept in Share so
+  // terminal Share code does not depend on the upper SQL module.
+  static int escape_identifier(common::ObIAllocator &allocator,
+                               const common::ObString &src,
+                               common::ObString &dest);
   static int get_server_ip(const common::ObAddr &self_addr,
                            common::ObIAllocator &allocator,
                            common::ObString &ip_string);

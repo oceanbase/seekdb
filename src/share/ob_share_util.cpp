@@ -30,6 +30,52 @@ using namespace share::schema;
 namespace share
 {
 
+int ObShareUtil::escape_identifier(
+    ObIAllocator &allocator,
+    const ObString &src,
+    ObString &dest)
+{
+  int ret = OB_SUCCESS;
+  const ObString::obstr_size_t src_len = src.length();
+  ObString::obstr_size_t dest_len = src_len;
+  const char escape_character = '`';
+  char *buf = nullptr;
+
+  if (OB_ISNULL(src.ptr()) || src_len <= 0) {
+    dest.assign(nullptr, 0);
+  } else if (nullptr == src.find(escape_character)) {
+    dest = src;
+  } else {
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (src[i] == escape_character) {
+        ++dest_len;
+      }
+    }
+    if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(dest_len + 1)))) {
+      dest.assign(NULL, 0);
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory failed", K(ret), "size", dest_len);
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < src_len; ++i) {
+        if (src[i] == escape_character) {
+          buf[pos++] = escape_character;
+          buf[pos++] = escape_character;
+        } else {
+          buf[pos++] = src[i];
+        }
+      }
+      if (pos != dest_len) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        buf[dest_len] = '\0';
+        dest.assign_ptr(buf, dest_len);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObShareUtil::get_server_ip(
     const ObAddr &self_addr,
     ObIAllocator &allocator,
