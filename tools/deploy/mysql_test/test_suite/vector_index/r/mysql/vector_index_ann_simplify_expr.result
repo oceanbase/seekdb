@@ -45,15 +45,28 @@ Outputs & filters:
       access([ann_simplify.__pk_increment], [ann_simplify.category], [ann_simplify.age], [ann_simplify.id]), partitions(p0)
       is_index_back=true, is_global_index=false, filter_before_indexback[false,true], 
       range_key([ann_simplify.category], [ann_simplify.__pk_increment]), range(1,MIN ; 1,MAX)
+# the filter from #1489: category = 1 followed by 128 OR-ed copies of age > 1000
+Query Plan
+=========================================================
+|ID|OPERATOR                               |NAME        |
+---------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_simplify|
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_simplify.id]), filter([ann_simplify.category = 1 OR ann_simplify.age > 1000]), rowset=16
+      access([ann_simplify.__pk_increment], [ann_simplify.category], [ann_simplify.age], [ann_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([ann_simplify.__pk_increment]), range(MIN ; MAX)always true
 # results are unchanged by the simplification
-select id from ann_simplify
-where category = 1 or age > 1000 or age > 1000 or age > 1000 or age > 1000
-or age > 1000 or age > 1000 or age > 1000 or age > 1000
-order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
 id
 1
 5
 2
+id
+1
+2
+5
 select id from ann_simplify
 where category = 1
 order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
