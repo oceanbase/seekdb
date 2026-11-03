@@ -38,7 +38,54 @@ using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::blocksstable;
+// Escape an identifier so that it can be embedded inside a backquoted DDL
+// fragment: every literal backtick is doubled, which is what MySQL and
+// OceanBase expect for quoted identifiers.
+//
+// Kept local to share so that the terminal share module does not depend on the
+// upper sql module for DDL identifier escaping.
+static int escape_ddl_identifier(ObIAllocator &allocator, const ObString &src, ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const char escape_character = '`';
+  const ObString::obstr_size_t src_len = src.length();
+  ObString::obstr_size_t dst_len = src_len;
+  char *ptr = NULL;
 
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dst = src;
+  } else {
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (src[i] == escape_character) {
+        ++dst_len;
+      }
+    }
+    if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      dst = NULL;
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory failed", K(ret), "size", dst_len);
+    } else {
+      int64_t tmp_dst_pos = 0;
+      for (int64_t i = 0; i < src_len; i++) {
+        if (src[i] == escape_character) {
+          ptr[tmp_dst_pos++] = escape_character;
+          ptr[tmp_dst_pos++] = escape_character;
+        } else {
+          ptr[tmp_dst_pos++] = src[i];
+        }
+      }
+      if (tmp_dst_pos != dst_len) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ptr[dst_len] = '\0';
+        dst.assign_ptr(ptr, dst_len);
+      }
+    }
+  }
+  return ret;
+}
 ObDDLTaskSerializeField::ObDDLTaskSerializeField()
 {
   reset();
@@ -519,28 +566,46 @@ int ObDDLUtil::refresh_alter_table_arg(ObMultiVersionSchemaService &schema_servi
 }
 
 int ObDDLUtil::generate_column_name_str(
-    const common::ObIArray<ObColumnNameInfo> &column_names,
+    const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
     const bool with_alias_name,
-    const bool use_heap_table_ddl_plan,
+    const bool with_comma,
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(column_names.count() == 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    bool with_comma = false;
-    for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
-      if (use_heap_table_ddl_plan && column_names.at(i).column_name_ == OB_HIDDEN_PK_INCREMENT_COLUMN_NAME) {
-      } else if (OB_FAIL(generate_column_name_str(column_names.at(i), with_origin_name, with_alias_name, with_comma, sql_string))) {
-      } else {
-        with_comma = true;
+  const char *split_char = "`";
+  ObArenaAllocator allocator("ObDDLTmp");
+  ObString escaped_column_name = column_name_info.column_name_;
+  if ((with_origin_name || with_alias_name)
+      && OB_FAIL(escape_ddl_identifier(allocator, column_name_info.column_name_, escaped_column_name))) {
+  }
+  // append comma
+  if (OB_SUCC(ret) && with_comma) {
+    if (OB_FAIL(sql_string.append_fmt(", "))) {
+    }
+  }
+  // append original column name
+  if (OB_SUCC(ret) && with_origin_name) {
+    if (column_name_info.is_enum_set_need_cast_) {
+      // Enum and set values are cast to unsigned before being appended to a macro block.
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
       }
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
+    }
+  }
+  // append AS
+  if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
+    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+    }
+  }
+  // append alias column name
+  if (OB_SUCC(ret) && with_alias_name) {
+    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
+        escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   return ret;
 }
-
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
