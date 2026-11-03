@@ -2682,6 +2682,47 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
       } else {
         trans_happened = true; 
       }
+    } else if (T_OP_IN == expr->get_expr_type() || T_OP_NOT_IN == expr->get_expr_type()) {
+      /* basic case
+      * c1 in (1, 2, 2) -> c1 in (1, 2)
+      * the duplicated constants in the in-list are removed, otherwise the range
+      * count and the filter pushed down to the vector index are inflated
+      */
+      ObOpRawExpr *in_expr = static_cast<ObOpRawExpr *>(expr);
+      const int64_t param_count = in_expr->get_param_count();
+      ObSEArray<ObRawExpr *, 4> in_params;
+      bool all_const = true;
+      if (param_count <= 2 || param_count > 100) {
+        /* use too much resource and need add lots of constraints */
+      } else {
+        for (int64_t i = 1; OB_SUCC(ret) && all_const && i < param_count; ++i) {
+          ObRawExpr *param_expr = in_expr->get_param_expr(i);
+          if (OB_ISNULL(param_expr)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected null in param expr", K(ret), K(i));
+          } else if (!param_expr->is_const_or_param_expr()) {
+            all_const = false;
+          } else if (OB_FAIL(in_params.push_back(param_expr))) {
+            LOG_WARN("failed to push back in param expr", K(ret));
+          }
+        }
+        if (OB_SUCC(ret) && all_const) {
+          ObSEArray<ObRawExpr *, 4> new_params;
+          if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, in_params))) {
+            LOG_WARN("failed to remove duplicate in params", K(ret));
+          } else if (in_params.count() == param_count - 1) {
+            //do nothing
+          } else if (OB_FAIL(new_params.push_back(in_expr->get_param_expr(0)))) {
+            LOG_WARN("failed to push back in left expr", K(ret));
+          } else if (OB_FAIL(new_params.append(in_params))) {
+            LOG_WARN("failed to append deduped in params", K(ret));
+          } else if (OB_FAIL(in_expr->set_param_exprs(new_params))) {
+            LOG_WARN("failed to set in param exprs", K(ret));
+          } else {
+            trans_happened = true;
+          }
+        }
+      }
     }
   }
   return ret;
