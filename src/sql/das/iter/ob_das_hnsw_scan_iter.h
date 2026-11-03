@@ -476,7 +476,7 @@ private:
   bool is_parallel_with_block_granule();
   bool check_need_force_switch_run_path();
   int check_iter_filter_need_retry();
-  int check_pre_filter_need_retry();
+  int check_pre_filter_need_retry(int64_t matched_row_cnt);
   int reset_filter_path();
   int updata_vec_exec_ctx(ObPlanStat* plan_stat);
   int prepare_follower_query_cond(ObVectorQueryConditions &query_cond);
