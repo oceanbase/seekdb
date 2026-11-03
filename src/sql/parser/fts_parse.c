@@ -15,8 +15,8 @@
  */
 
 #include "fts_parse.h"
-#include "ftsblex_lex.h"
-#include "ftsparser_tab.h"  // Bison generated header file
+#include "sql/parser/ftsblex_lex.h"
+#include "sql/parser/ftsparser_tab.h"  // Bison generated header file
 
 extern int obsql_fts_yyparse(FtsParserResult *ftsParserResult);
 

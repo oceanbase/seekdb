@@ -35,7 +35,7 @@ extern char *parse_strdup(const char *str, void *malloc_pool, int64_t *out_len);
 extern char* charset_upper(const struct ObCharsetInfo* src_cs, char *src_ptr, int64_t src_len, void *malloc_pool);
 extern char *parse_str_convert_utf8(const struct ObCharsetInfo* src_cs, const char *str, void *malloc_pool, int64_t *out_len, int *extra_errno);
 extern char *replace_invalid_character(const struct ObCharsetInfo* src_cs,
-                                       const struct ObCharsetInfo* oracle_db_cs,
+                                       const struct ObCharsetInfo* nls_db_cs,
                                        const char *str, int64_t *out_len, void *malloc_pool, int *extra_errno);
 extern char *strndup_with_prefix(const char *prefix, const char *str, size_t nbyte, void *malloc_pool);
 extern char *strndup_with_prefix_and_postfix(const char *prefix, const char *postfix, const char *str, size_t nbyte, void *malloc_pool);

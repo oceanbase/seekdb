@@ -18,9 +18,28 @@
 #include "parse_malloc.h"
 #include <lib/utility/alloc_assist.h>
 #include "parse_node.h"
+#include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_ctype.h"
 #include "sql/parser/parse_define.h"
-#include "sql/parser/parser_proxy_func.h"
+
+namespace
+{
+void *alloc_parser_buffer(void *malloc_pool, const int64_t alloc_size)
+{
+  void *buffer = nullptr;
+  if (OB_NOT_NULL(malloc_pool) && alloc_size > 0) {
+    buffer = static_cast<oceanbase::common::ObIAllocator *>(malloc_pool)->alloc(alloc_size);
+  }
+  return buffer;
+}
+
+void free_parser_buffer(void *malloc_pool, void *buffer)
+{
+  if (OB_NOT_NULL(malloc_pool) && OB_NOT_NULL(buffer)) {
+    static_cast<oceanbase::common::ObIAllocator *>(malloc_pool)->free(buffer);
+  }
+}
+}
 
 char* charset_upper(const struct ObCharsetInfo* src_cs,
                     char *src_ptr, int64_t src_len,
@@ -59,7 +78,7 @@ void *malloc_parentheses_info(const size_t nbyte, void *malloc_pool)
   if (OB_ISNULL(malloc_pool)) {
   } else if (OB_UNLIKELY(nbyte <= 0)) {
   } else {
-    if (OB_UNLIKELY(NULL == (ptr = parser_alloc_buffer(malloc_pool, nbyte)))) {
+    if (OB_UNLIKELY(NULL == (ptr = alloc_parser_buffer(malloc_pool, nbyte)))) {
     } else {
       MEMSET(ptr, 0, nbyte);
     }
@@ -75,7 +94,7 @@ void *parse_malloc(const size_t nbyte, void *malloc_pool)
   if (OB_ISNULL(malloc_pool)) {
   } else if (OB_UNLIKELY(nbyte <= 0)) {
   } else {
-    if (OB_UNLIKELY(NULL == (ptr = parser_alloc_buffer(malloc_pool, headlen + nbyte)))) {
+    if (OB_UNLIKELY(NULL == (ptr = alloc_parser_buffer(malloc_pool, headlen + nbyte)))) {
     } else {
       *(static_cast<int64_t *>(ptr)) = nbyte;
       ptr = static_cast<char *>(ptr) + headlen;
@@ -90,7 +109,7 @@ void *parser_alloc(void *malloc_pool, const int64_t alloc_size)
   void *ptr = NULL;
   if (OB_ISNULL(malloc_pool)) {
   } else {
-    if (OB_UNLIKELY(NULL == (ptr = parser_alloc_buffer(malloc_pool, alloc_size)))) {
+    if (OB_UNLIKELY(NULL == (ptr = alloc_parser_buffer(malloc_pool, alloc_size)))) {
     } else {
       MEMSET(ptr, 0, alloc_size);
     }
@@ -106,16 +125,16 @@ void *parse_realloc(void *ptr, size_t nbyte, void *malloc_pool)
   if (OB_ISNULL(malloc_pool)) {
   } else {
     if (OB_UNLIKELY(NULL == ptr)) {
-      new_ptr = parser_alloc_buffer(malloc_pool, nbyte);
+      new_ptr = alloc_parser_buffer(malloc_pool, nbyte);
     } else {
       size_t headlen = sizeof(int64_t);
-      if (OB_UNLIKELY(NULL == (new_ptr = parser_alloc_buffer(malloc_pool, headlen + nbyte)))) {
+      if (OB_UNLIKELY(NULL == (new_ptr = alloc_parser_buffer(malloc_pool, headlen + nbyte)))) {
       } else {
         int64_t obyte = *(reinterpret_cast<int64_t *>(static_cast<char *>(ptr) - headlen));
         *(static_cast<int64_t *>(new_ptr)) = nbyte;
         new_ptr = static_cast<char *>(new_ptr) + headlen;
         MEMMOVE(new_ptr, ptr, static_cast<int64_t>(nbyte) > obyte ? obyte : nbyte);
-        parser_free_buffer(malloc_pool, static_cast<char *>(ptr) - headlen);
+        free_parser_buffer(malloc_pool, static_cast<char *>(ptr) - headlen);
       }
     }
   }
@@ -150,15 +169,15 @@ char *parse_strdup(const char *str, void *malloc_pool, int64_t *out_len)
   return out_str;
 }
 
-char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct ObCharsetInfo* oracle_db_cs,
+char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct ObCharsetInfo* nls_db_cs,
                                 const char *str, int64_t *out_len, void *malloc_pool, int *extra_errno)
 {
   char *out_str = NULL;
   if (OB_ISNULL(str) || OB_ISNULL(extra_errno) || OB_ISNULL(out_len)) {
-  } else if (NULL == src_cs || NULL == oracle_db_cs) {
+  } else if (NULL == src_cs || NULL == nls_db_cs) {
     out_str = const_cast<char *>(str);
   } else {
-    ob_wc_t replace_char = (!!(oracle_db_cs->state & OB_CS_UNICODE)) &&
+    ob_wc_t replace_char = (!!(nls_db_cs->state & OB_CS_UNICODE)) &&
                            (!!(src_cs->state & OB_CS_UNICODE))
                            ? 0xFFFD : '?';
     uint errors = 0;
@@ -168,12 +187,12 @@ char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct
     if (OB_ISNULL(temp_str = static_cast<char *>(parse_malloc(temp_len + 1, malloc_pool)))) {
     } else {
       int64_t temp_res_len = static_cast<int64_t>(
-        ob_convert(temp_str, temp_len, oracle_db_cs, str, str_len, src_cs, false, replace_char, &errors));
+        ob_convert(temp_str, temp_len, nls_db_cs, str, str_len, src_cs, false, replace_char, &errors));
       size_t dst_len = temp_res_len * 4;
       if (OB_ISNULL(out_str = static_cast<char *>(parse_malloc(dst_len + 1, malloc_pool)))) {
       } else {
         *out_len = static_cast<int64_t>(
-          ob_convert(out_str, dst_len, src_cs, temp_str, temp_res_len, oracle_db_cs, false, replace_char, &errors));
+          ob_convert(out_str, dst_len, src_cs, temp_str, temp_res_len, nls_db_cs, false, replace_char, &errors));
         out_str[*out_len] = '\0';
       }
     }

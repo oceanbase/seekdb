@@ -153,7 +153,7 @@ struct ObCharsets4Parser
       nls_collation_(common::CS_TYPE_INVALID)
     {}
   common::ObCollationType string_collation_; //collation type for the string to parse
-  common::ObCollationType nls_collation_; //oracle database collation for validating identifiers
+  common::ObCollationType nls_collation_; // database NLS collation for validating identifiers
 };
 
 } // end namespace sql

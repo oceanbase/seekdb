@@ -100,10 +100,7 @@ mysql_compatible_comment_with_version \/\*\![0-9]{5}
 mysql_compatible_comment_without_version \/\*\!
 mysql_compatible_comment_end \*\/
 
-ColumnStorePattern  (WITH{whitespace}COLUMN{whitespace}GROUP)
-
 %%
-{ColumnStorePattern}                { REPUT_TOKEN_NEG_SIGN(WITH_COLUMN_GROUP); }
 INTERVAL {
 
   ParseResult *p = (ParseResult *)yyextra;
@@ -183,7 +180,6 @@ NULL {
     STORE_PARAM_NODE();
   } else {
     node->sql_str_off_ = yylloc->first_column - 1;
-    setup_token_pos_info(node, yylloc->first_column - 1, node->text_len_);
     return token_ret;
   }
 }
@@ -357,7 +353,6 @@ FALSE {
     STORE_PARAM_NODE();
   } else {
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->text_len_ - 2);
     return token_ret;
   }
 }
@@ -507,7 +502,6 @@ FALSE {
     STORE_PARAM_NODE();
   } else {
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return STRING_VALUE;
   }
 }
@@ -634,7 +628,6 @@ FALSE {
     yylval->node->str_value_ = dup_value;
     yylval->node->is_input_quoted_ = 1;
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return NAME_OB;
   }
 }
@@ -705,7 +698,6 @@ FALSE {
     yylval->node->str_value_ = dup_value;
     yylval->node->is_input_quoted_ = 1;
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return NAME_OB;
   }
 }
@@ -991,9 +983,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>UNION_MERGE { return UNION_MERGE_HINT; }
 <hint>USE_DAS { return USE_DAS_HINT; }
 <hint>NO_USE_DAS { return NO_USE_DAS_HINT; }
-<hint>INDEX_SS { return INDEX_SS_HINT; }
-<hint>INDEX_SS_ASC { return INDEX_SS_ASC_HINT; }
-<hint>INDEX_SS_DESC { return INDEX_SS_DESC_HINT; }
 <hint>USE_NL { return USE_NL; }
 <hint>NO_USE_NL { return NO_USE_NL; }
 <hint>USE_NL_MATERIALIZATION { return USE_NL_MATERIALIZATION; }
@@ -1007,16 +996,12 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>FROZEN  { return FROZEN; }
 <hint>NONE  { return NONE; }
 <hint>DEFAULT  { return DEFAULT; }
-<hint>MAX_CONCURRENT { return MAX_CONCURRENT; }
 <hint>PARALLEL { return PARALLEL; }
 <hint>MANUAL { return MANUAL; }
 <hint>NO_PARALLEL { return NO_PARALLEL; }
 <hint>DML_PARALLEL { return DML_PARALLEL; }
-<hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
-<hint>USE_COLUMN_TABLE { return USE_COLUMN_STORE_HINT; }
-<hint>NO_USE_COLUMN_TABLE { return NO_USE_COLUMN_STORE_HINT; }
 <hint>[(),.@]  {
   ParseResult *p = (ParseResult *)yyextra;
   if (!p->is_ignore_token_) {
@@ -1036,8 +1021,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>LEADING  { return LEADING_HINT; }
 <hint>ORDERED  { return ORDERED; }
 <hint>NO_REWRITE { return NO_REWRITE; }
-<hint>MV_REWRITE { return MV_REWRITE; }
-<hint>NO_MV_REWRITE { return NO_MV_REWRITE; }
 <hint>FULL  { return FULL_HINT; }
 <hint>USE_MERGE  { return USE_MERGE; }
 <hint>NO_USE_MERGE  { return NO_USE_MERGE; }
@@ -1057,12 +1040,8 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>NO_PUSH_SUBQ  { return NO_PUSH_SUBQ; }
 <hint>TRACE_LOG { return TRACE_LOG; }
 <hint>LOAD_BATCH_SIZE { return LOAD_BATCH_SIZE; }
-<hint>NO_DIRECT { return NO_DIRECT; }
-<hint>DIRECT { return DIRECT; }
-<hint>APPEND { return APPEND; }
 <hint>TRACING { return TRACING; }
 <hint>DOP { return DOP; }
-<hint>FORCE_REFRESH_LOCATION_CACHE { return FORCE_REFRESH_LOCATION_CACHE; }
 <hint>STAT { return STAT; }
 <hint>PX_JOIN_FILTER { return PX_JOIN_FILTER; }
 <hint>NO_PX_JOIN_FILTER { return NO_PX_JOIN_FILTER; }
@@ -1071,10 +1050,8 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>QB_NAME { return QB_NAME; }
 <hint>BEGIN_OUTLINE_DATA { return BEGIN_OUTLINE_DATA; }
 <hint>END_OUTLINE_DATA { return END_OUTLINE_DATA; }
-<hint>OPTIMIZER_FEATURES_ENABLE { return OPTIMIZER_FEATURES_ENABLE; }
 <hint>NO_QUERY_TRANSFORMATION { return NO_QUERY_TRANSFORMATION; }
 <hint>NO_COST_BASED_QUERY_TRANSFORMATION { return NO_COST_BASED_QUERY_TRANSFORMATION; }
-<hint>FLASHBACK_READ_TX_UNCOMMITTED { return FLASHBACK_READ_TX_UNCOMMITTED; }
 <hint>TRANS_PARAM { return TRANS_PARAM; }
 <hint>PQ_DISTRIBUTE { return PQ_DISTRIBUTE; }
 <hint>PQ_DISTRIBUTE_WINDOW { return PQ_DISTRIBUTE_WINDOW; }
@@ -1174,18 +1151,13 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>COALESCE_AGGR { return COALESCE_AGGR; }
 <hint>NO_COALESCE_AGGR { return NO_COALESCE_AGGR; }
 <hint>OPT_PARAM { return OPT_PARAM; }
-<hint>OB_DDL_SCHEMA_VERSION { return OB_DDL_SCHEMA_VERSION; }
 <hint>DYNAMIC_SAMPLING { return DYNAMIC_SAMPLING; }
 <hint>BLOCKING { return BLOCKING; }
 <hint>PUSHDOWN { return PUSHDOWN; }
 <hint>DECORRELATE { return DECORRELATE; }
 <hint>NO_DECORRELATE { return NO_DECORRELATE; }
-<hint>RESOURCE_GROUP { return RESOURCE_GROUP; }
 <hint>PQ_GBY { return PQ_GBY; }
 <hint>PQ_DISTINCT { return PQ_DISTINCT; }
-<hint>PX_NODE_POLICY {return PX_NODE_POLICY; }
-<hint>PX_NODE_ADDRS {return PX_NODE_ADDRS; }
-<hint>PX_NODE_COUNT {return PX_NODE_COUNT; }
 <hint>{identifier} {
   if (!(IS_FAST_PARAMETERIZE)) {
     check_value(yylval);
@@ -1205,7 +1177,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
     node->str_value_ = str_tolower(dup_value, strlen(dup_value));
     node->str_len_ = out_len;
     node->sql_str_off_ = yylloc->first_column - 1;
-    setup_token_pos_info(node, yylloc->first_column - 1, yylval->node->str_len_);
   }
   return NAME_OB;
 }
@@ -1238,7 +1209,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
     STORE_PARAM_NODE();
   } else {
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->text_len_ - 2);
     return STRING_VALUE;
   }
 }
@@ -1298,7 +1268,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
     check_malloc(dup_value);
     yylval->node->str_value_ = dup_value;
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return NAME_OB;
   }
 }
@@ -1372,7 +1341,7 @@ Timestamp{whitespace}?\"[^\"]*\" {
     yylval->node->raw_text_ = parse_strndup(tmp_literal, yylval->node->str_len_ + 1, p->malloc_pool_);
     check_malloc(yylval->node->raw_text_);
     char *dup_value = NULL;
-    char *well_formed_str = replace_invalid_character(p->charset_info_, p->charset_info_oracle_db_, tmp_literal, &(yylval->node->str_len_), p->malloc_pool_, &(p->extra_errno_));
+    char *well_formed_str = replace_invalid_character(p->charset_info_, p->charset_info_nls_db_, tmp_literal, &(yylval->node->str_len_), p->malloc_pool_, &(p->extra_errno_));
     check_identifier_convert_result(p->extra_errno_);
     if (p->is_not_utf8_connection_) {
       dup_value = parse_str_convert_utf8(p->charset_info_, well_formed_str, p->malloc_pool_, &(yylval->node->str_len_), &(p->extra_errno_));
@@ -1405,34 +1374,11 @@ Timestamp{whitespace}?\"[^\"]*\" {
 
 {c_cmt_begin} {
 BEGIN(in_c_comment);
-#ifdef SQL_PARSER_COMPILATION
-  ParseResult *p = (ParseResult *)yyextra;
-  if (false == p->stop_add_comment_) {
-    TokenPosInfo info;
-    info.token_off_ = yylloc->first_column - 1;
-    info.token_len_ = -1;
-    if (OB_UNLIKELY(OB_PARSER_SUCCESS != add_comment_list(p, &info))) {
-      YY_UNEXPECTED_ERROR("add comment to comment list failed");
-    }
-  }
-#endif
 }
 
 <in_c_comment>{c_cmt_end} {
   ((ParseResult *)yyextra)->has_encount_comment_ = true;
   BEGIN(INITIAL);
-#ifdef SQL_PARSER_COMPILATION
-  ParseResult *p = (ParseResult *)yyextra;
-  p->has_encount_comment_ = true;
-  if (false == p->stop_add_comment_) {
-    if (OB_UNLIKELY(0 >= p->comment_cnt_)) {
-      YY_UNEXPECTED_ERROR("comment_cnt_ cannot less than 0 in comment end");
-    } else {
-      TokenPosInfo *info = &(p->comment_list_[p->comment_cnt_-1]);
-      info->token_len_ = yylloc->last_column - info->token_off_;
-    }
-  }
-#endif
 }
 
 {mysql_compatible_comment_end} {
@@ -1813,7 +1759,6 @@ BEGIN(in_c_comment);
       }
       check_malloc(node->str_value_);
       node->sql_str_off_ = yylloc->first_column-1;
-      setup_token_pos_info(node, yylloc->first_column - 1, node->str_len_);
       ret = NAME_OB;
     } else {
       yylval->non_reserved_keyword = word;

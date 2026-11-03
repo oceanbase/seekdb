@@ -21,8 +21,6 @@
 #define yyconst const
 typedef void* yyscan_t;
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
-#define IS_ORACLE_MODE(mode) (0 != (mode & SMO_ORACLE))
-#define IS_ORACLE_COMPATIBLE (IS_ORACLE_MODE(p->sql_mode_))
 extern int obsql_mysql_yylex_init_extra(YY_EXTRA_TYPE yy_user_defined,yyscan_t* ptr_yy_globals );
 extern int obsql_mysql_yyparse(ParseResult *result);
 extern int obsql_mysql_multi_fast_parse(ParseResult *p);

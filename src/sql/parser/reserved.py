@@ -16,7 +16,7 @@ class SqlKeywords:
           FALSE  FETCH  FIRST  FLOAT  FOR  FOREIGN  FOUND  FROM  FULL
           GET  GLOBAL  GO  GOTO  GRANT  GROUP
           HAVING  HOUR
-          IDENTITY  IMMEDIATE  IN  INDICATOR  INITIALLY  INNER  INPUT  INSENSITIVE
+          IMMEDIATE  IN  INDICATOR  INITIALLY  INNER  INPUT  INSENSITIVE
           INSERT  INT  INTEGER  INTERSECT  INTERVAL  INTO  IS  ISOLATION
           JOIN
           KEY
@@ -34,7 +34,7 @@ class SqlKeywords:
           VALUE  VALUES  VARCHAR  VARYING  VIEW
           WHEN  WHENEVER  WHERE  WITH  WORK  WRITE
           YEAR
-          ZONE'''
+          '''
     non_reserved_92 = '''
          ADA
           C  CATALOG_NAME  CHARACTER_SET_CATALOG  CHARACTER_SET_NAME  CHARACTER_SET_SCHEMA
@@ -74,7 +74,7 @@ class SqlKeywords:
           FULL  FUNCTION
           GENERAL  GET  GLOBAL  GO  GOTO  GRANT  GROUP  GROUPING
           HANDLE  HAVING  HOLD  HOUR
-          IDENTITY  IF  IMMEDIATE  IN  INDICATOR
+          IF  IMMEDIATE  IN  INDICATOR
           INITIALLY  INNER  INOUT  INPUT  INSERT  INT  INTEGER
           INTERSECT  INTERVAL  INTO  IS  ISOLATION
           JOIN
@@ -104,7 +104,7 @@ class SqlKeywords:
           VALUE  VALUES  VARCHAR  VARYING  VIEW
           WHEN  WHENEVER  WHERE  WHILE  WITH  WITHOUT  WORK  WRITE
           YEAR
-          ZONE'''
+          '''
     non_reserved_99 = '''
          ABS  ADA  ADMIN  ASENSITIVE  ASSIGNMENT  ASYMMETRIC  ATOMIC
           ATTRIBUTE  AVG
@@ -398,7 +398,7 @@ class SqlKeywords:
           VIEW
           WORK
           WRITE
-          ZONE '''
+          '''
     reserved_03 = '''
          ADD
           ALL
@@ -498,7 +498,6 @@ class SqlKeywords:
           HAVING
           HOLD
           HOUR
-          IDENTITY
           IMMEDIATE
           IN
           INDICATOR
@@ -532,7 +531,6 @@ class SqlKeywords:
           MODIFIES
           MODULE
           MONTH
-          MULTISET
           NATIONAL
           NATURAL
           NCHAR
@@ -606,7 +604,6 @@ class SqlKeywords:
           SQLWARNING
           START
           STATIC
-          SUBMULTISET
           SYMMETRIC
           SYSTEM
           SYSTEM_USER
@@ -951,7 +948,6 @@ class SqlKeywords:
          DELAY_KEY_WRITE
          DES_KEY_FILE
          DIAGNOSTICS
-         DIRECTORY
          DISABLE
          DISCARD
          DISK
@@ -968,8 +964,6 @@ class SqlKeywords:
          ERROR
          ERRORS
          ESCAPE
-         EVENT
-         EVENTS
          EVERY
          EXCHANGE
          EXECUTE
@@ -1060,7 +1054,6 @@ class SqlKeywords:
          MERGE
          MESSAGE_TEXT
          MICROSECOND
-         MIGRATE
          MINUTE
          MIN_ROWS
          MODE
@@ -1102,9 +1095,6 @@ class SqlKeywords:
          PASSWORD
          PHASE
          PHRASE
-         PLUGIN
-         PLUGINS
-         PLUGIN_DIR
          POINT
          POLYGON
          PORT
@@ -1132,7 +1122,6 @@ class SqlKeywords:
          RELAY_THREAD
          RELOAD
          REMOVE
-         REORGANIZE
          REPAIR
          REPEATABLE
          REPLICATION
@@ -1168,7 +1157,6 @@ class SqlKeywords:
          SNAPSHOT
          SOCKET
          SOME
-         SONAME
          SOUNDS
          SOURCE
          SPARSEVECTOR
@@ -1242,7 +1230,6 @@ class SqlKeywords:
          WORK
          WRAPPER
          X509_
-         XA
          XML
          YEAR
          '''
@@ -1504,7 +1491,6 @@ class SqlKeywords:
          AVG_ROW_LENGTH
          BACKUP
          BEGIN
-         BIGINT_PRECISION
          BINLOG
          BIT
          BLOCK
@@ -1529,7 +1515,6 @@ class SqlKeywords:
          CLEAR
          CLIENT
          CLOSE
-         CLUSTER_ID
          COALESCE
          CODE
          COLLATION
@@ -1564,7 +1549,6 @@ class SqlKeywords:
          CURSOR_NAME
          DATA
          DATAFILE
-         DATA_DISK_SIZE
          DATE
          DATE_ADD
          DATE_SUB
@@ -1575,11 +1559,9 @@ class SqlKeywords:
          DEFINER
          DELAY
          DELAY_KEY_WRITE
-         DELETE_INSERT
          DES_KEY_FILE
          DESTINATION
          DIAGNOSTICS
-         DIRECTORY
          DISABLE
          DISCARD
          DISK
@@ -1588,7 +1570,6 @@ class SqlKeywords:
          DUMPFILE
          DUPLICATE
          DYNAMIC
-         DYNAMIC_PARTITION_POLICY
          EFFECTIVE
          ENABLE
          END
@@ -1601,21 +1582,17 @@ class SqlKeywords:
          ERROR_P
          ERRORS
          ESCAPE
-         EVENT
-         EVENTS
          EVERY
          EXCEPT
          EXCHANGE
          EXECUTE
          EXPANSION
          EXPIRE
-         EXPIRE_INFO
          EXPIRE_TIME
          EXPORT
          EXTENDED
          EXTENT_SIZE
          EXTRACT
-         FAILED_LOGIN_ATTEMPTS
          FAST
          FAULTS
          FIELDS
@@ -1714,11 +1691,9 @@ class SqlKeywords:
          MEMORY
          MEMTABLE
          MERGE
-         MERGE_ENGINE
          MESSAGE_TEXT
          META
          MICROSECOND
-         MIGRATE
          MIN
          MIN_CPU
          MIN_IOPS
@@ -1742,7 +1717,6 @@ class SqlKeywords:
          NDBCLUSTER
          NEW
          NEXT
-         NEXTVAL
          NO
          NODEGROUP
          NONE
@@ -1766,26 +1740,19 @@ class SqlKeywords:
          PARAMETERS
          PARSER
          PARTIAL
-         PARTIAL_UPDATE
-         PARTITION_ID
          PARTITIONING
          PARTITIONS
          PASSWORD
          PASSWORD_LOCK_TIME
          PAUSE
          PHASE
-         PLUGIN
-         PLUGIN_DIR
-         PLUGINS
          POINT
          POLYGON
          POOL
          PORT
-         PRECREATE_TIME
          PREPARE
          PRESERVE
          PREV
-         PRIMARY_ZONE
          PRIVILEGES
          PROCESSLIST
          PROFILE
@@ -1810,16 +1777,13 @@ class SqlKeywords:
          RELAY_THREAD
          RELOAD
          REMOVE
-         REORGANIZE
          REPAIR
          REPEATABLE
          REPLICA
-         REPLICA_NUM
          REPLICATION
          REPORT
          RESET
          RESOURCE
-         RESOURCE_POOL_LIST
          RESTART
          RESTORE
          RESUME
@@ -1862,7 +1826,6 @@ class SqlKeywords:
          SNAPSHOT
          SOCKET
          SOME
-         SONAME
          SOUNDS
          SOURCE
          SPLIT
@@ -1910,8 +1873,6 @@ class SqlKeywords:
          SYSTEM
          SYSTEM_USER
          TABLE_CHECKSUM
-         TABLEGROUP
-         TABLE_ID
          TABLET_ID
          TABLE_NAME
          TABLES
@@ -1919,7 +1880,6 @@ class SqlKeywords:
          TABLET_MAX_SIZE
          TEMPORARY
          TEMPTABLE
-         TENANT
          TEXT
          THAN
          TIME
@@ -1944,14 +1904,11 @@ class SqlKeywords:
          UNDOFILE
          UNICODE
          UNINSTALL
-         UNIT
-         UNIT_NUM
          UNLOCKED
          UNKNOWN
          UNTIL
          UNUSUAL
          UPGRADE
-         USE_BLOOM_FILTER
          USE_FRM
          USER
          USER_RESOURCES
@@ -1967,11 +1924,8 @@ class SqlKeywords:
          WORK
          WRAPPER
          X509_
-         XA
          XML
          YEAR
-         ZONE
-         ZONE_LIST
          LOCATION
          API_MODE
                   '''
@@ -2013,7 +1967,6 @@ class SqlKeywords:
          EXCEPT
          EXISTS
          JOIN_INFO
-         EXPIRE_INFO
          EXPLAIN
          FLOAT
          FROM
@@ -2047,10 +2000,8 @@ class SqlKeywords:
          OUTER
          PRECISION
          PRIMARY
-         PRIMARY_ZONE
          REAL
          REPLACE
-         REPLICA_NUM
          RIGHT
          SCHEMA
          SELECT
@@ -2069,7 +2020,6 @@ class SqlKeywords:
          TINYINT
          UNION
          UPDATE
-         USE_BLOOM_FILTER
          VALUES
          VARCHAR
          VARBINARY

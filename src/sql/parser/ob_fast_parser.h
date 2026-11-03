@@ -359,10 +359,10 @@ protected:
 	// [`'\"A-Za-z0-9_\.$/%]
 	inline bool is_user_var_char(char ch)
 	{
-		bool is_oracle_user_var =
+		bool is_extended_user_var_char =
 		USER_VAR_CHAR[static_cast<uint8_t>(ch)] || '/' == ch || '%' == ch || '\"' == ch || '\'' == ch;
 		return is_valid_char(ch) &&
-		(is_oracle_user_var || '`' == ch);
+		(is_extended_user_var_char || '`' == ch);
 	}
 	// [A-Za-z0-9_\.$]
 	inline bool is_user_var_char_without_quota(char ch)
@@ -471,7 +471,7 @@ protected:
 	// [A-Za-z]
 	inline bool is_first_identifier_char(char ch)
 	{
-		return is_valid_char(ch) && ORACLE_FIRST_IDENTIFIER_FLAGS[static_cast<uint8_t>(ch)];
+		return is_valid_char(ch) && MYSQL_FIRST_IDENTIFIER_FLAGS[static_cast<uint8_t>(ch)];
 	}
 	/**
 	 * Used to parse [A-Za-z] or {UTF8_GB_CHAR}
@@ -665,33 +665,6 @@ private:
 	DISALLOW_COPY_AND_ASSIGN(ObFastParserMysql);
 };
 
-class ObFastParserOracle final : public ObFastParserBase
-{
-public:
-	explicit ObFastParserOracle(
-		common::ObIAllocator &allocator,
-		const FPContext fp_ctx)
-		: ObFastParserBase(allocator, fp_ctx)
-	{
-		set_callback_func(
-		static_cast<ParseNextTokenFunc>(&ObFastParserOracle::parse_next_token),
-		static_cast<ProcessIdfFunc>(&ObFastParserOracle::process_identifier));
-	}
-	~ObFastParserOracle() {}
-private:
-	int parse_next_token();
-	int process_identifier(bool is_number_begin);
-	/**
-	 * @param [in] : if in_q_quote is true, means that the current token
-	 * starts with ("N"|"n")?("Q"|"q"){sqbegin}
-	 * else, means that the current token starts with ("N"|"n")?{sqbegin }
-	 */
-	int process_string(const bool in_q_quote);
-	int process_identifier_begin_with_n();
-
-private:
-	DISALLOW_COPY_AND_ASSIGN(ObFastParserOracle);
-};
 } // end namespace sql
 } // end namespace oceanbase
 
