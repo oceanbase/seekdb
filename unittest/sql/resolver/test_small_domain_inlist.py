@@ -99,7 +99,7 @@ class SmallDomainInlistTest(unittest.TestCase):
         self.sql("CREATE TABLE string_values (v VARCHAR(40) COLLATE utf8mb4_unicode_ci)")
         self.sql("INSERT INTO string_values VALUES ('A'),('a'),('ß'),('SS'),('1'),('01'),(NULL)")
         for compact in ["'A','a'", "'ß','SS',NULL", "1,2,3", "1,'1',NULL",
-                        "CONVERT('A' USING binary),CONVERT('a' USING utf8mb4)"]:
+                        "CONVERT('A' USING binary),CONVERT('a' USING utf8mb4) COLLATE utf8mb4_unicode_ci"]:
             repeated = ",".join([compact] * 1024)
             for operator in ["IN", "NOT IN"]:
                 prefix = "SELECT COUNT(*) FROM string_values WHERE v " + operator + " ("
