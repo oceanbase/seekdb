@@ -648,6 +648,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
   ObPluginVectorIndexAdaptor *new_adapter = nullptr;
   ObPluginVectorIndexMgr *vec_idx_mgr = nullptr;
   int64_t index_count = 0;
+  int64_t refresh_stage = 0;
 
   void *adpt_buff = nullptr;
   if (OB_FAIL(read_local_tablet(adapter,
@@ -659,6 +660,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
                                 snapshot_table_param,
                                 snapshot_idx_iter))) {
   } else {
+    refresh_stage = 1;
     blocksstable::ObDatumRow *row = nullptr;
     ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(snapshot_idx_iter);
     if (OB_FAIL(table_scan_iter->get_next_row(row))) {
@@ -670,6 +672,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       ret = OB_ERR_UNEXPECTED;
     } else if (adapter->get_snapshot_key_prefix().empty() || 
                !row->storage_datums_[0].get_string().prefix_match(adapter->get_snapshot_key_prefix())) {
+      refresh_stage = 2;
       ObString key_prefix;
       ObString target_prefix;
       if (OB_ISNULL(vector_index_service)) {
@@ -688,21 +691,25 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
             } else if (OB_FAIL(new_adapter->set_index_identity(adapter->get_index_identity()))) {
             } else {
               adapter = new_adapter;
+              refresh_stage = 3;
             }
           }
         } else {
           new_adapter = adapter;
         }
       }
+      ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
+      ObHNSWDeserializeCallback::CbParam param(
+          snapshot_idx_iter, &tmp_allocator, lob_read_options);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
-      } else if (OB_FAIL(iter_table_rescan(snapshot_scan_param, table_scan_iter))) {
+        LOG_WARN("copy snapshot key failed", K(ret));
+      } else if (OB_FAIL(param.set_first_row(*row))) {
+        LOG_WARN("stage first snapshot row failed", K(ret), K(key_prefix));
+      } else if (OB_FAIL(param.prepare_stream_size())) {
+        LOG_WARN("stage remaining snapshot rows failed", K(ret), K(key_prefix));
       } else {
-  
-        ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
-        ObHNSWDeserializeCallback::CbParam param(
-            snapshot_idx_iter, &tmp_allocator, lob_read_options);
-    
+        refresh_stage = 4;
         ObHNSWDeserializeCallback callback(static_cast<void*>(new_adapter));
         ObIStreamBuf::Callback cb = callback;
         // ToDo: concurrency with weakread
@@ -717,13 +724,19 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
         } else {
           TCWLockGuard lock_guard(snap_memdata->mem_data_rwlock_);
           if (OB_FAIL(index_seri.deserialize(snap_memdata->index_, param, cb))) {
+            LOG_WARN("deserialize staged snapshot failed", K(ret), K(key_prefix));
           } else if (OB_FAIL(obvectorutil::immutable_optimize(snap_memdata->index_))) {
+            LOG_WARN("optimize deserialized snapshot failed", K(ret), K(key_prefix));
           } else if (OB_FALSE_IT(index_type = new_adapter->get_snap_index_type())) {
           } else if (OB_FAIL(get_split_snapshot_prefix(index_type, key_prefix, target_prefix))) {
+            LOG_WARN("split snapshot prefix failed", K(ret), K(index_type), K(key_prefix));
           } else if (OB_FAIL(new_adapter->set_snapshot_key_prefix(target_prefix))) {
+            LOG_WARN("set snapshot prefix failed", K(ret), K(target_prefix));
           } else if (OB_FAIL(obvectorutil::get_index_number(snap_memdata->index_, index_count))) {
             ret = OB_ERR_VSAG_RETURN_ERROR;
+            LOG_WARN("read deserialized snapshot index count failed", K(ret), K(key_prefix));
           } else if (index_count == 0) {
+            refresh_stage = 5;
             free_memdata_resource(VIRT_SNAP, snap_memdata, new_adapter->get_allocator());
             //should not release mem_ctx here, create by init_mem, not init_memdata
             //if (OB_NOT_NULL(snap_memdata->mem_ctx_)) {
@@ -733,6 +746,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
             //}
             LOG_INFO("memdata sync snapshot index complement no data", K(index_count), K(index_type), KPC(new_adapter));
           } else { // index_count > 0
+            refresh_stage = 6;
             new_adapter->close_snap_data_rb_flag();
             LOG_INFO("memdata sync snapshot index complement data", K(index_count), K(index_type), KPC(new_adapter));
           }
@@ -742,7 +756,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
   }
   // free adapter memory when failed
   if ((OB_FAIL(ret) || index_count == 0) && OB_NOT_NULL(new_adapter) && create_new_adp) {
-    LOG_INFO("release new adapter memory in failure", K(ret));
+    LOG_INFO("release new adapter memory in failure", K(ret), K(index_count), K(refresh_stage));
     new_adapter->~ObPluginVectorIndexAdaptor();
     vector_index_service->get_allocator().free(adpt_buff);
     adpt_buff = nullptr;

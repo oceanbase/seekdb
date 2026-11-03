@@ -414,6 +414,8 @@ int HnswIndexHandler::knn_search(const vsag::DatasetPtr &query, int64_t topk,
     }
   } else {
     ret = vsag_errcode2ob(result.error().type);
+    LOG_WARN("[OBVSAG] knn search error", K(ret), K(result.error().type),
+             KCSTRING(result.error().message.c_str()));
   }
   return ret;
 }
@@ -462,6 +464,8 @@ int HnswIndexHandler::knn_search(const vsag::DatasetPtr &query, int64_t topk,
     }
   } else {
     ret = vsag_errcode2ob(result.error().type);
+    LOG_WARN("[OBVSAG] knn search error", K(ret), K(result.error().type),
+             KCSTRING(result.error().message.c_str()));
   }
   return ret;
 }
