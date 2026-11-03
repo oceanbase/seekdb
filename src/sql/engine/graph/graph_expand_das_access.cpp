@@ -93,8 +93,8 @@ int GraphExpandDasAccess::lookup_vertices(
 }
 
 int GraphExpandDasAccess::scan_edges(
-    const ObIArray<GraphElementIdentity> &sources, GraphPathDirection direction,
-    const GraphElementIdentity *after_edge, int64_t limit,
+    const ObIArray<GraphElementIdentity> &sources,
+    const GraphExpandScanRequest &request,
     ObIArray<GraphExpandEdge> &edges, int64_t &scanned_edges, bool &end)
 {
   int ret = OB_SUCCESS;
@@ -105,7 +105,7 @@ int GraphExpandDasAccess::scan_edges(
     end = false;
     ret = OB_NOT_INIT;
   } else {
-    ret = edge_cursor_.scan_edges(sources, direction, after_edge, limit,
+    ret = edge_cursor_.scan_edges(sources, request,
                                   edges, scanned_edges, end);
   }
   return ret;

@@ -51,7 +51,7 @@ public:
 // the recursive CTE operator hierarchy.
 class GraphFeedbackLoopSpec final : public RecursivePumpSpec
 {
-  OB_UNIS_VERSION_V(4);
+  OB_UNIS_VERSION_V(5);
 public:
   explicit GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                  const ObPhyOperatorType type);

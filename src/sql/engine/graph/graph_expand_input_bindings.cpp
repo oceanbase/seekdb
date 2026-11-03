@@ -69,7 +69,10 @@ int GraphExpandInputBindings::next_input(
     if (input_index_ >= inputs_.count()) {
       if (source_input_groups_enabled_) { ret = OB_ERR_UNEXPECTED; }
       else { input_index_ = -1; }
-    } else if (OB_FAIL(access_.check_status())) {
+    } else if (++associations_since_status_check_
+                   >= GRAPH_EXPAND_STATUS_CHECK_INTERVAL) {
+      associations_since_status_check_ = 0;
+      ret = access_.check_status();
     } else {
       const int64_t current = input_index_;
       if (source_input_groups_enabled_) {
@@ -120,6 +123,7 @@ void GraphExpandInputBindings::reset()
   next_input_indices_.reset();
   identity_allocator_.reuse();
   input_index_ = -1;
+  associations_since_status_check_ = 0;
   source_input_groups_enabled_ = true;
   input_group_started_ = false;
 }

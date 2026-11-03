@@ -576,6 +576,7 @@ private:
   bool graph_path_any_shortest_{false};
   bool graph_path_shortest_single_segment_{false};
   bool graph_path_shortest_goal_key_filter_{false};
+  bool graph_path_shortest_dedup_in_feedback_{false};
   /* These fields are only used by normal select */
   bool is_distinct_;
   // Used for the sort column specified in the search by clause of the cte recursive statement

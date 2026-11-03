@@ -46,8 +46,7 @@ public:
                       common::ObIArray<GraphElementIdentity> &existing,
                       GraphVertexLookupPhase phase) override;
   int scan_edges(const common::ObIArray<GraphElementIdentity> &sources,
-                 GraphPathDirection direction,
-                 const GraphElementIdentity *after_edge, int64_t limit,
+                 const GraphExpandScanRequest &request,
                  common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
   int probe_adjacency_rows(

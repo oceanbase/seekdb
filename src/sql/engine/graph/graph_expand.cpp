@@ -413,25 +413,32 @@ int GraphExpand::load_next_page()
   int ret = OB_SUCCESS;
   bool page_end = false;
   int64_t scanned_edges = 0;
+  GraphExpandScanRequest request;
+  request.direction_ = direction_;
+  request.limit_ = page_size_;
+  request.continue_scan_ = continue_edge_scan_;
+  request.need_edge_identity_ = need_edge_identity_;
+  request.need_edge_payload_ = need_edge_payload_;
   edge_page_.reuse();
   edge_index_ = 0;
   input_group_started_ = false;
   if (OB_FAIL(access_.check_status())) {
-  } else if (OB_FAIL(access_.scan_edges(existing_sources_, direction_,
-                                        edge_page_.continuation(),
-                                        page_size_, edge_page_.edges(), scanned_edges,
+  } else if (OB_FAIL(access_.scan_edges(existing_sources_, request,
+                                        edge_page_.edges(), scanned_edges,
                                         page_end))) {
   } else if (OB_FAIL(access_.check_status())) {
   } else if (edge_page_.edges().count() > page_size_
              || (edge_page_.edges().empty() && !page_end)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(edge_page_.stabilize_edge_page())) {
+  } else if (OB_FAIL(edge_page_.stabilize_edge_page(
+                 need_edge_identity_, need_edge_payload_))) {
   } else if (OB_FAIL(check_memory_limit())) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.edges().count(); ++i) {
     const GraphExpandEdge &edge = edge_page_.edges().at(i);
     bool source_exists = false;
-    if (!edge.source_identity_.is_valid() || !edge.edge_identity_.is_valid()
+    if (!edge.source_identity_.is_valid()
+        || (need_edge_identity_ && !edge.edge_identity_.is_valid())
         || !edge.target_identity_.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (input_bindings_.grouped()) {
@@ -443,10 +450,7 @@ int GraphExpand::load_next_page()
     } else {
       source_exists = contains(existing_sources_, edge.source_identity_);
     }
-    if (OB_SUCC(ret)
-        && (!source_exists
-            || (edge_page_.continuation() != nullptr
-                && edge.edge_identity_ == *edge_page_.continuation()))) {
+    if (OB_SUCC(ret) && !source_exists) {
       ret = OB_ERR_UNEXPECTED;
     }
   }
@@ -456,7 +460,7 @@ int GraphExpand::load_next_page()
   }
   if (OB_SUCC(ret) && !edge_page_.edges().empty()) {
     if (OB_FAIL(edge_page_.prepare_targets(
-            known_visited_, known_visited_binding_id_))) {
+            known_visited_, known_visited_binding_id_, need_edge_identity_))) {
     } else if (OB_FAIL(check_memory_limit())) {
     } else if (OB_FAIL(access_.check_status())) {
     }
@@ -477,13 +481,13 @@ int GraphExpand::load_next_page()
           ++stats_.orphan_edges_;
         }
       }
-      if (OB_FAIL(edge_page_.save_continuation())) {
-      } else if (OB_FAIL(check_memory_limit())) {
+      if (OB_FAIL(check_memory_limit())) {
       }
     }
   }
   if (OB_SUCC(ret)) {
     end_ = page_end;
+    continue_edge_scan_ = !page_end;
   }
   return ret;
 }
@@ -559,6 +563,7 @@ void GraphExpand::release()
   identity_allocator_.reuse();
   edge_index_ = 0;
   end_ = false;
+  continue_edge_scan_ = false;
   is_open_ = false;
   input_group_started_ = false;
   fixed_memory_bytes_ = 0;

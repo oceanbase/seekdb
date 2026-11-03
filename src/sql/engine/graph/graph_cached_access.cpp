@@ -26,8 +26,7 @@ GraphCachedAccess::GraphCachedAccess(ObIAllocator &allocator,
                                     IGraphExpandAccess &child, int64_t memory_limit)
     : child_(child), cache_(allocator, memory_limit),
       hits_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphAdjCache")),
-      misses_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphAdjCache")),
-      cursor_allocator_(allocator)
+      misses_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphAdjCache"))
 {}
 
 int GraphCachedAccess::select_context(const ObIArray<ObObj> &parameters)
@@ -54,9 +53,7 @@ void GraphCachedAccess::release()
   cache_.release_recording();
   hits_.reset();
   misses_.reset();
-  cursor_allocator_.reset();
-  child_cursor_.reset();
-  child_has_cursor_ = false;
+  child_scan_active_ = false;
   hit_position_ = 0;
   hit_edge_ = -1;
 }
@@ -70,7 +67,7 @@ void GraphCachedAccess::clear()
 int64_t GraphCachedAccess::retained_wrapper_memory() const
 {
   const int64_t parts[] = {cache_.used_memory(),
-      hits_.get_data_size(), misses_.get_data_size(), cursor_allocator_.total()};
+      hits_.get_data_size(), misses_.get_data_size()};
   int64_t bytes = 0;
   for (int64_t part : parts) {
     if (part < 0 || part > INT64_MAX - bytes) { bytes = INT64_MAX; break; }
@@ -125,9 +122,8 @@ int GraphCachedAccess::begin(const ObIArray<GraphElementIdentity> &sources)
 }
 
 int GraphCachedAccess::scan_edges(const ObIArray<GraphElementIdentity> &sources,
-                                  GraphPathDirection direction,
-                                  const GraphElementIdentity *after_edge,
-                                  int64_t limit, ObIArray<GraphExpandEdge> &edges,
+                                  const GraphExpandScanRequest &request,
+                                  ObIArray<GraphExpandEdge> &edges,
                                   int64_t &scanned_edges, bool &end)
 {
   int ret = OB_SUCCESS;
@@ -135,11 +131,12 @@ int GraphCachedAccess::scan_edges(const ObIArray<GraphElementIdentity> &sources,
   scanned_edges = 0;
   end = false;
   if (OB_FAIL(check_status())) {
-  } else if (after_edge == nullptr && OB_FAIL(begin(sources))) {
+  } else if (!request.continue_scan_ && OB_FAIL(begin(sources))) {
   } else if (bypass_) {
-    ret = child_.scan_edges(sources, direction, after_edge, limit, edges, scanned_edges, end);
+    ret = child_.scan_edges(sources, request, edges, scanned_edges, end);
   } else {
-    while (OB_SUCC(ret) && hit_position_ < hits_.count() && edges.count() < limit) {
+    while (OB_SUCC(ret) && hit_position_ < hits_.count()
+           && edges.count() < request.limit_) {
       if (hit_edge_ < 0) {
         if (++hit_position_ < hits_.count()) {
           hit_edge_ = cache_.first_edge(hits_.at(hit_position_));
@@ -158,15 +155,12 @@ int GraphCachedAccess::scan_edges(const ObIArray<GraphElementIdentity> &sources,
     } else if (OB_SUCC(ret) && misses_.empty()) {
       end = true;
     } else if (OB_SUCC(ret)) {
-      if (OB_FAIL(child_.scan_edges(misses_, direction,
-                     child_has_cursor_ ? &child_cursor_ : nullptr,
-                     limit, edges, scanned_edges, end))) {
-      } else if (!edges.empty()) {
-        cursor_allocator_.reuse();
-        child_cursor_ = edges.at(edges.count() - 1).edge_identity_;
-        if (OB_FAIL(edges.at(edges.count() - 1).edge_identity_.rowkey_.deep_copy(
-                        child_cursor_.rowkey_, cursor_allocator_))) {
-        } else { child_has_cursor_ = true; }
+      GraphExpandScanRequest child_request = request;
+      child_request.continue_scan_ = child_scan_active_;
+      if (OB_FAIL(child_.scan_edges(misses_, child_request,
+                                   edges, scanned_edges, end))) {
+      } else {
+        child_scan_active_ = !end;
       }
       if (OB_SUCC(ret)) { ret = cache_.record(misses_, edges, end); }
     }

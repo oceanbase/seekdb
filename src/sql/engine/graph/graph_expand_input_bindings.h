@@ -69,6 +69,7 @@ private:
   common::ObArray<SourceInputGroup> source_input_groups_;
   common::ObArray<int64_t> next_input_indices_;
   int64_t input_index_{-1};
+  int64_t associations_since_status_check_{0};
   bool source_input_groups_enabled_{true};
   bool input_group_started_{false};
   DISALLOW_COPY_AND_ASSIGN(GraphExpandInputBindings);

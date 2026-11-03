@@ -18,6 +18,9 @@ while ($passes)
 {
   if ($passes == 1)
   {
+    # Keep a legal but endpoint-incomplete index ahead of the covering one in
+    # schema order. Native endpoint-only traversal must prefer the latter.
+    CREATE INDEX shortest_src_only ON graph_knows(src);
     CREATE INDEX shortest_out ON graph_knows(src,since,dst);
     CREATE INDEX shortest_in ON graph_knows(dst,since,src);
   }
@@ -114,6 +117,10 @@ EXPLAIN INTO plan_table SET statement_id='shortest_reach'
 SELECT DISTINCT personId FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
  (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
  COLUMNS(b.id AS personId)) g WHERE personId<>1 ORDER BY personId;
+EXPLAIN INTO plan_table SET statement_id='shortest_property'
+SELECT name,hops FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
+ COLUMNS(b.name AS name,COUNT(e.id) AS hops)) g;
 EXPLAIN INTO plan_table SET statement_id='shortest_extra_target'
 SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
  (a IS person WHERE a.id=1)-[e IS knows]->{1,6}
@@ -126,6 +133,14 @@ AND special_predicates LIKE '%visited=cross_hop, goal=bound_key%';
 SELECT COUNT(*)=1 AS cross_hop_visited FROM plan_table
 WHERE statement_id='shortest_reach' AND operator='GRAPH FEEDBACK LOOP'
 AND special_predicates LIKE '%visited=cross_hop, goal=none%';
+SELECT COUNT(*)=0 AS shortest_selector_eliminated FROM plan_table
+WHERE statement_id='shortest_reach' AND operator='WINDOW FUNCTION';
+SELECT COUNT(*)=1 AS property_keeps_shortest_selector FROM plan_table
+WHERE statement_id='shortest_property' AND operator='WINDOW FUNCTION';
+SELECT COUNT(*)=1 AS covering_adjacency_preferred FROM plan_table
+WHERE statement_id='shortest_reach'
+AND operator IN ('TABLE FULL SCAN','TABLE RANGE SCAN')
+AND object_alias='__g_step_edge(shortest_out)';
 SELECT COUNT(*)=1 AS extra_terminal_filter_disables_goal FROM plan_table
 WHERE statement_id='shortest_extra_target' AND operator='GRAPH FEEDBACK LOOP'
 AND special_predicates LIKE '%goal=none%';

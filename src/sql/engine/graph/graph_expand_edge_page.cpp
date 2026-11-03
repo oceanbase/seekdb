@@ -24,7 +24,7 @@ using namespace common;
 namespace sql
 {
 GraphExpandEdgePage::GraphExpandEdgePage(ObIAllocator &allocator)
-    : identity_allocator_(allocator), cursor_allocator_(allocator),
+    : identity_allocator_(allocator),
       edge_page_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
       target_identities_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
       existing_targets_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
@@ -52,32 +52,11 @@ void GraphExpandEdgePage::reset()
   target_identities_.reset();
   existing_targets_.reset();
   identity_allocator_.reuse();
-  after_edge_.reset();
-  has_after_edge_ = false;
-  cursor_allocator_.reuse();
-}
-
-int GraphExpandEdgePage::save_continuation()
-{
-  int ret = OB_SUCCESS;
-  if (edge_page_.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    // scan_edges has consumed the previous token. Copy the last edge from the
-    // independent page arena before that arena can be reused for the next page.
-    cursor_allocator_.reuse();
-    has_after_edge_ = false;
-    after_edge_ = edge_page_.at(edge_page_.count() - 1).edge_identity_;
-    if (OB_FAIL(edge_page_.at(edge_page_.count() - 1).edge_identity_.rowkey_.deep_copy(
-            after_edge_.rowkey_, cursor_allocator_))) {
-    } else { has_after_edge_ = true; }
-  }
-  return ret;
 }
 
 int64_t GraphExpandEdgePage::used_memory() const
 {
-  const int64_t parts[] = {identity_allocator_.total(), cursor_allocator_.total(),
+  const int64_t parts[] = {identity_allocator_.total(),
       edge_page_.get_data_size(), target_identities_.get_data_size(),
       existing_targets_.get_data_size(), target_index_.used_memory(),
       validation_index_.used_memory(), target_status_.get_data_size()};
@@ -90,10 +69,12 @@ int64_t GraphExpandEdgePage::used_memory() const
 }
 
 int GraphExpandEdgePage::prepare_targets(
-    const GraphIdentityIndex *known_visited, int64_t binding_id)
+    const GraphIdentityIndex *known_visited, int64_t binding_id,
+    bool validate_edge_identity)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(validation_index_.init(edge_page_.count()))) {
+  if (validate_edge_identity
+      && OB_FAIL(validation_index_.init(edge_page_.count()))) {
   } else if (OB_FAIL(target_index_.init(edge_page_.count()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.count(); ++i) {
@@ -101,8 +82,10 @@ int GraphExpandEdgePage::prepare_targets(
     int64_t position = -1;
     bool inserted = false;
     bool visited = false;
-    if (OB_FAIL(validation_index_.get_or_insert(edge.edge_identity_, position, inserted))) {
-    } else if (!inserted) {
+    if (validate_edge_identity
+        && OB_FAIL(validation_index_.get_or_insert(
+            edge.edge_identity_, position, inserted))) {
+    } else if (validate_edge_identity && !inserted) {
       ret = OB_ERR_UNEXPECTED;
     } else if (known_visited != nullptr
                && OB_FAIL(known_visited->find(
@@ -185,19 +168,22 @@ int GraphExpandEdgePage::stabilize_identities(ObIArray<GraphElementIdentity> &id
   return ret;
 }
 
-int GraphExpandEdgePage::stabilize_edge_page()
+int GraphExpandEdgePage::stabilize_edge_page(
+    bool need_edge_identity, bool need_edge_payload)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.count(); ++i) {
     GraphExpandEdge stable;
     if (OB_FAIL(deep_copy_identity(edge_page_.at(i).source_identity_,
                                    stable.source_identity_))) {
-    } else if (OB_FAIL(deep_copy_identity(edge_page_.at(i).edge_identity_,
-                                          stable.edge_identity_))) {
+    } else if (need_edge_identity
+               && OB_FAIL(deep_copy_identity(edge_page_.at(i).edge_identity_,
+                                             stable.edge_identity_))) {
     } else if (OB_FAIL(deep_copy_identity(edge_page_.at(i).target_identity_,
                                           stable.target_identity_))) {
-    } else if (OB_FAIL(stable.payload_.deep_copy(edge_page_.at(i).payload_,
-                                                identity_allocator_))) {
+    } else if (need_edge_payload
+               && OB_FAIL(stable.payload_.deep_copy(edge_page_.at(i).payload_,
+                                                   identity_allocator_))) {
     } else {
       edge_page_.at(i) = stable;
     }

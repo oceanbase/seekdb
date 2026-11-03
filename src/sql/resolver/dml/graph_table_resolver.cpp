@@ -313,6 +313,7 @@ private:
 // with every typed source/destination column in graph-mapping order.
 int find_adjacency_index(const GraphBinding &edge,
                          GraphPathDirection direction,
+                         bool need_edge_identity,
                          ObSchemaGetterGuard &schema_guard,
                          ObString &index_name)
 {
@@ -323,11 +324,17 @@ int find_adjacency_index(const GraphBinding &edge,
                                     : edge.element_->source_columns_;
   const int64_t column_count = reverse ? edge.element_->destination_key_count_
                                        : edge.element_->source_key_count_;
+  const uint64_t *next_columns = reverse ? edge.element_->source_columns_
+                                         : edge.element_->destination_columns_;
+  const int64_t next_column_count = reverse ? edge.element_->source_key_count_
+                                            : edge.element_->destination_key_count_;
+  int64_t best_covered_columns = -1;
+  int64_t best_index_key_count = INT64_MAX;
+  uint64_t best_index_table_id = OB_INVALID_ID;
   index_name.reset();
   if (OB_FAIL(edge.table_->get_simple_index_infos(index_infos))) {
   }
-  for (int64_t i = 0; OB_SUCC(ret) && index_name.empty()
-       && i < index_infos.count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
     const ObTableSchema *index_schema = nullptr;
     if (OB_FAIL(schema_guard.get_table_schema(index_infos.at(i).table_id_,
                                                index_schema))) {
@@ -348,8 +355,59 @@ int find_adjacency_index(const GraphBinding &edge,
         const ObIndexColumn *column = index_columns.get_column(j);
         prefix_matches = column != nullptr && column->column_id_ == columns[j];
       }
-      if (prefix_matches && OB_FAIL(index_schema->get_index_name(index_name))) {
-        LOG_WARN("failed to read adjacency index name", K(ret), KPC(index_schema));
+      int64_t covered_columns = 0;
+      const uint64_t *required_groups[] = {
+          columns, next_columns, edge.element_->key_columns_};
+      const int64_t required_counts[] = {
+          column_count, next_column_count,
+          need_edge_identity ? edge.element_->key_count_ : 0};
+      for (int64_t group = 0; OB_SUCC(ret) && prefix_matches
+           && group < ARRAYSIZEOF(required_groups); ++group) {
+        for (int64_t column = 0; OB_SUCC(ret)
+             && column < required_counts[group]; ++column) {
+          const uint64_t column_id = required_groups[group][column];
+          bool already_counted = false;
+          bool covered = false;
+          for (int64_t prior_group = 0; !already_counted
+               && prior_group <= group; ++prior_group) {
+            const int64_t prior_limit = prior_group == group
+                ? column : required_counts[prior_group];
+            for (int64_t prior = 0; !already_counted
+                 && prior < prior_limit; ++prior) {
+              already_counted = required_groups[prior_group][prior] == column_id;
+            }
+          }
+          if (!already_counted
+              && OB_FAIL(index_schema->has_column(column_id, covered))) {
+            LOG_WARN("failed to inspect graph adjacency index coverage", K(ret),
+                     K(column_id), KPC(index_schema));
+          } else if (!already_counted && covered) {
+            ++covered_columns;
+          }
+        }
+      }
+      // Prefix compatibility determines correctness. Among compatible access
+      // paths, prefer the ordinary index that covers the most identities the
+      // native edge scan must read. A narrower declared key is the stable
+      // tie-breaker; the table ID makes the result independent of schema-list
+      // iteration order.
+      const int64_t index_key_count = index_columns.get_size();
+      if (OB_SUCC(ret) && prefix_matches
+          && (covered_columns > best_covered_columns
+              || (covered_columns == best_covered_columns
+                  && (index_key_count < best_index_key_count
+                      || (index_key_count == best_index_key_count
+                          && index_schema->get_table_id()
+                              < best_index_table_id))))) {
+        ObString candidate_name;
+        if (OB_FAIL(index_schema->get_index_name(candidate_name))) {
+          LOG_WARN("failed to read adjacency index name", K(ret), KPC(index_schema));
+        } else {
+          index_name = candidate_name;
+          best_covered_columns = covered_columns;
+          best_index_key_count = index_key_count;
+          best_index_table_id = index_schema->get_table_id();
+        }
       }
     }
   }
@@ -2165,6 +2223,60 @@ int rewrite_graph_key_projections(GraphRelationBuilder &builder,
   return ret;
 }
 
+// Removing the relational ANY SHORTEST selector is safe only when the native
+// feedback loop can produce the complete result without endpoint lookups.
+// Prove the same key-only condition used by rewrite_graph_key_projections()
+// before the generated CTE is resolved, so the path descriptor never promises
+// a native-only optimization for a property-producing result.
+int can_project_shortest_feedback_keys(const GraphBinding &source,
+                                       const GraphBinding &target,
+                                       const ParseNode &projects,
+                                       bool &can_project)
+{
+  int ret = OB_SUCCESS;
+  can_project = true;
+  const GraphBinding *bindings[] = {&source, &target};
+  ObArray<const ParseNode *> pending;
+  for (int64_t b = 0; can_project && b < ARRAYSIZEOF(bindings); ++b) {
+    for (int64_t k = 0; can_project && k < bindings[b]->element_->key_count_; ++k) {
+      const ObColumnSchemaV2 *column = bindings[b]->table_->get_column_schema(
+          bindings[b]->element_->key_columns_[k]);
+      can_project = column != nullptr && ob_is_integer_type(column->get_data_type());
+    }
+  }
+  if (can_project && OB_FAIL(pending.push_back(&projects))) {
+  }
+  while (OB_SUCC(ret) && can_project && !pending.empty()) {
+    const ParseNode *node = pending.at(pending.count() - 1);
+    pending.pop_back();
+    if (node == nullptr) {
+      continue;
+    } else if (node->type_ == T_COLUMN_REF && node->num_child_ == 3
+               && node->children_[1] != nullptr && node->children_[2] != nullptr) {
+      for (int64_t b = 0; can_project && b < ARRAYSIZEOF(bindings); ++b) {
+        const GraphBinding &binding = *bindings[b];
+        if (graph_name_equal(graph_node_name(*node->children_[1]),
+                             graph_node_name(*binding.variable_))) {
+          bool is_key = false;
+          for (int64_t k = 0; !is_key && k < binding.element_->key_count_; ++k) {
+            const ObColumnSchemaV2 *column = binding.table_->get_column_schema(
+                binding.element_->key_columns_[k]);
+            is_key = column != nullptr
+                && graph_name_equal(graph_node_name(*node->children_[2]),
+                                    column->get_column_name_str());
+          }
+          can_project = is_key;
+        }
+      }
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
+        ret = pending.push_back(node->children_[i]);
+      }
+    }
+  }
+  return ret;
+}
+
 int build_recursive_graph_match(GraphRelationBuilder &builder,
                                 const GraphSchema &graph,
                                 const ObString &database_name,
@@ -2815,7 +2927,9 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
                                           rewritten_projects))) {
     }
     if (OB_SUCC(ret) && target_filter == nullptr && composed_chain == nullptr
-        && !alternating && !path_desc.any_shortest_
+        && !alternating
+        && (!path_desc.any_shortest_
+            || path_desc.shortest_dedup_in_feedback_)
         && path_desc.direction_ != GraphPathDirection::BOTH) {
       bool replaced = false;
       if (OB_FAIL(rewrite_graph_key_projections(builder, result_source, result_target,
@@ -2866,7 +2980,8 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
           select->children_[PARSE_SELECT_WHERE] = clause;
         }
       }
-      if (OB_SUCC(ret) && path_desc.any_shortest_) {
+      if (OB_SUCC(ret) && path_desc.any_shortest_
+          && !path_desc.shortest_dedup_in_feedback_) {
         ret = select_shortest_matches(builder, select,
             composed_chain == nullptr ? result_source : composed_actual.at(0),
             composed_chain == nullptr ? result_target : composed_actual.at(composed_actual.count() - 1),
@@ -3482,6 +3597,26 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
             || path_desc.path_mode_ == GraphPathMode::ACYCLIC
             || path_desc.row_shape_ == GraphPathRowShape::PER_STEP
             || contains_item_type(projects, T_FUN_JSON_ARRAYAGG);
+        const bool shortest_feedback_candidate = path_desc.any_shortest_
+            && path_desc.shortest_single_segment_
+            && path_desc.path_mode_ == GraphPathMode::WALK
+            && path_desc.row_shape_ == GraphPathRowShape::PER_MATCH
+            && !path_desc.need_path_
+            && path_desc.direction_ != GraphPathDirection::BOTH
+            && path_desc.source_element_id_ == path_desc.target_element_id_
+            && chain.children_[quantified_index]->children_[2] == nullptr
+            && chain.children_[quantified_index + 1]->children_[2] == nullptr;
+        if (shortest_feedback_candidate) {
+          bool can_project_feedback_keys = false;
+          if (OB_FAIL(can_project_shortest_feedback_keys(
+                  bindings.at(quantified_index - 1),
+                  bindings.at(quantified_index + 1),
+                  projects, can_project_feedback_keys))) {
+            LOG_WARN("failed to verify shortest feedback projections", K(ret));
+          } else {
+            path_desc.shortest_dedup_in_feedback_ = can_project_feedback_keys;
+          }
+        }
         if (path_desc.lower_bound_ < 0 || path_desc.upper_bound_ < 0
             || path_desc.lower_bound_ > path_desc.upper_bound_) {
           ret = OB_NOT_SUPPORTED;
@@ -3545,6 +3680,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
       ObString adjacency_index;
       if (OB_SUCC(ret) && path_desc.direction_ != GraphPathDirection::BOTH && OB_FAIL(find_adjacency_index(
               bindings.at(quantified_index), path_desc.direction_,
+              path_desc.need_path_,
               *schema_checker_->get_schema_guard(), adjacency_index))) {
         LOG_WARN("failed to select graph adjacency index", K(ret), K(path_desc));
       }
