@@ -309,6 +309,32 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       if (in_list.num_child_ < threshold) {
       } else {
         is_enable = true;
+        // Rewriting a large literal IN-list as a values table adds a DISTINCT
+        // operator.  Avoid that overhead when the list only looks large because
+        // the same literals are repeated many times.
+        if (T_OP_ROW != left_expr.get_expr_type() && threshold > 0) {
+          bool all_literals = true;
+          ObSEArray<const ParseNode *, 16> distinct_nodes;
+          for (int64_t i = 0; OB_SUCC(ret) && all_literals
+               && distinct_nodes.count() < threshold && i < in_list.num_child_; ++i) {
+            const ParseNode *node = in_list.children_[i];
+            bool found = false;
+            if (OB_ISNULL(node)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (!IS_DATATYPE_OP(node->type_)) {
+              all_literals = false;
+            } else {
+              for (int64_t j = 0; !found && j < distinct_nodes.count(); ++j) {
+                found = parsenode_equal(node, distinct_nodes.at(j), NULL);
+              }
+              if (!found && OB_FAIL(distinct_nodes.push_back(node))) {
+              }
+            }
+          }
+          if (OB_SUCC(ret) && all_literals && distinct_nodes.count() < threshold) {
+            is_enable = false;
+          }
+        }
       }
     }
   }
