@@ -1,0 +1,32 @@
+# Regression for oceanbase/seekdb#1512.
+# Duplicate-heavy integer IN lists should remain scalar predicates.
+--disable_query_log
+CREATE TABLE inlist_duplicate_integer (id INT PRIMARY KEY, n BIGINT);
+INSERT INTO inlist_duplicate_integer VALUES (1,-1),(2,0),(3,1),(4,2),(5,3),(6,4),(7,NULL);
+--echo compact plan
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,2,3);
+--echo duplicate plan
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,2,3,1,2,3,1,2,3,1,2,3);
+--echo distinct list still rewritten
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,2,3,4,5,6);
+--echo integer membership and negative values
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (-1,0,-1,0,-1,0) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n NOT IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY id;
+--echo NULL and mixed-type fallbacks
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,2,NULL,1,2,NULL) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n NOT IN (1,2,NULL,1,2,NULL) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,'2',3,1,'2',3) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (18446744073709551615,1,18446744073709551615,1) ORDER BY id;
+--echo cached statements must retain all parameter positions
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,1,1,1,1,1) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicate_integer WHERE n IN (1,1,1,1,1,4) ORDER BY id;
+--echo prepared statements and changing parameter values
+PREPARE inlist_stmt FROM 'SELECT /*+ opt_param(''inlist_rewrite_threshold'' 4) */ id FROM inlist_duplicate_integer WHERE n IN (?,?,?,?,?,?) ORDER BY id';
+SET @a=1, @b=1, @c=1, @d=1, @e=1, @f=1;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+SET @f=4;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+DEALLOCATE PREPARE inlist_stmt;
+DROP TABLE inlist_duplicate_integer;
+--enable_query_log
