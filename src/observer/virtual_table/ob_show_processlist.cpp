@@ -117,7 +117,12 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
     } else {
       type_is_double = tmp_column_schema->get_meta_type().is_double();
     }
-    if (sess_info->is_shadow()) {
+    // MySQL only exposes other sessions to users with PROCESS privilege.
+    // Keep ordinary users' process list limited to their own sessions so
+    // session identifiers and query details cannot be used to target peers.
+    if (sess_info->is_shadow()
+        || (!my_session_->has_user_process_privilege()
+            && my_session_->get_user_id() != sess_info->get_user_id())) {
       // do not show shadow session
     } else {
       ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
