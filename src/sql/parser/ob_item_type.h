@@ -15,4 +15,12 @@
  */
 
 #pragma once
-#include "query/parser/ob_item_type.h"
+#include "query/parser/ob_item_type.h"enum ObContextType {
+    ACCESSED_LOCALLY = 0,
+    INITIALIZED_EXTERNALLY = 1,
+    ACCESSED_GLOBALLY = 2,
+    INITIALIZED_GLOBALLY = 3,
+  }ObContextType;
+
+
+
