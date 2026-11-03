@@ -67,6 +67,7 @@ ObDMLResolver::ObDMLResolver(ObResolverParams &params)
       current_view_level_(0),
       view_ref_id_(OB_INVALID_ID),
       is_resolving_view_(false),
+      keep_scalar_inlist_(false),
       join_infos_(),
       parent_cte_tables_(),
       current_cte_tables_(),
@@ -1001,6 +1002,7 @@ int ObDMLResolver::resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
     ctx.is_expanding_view_ = params_.is_expanding_view_;
     ctx.is_in_system_view_ = params_.is_in_sys_view_;
     ctx.is_need_print_ = params_.is_from_create_view_ || params_.is_from_create_table_;
+    ctx.keep_scalar_inlist_ = keep_scalar_inlist_;
     ObRawExprResolverImpl expr_resolver(ctx);
     ObIArray<ObUserVarIdentRawExpr *> &user_var_exprs = get_stmt()->get_user_vars();
     bool is_multi_stmt = session_info_->get_cur_exec_ctx() != NULL &&

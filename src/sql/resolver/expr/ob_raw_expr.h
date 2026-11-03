@@ -1631,6 +1631,7 @@ struct ObResolveContext
     is_variable_allowed_(true),
     is_expanding_view_(false),
     is_need_print_(false),
+    keep_scalar_inlist_(false),
     is_from_show_resolver_(false),
     is_in_system_view_(false),
     match_exprs_(NULL),
@@ -1681,6 +1682,7 @@ struct ObResolveContext
   bool is_variable_allowed_;
   bool is_expanding_view_;
   bool is_need_print_;
+  bool keep_scalar_inlist_;
   bool is_from_show_resolver_;
   bool is_in_system_view_;
   common::ObIArray<ObMatchFunRawExpr*> *match_exprs_;

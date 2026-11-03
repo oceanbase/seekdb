@@ -840,6 +840,12 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
      OB_NOT_NULL(session_info_),
      OB_NOT_NULL(select_stmt->get_query_ctx()));
 
+  if (OB_SUCC(ret)) {
+    // A VALUES-subquery filter is evaluated outside the vector scan's Top-K.
+    // Keep scalar membership predicates available to the ANN scan instead.
+    keep_scalar_inlist_ = OB_NOT_NULL(parse_tree.children_[PARSE_SELECT_APPROX]);
+  }
+
   /**
    * @muhang.zb
    * Define a cte, regardless of whether it is ultimately used in the main clause, it must be parsed

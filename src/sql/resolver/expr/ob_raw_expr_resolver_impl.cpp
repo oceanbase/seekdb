@@ -3166,7 +3166,8 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
   bool is_question_mark = true;
   if (OB_ISNULL(node)|| OB_ISNULL(left_expr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*node,
+  } else if ((!ctx_.keep_scalar_inlist_ || T_OP_ROW == left_expr->get_expr_type()) &&
+             OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*node,
             op_type,
             *left_expr,
             ctx_.current_scope_,
