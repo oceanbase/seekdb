@@ -206,6 +206,10 @@ public:
 
   void reset();
 
+  // init 完成后 helper 内部状态与 allocator 无关（属性按值保存），
+  // 允许在多次调用间复用 helper 并按需切换本调用使用的 allocator。
+  void rebind_allocator(common::ObIAllocator *allocator) { allocator_ = allocator; }
+
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
