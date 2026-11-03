@@ -220,7 +220,6 @@ protected:
   int64_t ctx_create_time_;
   ObTransService *trans_service_;
   mutable CtxLock lock_;
-  ObTransTraceLog trace_log_;
   ObTransTraceLog *tlog_;
   ObLSTxCtxMgr *ls_tx_ctx_mgr_;
   uint32_t session_id_;
