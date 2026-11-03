@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_subplan_scan.h"
+#include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/optimizer/ob_join_order.h"
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -99,16 +100,35 @@ int ObLogSubPlanScan::do_re_est_cost(EstimateCostInfo &param, double &card, doub
   ObLogicalOperator *child = NULL;
   const int64_t parallel = param.need_parallel_;
   double selectivity = 1.0;
+  ObSEArray<ObRawExpr *, 4> selectivity_filters;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child)) ||
       OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FALSE_IT(get_plan()->get_selectivity_ctx().init_op_ctx(&child->get_output_equal_sets(), child->get_card()))) {
-  } else if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
+  } else if (OB_FAIL(selectivity_filters.assign(get_filter_exprs()))) {
+  } else if (child->get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP) {
+    const GraphFeedbackLoopLogOp *graph =
+        static_cast<const GraphFeedbackLoopLogOp *>(child);
+    for (int64_t i = selectivity_filters.count() - 1;
+         OB_SUCC(ret) && i >= 0; --i) {
+      if (selectivity_filters.at(i) != nullptr
+          && graph->is_implied_output_filter(*selectivity_filters.at(i))) {
+        if (OB_FAIL(selectivity_filters.remove(i))) {
+          LOG_WARN("failed to remove implied graph lower-bound filter",
+                   K(ret), K(i));
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_FALSE_IT(get_plan()->get_selectivity_ctx().init_op_ctx(
+          &child->get_output_equal_sets(), child->get_card()))) {
+  } else if (OB_SUCC(ret)
+             && OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
                                                             get_plan()->get_selectivity_ctx(),
-                                                            get_filter_exprs(),
+                                                            selectivity_filters,
                                                             selectivity,
                                                             get_plan()->get_predicate_selectivities()))) {
-  } else {
+  } else if (OB_SUCC(ret)) {
     double child_card = child->get_card();
     double child_cost = child->get_cost();
     if (param.need_row_count_ >= 0 && param.need_row_count_ < get_card() &&

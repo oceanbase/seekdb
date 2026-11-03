@@ -133,6 +133,12 @@ AND special_predicates LIKE '%visited=cross_hop, goal=bound_key%';
 SELECT COUNT(*)=1 AS cross_hop_visited FROM plan_table
 WHERE statement_id='shortest_reach' AND operator='GRAPH FEEDBACK LOOP'
 AND special_predicates LIKE '%visited=cross_hop, goal=none%';
+SELECT COUNT(*)=1 AS lower_bound_not_reestimated FROM plan_table frontier
+JOIN plan_table feedback ON frontier.statement_id=feedback.statement_id
+WHERE frontier.statement_id='shortest_reach'
+AND frontier.operator='SUBPLAN SCAN' AND frontier.object_alias='__g_walk_frontier'
+AND feedback.operator='GRAPH FEEDBACK LOOP'
+AND frontier.cardinality*10>=feedback.cardinality*9;
 SELECT COUNT(*)=0 AS shortest_selector_eliminated FROM plan_table
 WHERE statement_id='shortest_reach' AND operator='WINDOW FUNCTION';
 SELECT COUNT(*)=1 AS property_keeps_shortest_selector FROM plan_table
