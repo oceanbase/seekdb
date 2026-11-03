@@ -1,5 +1,6 @@
 """Expose the native compiler environment to Cargo build scripts."""
 
+load("@apple_support//lib:apple_support.bzl", "apple_support")
 load("@rules_cc//cc:action_names.bzl", "CPP_LINK_EXECUTABLE_ACTION_NAME")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "CC_TOOLCHAIN_ATTRS", "find_cpp_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
@@ -67,4 +68,24 @@ cargo_build_script_environment = rule(
     },
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),
+)
+
+def _ios_bindgen_environment_impl(ctx):
+    environment_file = ctx.actions.declare_file(ctx.label.name + ".env")
+    apple_support.run_shell(
+        actions = ctx.actions,
+        xcode_config = ctx.attr._xcode_config[apple_common.XcodeVersionConfig],
+        apple_platform_info = apple_support.platform_info_from_rule_ctx(ctx),
+        outputs = [environment_file],
+        arguments = [environment_file.path],
+        command = """
+printf 'LIBCLANG_PATH=%s/Toolchains/XcodeDefault.xctoolchain/usr/lib\\nBINDGEN_EXTRA_CLANG_ARGS=--sysroot "%s"\\n' "$DEVELOPER_DIR" "$SDKROOT" > "$1"
+""",
+    )
+    return [DefaultInfo(files = depset([environment_file]))]
+
+ios_bindgen_environment = rule(
+    implementation = _ios_bindgen_environment_impl,
+    attrs = apple_support.action_required_attrs() | apple_support.platform_constraint_attrs(),
+    fragments = ["apple"],
 )

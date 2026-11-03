@@ -1,0 +1,3 @@
+load("@@//bazel:aws_lc_build_script.bzl", "build_scripts")
+
+build_scripts()

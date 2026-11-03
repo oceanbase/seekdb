@@ -52,6 +52,13 @@ crate.annotation_select(
     build_script_env = {"EM_FROZEN_CACHE": "1"},
 )
 crate.annotation(
+    crate = "aws-lc-sys",
+    version = "0.47.0",
+    repositories = ["rust_crates"],
+    additive_build_file = "//bazel:aws_lc_build_script.BUILD.bazel",
+    override_target_build_script = "@@rules_rust++crate+rust_crates__aws-lc-sys-0.47.0//:platform_build_script",
+)
+crate.annotation(
     crate = "spdlog-rs",
     version = "0.5.3",
     repositories = ["rust_crates"],
