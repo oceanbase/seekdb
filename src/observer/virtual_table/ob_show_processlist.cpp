@@ -433,6 +433,7 @@ int ObShowProcesslist::FillScanner::init(ObIAllocator *allocator,
                   || NULL == scanner
                   || NULL == cur_row
                   || NULL == session_info
+                  || NULL == schema_guard
                   || NULL == table_schema)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN,
@@ -461,12 +462,12 @@ int ObShowProcesslist::FillScanner::init(ObIAllocator *allocator,
     }
     if (OB_FAIL(ret)) {
     } else {
-    allocator_ = allocator;
-    scanner_ = scanner;
-    cur_row_ = cur_row;
-    my_session_ = session_info;
-    schema_guard_ = schema_guard;
-    table_schema_ = table_schema;
+      allocator_ = allocator;
+      scanner_ = scanner;
+      cur_row_ = cur_row;
+      my_session_ = session_info;
+      schema_guard_ = schema_guard;
+      table_schema_ = table_schema;
     }
   }
   return ret;
