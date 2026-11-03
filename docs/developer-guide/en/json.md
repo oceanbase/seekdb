@@ -31,18 +31,27 @@ The ARRAY/MAP SQL conversion boundary retains its existing case-insensitive unqu
 | Interface | Responsibility and ownership |
 | --- | --- |
 | `BinaryDocument<B>`, `BinaryValue<'_>` | Stored bytes and borrowed scalar/container views; reads check offsets and lengths. |
-| `Query`, `Path`, `Value`, `Selection` | Query execution and output policy. Selections share immutable document ownership and carry stable occurrence identities for JSON_TABLE scans. |
+| `Query`, `Path`, `Value`, `ValueRef`, `Selection` | Query execution and output policy. Immutable values own either stored bytes or a parsed document. Borrowed views share path and output policies across both representations. Selections retain document ownership and stable occurrence identities for JSON_TABLE scans. |
 | `compare`, `format`, `hash` | Complete domain traversal; database number/time formatting, ordering and hashing use narrow synchronous capabilities. |
 | `schema::Schema`, `schema::Cache` | Compiled validation rules, normalized encoding, reports and per-expression cache entries. Pattern compilation is injected separately. |
 | `construction::Scalar`, `ContainerBuilder` | Scalar encoding and owned array/object construction, with explicit duplicate and aggregate policies. |
 | `writer::BinaryWriter` | Container framing and widths for streaming producers such as GeoJSON. Open-container handles belong to one writer. |
-| `mutation` | Sparse binary editing, prepared SQL mutations, merge policies and the authoritative logical/physical delta state. |
+| `mutation::owned::OwnedValue`, `mutation::sql::OwnedEditor` | Complete-document edits and merges in a flat owned value arena, with one final binary encoding. |
+| `mutation::editor::Editor`, `mutation::editor::Session`, `mutation::Delta` | Sparse binary edits and the authoritative logical and physical delta state. |
 
 Native Rust callers use these interfaces directly without constructing CXX objects. CXX translates representations and database errors. Database-specific number/time payloads remain opaque to domain algorithms when their semantics require database conversion.
+
+`Value::from_text` parses once and freezes the document after stable object-key normalization. JSON_TABLE traverses that document without first encoding the whole input as binary JSON. Retained selections keep the root owner alive. Binary encoding occurs when an output consumer requests bytes. Binary inputs retain borrowed binary traversal.
+
+Full-document mutations decode once into `OwnedEditor`. Text input transfers the parsed document directly into that editor. Complete and sparse editors share prepared SQL mutation rules, including value-evaluation decisions. Their storage differs because sparse edits must retain physical offsets, free space and delta state. Imported object keys follow the destination document's key order. Duplicate-key policies remain explicit, and edits preserve the existing operation-specific lookup behavior.
+
+Container builders accept either borrowed encoded scalars or owned buffers. C++ constructors transfer Rust-owned scalar buffers into the builder. Scalar-only containers use the same size, header and scalar codecs as nested containers without allocating a traversal plan. Nested encoding, owned edits and parsed-document destruction use iterative traversal.
 
 The LOB source capability and number, time, hash and pattern capabilities execute synchronously on the caller's thread. They do not spawn work, retain borrowed inputs or outlive their SQL expression. C++ owns the supplied allocator, LOB reader and database scalar objects. Rust owns returned binary buffers, compiled schemas, selections, editors and deltas. SQL contexts destroy handles before their backing allocator and capability objects.
 
 Prepared mutations record the editor generation and reject stale application. Values are evaluated only when the SQL operation requires them; a failed later argument is propagated before publishing the final SQL result. Delta restore validates into temporary state before replacing the current delta. Immutable construction and merge results become visible only after successful completion. Storage writes and transaction rollback remain the database caller's responsibility.
+
+Applying a complete-document mutation consumes its `OwnedEditor`. Failure does not return a partially edited owner that a caller could publish. Sparse edits retain their existing session and delta rollback contract.
 
 ## Production consumers
 
@@ -55,3 +64,5 @@ GeoJSON uses the binary writer with the existing coordinate conversion and geome
 The established `expr.json_standard_syntax` mysqltest suite covers strict syntax and SQL regressions. Native tests in `rust/json/src/tests.rs` cover the domain interfaces, malformed binary inputs, deep binary traversal, scalar width boundaries, mutation failure state and ownership. `test_json_parser` exercises CXX integration and frozen C++ mutation/hash results; `test_json_direct_benchmark differential` checks parser binary output against frozen legacy results.
 
 The differential drivers in `unittest/oblib/json_*_differential.py` compare exact results, storage sizes and SQL errors against a separate baseline instance. `json_ai_local.py` validates request and response behavior with a local HTTP fixture. `json_domain_benchmark.py` copies a small-document fixture into identical task-owned tables on both instances, checks exact results and alternates warm SQL measurements. Optional profiling runs after timed trials; process RSS is reported separately from latency and is not a measure of JSON allocation alone.
+
+The [migration validation record](json-validation.md) reports the measured SQL performance, memory observations, independent checks and platform coverage.
