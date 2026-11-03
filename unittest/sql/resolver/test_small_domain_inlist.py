@@ -95,8 +95,19 @@ class SmallDomainInlistTest(unittest.TestCase):
                     self.sql("SELECT COUNT(*) FROM t WHERE category IN (4,5,NULL)")]
         self.assertEqual(result.splitlines(), expected)
 
+    def test_string_collation_and_mixed_types_keep_semantics(self):
+        self.sql("CREATE TABLE string_values (v VARCHAR(40) COLLATE utf8mb4_unicode_ci)")
+        self.sql("INSERT INTO string_values VALUES ('A'),('a'),('ß'),('SS'),('1'),('01'),(NULL)")
+        for compact in ["'A','a'", "'ß','SS',NULL", "1,2,3", "1,'1',NULL",
+                        "_latin1'A',_utf8mb4'a'"]:
+            repeated = ",".join([compact] * 1024)
+            for operator in ["IN", "NOT IN"]:
+                prefix = "SELECT COUNT(*) FROM string_values WHERE v " + operator + " ("
+                self.assertEqual(self.sql(prefix + compact + ")"),
+                                 self.sql(prefix + repeated + ")"))
+
     def test_cached_literal_plan_does_not_remove_input_values(self):
-        for domain in [[1, 2, 3], [3, 4, 5], list(range(1, 100))]:
+        for domain in [[1], [1, 2], [1, 2, 3], [3, 4, 5], list(range(1, 100))]:
             values = [str(domain[i % len(domain)]) for i in range(3072)]
             self.assertEqual(self.sql("SELECT COUNT(*) FROM t WHERE category IN (" +
                                       ",".join(values) + ")"),
