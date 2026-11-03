@@ -422,3 +422,12 @@ cc_library(
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
+# AI prompt rendering is tested without making SQL implementation headers public.
+cc_library(
+    name = "ai_prompt_test_headers",
+    testonly = True,
+    hdrs = ["engine/expr/ob_expr_ai/ob_ai_func_utils.h"],
+    deps = [":sql_runtime_internal_headers"],
+    visibility = ["//unittest/sql/engine/expr:__pkg__"],
+)
