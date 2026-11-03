@@ -35,6 +35,8 @@ Windows 11 x64 uses `python build.py`; `init` selects the Windows dependency man
 
 ```bash
 sudo yum install git wget curl rpm-build rpm2cpio cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
+
+> Note: do not use the `rpm*` glob; some yum/dnf versions error with `no matches found: rpm*`. Use the explicit `rpm-build` and `rpm2cpio` package names above.
 ```
 
 ### Debian-compatible systems
