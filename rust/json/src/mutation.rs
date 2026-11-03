@@ -20,6 +20,8 @@
 
 pub mod editor;
 pub mod merge;
+pub mod owned;
+pub mod sql;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]

@@ -34,7 +34,7 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/ob_exec_context.h"
 
-namespace oceanbase { namespace common { struct BinaryMerge; } }
+namespace oceanbase { namespace common { struct BinaryMerge; class JsonContainerBuilder; } }
 
 using namespace oceanbase::common;
 
@@ -218,6 +218,9 @@ public:
   */
   static int get_json_binary(const ObExpr &expr, ObEvalCtx &ctx,
                              MultimodeAlloctor &allocator, uint16_t index, ObString &binary);
+  static int append_json_value(const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator,
+                               uint16_t index, common::JsonContainerBuilder &builder,
+                               const common::ObString &key, bool &input_error);
   static int datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
                                   ObScale scale, bool is_bool, bool format_json, bool strict,
                                   bool oracle, common::ObIAllocator &allocator,

@@ -248,6 +248,7 @@ pub mod ffi {
         type ContainerBuilder;
         fn new_container_builder(object: bool) -> Box<ContainerBuilder>;
         fn append_binary(self: &mut ContainerBuilder, key: &[u8], value: &[u8]) -> i32;
+        fn append_owned_binary(self: &mut ContainerBuilder, key: &[u8], value: Vec<u8>) -> i32;
         fn append_aggregate_binary(self: &mut ContainerBuilder, key: &[u8], value: &[u8]) -> i32;
         fn approximate_length(self: &ContainerBuilder) -> u64;
         fn extend_binary(self: &mut ContainerBuilder, input: &[u8]) -> i32;
@@ -440,7 +441,11 @@ pub mod ffi {
         type Value;
         fn identity(self: &Value) -> u64;
         type SelectionResult;
-        fn query_root(query: Box<Query>) -> Box<Value>;
+        type ValueParseResult;
+        fn parse_value(input: &[u8], text: bool, max_depth: u32) -> Box<ValueParseResult>;
+        fn status(self: &ValueParseResult) -> Status;
+        fn byte_offset(self: &ValueParseResult) -> u64;
+        fn take_value(parsed: Box<ValueParseResult>) -> Box<Value>;
         fn select_values(value: &Value, path: &Path, first_only: bool) -> Box<SelectionResult>;
         fn status(self: &SelectionResult) -> Status;
         fn byte_offset(self: &SelectionResult) -> u64;
@@ -492,8 +497,23 @@ pub struct SelectionResult {
     state: BinaryResult<crate::Selection>,
 }
 
-fn query_root(query: Box<Query>) -> Box<Value> {
-    Box::new(query.state.expect("query status was checked").into_value().expect("validated root"))
+pub struct ValueParseResult { state: Result<Value, (ffi::Status, u64)> }
+impl ValueParseResult {
+    fn status(&self) -> ffi::Status { self.state.as_ref().map_or_else(|(status, _)| *status, |_| ffi::Status::Ok) }
+    fn byte_offset(&self) -> u64 { self.state.as_ref().err().map_or(0, |(_, offset)| *offset) }
+}
+fn parse_value(input: &[u8], text: bool, max_depth: u32) -> Box<ValueParseResult> {
+    let state = if text {
+        crate::Value::from_text(input, ParseOptions { max_depth, ..ParseOptions::default() })
+            .map_err(|error| (parse_status(&error), error.byte_offset as u64))
+    } else {
+        crate::BinaryDocument::new(input.to_vec()).and_then(crate::Value::root)
+            .map_err(|error| (ffi::Status::InvalidBinary, error.byte_offset as u64))
+    };
+    Box::new(ValueParseResult { state })
+}
+fn take_value(parsed: Box<ValueParseResult>) -> Box<Value> {
+    Box::new(parsed.state.expect("value parse status was checked"))
 }
 
 fn select_values(value: &Value, path: &Path, first_only: bool) -> Box<SelectionResult> {
@@ -1641,14 +1661,16 @@ fn order_binary(left: &[u8], right: &[u8]) -> ffi::OrderResult {
 
 type MutationError = crate::mutation::editor::EditError;
 
+enum EditorBackend {
+    Owned(crate::mutation::sql::OwnedEditor),
+    External(crate::mutation::editor::Session),
+}
 struct SqlEditor {
-    session: Result<crate::mutation::editor::Session, MutationError>,
-    owned: Option<Vec<u8>>,
-    last_error: Option<MutationError>,
+    state: Option<Result<EditorBackend, MutationError>>,
 }
 
 struct PreparedMutation {
-    edit: Result<crate::mutation::editor::PreparedEdit, MutationError>,
+    edit: Result<crate::mutation::sql::PreparedEdit, MutationError>,
 }
 
 fn mutation_error_status(error: &MutationError) -> i32 {
@@ -1672,8 +1694,8 @@ fn mutation_source_status(error: &MutationError) -> i32 {
     }
 }
 
-fn sql_operation(operation: u8) -> Result<crate::mutation::editor::SqlOperation, MutationError> {
-    use crate::mutation::editor::SqlOperation;
+fn sql_operation(operation: u8) -> Result<crate::mutation::sql::SqlOperation, MutationError> {
+    use crate::mutation::sql::SqlOperation;
     match operation {
         0 => Ok(SqlOperation::Set),
         1 => Ok(SqlOperation::Insert),
@@ -1686,132 +1708,70 @@ fn sql_operation(operation: u8) -> Result<crate::mutation::editor::SqlOperation,
 }
 
 fn new_sql_editor_owned(input: &[u8], text: bool, max_depth: u32) -> Box<SqlEditor> {
-    let bytes = if text {
-        crate::parse_binary(
-            input,
-            ParseOptions {
-                max_depth,
-                ..ParseOptions::default()
-            },
-        )
-        .map_err(|_| MutationError::InvalidIndex)
-    } else {
-        let mut bytes = Vec::new();
-        match bytes.try_reserve_exact(input.len()) {
-            Ok(()) => {
-                bytes.extend_from_slice(input);
-                Ok(bytes)
-            }
-            Err(_) => Err(MutationError::Delta(DeltaError::Allocation)),
-        }
-    };
-    match bytes {
-        Ok(bytes) => {
-            let session = crate::mutation::editor::Session::open_for_rebuild(bytes.as_slice());
-            Box::new(SqlEditor {
-                session,
-                owned: Some(bytes),
-                last_error: None,
-            })
-        }
-        Err(error) => Box::new(SqlEditor {
-            session: Err(error),
-            owned: None,
-            last_error: None,
-        }),
-    }
+    use crate::mutation::sql::OwnedEditor;
+    let state = (|| {
+        let editor = if text {
+            let document = crate::parse(input, ParseOptions { max_depth, ..ParseOptions::default() })
+                .map_err(|_| MutationError::InvalidIndex)?;
+            OwnedEditor::from_document(document)?
+        } else {
+            let document = crate::BinaryDocument::new(input)?;
+            OwnedEditor::from_binary(document.root()?)?
+        };
+        Ok(EditorBackend::Owned(editor))
+    })();
+    Box::new(SqlEditor { state: Some(state) })
 }
 
 fn new_sql_editor_external(source: &ffi::BinarySource) -> Box<SqlEditor> {
-    let session = crate::mutation::editor::Session::open(&CursorSource::new(source));
-    Box::new(SqlEditor {
-        session,
-        owned: None,
-        last_error: None,
-    })
+    Box::new(SqlEditor { state: Some(crate::mutation::editor::Session::open(&CursorSource::new(source))
+        .map(EditorBackend::External)) })
 }
 
 impl SqlEditor {
     fn editor_status(&self) -> i32 {
-        self.last_error
-            .as_ref()
-            .or(self.session.as_ref().err())
-            .map_or(0, mutation_error_status)
+        self.state.as_ref().unwrap().as_ref().err().map_or(0, mutation_error_status)
     }
     fn editor_source_status(&self) -> i32 {
-        self.last_error
-            .as_ref()
-            .or(self.session.as_ref().err())
-            .map_or(0, mutation_source_status)
+        self.state.as_ref().unwrap().as_ref().err().map_or(0, mutation_source_status)
     }
     fn prepare_owned(&mut self, path: &Path, operation: u8) -> Box<PreparedMutation> {
         let edit = (|| {
             let operation = sql_operation(operation)?;
-            let session = self
-                .session
-                .as_mut()
-                .map_err(|_| MutationError::InvalidIndex)?;
-            let bytes = self.owned.as_ref().ok_or(MutationError::InvalidIndex)?;
-            session.prepare(bytes.as_slice(), path, operation)
+            let Ok(EditorBackend::Owned(editor)) = self.state.as_ref().unwrap() else { return Err(MutationError::InvalidIndex); };
+            editor.prepare(path, operation)
         })();
         Box::new(PreparedMutation { edit })
     }
-    fn prepare_external(
-        &mut self,
-        source: &ffi::BinarySource,
-        path: &Path,
-        operation: u8,
-    ) -> Box<PreparedMutation> {
+    fn prepare_external(&mut self, source: &ffi::BinarySource, path: &Path, operation: u8) -> Box<PreparedMutation> {
         let edit = (|| {
             let operation = sql_operation(operation)?;
-            let session = self
-                .session
-                .as_mut()
-                .map_err(|_| MutationError::InvalidIndex)?;
+            let Ok(EditorBackend::External(session)) = self.state.as_mut().unwrap() else { return Err(MutationError::InvalidIndex); };
             session.prepare(&CursorSource::new(source), path, operation)
         })();
         Box::new(PreparedMutation { edit })
     }
     fn apply_owned(&mut self, prepared: Box<PreparedMutation>, value: &[u8]) -> i32 {
-        let result = (|| {
+        let state = self.state.take().unwrap();
+        self.state = Some((|| {
+            let EditorBackend::Owned(editor) = state? else { return Err(MutationError::InvalidIndex); };
             let prepared = prepared.edit?;
-            let value = if prepared.needs_value() {
-                Some(crate::BinaryDocument::new(value)?)
-            } else {
-                None
-            };
-            let root = value.as_ref().map(|value| value.root()).transpose()?;
-            let session = self
-                .session
-                .as_mut()
-                .map_err(|_| MutationError::InvalidIndex)?;
-            let source = self.owned.as_ref().ok_or(MutationError::InvalidIndex)?;
-            session.apply(source.as_slice(), prepared, root)
-        })();
-        self.last_error = result.err();
+            let document = if prepared.needs_value() { Some(crate::BinaryDocument::new(value)?) } else { None };
+            let value = document.as_ref().map(|document| document.root()).transpose()?;
+            editor.apply(prepared, value).map(EditorBackend::Owned)
+        })());
         self.editor_status()
     }
-    fn apply_external(
-        &mut self,
-        source: &ffi::BinarySource,
-        prepared: Box<PreparedMutation>,
-        value: &[u8],
-    ) -> i32 {
-        let result = (|| {
+    fn apply_external(&mut self, source: &ffi::BinarySource, prepared: Box<PreparedMutation>, value: &[u8]) -> i32 {
+        let state = self.state.take().unwrap();
+        self.state = Some((|| {
+            let EditorBackend::External(mut session) = state? else { return Err(MutationError::InvalidIndex); };
             let prepared = prepared.edit?;
-            let value = if prepared.needs_value() {
-                Some(crate::BinaryDocument::new(value)?)
-            } else {
-                None
-            };
-            let root = value.as_ref().map(|value| value.root()).transpose()?;
-            let session = self
-                .session
-                .as_mut()
-                .map_err(|_| MutationError::InvalidIndex)?;
-            session.apply(&CursorSource::new(source), prepared, root)
-        })();
-        self.last_error = result.err();
+            let document = if prepared.needs_value() { Some(crate::BinaryDocument::new(value)?) } else { None };
+            let value = document.as_ref().map(|document| document.root()).transpose()?;
+            session.apply(&CursorSource::new(source), prepared, value)?;
+            Ok(EditorBackend::External(session))
+        })());
         self.editor_status()
     }
 }
@@ -1831,16 +1791,11 @@ impl PreparedMutation {
 fn finish_owned(editor: Box<SqlEditor>) -> Box<NativeEdit> {
     let mut binary = Vec::new();
     let result = (|| {
-        let mut session = editor.session?;
-        let source = editor.owned.ok_or(MutationError::InvalidIndex)?;
-        binary = session.constructed_binary(source.as_slice())?;
-        Ok(session.finish())
+        let EditorBackend::Owned(editor) = editor.state.unwrap()? else { return Err(MutationError::InvalidIndex); };
+        binary = editor.finish()?;
+        Ok(crate::mutation::editor::Update { writes: Vec::new(), delta: Delta::default() })
     })();
-    Box::new(NativeEdit {
-        result,
-        binary,
-        partial: false,
-    })
+    Box::new(NativeEdit { result, binary, partial: false })
 }
 
 fn finish_external(
@@ -1852,7 +1807,7 @@ fn finish_external(
     let mut binary = Vec::new();
     let mut partial = false;
     let result = (|| {
-        let mut session = editor.session?;
+        let EditorBackend::External(mut session) = editor.state.unwrap()? else { return Err(MutationError::InvalidIndex); };
         partial = session.should_pack_with(crate::mutation::UpdateState::from_flags(
             prior_rebuilt,
             prior_unchanged,
@@ -1971,6 +1926,10 @@ impl ContainerBuilder {
     }
     fn append_binary(&mut self, key: &[u8], value: &[u8]) -> i32 {
         let result = if self.1 { self.0.insert(key, value) } else { self.0.append(value) };
+        result.err().map_or(0, build_error_status)
+    }
+    fn append_owned_binary(&mut self, key: &[u8], value: Vec<u8>) -> i32 {
+        let result = if self.1 { self.0.insert_owned(key, value) } else { self.0.append_owned(value) };
         result.err().map_or(0, build_error_status)
     }
     fn approximate_length(&self) -> u64 { self.0.approximate_length() }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::mutation::sql::{OwnedEditor, SqlOperation};
 use crate::bridge::{ffi, parse_binary as parse_bridge_binary};
 use crate::{binary, Query, SearchOptions};
 use crate::{
@@ -1477,7 +1478,7 @@ fn selected_values_outlive_query_and_parent_selection() {
     let child = children.get(0).unwrap().clone();
     drop(children);
     drop(row);
-    assert_eq!(child.as_binary().number().unwrap(), Number::I64(-129));
+    assert_eq!(child.read().number().unwrap(), Number::I64(-129));
     let output = other_row.query_output(
         &Path::parse_mysql(b"$.b[*]").unwrap(), crate::QueryOutputOptions::default(),
     ).unwrap();
@@ -1608,7 +1609,7 @@ fn read_operations_reject_binary_cycles_without_recursive_descent() {
 
 #[test]
 fn sql_mutation_prepares_paths_and_preserves_lazy_value_evaluation() {
-    use crate::mutation::editor::{Editor, SqlOperation};
+    use crate::mutation::editor::{Editor};
     let original = crate::parse_binary(br#"{"a":[1,2],"b":3}"#, ParseOptions::default()).unwrap();
     let mut editor = Editor::open(original.as_slice()).unwrap();
     let value =
@@ -1684,7 +1685,7 @@ fn sql_mutation_prepares_paths_and_preserves_lazy_value_evaluation() {
 
 #[test]
 fn sql_mutation_handles_root_replacement_wrapping_and_array_insert() {
-    use crate::mutation::editor::{Editor, SqlOperation};
+    use crate::mutation::editor::{Editor};
     let original = crate::parse_binary(b"1", ParseOptions::default()).unwrap();
     let value =
         BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
@@ -1731,42 +1732,20 @@ fn sql_mutation_handles_root_replacement_wrapping_and_array_insert() {
 }
 
 #[test]
-fn sql_mutation_full_results_accept_empty_keys_and_drop_delta_records() {
-    use crate::mutation::editor::{Session, SqlOperation};
-    let original = crate::parse_binary(b"{}", ParseOptions::default()).unwrap();
-    let value =
-        BinaryDocument::new(crate::parse_binary(b"42", ParseOptions::default()).unwrap()).unwrap();
-    let mut session = Session::open_for_rebuild(original.as_slice()).unwrap();
+fn owned_mutations_accept_empty_object_keys() {
+    let mut editor = OwnedEditor::from_document(crate::parse(b"{}", Default::default()).unwrap()).unwrap();
+    let value = BinaryDocument::new(crate::parse_binary(b"42", Default::default()).unwrap()).unwrap();
     let path = Path::parse_mysql(br#"$."""#).unwrap();
-    let edit = session
-        .prepare(original.as_slice(), &path, SqlOperation::Set)
-        .unwrap();
-    session
-        .apply(original.as_slice(), edit, Some(value.root().unwrap()))
-        .unwrap();
-    let binary = session.binary(original.as_slice()).unwrap();
-    let document = BinaryDocument::new(binary).unwrap();
-    assert_eq!(document.root().unwrap().key(0).unwrap(), b"");
-    assert_eq!(
-        document.root().unwrap().value(0).unwrap().number().unwrap(),
-        Number::I64(42)
-    );
-    let edit = session
-        .prepare(original.as_slice(), &path, SqlOperation::Remove)
-        .unwrap();
-    session.apply(original.as_slice(), edit, None).unwrap();
-    let binary = session.binary(original.as_slice()).unwrap();
-    assert_eq!(
-        BinaryDocument::new(binary)
-            .unwrap()
-            .root()
-            .unwrap()
-            .len()
-            .unwrap(),
-        0
-    );
-    let update = session.finish();
-    assert!(update.delta.logical().is_empty());
+    let edit = editor.prepare(&path, SqlOperation::Set).unwrap();
+    editor = editor.apply(edit, Some(value.root().unwrap())).unwrap();
+    let inserted = BinaryDocument::new(editor.finish().unwrap()).unwrap();
+    assert_eq!(inserted.root().unwrap().key(0).unwrap(), b"");
+    assert_eq!(inserted.root().unwrap().value(0).unwrap().number().unwrap(), Number::I64(42));
+    let editor = OwnedEditor::from_binary(inserted.root().unwrap()).unwrap();
+    let edit = editor.prepare(&path, SqlOperation::Remove).unwrap();
+    let editor = editor.apply(edit, None).unwrap();
+    let document = BinaryDocument::new(editor.finish().unwrap()).unwrap();
+    assert_eq!(document.root().unwrap().len().unwrap(), 0);
 }
 
 #[test]
@@ -2548,7 +2527,7 @@ fn binary_copy_and_construction_keep_object_lookup_order_consistent() {
 
 #[test]
 fn owned_sql_mutations_construct_from_the_complete_overlay() {
-    use crate::mutation::editor::{Session, SqlOperation};
+    use crate::mutation::editor::{Session};
     let mut documents = vec!["1".to_owned(), "[1,2]".into(), "{\"a\":[1,2],\"x\":{\"y\":3}}".into()];
     documents.push(format!("{{\"a\":\"{}\",\"x\":-1}}", "x".repeat(300)));
     documents.push(format!("{{{}}}", (0..30).map(|i| format!("\"{i}\":{i}")).collect::<Vec<_>>().join(",")));
@@ -2560,18 +2539,22 @@ fn owned_sql_mutations_construct_from_the_complete_overlay() {
             for path in ["$", "$.a", "$.new", "$[1]", "$.a[0]", "$.missing[0]"] {
                 for value in &values {
                     let value = BinaryDocument::new(parse_binary(value.as_bytes(), Default::default()).unwrap()).unwrap();
-                    let mut session = Session::open_for_rebuild(source.as_slice()).unwrap();
+                    let mut session = Session::open(source.as_slice()).unwrap();
+                    let mut owned = OwnedEditor::from_binary(BinaryDocument::new(source.as_slice()).unwrap().root().unwrap()).unwrap();
                     let prepared = match session.prepare(source.as_slice(), &Path::parse_mysql(path.as_bytes()).unwrap(), operation) {
                         Ok(prepared) => prepared,
                         Err(crate::mutation::editor::EditError::VacuousPath
                             | crate::mutation::editor::EditError::InvalidPath) => continue,
                         Err(error) => panic!("{document} {path} {operation:?}: {error:?}"),
                     };
+                    let owned_plan = owned.prepare(&Path::parse_mysql(path.as_bytes()).unwrap(), operation).unwrap();
+                    assert_eq!(prepared.needs_value(), owned_plan.needs_value());
                     let value = prepared.needs_value().then(|| value.root().unwrap());
                     session.apply(source.as_slice(), prepared, value).unwrap();
+                    owned = owned.apply(owned_plan, value).unwrap();
                     let packed = BinaryDocument::new(session.binary(source.as_slice()).unwrap()).unwrap();
                     let expected = crate::binary::serialize_constructed_value(packed.root().unwrap()).unwrap();
-                    assert_eq!(session.constructed_binary(source.as_slice()).unwrap(), expected,
+                    assert_eq!(owned.finish().unwrap(), expected,
                                "{document} {path} {operation:?}");
                 }
             }
@@ -2644,8 +2627,9 @@ fn numeric_order_preserves_signed_and_unsigned_integer_boundaries() {
 
 mod mutation_order_tests {
     use crate::{BinaryDocument, Path, Query, QueryOptions, construction::Scalar, writer::BinaryWriter};
-    use crate::mutation::editor::{Editor, Session, SqlOperation, StoredValue};
+    use crate::mutation::editor::{Editor, StoredValue};
 
+    use crate::mutation::sql::{OwnedEditor, SqlOperation};
     fn object(lexicographical: bool) -> Vec<u8> {
         let mut writer = BinaryWriter::default();
         let root = writer.begin(true, 2, 1).unwrap();
@@ -2668,14 +2652,15 @@ mod mutation_order_tests {
         writer.finish(lexicographical).unwrap()
     }
 
-    fn apply(session: &mut Session, source: &[u8], operation: SqlOperation, path: &str, value: &BinaryDocument<Vec<u8>>) {
-        let prepared = session.prepare(source, &Path::parse_mysql(path.as_bytes()).unwrap(), operation).unwrap();
+    fn apply(session: &mut Option<OwnedEditor>, _source: &[u8], operation: SqlOperation, path: &str, value: &BinaryDocument<Vec<u8>>) {
+        let editor = session.take().unwrap();
+        let prepared = editor.prepare(&Path::parse_mysql(path.as_bytes()).unwrap(), operation).unwrap();
         let value = prepared.needs_value().then(|| value.root().unwrap());
-        session.apply(source, prepared, value).unwrap();
+        *session = Some(editor.apply(prepared, value).unwrap());
     }
 
-    fn assert_updated(session: &mut Session, source: &[u8], path: &str) {
-        let query = Query::from_binary(session.constructed_binary(source).unwrap()).unwrap();
+    fn assert_updated(session: &mut Option<OwnedEditor>, _source: &[u8], path: &str) {
+        let query = Query::from_binary(session.take().unwrap().finish().unwrap()).unwrap();
         let hits = query.query(&Path::parse_mysql(path.as_bytes()).unwrap(), QueryOptions::default()).unwrap();
         assert_eq!(hits.len(), 1, "{path}");
         assert_eq!(hits[0].string_bytes().unwrap(), b"updated", "{path}");
@@ -2696,7 +2681,7 @@ mod mutation_order_tests {
                 (SqlOperation::Replace, "$", false, "$.b".into()),
             ] {
                 let source = outer(lexicographical, array);
-                let mut session = Session::open_for_rebuild(source.as_slice()).unwrap();
+                let mut session = Some(OwnedEditor::from_binary(BinaryDocument::new(source.as_slice()).unwrap().root().unwrap()).unwrap());
                 apply(&mut session, &source, operation, path, &replacement);
                 apply(&mut session, &source, SqlOperation::Replace, &selected, &updated);
                 assert_updated(&mut session, &source, &selected);
@@ -2709,7 +2694,7 @@ mod mutation_order_tests {
         let updated = BinaryDocument::new(Scalar::String(b"updated").encode().unwrap()).unwrap();
         for lexicographical in [false, true] {
             let source = object(lexicographical);
-            let mut session = Session::open_for_rebuild(source.as_slice()).unwrap();
+            let mut session = Some(OwnedEditor::from_binary(BinaryDocument::new(source.as_slice()).unwrap().root().unwrap()).unwrap());
             apply(&mut session, &source, SqlOperation::ArrayAppend, "$", &updated);
             apply(&mut session, &source, SqlOperation::Replace, "$[0].b", &updated);
             assert_updated(&mut session, &source, "$[0].b");
@@ -2743,4 +2728,226 @@ mod mutation_order_tests {
             }
         }
     }
+}
+
+#[test]
+fn owned_mutations_keep_duplicate_binary_members_and_reject_stale_plans() {
+    let values = [1, 2, 3].map(|value| BinaryDocument::new(crate::construction::Scalar::Signed(value).encode().unwrap()).unwrap());
+    let pairs: Vec<_> = values.iter().map(|value| (b"a".as_slice(), value.root().unwrap())).collect();
+    let source = BinaryDocument::new(binary::serialize_object(&pairs).unwrap()).unwrap();
+    let replacement = BinaryDocument::new(crate::construction::Scalar::Signed(9).encode().unwrap()).unwrap();
+    let editor = OwnedEditor::from_binary(source.root().unwrap()).unwrap();
+    let path = Path::parse_mysql(b"$.a").unwrap();
+    let plan = editor.prepare(&path, SqlOperation::Replace).unwrap();
+    let stale = editor.prepare(&path, SqlOperation::Replace).unwrap();
+    let editor = editor.apply(plan, Some(replacement.root().unwrap())).unwrap();
+    assert!(matches!(editor.apply(stale, Some(replacement.root().unwrap())), Err(crate::mutation::editor::EditError::StalePlan)));
+    let editor = OwnedEditor::from_binary(source.root().unwrap()).unwrap();
+    let plan = editor.prepare(&path, SqlOperation::Replace).unwrap();
+    let editor = editor.apply(plan, Some(replacement.root().unwrap())).unwrap();
+    let output = BinaryDocument::new(editor.finish().unwrap()).unwrap();
+    assert_eq!(output.root().unwrap().len().unwrap(), 3);
+    let actual: Vec<_> = (0..3).map(|index| output.root().unwrap().value(index).unwrap().number().unwrap()).collect();
+    assert_eq!(actual, [Number::I64(1), Number::I64(9), Number::I64(3)]);
+}
+
+#[test]
+fn owned_mutation_no_ops_keep_generation_and_required_value_errors() {
+    let source = crate::parse(br#"{"a":1}"#, Default::default()).unwrap();
+    let editor = OwnedEditor::from_document(source).unwrap();
+    let path = Path::parse_mysql(b"$.a").unwrap();
+    let replace = editor.prepare(&path, SqlOperation::Set).unwrap();
+    let no_op = editor.prepare(&path, SqlOperation::Insert).unwrap();
+    assert!(!no_op.needs_value());
+    let editor = editor.apply(no_op, None).unwrap();
+    let value = BinaryDocument::new(crate::construction::Scalar::Signed(9).encode().unwrap()).unwrap();
+    let editor = editor.apply(replace, Some(value.root().unwrap())).unwrap();
+    assert_eq!(editor.finish().unwrap(), crate::parse_binary(br#"{"a":9}"#, Default::default()).unwrap());
+    let editor = OwnedEditor::from_document(crate::Document::Null).unwrap();
+    let plan = editor.prepare(&Path::parse_mysql(b"$.missing").unwrap(), SqlOperation::Set).unwrap();
+    assert!(plan.needs_value());
+    assert!(matches!(editor.apply(plan, None), Err(crate::mutation::editor::EditError::InvalidIndex)));
+}
+
+#[test]
+fn owned_mutations_edit_and_discard_deep_values_without_recursive_state() {
+    let mut document = crate::Document::Null;
+    for _ in 0..12_000 { document = crate::Document::Array(vec![document]); }
+    let editor = OwnedEditor::from_document(document).unwrap();
+    let original = BinaryDocument::new(editor.finish().unwrap()).unwrap();
+    assert_eq!(original.depth().unwrap(), 12_001);
+    let editor = OwnedEditor::from_binary(original.root().unwrap()).unwrap();
+    let path = Path::parse_mysql(b"$[0]").unwrap();
+    let plan = editor.prepare(&path, SqlOperation::Set).unwrap();
+    let editor = editor.apply(plan, Some(original.root().unwrap())).unwrap();
+    let output = BinaryDocument::new(editor.finish().unwrap()).unwrap();
+    assert_eq!(output.depth().unwrap(), 12_002);
+    let value = BinaryDocument::new(crate::construction::Scalar::Signed(-1).encode().unwrap()).unwrap();
+    let editor = OwnedEditor::from_binary(output.root().unwrap()).unwrap();
+    let plan = editor.prepare(&Path::parse_mysql(b"$").unwrap(), SqlOperation::Replace).unwrap();
+    let editor = editor.apply(plan, Some(value.root().unwrap())).unwrap();
+    assert_eq!(editor.finish().unwrap(), value.as_bytes());
+}
+
+#[test]
+fn owned_constructor_inputs_preserve_bytes_and_failed_append_state() {
+    use crate::construction::{ContainerBuilder, Scalar};
+    let inputs = vec![Scalar::Null.encode().unwrap(), Scalar::Signed(-1).encode().unwrap(),
+        Scalar::Unsigned(u64::MAX).encode().unwrap(), Scalar::Float(-0.0).encode().unwrap(),
+        Scalar::String(&vec![b'x'; 300]).encode().unwrap(),
+        Scalar::String(&vec![b'y'; 65_536]).encode().unwrap(),
+        Scalar::Opaque { field_type: 28, bytes: &[0, 255] }.encode().unwrap(),
+        parse_binary(br#"{"aa":[-1,null],"b":{"":true}}"#, Default::default()).unwrap()];
+    for object in [false, true] {
+        let mut borrowed = if object { ContainerBuilder::object() } else { ContainerBuilder::array() };
+        let mut owned = if object { ContainerBuilder::object() } else { ContainerBuilder::array() };
+        for (index, input) in inputs.iter().enumerate() {
+            let key = format!("key{}", index % 3);
+            if object {
+                borrowed.insert(key.as_bytes(), input).unwrap();
+                owned.insert_owned(key.as_bytes(), input.clone()).unwrap();
+            } else {
+                borrowed.append(input).unwrap();
+                owned.append_owned(input.clone()).unwrap();
+            }
+        }
+        assert_eq!(borrowed.approximate_length(), owned.approximate_length());
+        for duplicate in [DuplicatePolicy::Preserve, DuplicatePolicy::Overwrite, DuplicatePolicy::KeepFirst, DuplicatePolicy::Reject] {
+            for aggregate in [false, true] {
+                let before = borrowed.finish(duplicate, true, aggregate, None).map(|output| output.binary);
+                let after = owned.finish(duplicate, true, aggregate, None).map(|output| output.binary);
+                match (before, after) {
+                    (Ok(before), Ok(after)) => assert_eq!(before, after),
+                    (Err(crate::construction::BuildError::DuplicateKey),
+                     Err(crate::construction::BuildError::DuplicateKey)) => {},
+                    (before, after) => panic!("{before:?} != {after:?}"),
+                }
+            }
+        }
+        let prior = owned.finish(DuplicatePolicy::Preserve, true, false, None).unwrap().binary;
+        for invalid in [Vec::new(), vec![255], vec![7, 0, 1, 6, 0, 7]] {
+            let result = if object { owned.insert_owned(b"bad", invalid) } else { owned.append_owned(invalid) };
+            assert!(result.is_err());
+            assert_eq!(owned.finish(DuplicatePolicy::Preserve, true, false, None).unwrap().binary, prior);
+        }
+    }
+}
+
+#[test]
+fn parsed_selections_preserve_binary_query_policy_and_occurrence_ownership() {
+    let texts = ["null", "1", "[1,2,3]", "{\"a\":[{\"b\":[-129,256]},{\"b\":[9]}]}",
+        "{\"a\":1,\"a\":2,\"\":{\"雪\":\"v\"},\"bb\":null}",
+        "{\"a\":{\"a\":1},\"arr\":[{\"a\":2},[3]],\"雪\":true}",
+        "{\"aa\":1,\"b\":2,\"雪\":3,\"\":4,\"b\":5}"];
+    let paths = ["$", "$.a", "$.a[*]", "$.a[*].b[*]", "$.*", "$[*]", "$[0]", "$[last]", "$[1 to 3]", "$**.a", "$**[*]", "$**.\"雪\"", "$.\"\""];
+    for policy in [DuplicatePolicy::Overwrite, DuplicatePolicy::Preserve, DuplicatePolicy::KeepFirst] {
+        for text in texts {
+            let parsed = crate::Value::from_text(text.as_bytes(), options(policy)).unwrap();
+            let binary = Query::from_text(text.as_bytes(), options(policy)).unwrap().into_value().unwrap();
+            for path in paths {
+                let path = Path::parse_mysql(path.as_bytes()).unwrap();
+                for first_only in [false, true] {
+                    for auto_wrap in [false, true] {
+                        let options = QueryOptions { first_only, auto_wrap };
+                        let a = parsed.select(&path, options).unwrap();
+                        let b = binary.select(&path, options).unwrap();
+                        assert_eq!(a.len(), b.len());
+                        for (a, b) in a.iter().zip(b.iter()) {
+                            assert_eq!(a.read().to_binary().unwrap(), b.read().to_binary().unwrap());
+                        }
+                        let identities: std::collections::HashSet<_> = a.iter().map(crate::Value::identity).collect();
+                        assert_eq!(identities.len(), a.len());
+                    }
+                }
+                for wrapper in [crate::WrapperPolicy::Without, crate::WrapperPolicy::With, crate::WrapperPolicy::Conditional] {
+                    for allow_scalar in [false, true] {
+                        for wrap_single in [false, true] {
+                            for wrap_multiple in [false, true] {
+                                let options = crate::QueryOutputOptions { wrapper, allow_scalar, wrap_single, wrap_multiple };
+                                let a = parsed.query_output(&path, options).unwrap();
+                                let b = binary.query_output(&path, options).unwrap();
+                                assert_eq!((a.binary, a.match_count, a.value_type, a.use_wrapper, a.wrapper_required),
+                                    (b.binary, b.match_count, b.value_type, b.use_wrapper, b.wrapper_required));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let root = crate::Value::from_text(br#"{"a":[{"b":[-129,256]},{"b":[9]}]}"#, Default::default()).unwrap();
+    let rows = root.select(&Path::parse_mysql(b"$.a[*]").unwrap(), QueryOptions::default()).unwrap();
+    let row = rows.get(0).unwrap().clone();
+    drop(rows); drop(root);
+    let children = row.select(&Path::parse_mysql(b"$.b[*]").unwrap(), QueryOptions::default()).unwrap();
+    let child = children.get(0).unwrap().clone();
+    drop(children); drop(row);
+    assert_eq!(child.read().number().unwrap(), Number::I64(-129));
+}
+
+#[test]
+fn parsed_value_deep_selection_encoding_and_drop_do_not_recurse() {
+    let mut document = Document::Object(vec![("leaf".into(), Document::Number(Number::I64(7)))]);
+    for _ in 0..12_000 { document = Document::Array(vec![document]); }
+    let root = crate::Value::from_document(document);
+    let selected = root.select(&Path::parse_mysql(b"$**.leaf").unwrap(), QueryOptions { first_only: true, auto_wrap: true }).unwrap();
+    let leaf = selected.get(0).unwrap().clone();
+    drop(selected);
+    let encoded = root.query_output(&Path::parse_mysql(b"$").unwrap(), Default::default()).unwrap().binary.unwrap();
+    assert_eq!(BinaryDocument::new(encoded).unwrap().depth().unwrap(), 12_002);
+    drop(root);
+    assert_eq!(leaf.read().number().unwrap(), Number::I64(7));
+    drop(leaf);
+}
+
+#[test]
+fn constructed_scalar_containers_preserve_wire_format_at_width_boundaries() {
+    use crate::construction::{ContainerBuilder, Scalar};
+    for object in [false, true] {
+        for count in [0, 1, 2, 30, 40, 255, 256, 257] {
+            for length in [0, 300, 65_536] {
+                let string = format!("\"{}\"", "x".repeat(length));
+                let values = ["-1", "-129", "-9223372036854775808", "18446744073709551615", "-0.0", "null", "true", &string];
+                let body = (0..count).map(|index| {
+                    let value = values[index % values.len()];
+                    if object { format!("\"key{index}\":{value}") } else { value.to_owned() }
+                }).collect::<Vec<_>>().join(",");
+                let text = if object { format!("{{{body}}}") } else { format!("[{body}]") };
+                let expected = parse_binary(text.as_bytes(), Default::default()).unwrap();
+                let input = BinaryDocument::new(expected.as_slice()).unwrap();
+                assert_eq!(binary::serialize_constructed_value(input.root().unwrap()).unwrap(), expected,
+                    "object={object}, count={count}, string length={length}");
+            }
+        }
+    }
+    let mut values = vec![Scalar::Opaque { field_type: 28, bytes: &[0, 255] }.encode().unwrap()];
+    for kind in [9, 10, 11, 12, 32, 33] {
+        let payload = if [9, 32].contains(&kind) { vec![0; 4] } else { vec![0; 8] };
+        values.push(Scalar::Database { kind, payload: &payload }.encode().unwrap());
+    }
+    for kind in [20, 21, 22, 23, 28, 29] { values.push(vec![kind, 3, b'a', 0, b'z']); }
+    for length in [300, 65_536] {
+        let mut builder = ContainerBuilder::array();
+        builder.append(&Scalar::Signed(-129).encode().unwrap()).unwrap();
+        builder.append(&Scalar::String(&vec![b'x'; length]).encode().unwrap()).unwrap();
+        for value in &values { builder.append(value).unwrap(); }
+        let output = BinaryDocument::new(builder.finish(DuplicatePolicy::Preserve, false, false, None).unwrap().binary).unwrap();
+        assert_eq!(output.root().unwrap().value(0).unwrap().number().unwrap(), Number::I64(-129));
+        for (index, expected) in values.iter().enumerate() {
+            assert_eq!(binary::serialize_value(output.root().unwrap().value(index as u64 + 2).unwrap()).unwrap(), *expected);
+        }
+    }
+}
+
+#[test]
+fn owned_document_decode_keeps_nested_values_and_duplicate_order() {
+    let input = br#"{"z":[1,{"b":2,"a":3}],"a":{"dup":4,"dup":[5,6]},"z":7}"#;
+    let options = ParseOptions {
+        duplicate_policy: DuplicatePolicy::Preserve,
+        ..Default::default()
+    };
+    let document = crate::parse(input, options).unwrap();
+    let expected = binary::serialize(document.clone());
+    let output = OwnedEditor::from_document(document).unwrap().finish().unwrap();
+    assert_eq!(output, expected);
 }

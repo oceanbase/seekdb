@@ -78,6 +78,16 @@ impl ContainerBuilder {
         self.push(key, input)
     }
 
+    pub fn append_owned(&mut self, input: Vec<u8>) -> Result<(), BuildError> {
+        if self.object { return Err(BuildError::InvalidKind); }
+        self.push_owned(&[], input)
+    }
+
+    pub fn insert_owned(&mut self, key: &[u8], input: Vec<u8>) -> Result<(), BuildError> {
+        if !self.object { return Err(BuildError::InvalidKind); }
+        self.push_owned(key, input)
+    }
+
     /// Preserve SQL aggregate errors for extended scalar roots; nested values
     /// retain their own type tags in the serialized container payload.
     pub fn append_aggregate(&mut self, key: &[u8], input: &[u8]) -> Result<(), BuildError> {
@@ -126,15 +136,27 @@ impl ContainerBuilder {
         let depth = source.depth()?;
         let payload_length = binary::aggregate_payload_length(source.root()?)?;
         let mut bytes = Vec::new();
-        let mut owned_key = Vec::new();
         bytes.try_reserve_exact(input.len()).map_err(|_| BuildError::Allocation)?;
+        bytes.extend_from_slice(input);
+        self.push_entry(key, BinaryDocument::new(bytes)?, depth, payload_length)
+    }
+
+    fn push_owned(&mut self, key: &[u8], input: Vec<u8>) -> Result<(), BuildError> {
+        let value = BinaryDocument::new(input)?;
+        let depth = value.depth()?;
+        let payload_length = binary::aggregate_payload_length(value.root()?)?;
+        self.push_entry(key, value, depth, payload_length)
+    }
+
+    fn push_entry(&mut self, key: &[u8], value: BinaryDocument<Vec<u8>>, depth: u32,
+                  payload_length: u64) -> Result<(), BuildError> {
+        let mut owned_key = Vec::new();
         owned_key.try_reserve_exact(key.len()).map_err(|_| BuildError::Allocation)?;
         self.entries.try_reserve(1).map_err(|_| BuildError::Allocation)?;
-        bytes.extend_from_slice(input);
-        owned_key.extend_from_slice(key);
         let approximate_length = self.approximate_length.checked_add(key.len() as u64)
             .and_then(|length| length.checked_add(payload_length)).ok_or(BuildError::Allocation)?;
-        self.entries.push(Entry { key: owned_key, value: BinaryDocument::new(bytes)?, depth });
+        owned_key.extend_from_slice(key);
+        self.entries.push(Entry { key: owned_key, value, depth });
         self.approximate_length = approximate_length;
         Ok(())
     }

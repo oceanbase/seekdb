@@ -16,6 +16,7 @@ use crate::{
     binary, BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, CompareResult, JsonType, ParseOptions,
 };
 use std::fmt;
+use crate::ValueRef;
 
 pub const MAX_PATH_NODES: usize = 100;
 pub const MAX_ARRAY_INDEX: u64 = u32::MAX as u64;
@@ -276,16 +277,19 @@ fn constructed_array(values: &[crate::BinaryValue<'_>]) -> BinaryResult<Vec<u8>>
     binary::serialize_constructed(false, &entries)
 }
 
-pub(crate) fn build_query_output(
-    matches: Vec<BinaryValue<'_>>,
-    options: QueryOutputOptions,
-) -> BinaryResult<QueryOutput> {
+pub(crate) fn build_query_output(matches: Vec<BinaryValue<'_>>, options: QueryOutputOptions) -> BinaryResult<QueryOutput> {
+    build_output(matches, options)
+}
+pub(crate) fn build_read_output(matches: Vec<ValueRef<'_>>, options: QueryOutputOptions) -> BinaryResult<QueryOutput> {
+    build_output(matches, options)
+}
+fn build_output<'a, V: QueryRead<'a>>(matches: Vec<V>, options: QueryOutputOptions) -> BinaryResult<QueryOutput> {
     let value_type = match matches.first() {
-        Some(value) => Some(value.json_type()?),
+        Some(value) => Some(value.kind()?),
         None => None,
     };
     let scalar_disallowed =
-        matches.len() == 1 && !options.allow_scalar && !matches[0].json_type()?.is_container();
+        matches.len() == 1 && !options.allow_scalar && !matches[0].kind()?.is_container();
     let wrapper_required = !matches.is_empty()
         && ((matches.len() > 1
             && !options.wrap_multiple
@@ -301,9 +305,9 @@ pub(crate) fn build_query_output(
             || (options.wrapper == WrapperPolicy::Conditional
                 && (matches.len() > 1 || scalar_disallowed)));
     let binary = if use_wrapper {
-        Some(constructed_array(&matches)?)
+        Some(V::render(&matches, true)?)
     } else if matches.len() == 1 && !wrapper_required {
-        Some(binary::serialize_constructed_value(matches[0])?)
+        Some(V::render(&matches, false)?)
     } else {
         None
     };
@@ -352,43 +356,32 @@ impl Path {
         })
     }
 
-    pub fn query<'a>(
-        &self,
-        root: BinaryValue<'a>,
-        options: QueryOptions,
-    ) -> BinaryResult<Vec<BinaryValue<'a>>> {
+    pub fn query<'a>(&self, root: BinaryValue<'a>, options: QueryOptions) -> BinaryResult<Vec<BinaryValue<'a>>> {
         let mut matches = Vec::new();
-        let mut location = String::new();
-        evaluate(
-            root,
-            &self.steps,
-            0,
-            options,
-            &mut matches,
-            None,
-            &mut location,
-        )?;
+        evaluate(root, &self.steps, 0, options, &mut |value, _: &Trace| matches.push(value), &mut Trace::default())?;
         Ok(matches)
     }
 
-    pub(crate) fn query_located<'a>(
-        &self,
-        root: BinaryValue<'a>,
-        options: QueryOptions,
-    ) -> BinaryResult<Vec<(BinaryValue<'a>, String)>> {
+    pub(crate) fn query_read<'a>(&self, root: ValueRef<'a>, options: QueryOptions) -> BinaryResult<Vec<ValueRef<'a>>> {
         let mut matches = Vec::new();
-        let mut locations = Vec::new();
-        let mut location = String::from("$");
-        evaluate(
-            root,
-            &self.steps,
-            0,
-            options,
-            &mut matches,
-            Some(&mut locations),
-            &mut location,
-        )?;
-        Ok(matches.into_iter().zip(locations).collect())
+        self.visit_read(root, options, false, |value, _| matches.push(value))?;
+        Ok(matches)
+    }
+
+    pub(crate) fn visit_read<'a>(&self, root: ValueRef<'a>, options: QueryOptions, coordinates: bool,
+        mut emit: impl FnMut(ValueRef<'a>, &[u64])) -> BinaryResult<()> {
+        let mut trace = Trace { coordinates, ..Default::default() };
+        evaluate(root, &self.steps, 0, options, &mut |value, trace: &Trace| emit(value, &trace.indices), &mut trace)?;
+        Ok(())
+    }
+
+    pub(crate) fn query_located<'a>(&self, root: BinaryValue<'a>, options: QueryOptions)
+        -> BinaryResult<Vec<(BinaryValue<'a>, String)>> {
+        let mut trace = Trace { locations: true, location: String::from("$"), ..Default::default() };
+        let mut matches = Vec::new();
+        evaluate(root, &self.steps, 0, options,
+            &mut |value, trace: &Trace| matches.push((value, trace.location.clone())), &mut trace)?;
+        Ok(matches)
     }
 
     pub fn to_mysql_string(&self) -> String {
@@ -417,213 +410,150 @@ impl Path {
     }
 }
 
-fn evaluate<'a>(
-    value: BinaryValue<'a>,
-    steps: &[PathStep],
-    index: usize,
-    options: QueryOptions,
-    matches: &mut Vec<BinaryValue<'a>>,
-    mut locations: Option<&mut Vec<String>>,
-    location: &mut String,
+trait QueryRead<'a>: Copy {
+    fn kind(self) -> BinaryResult<JsonType>;
+    fn count(self) -> BinaryResult<u64>;
+    fn child(self, index: u64) -> BinaryResult<Self>;
+    fn key(self, index: u64) -> BinaryResult<&'a [u8]>;
+    fn member(self, key: &[u8]) -> BinaryResult<Option<(u64, Self)>>;
+    fn identity(self) -> usize;
+    fn error_offset(self) -> usize;
+    fn render(values: &[Self], wrapper: bool) -> BinaryResult<Vec<u8>>;
+}
+impl<'a> QueryRead<'a> for BinaryValue<'a> {
+    fn kind(self) -> BinaryResult<JsonType> { self.json_type() }
+    fn count(self) -> BinaryResult<u64> { self.len() }
+    fn child(self, index: u64) -> BinaryResult<Self> { self.value(index) }
+    fn key(self, index: u64) -> BinaryResult<&'a [u8]> { BinaryValue::key(&self, index) }
+    fn member(self, key: &[u8]) -> BinaryResult<Option<(u64, Self)>> { self.member_index(key) }
+    fn identity(self) -> usize { self.storage_offset() }
+    fn error_offset(self) -> usize { self.storage_offset() }
+    fn render(values: &[Self], wrapper: bool) -> BinaryResult<Vec<u8>> {
+        if wrapper { constructed_array(values) } else { binary::serialize_constructed_value(values[0]) }
+    }
+}
+impl<'a> QueryRead<'a> for ValueRef<'a> {
+    fn kind(self) -> BinaryResult<JsonType> { self.json_type() }
+    fn count(self) -> BinaryResult<u64> { self.len() }
+    fn child(self, index: u64) -> BinaryResult<Self> { self.value(index) }
+    fn key(self, index: u64) -> BinaryResult<&'a [u8]> { ValueRef::key(self, index) }
+    fn member(self, key: &[u8]) -> BinaryResult<Option<(u64, Self)>> { self.member_index(key) }
+    fn identity(self) -> usize { ValueRef::identity(self).1 }
+    fn error_offset(self) -> usize { ValueRef::error_offset(self) }
+    fn render(values: &[Self], wrapper: bool) -> BinaryResult<Vec<u8>> { crate::value::render(values, wrapper) }
+}
+
+#[derive(Default)]
+struct Trace {
+    locations: bool,
+    location: String,
+    coordinates: bool,
+    indices: Vec<u64>,
+}
+impl Trace {
+    fn mark(&self) -> (usize, usize) { (self.location.len(), self.indices.len()) }
+    fn enter_member(&mut self, index: u64, key: &[u8]) {
+        if self.locations { append_raw_member(&mut self.location, &String::from_utf8_lossy(key)); }
+        if self.coordinates { self.indices.push(index); }
+    }
+    fn enter_array(&mut self, index: u64) {
+        if self.locations { append_array_location(&mut self.location, index); }
+        if self.coordinates { self.indices.push(index); }
+    }
+    fn restore(&mut self, mark: (usize, usize)) {
+        if self.locations { self.location.truncate(mark.0); }
+        if self.coordinates { self.indices.truncate(mark.1); }
+    }
+}
+
+fn evaluate<'a, V: QueryRead<'a>, F: FnMut(V, &Trace)>(
+    value: V, steps: &[PathStep], index: usize, options: QueryOptions,
+    emit: &mut F, trace: &mut Trace,
 ) -> BinaryResult<bool> {
     if index == steps.len() {
-        matches.push(value);
-        if let Some(locations) = locations {
-            locations.push(location.clone());
-        }
-        return Ok(options.first_only);
+        emit(value, trace); return Ok(options.first_only);
     }
     match &steps[index] {
         PathStep::Member(key) => {
-            if value.json_type()? == JsonType::Object {
-                if let Some(member) = value.member(key.as_bytes())? {
-                    let previous_length = location.len();
-                    if locations.is_some() {
-                        append_raw_member(location, key);
-                    }
-                    let result = evaluate(
-                        member,
-                        steps,
-                        index + 1,
-                        options,
-                        matches,
-                        locations,
-                        location,
-                    );
-                    location.truncate(previous_length);
-                    return result;
+            if value.kind()? == JsonType::Object {
+                if let Some((child_index, member)) = value.member(key.as_bytes())? {
+                    let mark = trace.mark(); trace.enter_member(child_index, key.as_bytes());
+                    let result = evaluate(member, steps, index + 1, options, emit, trace);
+                    trace.restore(mark); return result;
                 }
             }
         }
         PathStep::MemberWildcard => {
-            if value.json_type()? == JsonType::Object {
-                for child_index in 0..value.len()? {
-                    let previous_length = location.len();
-                    if locations.is_some() {
-                        append_raw_member(
-                            location,
-                            &String::from_utf8_lossy(value.key(child_index)?),
-                        );
-                    }
-                    let result = evaluate(
-                        value.value(child_index)?,
-                        steps,
-                        index + 1,
-                        options,
-                        matches,
-                        locations.as_deref_mut(),
-                        location,
-                    );
-                    location.truncate(previous_length);
-                    if result? {
-                        return Ok(true);
-                    }
+            if value.kind()? == JsonType::Object {
+                for child_index in 0..value.count()? {
+                    let mark = trace.mark();
+                    if trace.locations { trace.enter_member(child_index, value.key(child_index)?); }
+                    else if trace.coordinates { trace.indices.push(child_index); }
+                    let result = evaluate(value.child(child_index)?, steps, index + 1, options, emit, trace);
+                    trace.restore(mark); if result? { return Ok(true); }
                 }
             }
         }
         PathStep::ArrayCell(cell) => {
-            if value.json_type()? == JsonType::Array {
-                if let Some(child_index) = resolve_index(*cell, value.len()?) {
-                    let previous_length = location.len();
-                    if locations.is_some() {
-                        append_array_location(location, child_index);
-                    }
-                    let result = evaluate(
-                        value.value(child_index)?,
-                        steps,
-                        index + 1,
-                        options,
-                        matches,
-                        locations,
-                        location,
-                    );
-                    location.truncate(previous_length);
-                    return result;
+            if value.kind()? == JsonType::Array {
+                if let Some(child_index) = resolve_index(*cell, value.count()?) {
+                    let mark = trace.mark(); trace.enter_array(child_index);
+                    let result = evaluate(value.child(child_index)?, steps, index + 1, options, emit, trace);
+                    trace.restore(mark); return result;
                 }
             } else if options.auto_wrap && resolve_index(*cell, 1).is_some() {
-                return evaluate(
-                    value,
-                    steps,
-                    index + 1,
-                    options,
-                    matches,
-                    locations,
-                    location,
-                );
+                return evaluate(value, steps, index + 1, options, emit, trace);
             }
         }
         PathStep::ArrayRange(first, last) => {
-            if value.json_type()? == JsonType::Array {
-                let (begin, end) = resolve_range(*first, *last, value.len()?);
+            if value.kind()? == JsonType::Array {
+                let (begin, end) = resolve_range(*first, *last, value.count()?);
                 for child_index in begin..end {
-                    let previous_length = location.len();
-                    if locations.is_some() {
-                        append_array_location(location, child_index);
-                    }
-                    let result = evaluate(
-                        value.value(child_index)?,
-                        steps,
-                        index + 1,
-                        options,
-                        matches,
-                        locations.as_deref_mut(),
-                        location,
-                    );
-                    location.truncate(previous_length);
-                    if result? {
-                        return Ok(true);
-                    }
+                    let mark = trace.mark(); trace.enter_array(child_index);
+                    let result = evaluate(value.child(child_index)?, steps, index + 1, options, emit, trace);
+                    trace.restore(mark); if result? { return Ok(true); }
                 }
             } else if options.auto_wrap {
                 let (begin, end) = resolve_range(*first, *last, 1);
-                if begin < end {
-                    return evaluate(
-                        value,
-                        steps,
-                        index + 1,
-                        options,
-                        matches,
-                        locations,
-                        location,
-                    );
-                }
+                if begin < end { return evaluate(value, steps, index + 1, options, emit, trace); }
             }
         }
         PathStep::ArrayWildcard => {
-            if value.json_type()? == JsonType::Array {
-                for child_index in 0..value.len()? {
-                    let previous_length = location.len();
-                    if locations.is_some() {
-                        append_array_location(location, child_index);
-                    }
-                    let result = evaluate(
-                        value.value(child_index)?,
-                        steps,
-                        index + 1,
-                        options,
-                        matches,
-                        locations.as_deref_mut(),
-                        location,
-                    );
-                    location.truncate(previous_length);
-                    if result? {
-                        return Ok(true);
-                    }
+            if value.kind()? == JsonType::Array {
+                for child_index in 0..value.count()? {
+                    let mark = trace.mark(); trace.enter_array(child_index);
+                    let result = evaluate(value.child(child_index)?, steps, index + 1, options, emit, trace);
+                    trace.restore(mark); if result? { return Ok(true); }
                 }
             }
         }
         PathStep::RecursiveDescent => {
-            if evaluate(
-                value,
-                steps,
-                index + 1,
-                options,
-                matches,
-                locations.as_deref_mut(),
-                location,
-            )? {
-                return Ok(true);
-            }
-            let original_length = location.len();
+            if evaluate(value, steps, index + 1, options, emit, trace)? { return Ok(true); }
+            let original = trace.mark();
             let result = (|| {
                 let mut stack = Vec::new();
                 let mut active = std::collections::HashSet::new();
-                if value.json_type()?.is_container() {
-                    active.insert(value.storage_offset());
-                    stack.push((value, 0, location.len()));
-                }
-                while let Some((container, child_index, location_length)) = stack.last_mut() {
-                    location.truncate(*location_length);
-                    if *child_index == container.len()? {
-                        active.remove(&container.storage_offset());
-                        stack.pop();
-                        continue;
-                    }
+                if value.kind()?.is_container() { active.insert(value.identity()); stack.push((value, 0, trace.mark())); }
+                while let Some((container, child_index, mark)) = stack.last_mut() {
+                    trace.restore(*mark);
+                    if *child_index == container.count()? { active.remove(&container.identity()); stack.pop(); continue; }
                     let index_in_container = *child_index;
-                    let child = container.value(index_in_container)?;
-                    *child_index += 1;
-                    if locations.is_some() {
-                        if container.json_type()? == JsonType::Object {
-                            append_raw_member(location, &String::from_utf8_lossy(container.key(index_in_container)?));
-                        } else {
-                            append_array_location(location, index_in_container);
-                        }
+                    let child = container.child(index_in_container)?; *child_index += 1;
+                    if trace.locations || trace.coordinates {
+                        if container.kind()? == JsonType::Object {
+                            if trace.locations { trace.enter_member(index_in_container, container.key(index_in_container)?); }
+                            else { trace.indices.push(index_in_container); }
+                        } else { trace.enter_array(index_in_container); }
                     }
-                    if evaluate(child, steps, index + 1, options, matches,
-                        locations.as_deref_mut(), location)? {
-                        return Ok(true);
-                    }
-                    if child.json_type()?.is_container() {
-                        if !active.insert(child.storage_offset()) {
-                            return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, child.storage_offset()));
-                        }
-                        stack.push((child, 0, location.len()));
+                    if evaluate(child, steps, index + 1, options, emit, trace)? { return Ok(true); }
+                    if child.kind()?.is_container() {
+                        if !active.insert(child.identity()) { return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, child.error_offset())); }
+                        stack.push((child, 0, trace.mark()));
                     }
                 }
                 Ok(false)
             })();
-            location.truncate(original_length);
-            return result;
+            trace.restore(original); return result;
         }
     }
     Ok(false)

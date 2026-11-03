@@ -172,6 +172,14 @@ int JsonContainerBuilder::append(const ObString &key, const ObString &binary)
       rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(binary.ptr()), binary.length())));
 }
 
+int JsonContainerBuilder::append_encoded(const ObString &key, json::BuildResult encoded)
+{
+  const int ret = build_status_error(encoded.status);
+  if (ret != OB_SUCCESS) { return ret; }
+  return !state_ ? OB_ALLOCATE_MEMORY_FAILED : build_status_error(state_->builder_->append_owned_binary(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(key.ptr()), key.length()), std::move(encoded.binary)));
+}
+
 int JsonContainerBuilder::append_aggregate(const ObString &key, const ObString &binary)
 {
   return !state_ ? OB_ALLOCATE_MEMORY_FAILED : build_status_error(state_->builder_->append_aggregate_binary(
@@ -181,19 +189,13 @@ int JsonContainerBuilder::append_aggregate(const ObString &key, const ObString &
 
 int JsonContainerBuilder::append_integer(const ObString &key, int64_t integer)
 {
-  auto encoded = json::encode_scalar(2, integer, 0, 0, rust::Slice<const uint8_t>(), 0);
-  const int ret = build_status_error(encoded.status);
-  return ret != OB_SUCCESS ? ret : append(key,
-      ObString(encoded.binary.size(), reinterpret_cast<const char *>(encoded.binary.data())));
+  return append_encoded(key, json::encode_scalar(2, integer, 0, 0, rust::Slice<const uint8_t>(), 0));
 }
 
 int JsonContainerBuilder::append_string(const ObString &key, const ObString &text)
 {
-  auto encoded = json::encode_scalar(5, 0, 0, 0,
-      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.ptr()), text.length()), 0);
-  const int ret = build_status_error(encoded.status);
-  return ret != OB_SUCCESS ? ret : append(key,
-      ObString(encoded.binary.size(), reinterpret_cast<const char *>(encoded.binary.data())));
+  return append_encoded(key, json::encode_scalar(5, 0, 0, 0,
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.ptr()), text.length()), 0));
 }
 
 int JsonContainerBuilder::append_container(const ObString &key, JsonContainerBuilder &value)

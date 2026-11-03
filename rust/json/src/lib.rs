@@ -42,7 +42,7 @@ pub use path::{
 };
 pub use search::SearchOptions;
 pub use sql_path::SqlPath;
-pub use value::{Selection, Value};
+pub use value::{Selection, Value, ValueRef};
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;

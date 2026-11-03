@@ -18,7 +18,8 @@ use crate::Number;
 use std::io;
 
 mod sql;
-pub use sql::{PreparedEdit, Session, SqlOperation};
+pub use sql::Session;
+use super::sql::{PreparedEdit, SqlOperation};
 
 /// A stable binary JSON snapshot. Reads must fill the requested range or fail.
 pub trait BinarySource {
@@ -73,7 +74,13 @@ impl From<DeltaError> for EditError {
     }
 }
 
-type Result<T> = std::result::Result<T, EditError>;
+pub(crate) type Result<T> = std::result::Result<T, EditError>;
+impl From<super::owned::ValueError> for EditError {
+    fn from(error: super::owned::ValueError) -> Self { match error {
+        super::owned::ValueError::Binary(error) => Self::Binary(error),
+        super::owned::ValueError::Allocation => Self::Delta(DeltaError::Allocation),
+    } }
+}
 
 #[derive(Debug)]
 pub struct Write {
@@ -95,14 +102,13 @@ pub struct Editor<'a, S: BinarySource + ?Sized> {
     extension: u64,
     lexicographical: bool,
     generation: u64,
-    logical_diffs: bool,
     root: Node,
     writes: Vec<Write>,
     delta: Delta,
 }
 
 #[derive(Clone, Copy)]
-struct Node {
+pub(crate) struct Node {
     offset: u64,
     raw_type: u8,
     entry_type: u8,
@@ -440,7 +446,6 @@ impl<'a, S: BinarySource + ?Sized> Editor<'a, S> {
             extension: 0,
             lexicographical: false,
             generation: 0,
-            logical_diffs: true,
             root: Node {
                 offset: 0,
                 raw_type: 0,
@@ -497,7 +502,7 @@ impl<'a, S: BinarySource + ?Sized> Editor<'a, S> {
             let (container, parents) = editor.locate(ancestors)?;
             let mut index = index.min(container.count);
             if editor.kind(container.node)? == JsonType::Object {
-                if editor.logical_diffs && key.is_empty() {
+                if key.is_empty() {
                     return Err(EditError::EmptyObjectKey);
                 }
                 let (found, position) = editor.find_key(container, key)?;
@@ -941,10 +946,7 @@ impl<'a, S: BinarySource + ?Sized> Editor<'a, S> {
         path: &[u8],
         value: &[u8],
     ) -> Result<()> {
-        if self.logical_diffs {
-            self.delta
-                .record(operation, value_type, flags, path, value)?;
-        }
+        self.delta.record(operation, value_type, flags, path, value)?;
         Ok(())
     }
 
@@ -954,9 +956,6 @@ impl<'a, S: BinarySource + ?Sized> Editor<'a, S> {
         container: Container,
         index: Option<u64>,
     ) -> Result<Vec<u8>> {
-        if !self.logical_diffs {
-            return Ok(Vec::new());
-        }
         let mut path = vec![b'$'];
         for (container, index) in parents
             .iter()

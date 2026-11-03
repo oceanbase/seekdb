@@ -24,6 +24,7 @@ namespace common {
 
 class ObIAllocator;
 class ObIJsonBase;
+namespace json { struct BuildResult; }
 
 // The allocator owns both the copied bytes and the integration view.
 int copy_json_binary(ObIAllocator &allocator, const ObString &binary, ObIJsonBase *&value);
@@ -51,6 +52,7 @@ public:
   JsonContainerBuilder(const JsonContainerBuilder &) = delete;
   JsonContainerBuilder &operator=(const JsonContainerBuilder &) = delete;
   int append(const ObString &key, const ObString &binary);
+  int append_encoded(const ObString &key, json::BuildResult encoded);
   int append_aggregate(const ObString &key, const ObString &binary);
   int extend(const ObString &binary);
   int rename_key(const ObString &old_key, const ObString &new_key);

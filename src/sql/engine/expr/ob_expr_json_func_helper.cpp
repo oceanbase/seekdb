@@ -28,6 +28,7 @@
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "lib/utility/ob_defer.h"
+#include <variant>
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -800,10 +801,35 @@ void ObJsonExprHelper::get_accuracy_from_expr(const ObExpr &expr, ObAccuracy &ac
   }
 }
 
-int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
+namespace {
+struct ConvertedJson {
+  std::variant<ObString, rust::Vec<uint8_t>> bytes;
+
+  int get_binary(ObIAllocator &allocator, ObString &binary) const
+  {
+    if (const auto *owned = std::get_if<rust::Vec<uint8_t>>(&bytes)) {
+      return deep_copy_ob_string(allocator, ObString(owned->size(),
+          reinterpret_cast<const char *>(owned->data())), binary);
+    }
+    binary = std::get<ObString>(bytes);
+    return OB_SUCCESS;
+  }
+
+  int append(JsonContainerBuilder &builder, const ObString &key)
+  {
+    if (auto *owned = std::get_if<rust::Vec<uint8_t>>(&bytes)) {
+      common::json::BuildResult encoded{0, std::move(*owned), 0, 0};
+      return builder.append_encoded(key, std::move(encoded));
+    }
+    return builder.append(key, std::get<ObString>(bytes));
+  }
+};
+}
+
+static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
     ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
     ObIAllocator &allocator, ObBasicSessionInfo *session,
-    const common::ObLobReadOptions *lob_options, ObString &binary)
+    const common::ObLobReadOptions *lob_options, ConvertedJson &converted)
 {
   int ret = OB_SUCCESS;
   ObObjType type = meta.get_type();
@@ -820,23 +846,22 @@ int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const ObObjMeta
   } else if (is_bool) {
     kind = 8;
     integer = datum.get_bool();
-  } else if (is_convertible_to_json(type)) {
+  } else if (ObJsonExprHelper::is_convertible_to_json(type)) {
     payload = datum.get_string();
-    if (!oracle && type != ObJsonType && OB_FAIL(ensure_collation(type, cs_type))) {
+    if (!oracle && type != ObJsonType && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
     } else if (OB_FAIL(common::lob_helper::read_real_string_data(
         &allocator, type, cs_type, meta.has_lob_header(), payload, lob_options))) {
     } else if (oracle && type != ObJsonType && cs_type != CS_TYPE_INVALID && cs_type != CS_TYPE_BINARY
         && OB_FAIL(ObExprUtil::convert_string_collation(payload, cs_type, payload, CS_TYPE_UTF8MB4_BIN, allocator))) {
     } else if (type == ObJsonType) {
-      binary = payload;
+      converted.bytes.emplace<ObString>(payload);
       has_binary = true;
     } else if (format_json) {
       auto parsed = common::json::parse_binary(
           rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(payload.ptr()), payload.length()),
-          common::json::Duplicate::Overwrite, get_json_text_depth_limit(get_json_max_depth_config()), false);
+          common::json::Duplicate::Overwrite, ObJsonExprHelper::get_json_text_depth_limit(ObJsonExprHelper::get_json_max_depth_config()), false);
       if (parsed.status == common::json::Status::Ok) {
-        ObString result(parsed.binary.size(), reinterpret_cast<char *>(parsed.binary.data()));
-        ret = deep_copy_ob_string(allocator, result, binary);
+        converted.bytes.emplace<rust::Vec<uint8_t>>(std::move(parsed.binary));
         has_binary = true;
       } else if (strict) {
         ret = oracle ? OB_ERR_JSON_SYNTAX_ERROR : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
@@ -935,15 +960,25 @@ int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const ObObjMeta
     if (encoded.status != 0) {
       ret = encoded.status == 1 ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
     } else {
-      ObString result(encoded.binary.size(), reinterpret_cast<char *>(encoded.binary.data()));
-      ret = deep_copy_ob_string(allocator, result, binary);
+      converted.bytes.emplace<rust::Vec<uint8_t>>(std::move(encoded.binary));
     }
   }
   return ret;
 }
 
-int ObJsonExprHelper::get_json_binary(const ObExpr &expr, ObEvalCtx &ctx,
-    MultimodeAlloctor &allocator, uint16_t index, ObString &binary)
+int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
+    ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
+    ObIAllocator &allocator, ObBasicSessionInfo *session,
+    const common::ObLobReadOptions *lob_options, ObString &binary)
+{
+  ConvertedJson converted;
+  const int ret = convert_datum_to_json(datum, meta, scale, is_bool, format_json, strict,
+      oracle, allocator, session, lob_options, converted);
+  return ret != OB_SUCCESS ? ret : converted.get_binary(allocator, binary);
+}
+
+static int get_converted_json_value(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, ConvertedJson &converted)
 {
   int ret = OB_SUCCESS;
   ObExpr *arg = expr.args_[index];
@@ -958,15 +993,34 @@ int ObJsonExprHelper::get_json_binary(const ObExpr &expr, ObEvalCtx &ctx,
       auto encoded = common::json::encode_scalar(5, 0, 0, 0,
           rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.ptr()), text.length()), 0);
       if (encoded.status != 0) { ret = OB_ERR_UNEXPECTED; }
-      else { ret = deep_copy_ob_string(allocator,
-          ObString(encoded.binary.size(), reinterpret_cast<char *>(encoded.binary.data())), binary); }
+      else { converted.bytes.emplace<rust::Vec<uint8_t>>(std::move(encoded.binary)); }
     }
   } else {
     ObScale scale = arg->datum_meta_.type_ == ObBitType ? arg->datum_meta_.length_semantics_ : arg->datum_meta_.scale_;
-    ret = datum_to_json_binary(*datum, arg->obj_meta_, scale, arg->is_boolean_, false, false, false,
-        allocator, ctx.exec_ctx_.get_my_session(), lob_options, binary);
+    ret = convert_datum_to_json(*datum, arg->obj_meta_, scale, arg->is_boolean_, false, false, false,
+        allocator, ctx.exec_ctx_.get_my_session(), lob_options, converted);
   }
   return ret;
+}
+
+int ObJsonExprHelper::get_json_binary(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, ObString &binary)
+{
+  ConvertedJson converted;
+  const int ret = get_converted_json_value(expr, ctx, allocator, index, converted);
+  return ret != OB_SUCCESS ? ret : converted.get_binary(allocator, binary);
+}
+
+int ObJsonExprHelper::append_json_value(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, JsonContainerBuilder &builder,
+    const ObString &key, bool &input_error)
+{
+  ConvertedJson converted;
+  input_error = true;
+  const int ret = get_converted_json_value(expr, ctx, allocator, index, converted);
+  if (ret != OB_SUCCESS) { return ret; }
+  input_error = false;
+  return converted.append(builder, key);
 }
 
 

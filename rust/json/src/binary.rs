@@ -208,10 +208,13 @@ impl Iterator for MemberOrder {
     fn next(&mut self) -> Option<u64> {
         match self { Self::Original(indices) => indices.next(), Self::Sorted(indices) => indices.next() }
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self { Self::Original(indices) => indices.size_hint(), Self::Sorted(indices) => indices.size_hint() }
+    }
 }
 
 impl<'a> BinaryValue<'a> {
-    fn lexicographical(&self) -> bool {
+    pub(crate) fn lexicographical(&self) -> bool {
         self.bytes.first() == Some(&DOC_HEADER) && self.bytes.get(1).is_some_and(|flags| flags & 1 != 0)
     }
 
@@ -430,13 +433,23 @@ impl<'a> BinaryValue<'a> {
     }
 
     pub fn member(&self, key: &[u8]) -> BinaryResult<Option<BinaryValue<'a>>> {
-        let count = self.len()?;
-        for index in 0..count {
+        Ok(self.member_index(key)?.map(|(_, value)| value))
+    }
+
+    pub(crate) fn member_index(&self, key: &[u8]) -> BinaryResult<Option<(u64, BinaryValue<'a>)>> {
+        for index in 0..self.len()? {
             if self.key(index)? == key {
-                return self.value(index).map(Some);
+                return self.value(index).map(|value| Some((index, value)));
             }
         }
         Ok(None)
+    }
+
+    pub(crate) fn entries_in_order(self, lexicographical: bool)
+        -> BinaryResult<impl Iterator<Item = BinaryResult<(&'a [u8], Self)>> + 'a> {
+        let entries = self.entries()?;
+        Ok(self.member_order(entries.len() as u64, lexicographical)?
+            .map(move |index| entries.get(index as usize)))
     }
 
     pub fn boolean(&self) -> BinaryResult<bool> {
@@ -1091,7 +1104,7 @@ impl ConstructedScalar<'_> {
             Self::Document(value) => { write_value(output, value); Ok(()) }
         }
     }
-    fn serialize_root(self) -> BinaryResult<Vec<u8>> {
+    pub(crate) fn serialize_root(self) -> BinaryResult<Vec<u8>> {
         match self {
             Self::Binary(value) => serialize_value(value),
             Self::Document(value) => {
@@ -1183,7 +1196,43 @@ pub(crate) fn serialize_constructed(object: bool, values: &[(&[u8], BinaryValue<
 
 pub(crate) fn serialize_constructed_source<'a, S: ConstructedSource>(source: &'a S, root: S::Value) -> BinaryResult<Vec<u8>>
 where S::Value: 'a {
-    if !source.kind(root)?.is_container() { return source.scalar(root)?.serialize_root(); }
+    let kind = source.kind(root)?;
+    if !kind.is_container() { return source.scalar(root)?.serialize_root(); }
+    let entries = source.entries(root)?;
+    let mut scalar_only = true;
+    for (_, value) in &entries {
+        if source.kind(*value)?.is_container() { scalar_only = false; break; }
+    }
+    if scalar_only {
+        if source.traversal_limit() <= entries.len() { return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, 0)); }
+        let scalars = entries.iter().map(|(key, value)| {
+            let scalar = source.scalar(*value)?;
+            Ok((*key, scalar, scalar.size()?))
+        }).collect::<BinaryResult<Vec<_>>>()?;
+        let (_, size, width) = constructed_container_layout(kind, scalars.iter().map(|(key, _, size)| (*key, *size)), |width| {
+            let mut payload = 0;
+            for (_, scalar, size) in &scalars { if scalar.inline(width)?.is_none() { payload += size; } }
+            Ok(payload)
+        })?;
+        let mut output = constructed_output(size)?;
+        let (start, values) = write_constructed_header(&mut output, kind, size, width, scalars.iter().map(|(key, _, _)| *key));
+        for (index, (_, scalar, _)) in scalars.iter().enumerate() {
+            let position = values + index * (var_size(width) + 1);
+            if let Some((encoded, tag)) = scalar.inline(width)? {
+                set_var(&mut output, position, encoded, width);
+                output[position + var_size(width)] = tag;
+            } else {
+                let offset = (output.len() - start) as u64;
+                set_var(&mut output, position, offset, width);
+                output[position + var_size(width)] = scalar.tag();
+                scalar.write(&mut output)?;
+            }
+        }
+        debug_assert_eq!(output.len() as u64, size + 8);
+        finish_constructed_output(&mut output, source.lexicographical());
+        return Ok(output);
+    }
+    let mut root_entries = Some(entries);
     enum Planning<V> { Enter(V, Option<(usize, usize)>), Exit((usize, usize)) }
     let mut layouts: Vec<ConstructedLayout<'a>> = Vec::new();
     let mut pending = vec![Planning::Enter(root, None)];
@@ -1202,7 +1251,9 @@ where S::Value: 'a {
             if !active.insert(identity) { return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, identity.1)); }
             pending.push(Planning::Exit(identity));
         }
-        let entries = if kind.is_container() { source.entries(value)? } else { Vec::new() };
+        let entries = if kind.is_container() {
+            if parent.is_none() { root_entries.take().unwrap() } else { source.entries(value)? }
+        } else { Vec::new() };
         let scalar = if kind.is_container() { None } else { Some(source.scalar(value)?) };
         let scalar_size = scalar.map(ConstructedScalar::size).transpose()?.unwrap_or(0);
         let index = layouts.len();
@@ -1213,34 +1264,23 @@ where S::Value: 'a {
     }
     for index in (0..layouts.len()).rev() {
         if layouts[index].scalar.is_some() { continue; }
-        let object = layouts[index].kind == JsonType::Object;
-        let children = &layouts[index].children;
-        let key_bytes = children.iter().map(|(key, _)| key.len() as u64).sum();
-        let key_lengths = if object { children.iter().map(|(key, _)| var_size(var_type(key.len() as u64)) as u64).sum() } else { 0 };
-        let value_bytes = children.iter().map(|(_, child)| layouts[*child].estimate).sum();
-        let last_value = children.last().map_or(0, |(_, child)| layouts[*child].estimate);
-        let estimate = container_size(children.len(), key_bytes, key_lengths, value_bytes, last_value, object);
-        let mut width = var_type(estimate);
-        let size = loop {
-            let bytes = var_size(width) as u64;
-            let mut payload = key_bytes;
-            for (_, child) in children {
-                if layouts[*child].scalar.map(|value| value.inline(width)).transpose()?.flatten().is_none() { payload += layouts[*child].size; }
-            }
-            let size = 2 + var_size(var_type(children.len() as u64)) as u64 + bytes
-                + children.len() as u64 * if object { 3 * bytes + 1 } else { bytes + 1 } + payload;
-            let needed = var_type(size);
-            if needed <= width { break size; }
-            width = needed;
-        };
+        let (estimate, size, width) = constructed_container_layout(layouts[index].kind,
+            layouts[index].children.iter().map(|(key, child)| {
+                let child = &layouts[*child];
+                (*key, child.estimate)
+            }), |width| {
+                let mut payload = 0;
+                for (_, child) in &layouts[index].children {
+                    let child = &layouts[*child];
+                    if child.scalar.map(|value| value.inline(width)).transpose()?.flatten().is_none() { payload += child.size; }
+                }
+                Ok(payload)
+            })?;
         layouts[index].estimate = estimate;
         layouts[index].size = size;
         layouts[index].width = width;
     }
-    let total = layouts[0].size.checked_add(8).and_then(|size| usize::try_from(size).ok())
-        .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, 0))?;
-    let mut output = Vec::with_capacity(total);
-    output.resize(8, 0);
+    let mut output = constructed_output(layouts[0].size)?;
     struct Writing { index: usize, start: usize, entries: usize, next: usize }
     let mut frames = Vec::<Writing>::new();
     let mut next = Some(0);
@@ -1250,28 +1290,8 @@ where S::Value: 'a {
             if let Some(value) = layout.scalar {
                 value.write(&mut output)?;
             } else {
-                let object = layout.kind == JsonType::Object;
-                let start = output.len();
-                let count = layout.children.len() as u64;
-                let count_type = var_type(count);
-                let width = var_size(layout.width);
-                output.push(layout.kind as u8);
-                output.push(layout.width | count_type << 2 | layout.width << 4 | 0x40);
-                push_var(&mut output, count, count_type);
-                push_var(&mut output, layout.size, layout.width);
-                let keys = output.len();
-                if object { output.resize(keys + layout.children.len() * width * 2, 0); }
-                let entries = output.len();
-                output.resize(entries + layout.children.len() * (width + 1), 0);
-                if object {
-                    for (position, (key, _)) in layout.children.iter().enumerate() {
-                        let entry = keys + position * width * 2;
-                        let offset = (output.len() - start) as u64;
-                        set_var(&mut output, entry, offset, layout.width);
-                        set_var(&mut output, entry + width, key.len() as u64, layout.width);
-                        output.extend_from_slice(key);
-                    }
-                }
+                let (start, entries) = write_constructed_header(&mut output, layout.kind, layout.size, layout.width,
+                    layout.children.iter().map(|(key, _)| *key));
                 frames.push(Writing { index, start, entries, next: 0 });
             }
         }
@@ -1296,10 +1316,81 @@ where S::Value: 'a {
             next = Some(child);
         }
     }
-    debug_assert_eq!(output.len(), total);
-    let header = DOC_HEADER as u64 | (u64::from(source.lexicographical()) << 8) | ((output.len() as u64) << 22);
-    output[..8].copy_from_slice(&header.to_le_bytes());
+    debug_assert_eq!(output.len() as u64, layouts[0].size + 8);
+    finish_constructed_output(&mut output, source.lexicographical());
     Ok(output)
+}
+
+#[inline]
+fn constructed_container_layout<'a>(kind: JsonType, children: impl Iterator<Item = (&'a [u8], u64)>, mut payload_size: impl FnMut(u8) -> BinaryResult<u64>) -> BinaryResult<(u64, u64, u8)> {
+    let object = kind == JsonType::Object;
+    let mut count = 0;
+    let mut key_bytes = 0;
+    let mut key_lengths = 0;
+    let mut value_bytes = 0;
+    let mut last_value = 0;
+    for (key, estimate) in children {
+        count += 1;
+        key_bytes += key.len() as u64;
+        if object { key_lengths += var_size(var_type(key.len() as u64)) as u64; }
+        value_bytes += estimate;
+        last_value = estimate;
+    }
+    let estimate = container_size(count, key_bytes, key_lengths, value_bytes, last_value, object);
+    let mut width = var_type(estimate);
+    let size = loop {
+        let bytes = var_size(width) as u64;
+        let payload = key_bytes + payload_size(width)?;
+        let size = 2 + var_size(var_type(count as u64)) as u64 + bytes
+            + count as u64 * if object { 3 * bytes + 1 } else { bytes + 1 } + payload;
+        let needed = var_type(size);
+        if needed <= width { break size; }
+        width = needed;
+    };
+    Ok((estimate, size, width))
+}
+
+#[inline]
+fn constructed_output(size: u64) -> BinaryResult<Vec<u8>> {
+    let total = size.checked_add(8).and_then(|size| usize::try_from(size).ok())
+        .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, 0))?;
+    let mut output = Vec::with_capacity(total);
+    output.resize(8, 0);
+    Ok(output)
+}
+
+#[inline]
+fn write_constructed_header<'a>(output: &mut Vec<u8>, kind: JsonType, size: u64, entry_type: u8,
+    keys: impl ExactSizeIterator<Item = &'a [u8]>) -> (usize, usize) {
+    let object = kind == JsonType::Object;
+    let start = output.len();
+    let count = keys.len();
+    let count_type = var_type(count as u64);
+    let width = var_size(entry_type);
+    output.push(kind as u8);
+    output.push(entry_type | count_type << 2 | entry_type << 4 | 0x40);
+    push_var(output, count as u64, count_type);
+    push_var(output, size, entry_type);
+    let key_entries = output.len();
+    if object { output.resize(key_entries + count * width * 2, 0); }
+    let entries = output.len();
+    output.resize(entries + count * (width + 1), 0);
+    if object {
+        for (position, key) in keys.enumerate() {
+            let entry = key_entries + position * width * 2;
+            let offset = (output.len() - start) as u64;
+            set_var(output, entry, offset, entry_type);
+            set_var(output, entry + width, key.len() as u64, entry_type);
+            output.extend_from_slice(key);
+        }
+    }
+    (start, entries)
+}
+
+#[inline]
+fn finish_constructed_output(output: &mut [u8], lexicographical: bool) {
+    let header = DOC_HEADER as u64 | (u64::from(lexicographical) << 8) | ((output.len() as u64) << 22);
+    output[..8].copy_from_slice(&header.to_le_bytes());
 }
 
 pub(crate) fn encode_scalar(value: &crate::construction::Scalar<'_>) -> BinaryResult<Vec<u8>> {
@@ -1932,24 +2023,18 @@ fn write_object(output: &mut Vec<u8>, values: &[(String, Document)]) {
     write_container(output, Container::Object(values), object_size(values));
 }
 
-fn sort_objects(document: &mut Document) {
-    match document {
-        Document::Array(values) => {
-            for value in values {
-                sort_objects(value);
+pub(crate) fn sort_objects(document: &mut Document) {
+    let mut pending = vec![document];
+    while let Some(document) = pending.pop() {
+        match document {
+            Document::Array(values) => pending.extend(values.iter_mut()),
+            Document::Object(values) => {
+                values.sort_by(|(left, _), (right, _)| left.len().cmp(&right.len())
+                    .then_with(|| left.as_bytes().cmp(right.as_bytes())));
+                pending.extend(values.iter_mut().map(|(_, value)| value));
             }
+            _ => {}
         }
-        Document::Object(values) => {
-            for (_, value) in values.iter_mut() {
-                sort_objects(value);
-            }
-            values.sort_by(|(left, _), (right, _)| {
-                left.len()
-                    .cmp(&right.len())
-                    .then_with(|| left.as_bytes().cmp(right.as_bytes()))
-            });
-        }
-        _ => {}
     }
 }
 

@@ -114,10 +114,10 @@ public:
   virtual ~JsonProcessor() {}
   virtual void process_value(String &key, Value *value) = 0;
 };
-class ToStringJsonProcessor : public json::JsonProcessor
+class ToStringJsonProcessor : public ::oceanbase::json::JsonProcessor
 {
 public:
-  virtual void process_value(json::String &key, json::Value *value)
+  virtual void process_value(::oceanbase::json::String &key, ::oceanbase::json::Value *value)
   {
     if ((key == N_TID) && (value->get_type() == JT_NUMBER) &&
         (value->get_number() <= 0)) {
@@ -332,9 +332,9 @@ public:
   };
 private:
   common::ObArenaAllocator allocator_;
-  json::Parser parser_;
-  json::RegexFilter filter_;
-  json::Value *root_;
+  ::oceanbase::json::Parser parser_;
+  ::oceanbase::json::RegexFilter filter_;
+  ::oceanbase::json::Value *root_;
 };
 
 class Path

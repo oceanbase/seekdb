@@ -2065,7 +2065,7 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
           && OB_ISNULL(ctx.json_input_ = OB_NEWx(JsonTableInput, ctx.op_exec_alloc_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        auto document = common::json::new_query(
+        auto document = common::json::parse_value(
             rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(j_str.ptr()), j_str.length()),
             doc_type != ObJsonType,
             ObJsonExprHelper::get_json_text_depth_limit(ObJsonExprHelper::get_json_max_depth_config()));
@@ -2076,7 +2076,7 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
           SET_COVER_ERROR(&ctx, ret);
           ctx.is_need_end_ = 1;
         } else {
-          ctx.json_input_->value_.emplace(common::json::query_root(std::move(document)));
+          ctx.json_input_->value_.emplace(common::json::take_value(std::move(document)));
           jt.input_ = &**ctx.json_input_->value_;
         }
       }

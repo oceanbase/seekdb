@@ -111,14 +111,15 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
     } else {
       ObString key = json_datum->get_string();
-      ObString value;
       bool is_null = false;
+      bool input_error = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(arg, ctx, temp_allocator, key, is_null))) {
-      } else if (OB_FAIL(ObJsonExprHelper::get_json_binary(expr, ctx, temp_allocator, i+1, value))) {
-        ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-        LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
-      } else if (OB_FAIL(builder.append(key, value))) {
-        if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
+      } else if (OB_FAIL(ObJsonExprHelper::append_json_value(expr, ctx, temp_allocator,
+          i+1, builder, key, input_error))) {
+        if (input_error) {
+          ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+          LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+        } else if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
           LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
         }
       }

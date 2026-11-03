@@ -90,10 +90,10 @@ int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   }
 
   for (uint32_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
-    ObString value;
-    if (OB_FAIL(ObJsonExprHelper::get_json_binary(expr, ctx, temp_allocator, i, value))) {
-      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-    } else if (OB_FAIL(builder.append(ObString(), value))) {
+    bool input_error = false;
+    if (OB_FAIL(ObJsonExprHelper::append_json_value(expr, ctx, temp_allocator, i,
+        builder, ObString(), input_error))) {
+      if (input_error) { ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM; }
     }
   }
 
