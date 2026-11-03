@@ -1,3 +1,4 @@
+// Fix for Issue #1999: Escaping backticks in DDL constraints
 /*
  * Copyright (c) 2025 OceanBase.
  *
