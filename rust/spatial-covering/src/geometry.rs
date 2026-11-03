@@ -235,10 +235,8 @@ impl Parser<'_> {
                         self.envelope.add(point);
                         ring.push(point);
                     }
-                    if !ring.is_empty() {
-                        if ring.len() < 4 || ring.first() != ring.last() {
-                            return Err(Error::InvalidWkb("polygon ring is not closed"));
-                        }
+                    if !ring.is_empty() && (ring.len() < 4 || ring.first() != ring.last()) {
+                        return Err(Error::InvalidWkb("polygon ring is not closed"));
                     }
                     rings.push(ring);
                 }
