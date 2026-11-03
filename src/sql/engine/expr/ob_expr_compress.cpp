@@ -48,7 +48,7 @@ int ObExprCompress::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   ObExprResType tmp_type;
-  int64_t length = 0;
+  size_t length = 0;
   int64_t mbmaxlen = 0;
   type.set_varbinary();
   type.set_collation_level(CS_LEVEL_COERCIBLE);
@@ -57,7 +57,10 @@ int ObExprCompress::calc_result_type1(ObExprResType &type,
   OX (type1.set_calc_collation_type(tmp_type.get_collation_type()));
   OX (type1.set_calc_collation_level(tmp_type.get_collation_level()));
   OZ (ObCharset::get_mbmaxlen_by_coll(tmp_type.get_collation_type(), mbmaxlen));
-  OX (type.set_length(compression::zlib_compress_bound(type1.get_length() * mbmaxlen)
+  OX (length = type1.get_length() * mbmaxlen);
+  // SQL uses level 6, whose stored-block bound preserves the legacy metadata width.
+  // Runtime allocation still uses the backend's bound, which covers every level.
+  OX (type.set_length(length + (length >> 12) + (length >> 14) + (length >> 25) + 13
                       + COMPRESS_HEADER_LEN + 1));
   return ret;
 }
