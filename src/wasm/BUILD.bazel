@@ -1,5 +1,5 @@
 load("//bazel:defs.bzl", "final_link", "cc_library")
-load("//bazel:compile_config.bzl", "VERSION", "RELEASE_LOCAL_DEFINES")
+load("//bazel:compile_config.bzl", "RELEASE_LOCAL_DEFINES")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -95,7 +95,7 @@ final_link(
     visibility = ["//visibility:public"],
 )
 
-_ASSETS = glob(["*.mjs", "*.html", "*.css"])
+_ASSETS = glob(["*.mjs"])
 genrule(
     name = "database_assets",
     srcs = _ASSETS,
@@ -103,16 +103,9 @@ genrule(
     cmd = "mkdir -p $(RULEDIR)/dist && cp $(SRCS) $(RULEDIR)/dist/",
 )
 
-genrule(
-    name = "engine_version",
-    srcs = ["engine-version.mjs.in"],
-    outs = ["dist/engine-version.mjs"],
-    cmd = "sed 's/@engine_version@/%s/g' $< > $@" % VERSION,
-)
-
 filegroup(
     name = "database",
-    srcs = [":database_link", ":database_assets", ":engine_version"],
+    srcs = [":database_link", ":database_assets"],
     target_compatible_with = ["@platforms//os:emscripten"],
     visibility = ["//visibility:public"],
 )
