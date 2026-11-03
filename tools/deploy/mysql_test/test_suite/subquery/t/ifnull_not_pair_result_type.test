@@ -1,0 +1,35 @@
+# Regression test for issue #1477.
+#
+# Eliminating an even chain of NOT expressions replaces the NOT expression with
+# its operand.  The NOT operator returns INT32 while a predicate such as LIKE
+# returns INT64, so the replacement changes the result type of the replaced
+# expression.  The enclosing IFNULL then re-deduces the types of its arguments
+# and tries to add a second implicit cast on an operand that already carries
+# one, which ObRawExprUtils::try_add_cast_expr_above rejects with
+# "ERROR 4016 (HY000): Internal error".
+#
+# The fix keeps the result type of the replaced expression in both NOT-pair
+# elimination paths.
+
+connection default;
+
+# The reported reproducer.  It must succeed and return no rows.
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(!(1 LIKE 'x')));
+
+# Control case from the issue: a single negation instead of two.
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(1 LIKE 'x'));
+
+# Control case from the issue: a literal instead of a scalar subquery.
+SELECT 1 FROM dual WHERE IFNULL(FALSE, !(!(1 LIKE 'x')));
+
+# The TRUE scalar subquery variant fails in the same way.
+SELECT 1 FROM dual WHERE IFNULL((SELECT TRUE), !(!(1 LIKE 'x')));
+
+# Three valued logic is kept: the folded NOT pair of a NULL predicate is NULL.
+SELECT IFNULL((SELECT NULL), !(!(1 LIKE '1'))) AS value;
+
+# A non boolean operand still needs the boolean conversion.
+SELECT IFNULL((SELECT NULL), !(!(2))) AS value;
+
+# IFNULL simplifies its first argument with the same NOT-pair path.
+SELECT IFNULL(!(!(1 LIKE '1')), (SELECT FALSE)) AS value;
