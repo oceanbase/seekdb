@@ -18,6 +18,7 @@
 
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_area.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -46,7 +47,7 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeomPolygon, double)
   UNUSED(context);
   INIT_SUCC(ret);
   const ObWkbGeomPolygon *geo = reinterpret_cast<const ObWkbGeomPolygon *>(g->val());
-  result = boost::geometry::area(*geo);
+  result = seekdb::geo::cartesian::area(*geo);
   return ret;
 } OB_GEO_FUNC_END;
 
@@ -55,7 +56,7 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeomMultiPolygon, double)
   UNUSED(context);
   INIT_SUCC(ret);
   const ObWkbGeomMultiPolygon *geo = reinterpret_cast<const ObWkbGeomMultiPolygon *>(g->val());
-  result = boost::geometry::area(*geo);
+  result = seekdb::geo::cartesian::area(*geo);
   return ret;
 } OB_GEO_FUNC_END;
 

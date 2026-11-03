@@ -31,6 +31,7 @@
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "sql/pl/ob_pl.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 
 namespace oceanbase
 {
@@ -2304,7 +2305,7 @@ int ObAggregateProcessor::generate_group_row(GroupRow *&new_group_row,
         case T_FUN_ORA_JSON_ARRAYAGG:
         case T_FUN_JSON_OBJECTAGG:
         case T_FUN_ORA_JSON_OBJECTAGG: 
-        case T_FUN_SYS_ST_ASMVT: 
+
         case T_FUNC_SYS_ARRAY_AGG:
         {
           void *tmp_buf = NULL;
@@ -2466,7 +2467,7 @@ int ObAggregateProcessor::fill_group_row(GroupRow *new_group_row,
         case T_FUN_ORA_JSON_ARRAYAGG:
         case T_FUN_JSON_OBJECTAGG:
         case T_FUN_ORA_JSON_OBJECTAGG: 
-        case T_FUN_SYS_ST_ASMVT:
+
         case T_FUNC_SYS_ARRAY_AGG:
         {
           void *tmp_buf = NULL;
@@ -2700,14 +2701,14 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
       ret = max_calc(rollup_cell, target_result,
                      src_result,
                      aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                     aggr_info.is_number());
+                     aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_MIN: {
       ret = min_calc(rollup_cell, target_result,
                      src_result,
                      aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                     aggr_info.is_number());
+                     aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_AVG:
@@ -2829,7 +2830,7 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
     case T_FUN_ORA_JSON_ARRAYAGG: 
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
-    case T_FUN_SYS_ST_ASMVT:
+
     case T_FUNC_SYS_ARRAY_AGG:
     {
       GroupConcatExtraResult *aggr_extra = NULL;
@@ -3116,7 +3117,7 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
     case T_FUN_ORA_JSON_ARRAYAGG:
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
-    case T_FUN_SYS_ST_ASMVT:
+
     case T_FUNC_SYS_ARRAY_AGG:
     {
       GroupConcatExtraResult *extra = NULL;
@@ -3313,7 +3314,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
       ret = max_calc_batch(aggr_cell, aggr_cell.get_iter_result(),
                       aggr_input_datums,
                       aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                      aggr_info.is_number(), selector);
+                      aggr_info.is_number(), selector, aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_MIN: {
@@ -3321,7 +3322,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
       ret = min_calc_batch(aggr_cell, aggr_cell.get_iter_result(),
                       aggr_input_datums,
                       aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                      aggr_info.is_number(), selector);
+                      aggr_info.is_number(), selector, aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_AVG: {
@@ -3388,7 +3389,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
     case T_FUN_ORA_JSON_ARRAYAGG:
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
-    case T_FUN_SYS_ST_ASMVT:
+
     case T_FUNC_SYS_ARRAY_AGG:
     {
       GroupConcatExtraResult *extra_info = NULL;
@@ -3515,7 +3516,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = max_calc(aggr_cell, aggr_cell.get_iter_result(),
                        stored_row.cells()[0],
                        aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                       aggr_info.is_number());
+                       aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       }
       break;
     }
@@ -3527,7 +3528,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = min_calc(aggr_cell, aggr_cell.get_iter_result(),
                        stored_row.cells()[0],
                        aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                       aggr_info.is_number());
+                       aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       }
       break;
     }
@@ -3598,7 +3599,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
     case T_FUN_ORA_JSON_ARRAYAGG:
     case T_FUN_JSON_OBJECTAGG:
     case T_FUN_ORA_JSON_OBJECTAGG: 
-    case T_FUN_SYS_ST_ASMVT:
+
     case T_FUNC_SYS_ARRAY_AGG:
     {
       GroupConcatExtraResult *extra = NULL;
@@ -3905,13 +3906,6 @@ int ObAggregateProcessor::collect_aggr_result(
       break;
     }
 
-    case T_FUN_SYS_ST_ASMVT: {
-      GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_asmvt_result(aggr_info, extra, result))) {
-      } else {
-      }
-      break;      
-    }
     case T_FUNC_SYS_ARRAY_AGG: {
       GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
       if (OB_FAIL(get_array_agg_result(aggr_info, extra, result))) {
@@ -4359,15 +4353,25 @@ int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
   return ret;
 }
 
+int ObAggregateProcessor::compare_extremum(const ObExpr *ordered, ObDatumCmpFuncType native,
+    const ObDatum &left, const ObDatum &right, int &ordering)
+{
+  bool handled = false;
+  int ret = PluginTypeValueExpr::compare_ordered(ordered, eval_ctx_, left, right, handled, ordering);
+  if (OB_SUCC(ret) && !handled) ret = native ? native(left, right, ordering, datum_access_ctx_) : OB_ERR_UNEXPECTED;
+  return ret;
+}
+
 int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObDatum &other,
-    ObDatumCmpFuncType cmp_func, const bool is_number)
+    ObDatumCmpFuncType cmp_func, const bool is_number, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cmp_func)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(compare_extremum(ordered, cmp_func, base, other, cmp_ret))) {
+      LOG_WARN("failed to compare", K(ret));
     } else if (cmp_ret < 0) {
       ret = clone_aggr_cell(aggr_cell, other, is_number);
       removal_info_.is_index_change_ = true;
@@ -4384,14 +4388,15 @@ int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
 }
 
 int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, ObDatum &base, const ObDatum &other,
-    ObDatumCmpFuncType cmp_func, const bool is_number)
+    ObDatumCmpFuncType cmp_func, const bool is_number, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cmp_func)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(compare_extremum(ordered, cmp_func, base, other, cmp_ret))) {
+      LOG_WARN("failed to compare", K(ret));
     } else if (cmp_ret > 0) {
       ret = clone_aggr_cell(aggr_cell, other, is_number);
       removal_info_.is_index_change_ = true;
@@ -4411,7 +4416,7 @@ template <typename T>
 int ObAggregateProcessor::max_calc_batch(
   AggrCell &aggr_cell,
   ObDatum &dst, const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const bool is_number,
-  const T &selector)
+  const T &selector, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(cmp_func))) {
@@ -4425,14 +4430,16 @@ int ObAggregateProcessor::max_calc_batch(
     for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end(); selector.next(it)) {
       i = selector.get_batch_index(it);
       if (max && !src.at(i)->is_null()) {
-        if (OB_FAIL(cmp_func(*max, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        if (OB_FAIL(compare_extremum(ordered, cmp_func, *max, *src.at(i), cmp_ret))) {
+          LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret < 0) {
           max = src.at(i);
         }
       } else if (!src.at(i)->is_null()) {
         if (dst.is_null()) {
           max = src.at(i);
-        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        } else if (OB_FAIL(compare_extremum(ordered, cmp_func, dst, *src.at(i), cmp_ret))) {
+          LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret < 0) {
           max = src.at(i);
         }
@@ -4449,7 +4456,7 @@ template <typename T>
 int ObAggregateProcessor::min_calc_batch(
     AggrCell &aggr_cell,
     ObDatum &dst, const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const bool is_number,
-    const T &selector)
+    const T &selector, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(cmp_func))) {
@@ -4463,14 +4470,16 @@ int ObAggregateProcessor::min_calc_batch(
     for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end(); selector.next(it)) {
       i = selector.get_batch_index(it);
       if (min && !src.at(i)->is_null()) {
-        if (OB_FAIL(cmp_func(*min, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        if (OB_FAIL(compare_extremum(ordered, cmp_func, *min, *src.at(i), cmp_ret))) {
+          LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret > 0) {
           min = src.at(i);
         }
       } else if (!src.at(i)->is_null()) {
         if (dst.is_null()) {
           min = src.at(i);
-        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        } else if (OB_FAIL(compare_extremum(ordered, cmp_func, dst, *src.at(i), cmp_ret))) {
+          LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret > 0) {
           min = src.at(i);
         }
@@ -7240,186 +7249,6 @@ int ObAggregateProcessor::fast_single_row_agg_batch(ObEvalCtx &eval_ctx, const i
       default: {
         ret = OB_ERR_UNEXPECTED;
       }
-    }
-  }
-  return ret;
-}
-
-int ObAggregateProcessor::get_asmvt_result(const ObAggrInfo &aggr_info,
-                                           GroupConcatExtraResult *&extra,
-                                           ObDatum &concat_result)
-{
-  int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_alloc(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  common::ObILobReadService *lob_read_service =
-      eval_ctx_.exec_ctx_.get_lob_read_service();
-  if (OB_ISNULL(lob_read_service)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
-    // Group concat row may be iterated in rollup_process(), rewind here.
-  } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
-  } else {
-    const ObChunkDatumStore::StoredRow *storted_row = NULL;
-    bool inited_tmp_obj = false;
-    ObObj *tmp_obj = NULL;
-    mvt_agg_result mvt_res(tmp_alloc, *lob_read_service);
-    while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
-      if (OB_ISNULL(storted_row)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        common::ObArenaAllocator single_row_alloc(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
-        // get obj
-        if (!inited_tmp_obj
-            && OB_ISNULL(tmp_obj = static_cast<ObObj*>(tmp_alloc.alloc(sizeof(ObObj) * (storted_row->cnt_))))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (!inited_tmp_obj && FALSE_IT(inited_tmp_obj = true)) {
-        } else if (OB_FAIL(convert_datum_to_obj(aggr_info, *storted_row, tmp_obj, storted_row->cnt_))) {
-        } else if (!mvt_res.is_inited()
-                   && OB_FAIL(init_asmvt_result(tmp_alloc, aggr_info, tmp_obj, storted_row->cnt_, mvt_res))) {
-        } else if (FALSE_IT(mvt_res.set_tmp_allocator(&single_row_alloc))) {
-        } else if (OB_FAIL(mvt_res.generate_feature(tmp_obj, storted_row->cnt_))) {
-        }
-      }
-    }//end of while
-
-    if (ret != OB_ITER_END && ret != OB_SUCCESS) {
-    } else {
-      ret = OB_SUCCESS;
-      ObString mvt_str;
-      if (OB_FAIL(mvt_res.mvt_pack(mvt_str))) {
-      } else {
-        ObString blob_locator;
-        ObExprStrResAlloc expr_res_alloc(*aggr_info.expr_, eval_ctx_);
-        ObTextStringResult blob_res(ObLongTextType, true, &expr_res_alloc);
-        int64_t total_length = mvt_str.length();
-        if (OB_FAIL(ret)) { 
-        } else if (OB_FAIL(blob_res.init(total_length))) {
-        } else if (OB_FAIL(blob_res.append(mvt_str))) {
-        } else {
-          blob_res.get_result_buffer(blob_locator);
-          concat_result.set_string(blob_locator.ptr(), blob_locator.length());
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator, 
-                                            const ObAggrInfo &aggr_info,
-                                            const ObObj *tmp_obj,
-                                            uint32_t obj_cnt,
-                                            mvt_agg_result &mvt_res)
-{
-  int ret = OB_SUCCESS;
-  bool is_param_done = false;
-  int param_cnt = 0;
-  mvt_res.inited_ = true;
-  // try get first geom column
-  for (uint32_t i = 0; i < aggr_info.param_exprs_.count() && OB_SUCC(ret); i++) {
-    if (i == 0) {
-      param_cnt = tmp_obj[i].get_int();
-      mvt_res.column_offset_ = param_cnt + 1;
-    } 
-    ObExpr *expr = aggr_info.param_exprs_.at(i);
-    if (i >= mvt_res.column_offset_ && expr->type_ == T_REF_COLUMN) {
-      is_param_done = true;
-      if (i + 1 >= obj_cnt) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (expr->obj_meta_.is_geometry() && mvt_res.geom_idx_ == UINT32_MAX) {
-        if (mvt_res.geom_name_.empty()) {
-          mvt_res.geom_idx_ = i;
-          if (OB_FAIL(ob_write_string(allocator, tmp_obj[i + 1].get_string(), mvt_res.geom_name_))) {
-            // geo_name
-          } 
-        } else if (mvt_res.geom_name_.case_compare(tmp_obj[i + 1].get_string()) == 0) {
-          mvt_res.geom_idx_ = i;
-        } else if (OB_FAIL(mvt_res.add_key(tmp_obj[i + 1].get_string()))) {
-        }
-      } else if (!mvt_res.feature_id_name_.empty() && mvt_res.feat_id_idx_ == UINT32_MAX
-                && mvt_res.feature_id_name_.case_compare(tmp_obj[i + 1].get_string()) == 0
-                && ob_is_numeric_type(expr->obj_meta_.get_type())) {
-        // feature id column name won't add to keys
-        mvt_res.feat_id_idx_ = i;
-      } else if (!expr->obj_meta_.is_json() // json type will be expanded
-                && !expr->obj_meta_.is_enum_or_set()
-                && OB_FAIL(mvt_res.add_key(tmp_obj[i + 1].get_string()))) {
-      }
-    } else if (!is_param_done) {
-      ObObjType type = tmp_obj[i].get_type();
-      ObString content;
-      if (ob_is_null(type)) {
-        // do nothing, use default value
-      } else if (i == 1) {
-        // layer name
-        if (!ob_is_string_tc(type) && !ob_is_large_text(type) && !ob_is_geometry_tc(type)) {
-          ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        } else if (ob_is_geometry_tc(type)) {
-          ObObj geo_hex;
-          ObObj obj;
-          ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-          if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, tmp_obj[i], obj))) {
-          } else if (OB_FAIL(ObHexUtils::hex(ObString(obj.get_string().length(), obj.get_string().ptr()), cast_ctx, geo_hex))) {
-          } else if (OB_FAIL(ob_write_string(allocator, geo_hex.get_string(), mvt_res.lay_name_, true))) {
-          }
-        } else if (OB_FAIL(tmp_obj[i].get_string(content))) {
-        } else if (mvt_agg_result::is_upper_char_exist(content)) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-        } else if (OB_FAIL(ob_write_string(allocator, content, mvt_res.lay_name_, true))) {
-        }
-      } else if (i == 2) {
-        // extent
-        ObObj obj;
-        const ObObj *extent_res = &tmp_obj[i];
-        if (!ob_is_int_tc(type) && !ob_is_uint_tc(type)) {
-          if (expr->is_static_const_) {
-            ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-            if (OB_FAIL(ObObjCaster::to_type(ObInt32Type, cast_ctx, tmp_obj[i], obj))) {
-            } else {
-              extent_res = &obj;
-            }
-          } else {
-            ret = OB_ERR_INVALID_TYPE_FOR_OP;
-          }
-        } 
-        if (OB_FAIL(ret)) {
-        } else if (extent_res->get_int() == 0
-                   || extent_res->is_overflow_integer(ObInt32Type)) {
-          ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-          LOG_USER_ERROR(OB_ERR_ARGUMENT_OUT_OF_RANGE, extent_res->get_int());
-        } else {
-          mvt_res.extent_ = extent_res->get_int();
-        }
-      } else if (i == 3) {
-        // geo_name
-        if (!ob_is_string_tc(type)) {
-          ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        } else if (tmp_obj[i].get_string().empty()) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-        } else if (mvt_agg_result::is_upper_char_exist(tmp_obj[i].get_string())) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-        } else if (OB_FAIL(ob_write_string(allocator, tmp_obj[i].get_string(), mvt_res.geom_name_))) {
-        }
-      } else if (i == 4) {
-        // feature id name
-        if (!ob_is_string_tc(type)) {
-          ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        } else if (mvt_agg_result::is_upper_char_exist(tmp_obj[i].get_string())) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-        } else if (OB_FAIL(ob_write_string(allocator, tmp_obj[i].get_string(), mvt_res.feature_id_name_))) {
-        } else if (mvt_res.feature_id_name_.empty()) {
-          ret = OB_WRONG_COLUMN_NAME;
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (!mvt_res.feature_id_name_.empty() && mvt_res.feat_id_idx_ == UINT32_MAX) {
-      // can't find feature id column
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    } else if (OB_FAIL(mvt_res.init_layer())) {
     }
   }
   return ret;

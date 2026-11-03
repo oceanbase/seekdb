@@ -543,7 +543,6 @@ public:
   static bool can_domain_be_extract_range(const ObDomainOpType &op_type, const ObRawExprResType &col_type,
                                           const ObObjMeta &res_type, common::ObObjType data_type,
                                           bool &always_true);
-  static common::ObDomainOpType get_geo_relation(ObItemType type);
   static common::ObDomainOpType get_domain_op_type(ObItemType type);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPreRangeGraph);

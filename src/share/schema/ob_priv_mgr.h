@@ -242,6 +242,8 @@ public:
                    const ObObjPriv *&obj_priv) const;
   int get_obj_privs_in_ur_and_obj(const ObObjPrivSortKey &obj_key,
       ObPackedObjPriv &obj_privs) const;
+  int get_obj_privs_in_ur_and_obj(const ObObjPrivSortKey &obj_key,
+      common::ObIArray<const ObObjPriv *> &obj_privs) const;
   int get_obj_privs_in_grantor_ur_obj_id(const ObObjPrivSortKey &obj_key,
       common::ObIArray<const ObObjPriv *> &obj_privs) const;
   int get_obj_privs_in_grantor_obj_id(const ObObjPrivSortKey &obj_key,

@@ -1,1 +1,21 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:plugin.bzl", "plugin_sdk_archive")
+
 exports_files(["android_compat.h"])
+
+plugin_sdk_archive(name = "plugin_sdk_package", headers = glob(["seekdb/plugin/*.h"]))
+
+# Public, header-only ABI. Never depend on a server library here.
+cc_library(
+    name = "plugin_sdk",
+    hdrs = glob(["seekdb/plugin/*.h"]),
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "geo_algorithms",
+    hdrs = glob(["seekdb/geo/**/*.hpp", "seekdb/geo/**/*.h", "seekdb/geo/**/*.ipp"], allow_empty = True),
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)

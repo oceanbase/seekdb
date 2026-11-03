@@ -20,6 +20,10 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/engine/expr/plugin_function_expr.h"
+
+#include <vector>
 
 namespace oceanbase
 {
@@ -28,6 +32,20 @@ namespace sql
 {
 
 namespace {
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+// Types on columns and subqueries are not known yet in early expression
+// resolution. Keep one value node until normal logical type deduction.
+bool retain_plugin_single_eval(const ObRawExpr *value, uint32_t depth = 0)
+{
+  if (!value || depth >= 64 || value->get_plugin_type() ||
+      value->get_expr_type() == T_REF_COLUMN || value->get_expr_type() == T_REF_QUERY ||
+      value->get_expr_type() == T_FUN_SYS_PLUGIN_FUNCTION ||
+      value->get_expr_type() == T_FUN_SYS_PLUGIN_CAST || value->get_expr_type() == T_FUN_SYS_PLUGIN_TYPE_VALUE) return true;
+  for (int64_t i = 0; i < value->get_param_count(); ++i)
+    if (retain_plugin_single_eval(value->get_param_expr(i), depth + 1)) return true;
+  return false;
+}
+#endif
 static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, ObString &str, ParseNode &ret_node, int8_t json_expr_flag)
 {
   INIT_SUCC(ret);
@@ -747,7 +765,7 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
       case T_FUN_ORA_JSON_ARRAYAGG:
       case T_FUN_ORA_JSON_OBJECTAGG:
       case T_FUN_SUM_OPNSIZE:
-      case T_FUN_SYS_ST_ASMVT:
+
       case T_FUNC_SYS_ARRAY_AGG:
       {
         if (OB_FAIL(process_agg_node(node, expr))) {
@@ -934,6 +952,22 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         }
         break;
       }
+      case T_FUN_SYS_PLUGIN_TYPE_VALUE: {
+        if (node->num_child_ != 2 || !node->children_ || !node->children_[0] || !node->children_[1] ||
+            node->children_[1]->type_ != T_IDENT || !node->children_[1]->str_value_ ||
+            node->children_[1]->str_len_ <= 0 || node->children_[1]->str_len_ > SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES) {
+          ret = OB_ERR_PARSER_SYNTAX;
+        } else {
+          ObRawExpr *value = nullptr;
+          if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[0], value)))) {
+          } else if (OB_FAIL(PluginTypeValueExpr::prepare(ctx_.expr_factory_,
+              ObString(node->children_[1]->str_len_, node->children_[1]->str_value_), value))) {
+          } else {
+            expr = value;
+          }
+        }
+        break;
+      }
       case T_FUN_SYS_REGEXP_LIKE:
       case T_FUN_SYS: {
         if (OB_FAIL(process_fun_sys_node(node, expr, is_root_expr))) {
@@ -1048,16 +1082,9 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         }
         break;
       }
-      case T_FUN_SYS_POINT:
-      case T_FUN_SYS_LINESTRING:
-      case T_FUN_SYS_MULTIPOINT:
-      case T_FUN_SYS_MULTILINESTRING:
-      case T_FUN_SYS_POLYGON:
-      case T_FUN_SYS_MULTIPOLYGON:
-      case T_FUN_SYS_GEOMCOLLECTION:
       case T_FUN_SYS_ARRAY:
       case T_FUN_SYS_MAP: {
-        OZ (process_geo_func_node(node, expr));
+        OZ (process_collection_func_node(node, expr));
         break;
       }
       case T_FUN_SYS_VECTOR_DISTANCE: {
@@ -2076,7 +2103,7 @@ int ObRawExprResolverImpl::process_vector_similarity_func_node(const ParseNode *
   return ret;
 }
 
-int ObRawExprResolverImpl::set_geo_func_name(ObSysFunRawExpr *func_expr,
+int ObRawExprResolverImpl::set_collection_func_name(ObSysFunRawExpr *func_expr,
                                              const ObItemType func_type)
 {
   int ret = OB_SUCCESS;
@@ -2085,34 +2112,6 @@ int ObRawExprResolverImpl::set_geo_func_name(ObSysFunRawExpr *func_expr,
     ret = OB_INVALID_ARGUMENT;
   } else {
     switch (func_type) {
-      case T_FUN_SYS_POINT: {
-        OX(func_expr->set_func_name(N_POINT));
-        break;
-      }
-      case T_FUN_SYS_LINESTRING: {
-        OX(func_expr->set_func_name(N_LINESTRING));
-        break;
-      }
-      case T_FUN_SYS_POLYGON: {
-        OX(func_expr->set_func_name(N_POLYGON));
-        break;
-      }
-      case T_FUN_SYS_MULTIPOINT: {
-        OX(func_expr->set_func_name(N_MULTIPOINT));
-        break;
-      }
-      case T_FUN_SYS_MULTILINESTRING: {
-        OX(func_expr->set_func_name(N_MULTILINESTRING));
-        break;
-      }
-      case T_FUN_SYS_MULTIPOLYGON: {
-        OX(func_expr->set_func_name(N_MULTIPOLYGON));
-        break;
-      }
-      case T_FUN_SYS_GEOMCOLLECTION: {
-        OX(func_expr->set_func_name(N_GEOMCOLLECTION));
-        break;
-      }
       case T_FUN_SYS_ARRAY: {
         OX(func_expr->set_func_name(N_ARRAY));
         break;
@@ -2131,7 +2130,7 @@ int ObRawExprResolverImpl::set_geo_func_name(ObSysFunRawExpr *func_expr,
   return ret;
 }
 
-int ObRawExprResolverImpl::process_geo_func_node(const ParseNode *node, ObRawExpr *&expr)
+int ObRawExprResolverImpl::process_collection_func_node(const ParseNode *node, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *func_expr = NULL;
@@ -2139,24 +2138,13 @@ int ObRawExprResolverImpl::process_geo_func_node(const ParseNode *node, ObRawExp
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, func_expr))) {
-  } else if (OB_FAIL(set_geo_func_name(func_expr, node->type_))) {
-  } else if (T_FUN_SYS_POINT == node->type_) {
-    ObRawExpr *sub_expr1 = NULL;
-    ObRawExpr *sub_expr2 = NULL;
-    if (OB_UNLIKELY(2 != node->num_child_) || OB_ISNULL(node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[0], sub_expr1)))) {
-    } else if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[1], sub_expr2)))) {
-    } else if (OB_FAIL(func_expr->set_param_exprs(sub_expr1, sub_expr2))) {
-    }
-  } else if (OB_ISNULL(node->children_[0]) && T_FUN_SYS_GEOMCOLLECTION == node->type_) { // SELECT GEOMETRYCOLLECTION();
-    // do nothing
+  } else if (OB_FAIL(set_collection_func_name(func_expr, node->type_))) {
   } else {
     ParseNode *expr_list_node = node->children_[0];
     if (OB_ISNULL(expr_list_node) || OB_UNLIKELY(T_EXPR_LIST != expr_list_node->type_)
         || OB_ISNULL(expr_list_node->children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid children for geometry type function", K(node), K(expr_list_node));
+      LOG_WARN("invalid children for collection function", K(node), K(expr_list_node));
     } else if (OB_FAIL(func_expr->init_param_exprs(expr_list_node->num_child_))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_list_node->num_child_; ++i) {
@@ -2335,7 +2323,7 @@ int ObRawExprResolverImpl::process_array_map_func_node(const ParseNode *node, Ob
         if (OB_ISNULL(expr_list_node) || OB_UNLIKELY(T_EXPR_LIST != expr_list_node->type_)
             || OB_ISNULL(expr_list_node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid children for geometry type function", K(node), K(expr_list_node));
+          LOG_WARN("invalid children for collection function", K(node), K(expr_list_node));
         } else if (expr_list_node->num_child_ != node->children_[0]->children_[0]->num_child_) {
           ret = OB_ERR_PARAM_SIZE;
           ObString func_name_("lambda function");
@@ -2842,6 +2830,14 @@ int ObRawExprResolverImpl::process_between_node(const ParseNode *node, ObRawExpr
         }
       }
     }
+    #ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+    if (OB_SUCC(ret) && can_transform_in_mysql_mode) {
+      // Do not duplicate a plugin value or choose two independent common
+      // types before column/subquery types have been resolved. Native BETWEEN
+      // still has its ordinary evaluator and range-extraction implementation.
+      can_transform_in_mysql_mode = !retain_plugin_single_eval(btw_params[0]);
+    }
+    #endif
     // The content of the 4th raw expr is same to that of the 1st raw expr.
     // But the ptr addresses need to be different because our optimizer relys on it.
     if (OB_SUCC(ret)) {
@@ -3126,9 +3122,16 @@ int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
       }
     } else if (T_OP_ROW == param_type2) {
       ObOpRawExpr *row_expr = static_cast<ObOpRawExpr *>(sub_expr2);
+      bool keep_single_list = false;
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+      if (row_expr && row_expr->get_param_count() == 1) {
+        keep_single_list = retain_plugin_single_eval(sub_expr1) || retain_plugin_single_eval(row_expr->get_param_expr(0));
+      }
+#endif
       if (OB_ISNULL(row_expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (1 == row_expr->get_param_count()) {
+        LOG_WARN("failed to cast ObOpRawExpr", K(ret));
+      } else if (1 == row_expr->get_param_count() && !keep_single_list) {
         ObRawExpr *param = row_expr->get_param_expr(0);
         if (OB_FAIL(in_expr->set_param_exprs(sub_expr1, param))) {
         } else {
@@ -3504,15 +3507,6 @@ int ObRawExprResolverImpl::process_agg_node(const ParseNode *node, ObRawExpr *&e
           (static_cast<ObConstRawExpr *>(sub_expr))->set_scale(1);
         }
         if (OB_SUCC(ret) && OB_FAIL(agg_expr->add_real_param_expr(sub_expr))) {
-        }
-      } // end for
-    } else if (T_FUN_SYS_ST_ASMVT == node->type_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-        sub_expr = NULL;
-        if (OB_ISNULL(node->children_[i])) {
-          // do nothing
-        } else if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[i], sub_expr)))) {
-        } else if (OB_FAIL(agg_expr->add_real_param_expr(sub_expr))) {
         }
       } // end for
     } else if (T_FUNC_SYS_ARRAY_AGG == node->type_) {
@@ -5023,6 +5017,8 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *func_expr = NULL;
   ObString func_name;
+  ObString plugin_sql_name;
+  bool is_plugin_function = false;
   if (OB_ISNULL(node) || OB_ISNULL(ctx_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(1 > node->num_child_) || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0])) {
@@ -5084,7 +5080,49 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
     ObExprOperatorType type;
     type = ObExprOperatorFactory::get_type_by_name(func_name);
     if (OB_UNLIKELY(T_INVALID == (type))) {
-      ret = OB_ERR_FUNCTION_UNKNOWN;
+      const int32_t sql_argument_count =
+          node->num_child_ > 1 && nullptr != node->children_[1]
+              ? node->children_[1]->num_child_
+              : 0;
+      if (nullptr != share::g_mp && sql_argument_count >= 0) {
+        std::vector<const char *> unresolved_types(
+            static_cast<size_t>(sql_argument_count), nullptr);
+        std::string owned_name(func_name.ptr(), func_name.length());
+        // MySQL function names are case-insensitive; catalog identifiers use
+        // canonical ASCII names. Keep the same identity for preflight and the
+        // hidden dispatch argument used during typed binding.
+        for (char &character : owned_name) {
+          if (character >= 'A' && character <= 'Z') character += 'a' - 'A';
+        }
+        seekdb_plugin_sql_binding_v1_t binding = {};
+        int lookup_ret = OB_ENTRY_NOT_EXIST;
+        if (T_FROM_SCOPE == ctx_.current_scope_) {
+          lookup_ret = share::g_mp->resolve_plugin_sql_object(
+              SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, owned_name.c_str(),
+              unresolved_types.empty() ? nullptr : unresolved_types.data(),
+              static_cast<uint32_t>(unresolved_types.size()), &binding);
+        }
+        if (OB_SUCCESS != lookup_ret) {
+          lookup_ret = share::g_mp->resolve_plugin_sql_object(
+              SEEKDB_PLUGIN_EXTENSION_FUNCTION, owned_name.c_str(),
+              unresolved_types.empty() ? nullptr : unresolved_types.data(),
+              static_cast<uint32_t>(unresolved_types.size()), &binding);
+        }
+        if (OB_SUCCESS == lookup_ret) {
+          if (OB_SUCC(ret = ob_write_string(ctx_.expr_factory_.get_allocator(),
+                  ObString(owned_name.size(), owned_name.data()), plugin_sql_name))) {
+            func_name = ObString::make_string(
+                binding.kind == SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION
+                    ? PluginTableFunctionExpr::SQL_DISPATCH_NAME
+                    : PluginFunctionExpr::SQL_DISPATCH_NAME);
+            is_plugin_function = true;
+          }
+        } else {
+          ret = OB_ERR_FUNCTION_UNKNOWN;
+        }
+      } else {
+        ret = OB_ERR_FUNCTION_UNKNOWN;
+      }
     }
   }
 
@@ -5094,8 +5132,21 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
       if (OB_ISNULL(node->children_) || OB_ISNULL(node->children_[1])
           || OB_UNLIKELY(T_EXPR_LIST != node->children_[1]->type_)) {
         ret = OB_ERR_PARSER_SYNTAX;
-      } else if (OB_FAIL(func_expr->init_param_exprs(node->children_[1]->num_child_))) {
+        LOG_WARN("invalid node children", K(ret), K(node->children_));
+      } else if (OB_FAIL(func_expr->init_param_exprs(
+                     node->children_[1]->num_child_ +
+                     (is_plugin_function ? 1 : 0)))) {
       } else {
+        if (is_plugin_function) {
+          ObConstRawExpr *name_expression = nullptr;
+          if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
+                  ctx_.expr_factory_, ObVarcharType, plugin_sql_name,
+                  CS_TYPE_UTF8MB4_BIN, name_expression))) {
+            LOG_WARN("failed to build plugin SQL function identity", K(ret));
+          } else if (OB_FAIL(func_expr->add_param_expr(name_expression))) {
+            LOG_WARN("failed to add plugin SQL function identity", K(ret));
+          }
+        }
         ObRawExpr *para_expr = NULL;
         int32_t num = node->children_[1]->num_child_;
         int current_columns_count = ctx_.columns_->count();
@@ -5130,6 +5181,15 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
         }
       }
     } //end > 1
+    else if (is_plugin_function) {
+      ObConstRawExpr *name_expression = nullptr;
+      if (OB_FAIL(func_expr->init_param_exprs(1))) {
+      } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
+                     ctx_.expr_factory_, ObVarcharType, plugin_sql_name,
+                     CS_TYPE_UTF8MB4_BIN, name_expression))) {
+      } else if (OB_FAIL(func_expr->add_param_expr(name_expression))) {
+      }
+    }
   }
 
   if (OB_SUCC(ret)) {

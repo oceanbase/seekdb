@@ -1170,7 +1170,7 @@ int ObWindowFunctionOp::init()
           case T_FUN_JSON_OBJECTAGG:
           case T_FUN_ORA_JSON_ARRAYAGG:
           case T_FUN_ORA_JSON_OBJECTAGG:
-          case T_FUN_SYS_ST_ASMVT:
+
           case T_FUNC_SYS_ARRAY_AGG: {
             void *tmp_ptr = local_allocator_.alloc(sizeof(AggrCell));
             void *tmp_array = local_allocator_.alloc(sizeof(AggrInfoFixedArray));

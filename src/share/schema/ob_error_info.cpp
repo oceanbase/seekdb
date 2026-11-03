@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/schema/catalog_dml_sql_helper.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_error_info.h"
@@ -173,10 +174,10 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_error_dml(dml))) {
   } else {
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
-      ObDMLExecHelper exec(sql_client);
+      CatalogDMLSqlHelper exec(sql_client);
       if (is_replace) {
         if (OB_FAIL(exec.exec_update(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
         }
@@ -268,7 +269,8 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
   int64_t affected_rows = 0;
   if (ERROR_STATUS_NO_ERROR != error_info.get_error_status()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
+    LOG_WARN("delete error info unexpected.", K(ret), K(error_info));
+  } else if (OB_FAIL(sql.assign_fmt("delete FROM oceanbase.%s WHERE obj_id = %ld \
                                                   AND obj_seq = %ld \
                                                   AND obj_type = %ld", 
              OB_ALL_ERROR_TNAME, 
@@ -292,7 +294,8 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
   ObSqlString sql;
   if (false == error_info.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
+    LOG_WARN("error info is invalid", K(ret));
+  } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM oceanbase.%s WHERE obj_id = %ld  \
                                                                   AND obj_seq = %ld\
                                                                   AND obj_type = %ld",
              OB_ALL_ERROR_TNAME,

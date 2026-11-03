@@ -77,6 +77,7 @@ grouped_unity_cc_library(
         ":_textual_optimizer_map_inputs",
         ":optimizer_internal_headers",
         "//rust:config_headers",
+        "//rust:seekdb_rust_host_headers",
         "//src/data_plane:optimizer_storage_service",
         "//src/data_plane:parallel_range_task_planner",
         "//src/sql:sql_runtime_internal_headers",

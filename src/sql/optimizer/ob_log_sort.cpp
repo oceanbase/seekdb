@@ -494,6 +494,11 @@ int ObLogSort::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
 
 int ObLogSort::try_allocate_pushdown_topn_runtime_filter()
 {
+  // Runtime filters currently compare physical datums without TYPE bindings.
+  // Keep Top-N itself, but do not prune its input using a different ordering.
+  for (const auto &key : sort_keys_) {
+    if (key.expr_ && key.expr_->get_plugin_type()) return OB_SUCCESS;
+  }
   int ret = OB_SUCCESS;
   ObLogicalOperator *node = nullptr;
   double tsc_output_rows = 0;

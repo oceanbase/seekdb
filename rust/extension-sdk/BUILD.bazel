@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "extension",
+    crate_name = "seekdb_extension",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2021",
+    rustc_flags = ["-Cpanic=unwind"],
+    visibility = ["//plugins:__subpackages__"],
+)

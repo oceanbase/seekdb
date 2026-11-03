@@ -183,6 +183,7 @@ class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
   friend class StopTxDescFunctor;
   friend class IterateTxSchedulerFunctor;
   friend class ObTxnFreeRouteCtx;
+  friend class SessionCatalogTestAccess;
   OB_UNIS_VERSION(1);
 protected:
   ObTraceInfo trace_info_;
@@ -450,6 +451,11 @@ public:
   int64_t get_tx_lock_timeout() const { return lock_timeout_us_; }
   bool is_in_tx() const { return state_ > State::IDLE; }
   bool is_tx_active() const { return state_ >= State::ACTIVE && state_ < State::IN_TERMINATE; }
+  bool is_statement_ready() const {
+    return tx_id_.is_valid() && seq_base_ > 0 &&
+        (state_ == State::ACTIVE || state_ == State::IMPLICIT_ACTIVE ||
+         (state_ == State::IDLE && has_implicit_savepoint()));
+  }
   void print_trace();
   void dump_and_print_trace();
   bool in_tx_or_has_extra_state() const;

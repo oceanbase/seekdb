@@ -1548,14 +1548,19 @@ int ObDMLStmt::formalize_stmt_expr_reference(ObRawExprFactory *expr_factory,
       } else if (OB_FAIL(set_sharable_expr_reference(*stmt_exprs.at(i), ExplicitedRefType::REF_BY_NORMAL))) {
       } else { /*do nothing*/ }
     }
-    // table function column expr should not be removed
+    // Legacy table functions require all output expressions. Plugin table
+    // functions retain their full declaration in the frozen binding and map
+    // output by ordinal, so unused column expressions may be pruned normally.
     for (int64_t i = 0; OB_SUCC(ret) && i < column_items_.count(); i++) {
       TableItem *table_item = NULL;
       ColumnItem &column_item = column_items_.at(i);
       if (OB_ISNULL(column_item.expr_) ||
           OB_ISNULL(table_item = get_table_item_by_id(column_item.table_id_))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (table_item->is_function_table() ||
+        LOG_WARN("get unexpected null", K(column_item.table_id_), K(column_item.expr_), K(table_item), K(ret));
+      } else if ((table_item->is_function_table() &&
+                  (nullptr == table_item->function_table_expr_ ||
+                   table_item->function_table_expr_->get_expr_type() != T_FUN_SYS_PLUGIN_TABLE_FUNCTION)) ||
                  table_item->is_json_table() ||
                  table_item->for_update_ ||
                  table_item->is_values_table()) {

@@ -2,6 +2,9 @@ load(":build_settings.bzl", "bool_flag")
 load(":cargo_build_script_env.bzl", "cargo_build_script_environment")
 
 exports_files([
+    "plugin.bzl",
+    "rust_plugin.bzl",
+    "plugin_tools.py",
     "build_metadata.py",
     "parser.bzl",
     "parser_codegen.py",

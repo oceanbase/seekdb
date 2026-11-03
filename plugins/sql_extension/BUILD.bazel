@@ -1,0 +1,7 @@
+load("//bazel:plugin.bzl", "native_plugin")
+
+native_plugin(
+    name = "seekdb_sql_extension_plugin",
+    srcs = ["seekdb_sql_extension_plugin.c"],
+    output_name = "seekdb_sql_extension.so",
+)

@@ -33,13 +33,15 @@ public:
              share::schema::ObSchemaGetterGuard &schema_guard,
              common::ObMySQLProxy &sql_proxy,
              sql::ObIPLSqlRuntime *pl_sql_runtime,
-             pl::ObPL *pl_engine)
+             pl::ObPL *pl_engine,
+             bool require_complete_dependencies = false)
     : routine_info_(routine_info),
       session_info_(session_info),
       schema_guard_(schema_guard),
       sql_proxy_(sql_proxy),
       pl_sql_runtime_(pl_sql_runtime),
       pl_engine_(pl_engine),
+      require_complete_dependencies_(require_complete_dependencies),
       inner_allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE),
       expr_factory_(inner_allocator_) {}
   virtual ~ObPLRouter() {}
@@ -58,6 +60,7 @@ private:
   common::ObMySQLProxy &sql_proxy_;
   sql::ObIPLSqlRuntime *pl_sql_runtime_;
   pl::ObPL *pl_engine_;
+  bool require_complete_dependencies_;
   ObArenaAllocator inner_allocator_;
   sql::ObRawExprFactory expr_factory_;
 };

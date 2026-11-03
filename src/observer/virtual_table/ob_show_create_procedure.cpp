@@ -42,13 +42,18 @@ void ObShowCreateProcedure::reset()
 int ObShowCreateProcedure::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(schema_guard_)) {
+  if (OB_ISNULL(schema_guard_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
+    SERVER_LOG(WARN, "schema guard or session is NULL", K(ret), K(schema_guard_), K(session_));
   } else if (!start_to_read_) {
     const ObRoutineInfo *proc_info = NULL;
     uint64_t show_procedure_id = OB_INVALID_ID;
-    if (OB_FAIL(calc_show_procedure_id(show_procedure_id))) {
+    // Virtual-table scans acquire their own committed schema guard, separate
+    // from the statement resolver's guard. SHOW must read the caller's private
+    // routine version too, including the printer's subsequent ID lookup.
+    if (OB_FAIL(session_->bind_plugin_catalog_view(*schema_guard_))) {
+      SERVER_LOG(WARN, "failed to bind caller routine view for show create", K(ret));
+    } else if (OB_FAIL(calc_show_procedure_id(show_procedure_id))) {
     } else if (OB_UNLIKELY(OB_INVALID_ID == show_procedure_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this procedure is used for show clause, can't be selected");

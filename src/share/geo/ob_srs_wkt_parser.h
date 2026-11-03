@@ -18,25 +18,12 @@
 #define OCEANBASE_LIB_GEO_OB_SRS_WKT_PARSER_
 
 #include "share/geo/ob_srs_info.h"
-#include "lib/string/ob_string_buffer.h"
 
 namespace oceanbase
 {
 
 namespace  common
 {
-
-// read str from qi
-struct ObQiString
-{
-  ObArenaAllocator allocator_;
-  ObStringBuffer val_;
-
-  ObQiString():allocator_("QiString"), val_(&allocator_) {}
-  ObQiString(const ObQiString& other):allocator_("QiString"), val_(&allocator_) {
-    this->val_.append(other.val_.string());
-  }
-};
 
 class ObSrsWktParser final
 {

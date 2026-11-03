@@ -205,32 +205,12 @@ int ObDMLService::check_geometry_type(
     ObIAllocator &allocator,
     ObDatum &datum)
 {
-  int ret = OB_SUCCESS;
-  ObExpr *expr = dml_row.at(column_info.projector_index_);
-  if (!datum.is_null() && expr->obj_meta_.is_geometry()) {
-    const uint32_t column_srid = column_info.srs_info_.srid_;
-    const ObGeoType column_geo_type = static_cast<ObGeoType>(column_info.srs_info_.geo_type_);
-    ObString wkb = datum.get_string();
-    uint32_t input_srid = UINT32_MAX;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-        eval_ctx.exec_ctx_, allocator, datum,
-        expr->datum_meta_, expr->obj_meta_.has_lob_header(), wkb))) {
-    } else if (OB_FAIL(ObGeoTypeUtil::check_geo_type(column_geo_type, wkb))) {
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, input_srid))) {
-    } else if (OB_ISNULL(eval_ctx.exec_ctx_.get_srs_provider())) {
-      ret = OB_NOT_INIT;
-    } else if (OB_FAIL(ObSqlGeoUtils::check_srid(
-                   *eval_ctx.exec_ctx_.get_srs_provider(),
-                   column_srid,
-                   input_srid))) {
-      ret = OB_ERR_WRONG_SRID_FOR_COLUMN;
-      LOG_USER_ERROR(OB_ERR_WRONG_SRID_FOR_COLUMN, static_cast<uint64_t>(input_srid),
-          static_cast<uint64_t>(column_srid));
-    }
-  }
-  return ret;
+  UNUSED(eval_ctx);
+  UNUSED(dml_row);
+  UNUSED(column_info);
+  UNUSED(allocator);
+  UNUSED(datum);
+  return OB_SUCCESS;
 }
 
 int ObDMLService::check_rowkey_is_null(const ObExprPtrIArray &row,

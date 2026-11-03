@@ -962,7 +962,7 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "_%ld", geo_col_id))) {
     } else if (OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
-        def_pos, "SPATIAL_CELLID(`%s`)", col_schema.get_column_name()))) {
+        def_pos, "__seekdb_index_value(`%s`, CAST(NULL AS UNSIGNED))", col_schema.get_column_name()))) {
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
     } else {
       col_schema.add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
@@ -1016,7 +1016,7 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "_%ld", geo_col_id))) {
     } else if (OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
-        def_pos, "SPATIAL_MBR(`%s`)", col_schema.get_column_name()))) {
+        def_pos, "__seekdb_index_value(`%s`, CAST(NULL AS BINARY(32)))", col_schema.get_column_name()))) {
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
     } else {
       col_schema.add_column_flag(GENERATED_DEPS_CASCADE_FLAG);

@@ -156,7 +156,6 @@ private:
   int print_partition_exprs(ObWinFunRawExpr *expr);
   int print_order_items(ObWinFunRawExpr *expr);
   int print_window_clause(ObWinFunRawExpr *expr);
-  int print_st_asmvt(ObAggFunRawExpr *expr);
   int print_array_agg_expr(ObAggFunRawExpr *expr);
   int print_array_map(ObSysFunRawExpr *expr, const char *func_name);
 

@@ -398,8 +398,6 @@ bool ObSqlParameterization::is_ignore_scale_check(TransformTreeCtx &ctx, const P
   } else if (T_EXPR_LIST == ctx.tree_->type_ || T_NUMBER == ctx.tree_->type_) {
     if (T_NUMBER == ctx.tree_->type_ && ctx.ignore_scale_check_) {
       ret_bool = true;
-    } else if (T_FUN_SYS_POINT == parent->type_) {
-      ret_bool = true;
     } else if (T_FUN_SYS == parent->type_) {
       ParseNode **node = parent->children_;
       if (OB_ISNULL(node) || OB_ISNULL(node[0])) {

@@ -126,14 +126,22 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
                                                                             stmt.get_table_schema_version())))) {
       }
     }
+    if (OB_SUCC(ret) && arg.native_target_.resolved_) {
+      ret = arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.object_id_,
+          ROUTINE_SCHEMA, arg.native_target_.routine_.get_schema_version()));
+    }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
     } else if (OB_ISNULL(user_info)) {
-      // ignore ret
+      if (arg.native_target_.resolved_) ret = OB_USER_NOT_EXIST;
     } else if (OB_FAIL(ob_write_string(allocator, user_info->get_user_name_str(), arg.grantor_))) {
     } else if (OB_FAIL(ob_write_string(allocator, user_info->get_host_name_str(), arg.grantor_host_))) {
+    }
+    if (OB_SUCC(ret) && arg.native_target_.resolved_ && user_info != nullptr) {
+      arg.grantor_id_ = user_info->get_user_id();
+      ret = arg.native_target_.bind_actor(arg.grantor_id_, session_info->get_enable_role_array());
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(schema_guard.reset())) {
@@ -336,9 +344,13 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
     } else if (OB_ISNULL(user_info)) {
-      // ignore ret
+      if (arg.native_target_.resolved_) ret = OB_USER_NOT_EXIST;
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_user_name_str(), arg.grantor_))) {
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_host_name_str(), arg.grantor_host_))) {
+    }
+    if (OB_SUCC(ret) && arg.native_target_.resolved_ && user_info != nullptr) {
+      arg.grantor_id_ = user_info->get_user_id();
+      ret = arg.native_target_.bind_actor(arg.grantor_id_, session_info->get_enable_role_array());
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(schema_guard.reset())) {
@@ -351,6 +363,15 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     if (OB_FAIL(ret)) {
     } else if (0 == user_ids.count()) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (arg.native_target_.resolved_) {
+      if (OB_ISNULL(stmt.get_query_ctx())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(arg.set_native_grantees(user_ids))) {
+      } else {
+        arg.ddl_stmt_str_ = stmt.get_query_ctx()->get_sql_stmt();
+        ret = query::serialize_root_service_call(
+            [&]{ return ctx.root_command_service().revoke_routine(arg); });
+      }
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);

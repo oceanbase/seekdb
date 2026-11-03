@@ -278,35 +278,7 @@
 #include "sql/engine/expr/ob_expr_scn_to_timestamp.h"
 #include "sql/engine/expr/ob_expr_errno.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
-#include "sql/engine/expr/ob_expr_point.h"
-#include "sql/engine/expr/ob_expr_spatial_collection.h"
-#include "sql/engine/expr/ob_expr_st_area.h"
-#include "sql/engine/expr/ob_expr_st_intersects.h"
-#include "sql/engine/expr/ob_expr_st_x.h"
-#include "sql/engine/expr/ob_expr_st_transform.h"
-#include "sql/engine/expr/ob_expr_priv_st_transform.h"
-#include "sql/engine/expr/ob_expr_st_covers.h"
-#include "sql/engine/expr/ob_expr_st_bestsrid.h"
-#include "sql/engine/expr/ob_expr_st_astext.h"
-#include "sql/engine/expr/ob_expr_st_buffer.h"
-#include "sql/engine/expr/ob_expr_spatial_cellid.h"
-#include "sql/engine/expr/ob_expr_spatial_mbr.h"
-#include "sql/engine/expr/ob_expr_st_geomfromewkb.h"
-#include "sql/engine/expr/ob_expr_st_geomfromwkb.h"
-#include "sql/engine/expr/ob_expr_st_geomfromewkt.h"
-#include "sql/engine/expr/ob_expr_priv_st_geographyfromtext.h"
-#include "sql/engine/expr/ob_expr_st_asewkt.h"
-#include "sql/engine/expr/ob_expr_st_distance.h"
-#include "sql/engine/expr/ob_expr_st_geometryfromtext.h"
-#include "sql/engine/expr/ob_expr_priv_st_setsrid.h"
-#include "sql/engine/expr/ob_expr_priv_st_point.h"
-#include "sql/engine/expr/ob_expr_st_isvalid.h"
-#include "sql/engine/expr/ob_expr_st_dwithin.h"
-#include "sql/engine/expr/ob_expr_st_aswkb.h"
-#include "sql/engine/expr/ob_expr_st_distance_sphere.h"
-#include "sql/engine/expr/ob_expr_st_contains.h"
-#include "sql/engine/expr/ob_expr_st_within.h"
-#include "sql/engine/expr/ob_expr_priv_st_asewkb.h"
+#include "sql/engine/expr/index_value_expr.h"
 #include "sql/engine/expr/ob_expr_current_scn.h"
 #include "sql/engine/expr/ob_expr_name_const.h"
 #include "sql/engine/expr/ob_expr_format_bytes.h"
@@ -316,28 +288,10 @@
 #include "sql/engine/expr/ob_expr_prefix_pattern.h"
 #include "sql/engine/expr/ob_expr_extract_value.h"
 #include "sql/engine/expr/ob_expr_update_xml.h"
-#include "sql/engine/expr/ob_expr_priv_st_numinteriorrings.h"
-#include "sql/engine/expr/ob_expr_priv_st_iscollection.h"
-#include "sql/engine/expr/ob_expr_priv_st_equals.h"
-#include "sql/engine/expr/ob_expr_priv_st_touches.h"
 #include "sql/engine/expr/ob_expr_align_date4cmp.h"
 #include "sql/engine/expr/ob_expr_extract_cert_expired_time.h"
 #include "sql/engine/expr/ob_expr_transaction_id.h"
 #include "sql/engine/expr/ob_expr_inner_row_cmp_val.h"
-#include "sql/engine/expr/ob_expr_priv_st_makeenvelope.h"
-#include "sql/engine/expr/ob_expr_priv_st_clipbybox2d.h"
-#include "sql/engine/expr/ob_expr_priv_st_pointonsurface.h"
-#include "sql/engine/expr/ob_expr_priv_st_geometrytype.h"
-#include "sql/engine/expr/ob_expr_st_crosses.h"
-#include "sql/engine/expr/ob_expr_st_overlaps.h"
-#include "sql/engine/expr/ob_expr_st_union.h"
-#include "sql/engine/expr/ob_expr_st_length.h"
-#include "sql/engine/expr/ob_expr_st_difference.h"
-#include "sql/engine/expr/ob_expr_st_asgeojson.h"
-#include "sql/engine/expr/ob_expr_st_centroid.h"
-#include "sql/engine/expr/ob_expr_st_symdifference.h"
-#include "sql/engine/expr/ob_expr_priv_st_asmvtgeom.h"
-#include "sql/engine/expr/ob_expr_priv_st_makevalid.h"
 #include "sql/engine/expr/ob_expr_gtid.h"
 #include "sql/engine/expr/ob_expr_array.h"
 #include "sql/engine/expr/ob_expr_vec_ivf_center_id.h"
@@ -378,6 +332,7 @@
 #include "sql/engine/expr/ob_expr_array_cardinality.h"
 #include "sql/engine/expr/ob_expr_tokenize.h"
 #include "sql/engine/expr/ob_expr_lock_func.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/engine/expr/ob_expr_decode_trace_id.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
 #include "sql/engine/expr/ob_expr_get_path.h"
@@ -396,8 +351,6 @@
 #include "sql/engine/expr/ob_expr_array_first.h"
 #include "sql/engine/expr/ob_expr_mysql_proc_info.h"
 #include "sql/engine/expr/ob_expr_get_mysql_routine_parameter_type_str.h"
-#include "sql/engine/expr/ob_expr_priv_st_geohash.h"
-#include "sql/engine/expr/ob_expr_priv_st_makepoint.h"
 #include "sql/engine/expr/ob_expr_to_pinyin.h"
 #include "sql/engine/expr/ob_expr_url_codec.h"
 #include "sql/engine/expr/ob_expr_keyvalue.h"
@@ -442,6 +395,7 @@ static AllocFunc OP_ALLOC[T_MAX_OP];
       }                                             \
     }();                                            \
   } while(0)
+
 // When developing two functionally identical expressions (e.g., mid and substr expressions) you can use this macro
 // OriOp is the existing expression, now we want to develop NewOp with the same functionality, using this macro can avoid duplicate code
 // But require OriOp has already registered
@@ -840,52 +794,7 @@ void ObExprOperatorFactory::register_expr_operators()
     // convert input value into an OceanBase error number and throw out as exception
     REG_OP(ObExprErrno);
 #endif
-    REG_OP(ObExprPoint);
-    REG_OP(ObExprLineString);
-    REG_OP(ObExprMultiPoint);
-    REG_OP(ObExprMultiLineString);
-    REG_OP(ObExprPolygon);
-    REG_OP(ObExprMultiPolygon);
-    REG_OP(ObExprGeomCollection);
-    REG_OP(ObExprGeometryCollection);
-    REG_OP(ObExprSTGeomFromText);
-    REG_OP(ObExprSTArea);
-    REG_OP(ObExprSTIntersects);
-    REG_OP(ObExprSTX);
-    REG_OP(ObExprSTY);
-    REG_OP(ObExprSTLatitude);
-    REG_OP(ObExprSTLongitude);
-    REG_OP(ObExprSTTransform);
-    REG_OP(ObExprPrivSTTransform);
-    REG_OP(ObExprPrivSTCovers);
-    REG_OP(ObExprPrivSTBestsrid);
-    REG_OP(ObExprSTAsText);
-    REG_OP(ObExprSTAsWkt);
-    REG_OP(ObExprSTBufferStrategy);
-    REG_OP(ObExprSTBuffer);
-    REG_OP(ObExprSpatialCellid);
-    REG_OP(ObExprSpatialMbr);
-    REG_OP(ObExprPrivSTGeomFromEWKB);
-    REG_OP(ObExprSTGeomFromWKB);
-    REG_OP(ObExprSTGeometryFromWKB);
-    REG_OP(ObExprPrivSTGeomFromEwkt);
-    REG_OP(ObExprPrivSTAsEwkt);
-    REG_OP(ObExprSTSRID);
-    REG_OP(ObExprSTDistance);
-    REG_OP(ObExprPrivSTGeogFromText);
-    REG_OP(ObExprPrivSTGeographyFromText);
-    REG_OP(ObExprPrivSTSetSRID);
-    REG_OP(ObExprSTGeometryFromText);
-    REG_OP(ObExprPrivSTPoint);
-    REG_OP(ObExprSTIsValid);
-    REG_OP(ObExprPrivSTBuffer);
-    REG_OP(ObExprPrivSTDWithin);
-    REG_OP(ObExprSTAsWkb);
-    REG_OP(ObExprStPrivAsEwkb);
-    REG_OP(ObExprSTAsBinary);
-    REG_OP(ObExprSTDistanceSphere);
-    REG_OP(ObExprSTContains);
-    REG_OP(ObExprSTWithin);
+    REG_OP(IndexValueExpr);
     REG_OP(ObExprFormatBytes);
     REG_OP(ObExprFormatPicoTime);
     REG_OP(ObExprUuid2bin);
@@ -900,16 +809,20 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprEncode);
     REG_OP(ObExprDecode);
     REG_OP(ObExprGeneratorFunc);
+    REG_OP(PluginFunctionExpr);
+    REG_OP(PluginTableFunctionExpr);
+    REG_OP(PluginTypeEncodeExpr);
+    REG_OP(PluginCastExpr);
+    REG_OP(PluginTypeValueExpr);
+    REG_OP(PluginTypeComparisonExpr);
+    REG_OP(PluginTypeBetweenExpr);
+    REG_OP(PluginTypeInExpr);
     REG_OP(ObExprZipf);
     REG_OP(ObExprNormal);
     REG_OP(ObExprUniform);
     REG_OP(ObExprRandom);
     REG_OP(ObExprRandstr);
     REG_OP(ObExprPrefixPattern);
-    REG_OP(ObExprPrivSTNumInteriorRings);
-    REG_OP(ObExprPrivSTIsCollection);
-    REG_OP(ObExprPrivSTEquals);
-    REG_OP(ObExprPrivSTTouches);
     REG_OP(ObExprAlignDate4Cmp);
     REG_OP(ObExprJsonQuery);
     REG_OP(ObExprBM25);
@@ -922,22 +835,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprTransactionId);
     REG_OP(ObExprInnerRowCmpVal);
     REG_OP(ObExprTopNFilter);
-    REG_OP(ObExprPrivSTMakeEnvelope);
-    REG_OP(ObExprPrivSTClipByBox2D);
-    REG_OP(ObExprPrivSTPointOnSurface);
-    REG_OP(ObExprPrivSTGeometryType);
-    REG_OP(ObExprSTCrosses);
-    REG_OP(ObExprSTOverlaps);
-    REG_OP(ObExprSTUnion);
-    REG_OP(ObExprSTLength);
-    REG_OP(ObExprSTDifference);
-    REG_OP(ObExprSTAsGeoJson);
-    REG_OP(ObExprSTCentroid);
-    REG_OP(ObExprSTSymDifference);
-    REG_OP(ObExprPrivSTAsMVTGeom);
-    REG_OP(ObExprPrivSTMakeValid);
-    REG_OP(ObExprPrivSTGeoHash);
-    REG_OP(ObExprPrivSTMakePoint);
     REG_OP(ObExprCurrentRole);
     REG_OP(ObExprArray);
     REG_OP(ObExprDemoteCast);
@@ -1212,12 +1109,6 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
     } else if (0 == origin_name.case_compare("character_length")) {
       // character_length is synonym for char_length
       alias_name = ObString::make_string(N_CHAR_LENGTH);
-    } else if (0 == origin_name.case_compare("area")) {
-      // area is synonym for st_area
-      alias_name = ObString::make_string(N_ST_AREA);
-    } else if (0 == origin_name.case_compare("centroid")) {
-      // centroid is synonym for st_centroid
-      alias_name = ObString::make_string(N_ST_CENTROID);
     } else if (0 == origin_name.case_compare("semantic_distance")) {
       alias_name = ObString::make_string(N_SEMANTIC_DISTANCE);
     } else {

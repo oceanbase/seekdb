@@ -4888,9 +4888,13 @@ struct ObNeedPriv
   // If columns_ empty, then check table level priv_set.
   // Else column_ not empty, then table level has not the priv_set, then check if column_ has the priv_set.
   bool check_any_column_priv_; //used under table level.
+  // Native DCL pins an object/version, never a shared routine name. Primitive
+  // fields survive privilege-plan copies without borrowing routine schemas.
+  uint64_t native_routine_id_ = common::OB_INVALID_ID;
+  int64_t native_routine_version_ = 0;
   // If check_any_column_priv_ true, then check the table has any column with the priv_set.
   TO_STRING_KV(K_(db), K_(table), K_(columns), K_(priv_set), K_(priv_level), K_(is_sys_table), K_(is_for_update),
-               K_(priv_check_type));
+               K_(priv_check_type), K_(native_routine_id), K_(native_routine_version));
 };
 
 struct ObStmtNeedPrivs

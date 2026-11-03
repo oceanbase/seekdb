@@ -22,6 +22,7 @@
 #include "share/geo/ob_geo_to_tree_visitor.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/geo/ob_geo_func_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -55,7 +56,7 @@ static void apply_bg_union_inner(const GeometryType1 *geo1, const GeometryType2 
                                  GeometryRes *res)
 {
   UNUSED(context);
-  boost::geometry::union_(*geo1, *geo2, *res);
+  seekdb::geo::cartesian::union_(*geo1, *geo2, *res);
 }
 
 template <typename GeometryType1, typename GeometryType2, typename GeometryRes>

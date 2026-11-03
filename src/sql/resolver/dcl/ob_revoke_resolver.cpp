@@ -168,7 +168,7 @@ int ObRevokeResolver::resolve(const ParseNode &parse_tree)
 int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  static const int REVOKE_NUM_CHILD = 6;
+  static const int REVOKE_NUM_CHILD = 7;
   static const int REVOKE_ALL_NUM_CHILD = 3;
   static const int REVOKE_ROLE_NUM_CHILD = 1;
   ParseNode *node = const_cast<ParseNode*>(&parse_tree);
@@ -252,7 +252,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                                              db,
                                                                              table,
                                                                              allocator_,
-                                                                             false))) {
+                                                                             false, session_info_))) {
             }
           }
 
@@ -293,6 +293,27 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
           if (OB_FAIL(ret)) {
           } else {
             revoke_stmt->set_priv_set(priv_set);
+          }
+        }
+
+        // Only resolved native FUNCTION objects implement these semantics.
+        // Reject unsupported targets before user-list warning/ignore handling.
+        if (OB_SUCC(ret) && node->type_ == T_REVOKE) {
+          const ParseNode *options = node->children_[6];
+          const int64_t flags = options == nullptr ? 0 : options->value_;
+          if ((options != nullptr && (options->type_ != T_INT || options->num_child_ != 0)) ||
+              flags < 0 || flags > 5) {
+            ret = OB_ERR_PARSE_SQL;
+          } else if (flags != 0) {
+            if (grant_level != OB_PRIV_ROUTINE_LEVEL ||
+                revoke_stmt->get_object_type() != ObObjectType::FUNCTION ||
+                !revoke_stmt->native_target().resolved_ || revoke_stmt->get_priv_set() == 0 ||
+                (revoke_stmt->get_priv_set() & ~(OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE))) {
+              ret = OB_NOT_SUPPORTED;
+            } else {
+              revoke_stmt->set_native_revoke_options((flags & 1) != 0,
+                  static_cast<obcall::ObRevokeRoutineArg::NativeRevokeBehavior>(flags >> 1));
+            }
           }
         }
 

@@ -1,6 +1,10 @@
 """SQL interface and composition headers."""
 
 SQL_PUBLIC_HEADER_ROOTS = [
+    "resolver/ddl/extension_routine_resolver.h",
+    "resolver/ddl/extension_routine_batch.h",
+    "engine/expr/caller_catalog_transaction.h",
+    "engine/expr/plugin_function_expr.h",
     "code_generator/ob_expr_generator_impl.h",
     "code_generator/ob_static_engine_expr_cg.h",
     "das/iter/ob_das_iter.h",

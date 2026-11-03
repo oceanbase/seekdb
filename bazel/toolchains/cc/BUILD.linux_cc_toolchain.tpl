@@ -74,6 +74,7 @@ filegroup(
 filegroup(
     name = "local_all_files",
     srcs = [
+        "devtools/bin/llvm-nm",
         ":archive_files",
         ":base_linker_files",
         ":dwp_files",

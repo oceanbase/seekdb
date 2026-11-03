@@ -1948,43 +1948,6 @@ bool ObPreRangeGraph::can_domain_be_extract_range(const ObDomainOpType &op_type,
   return bret;
 }
 
-common::ObDomainOpType ObPreRangeGraph::get_geo_relation(ObItemType type)
-{
-  common::ObDomainOpType rel_type = common::ObDomainOpType::T_INVALID;
-  switch (type) {
-    case T_FUN_SYS_PRIV_ST_EQUALS :
-    case T_FUN_SYS_PRIV_ST_TOUCHES :
-    case T_FUN_SYS_ST_INTERSECTS : {
-      rel_type = common::ObDomainOpType::T_GEO_INTERSECTS;
-      break;
-    }
-    case T_FUN_SYS_ST_CONTAINS :
-    case T_FUN_SYS_ST_COVERS : {
-      rel_type = common::ObDomainOpType::T_GEO_COVERS;
-      break;
-    }
-    case T_FUN_SYS_ST_DWITHIN : {
-      rel_type = common::ObDomainOpType::T_GEO_DWITHIN;
-      break;
-    }
-    case T_FUN_SYS_ST_WITHIN : {
-      rel_type = common::ObDomainOpType::T_GEO_COVEREDBY;
-      break;
-    }
-    case T_FUN_SYS_ST_CROSSES : {
-      rel_type = common::ObDomainOpType::T_GEO_INTERSECTS;
-      break;
-    }
-    case T_FUN_SYS_ST_OVERLAPS : {
-      rel_type = common::ObDomainOpType::T_GEO_INTERSECTS;
-      break;
-    }
-    default:
-      break;
-  }
-  return rel_type;
-}
-
 common::ObDomainOpType ObPreRangeGraph::get_domain_op_type(ObItemType type)
 {
   common::ObDomainOpType rel_type = common::ObDomainOpType::T_INVALID;
@@ -1999,31 +1962,6 @@ common::ObDomainOpType ObPreRangeGraph::get_domain_op_type(ObItemType type)
     }
     case T_FUN_SYS_JSON_OVERLAPS : {
       rel_type = common::ObDomainOpType::T_JSON_OVERLAPS;
-      break;
-    }
-    case T_FUN_SYS_ST_INTERSECTS : {
-      rel_type = common::ObDomainOpType::T_GEO_INTERSECTS;
-      break;
-    }
-    case T_FUN_SYS_ST_CONTAINS :
-    case T_FUN_SYS_ST_COVERS : {
-      rel_type = common::ObDomainOpType::T_GEO_COVERS;
-      break;
-    }
-    case T_FUN_SYS_ST_DWITHIN : {
-      rel_type = common::ObDomainOpType::T_GEO_DWITHIN;
-      break;
-    }
-    case T_FUN_SYS_ST_WITHIN : {
-      rel_type = common::ObDomainOpType::T_GEO_COVEREDBY;
-      break;
-    }
-    case T_FUN_SYS_ST_CROSSES : {
-      rel_type = common::ObDomainOpType::T_GEO_INTERSECTS;
-      break;
-    }
-    case T_FUN_SYS_ST_OVERLAPS : {
-      rel_type = common::ObDomainOpType::T_GEO_INTERSECTS;
       break;
     }
     default:

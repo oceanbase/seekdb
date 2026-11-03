@@ -56,6 +56,9 @@ public:
   virtual int end_nested_session(
       ObSQLSessionInfo::StmtSavedValue &saved_session,
       SavedValue &saved_connection) = 0;
+  // Host-generated catalog SQL borrows an already prepared caller transaction.
+  // This opt-in is not implied by merely using an external or SPI session.
+  virtual int enable_plugin_catalog_sql() { return common::OB_NOT_SUPPORTED; }
 };
 
 inline ObIInnerSQLConnection *as_inner_sql_connection(

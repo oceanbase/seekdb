@@ -64,6 +64,11 @@ public:
   bool get_revoke_all() const { return revoke_all_; }
   const common::ObStrings& get_grantees() const { return grantees_; }
   virtual bool cause_implicit_commit() const { return true; }
+  obcall::NativeRoutinePrivilegeTarget &native_target() { return routine_arg_.native_target_; }
+  const obcall::NativeRoutinePrivilegeTarget &native_target() const { return routine_arg_.native_target_; }
+  bool has_native_revoke_options() const { return routine_arg_.has_native_revoke_options(); }
+  void set_native_revoke_options(bool option_only, obcall::ObRevokeRoutineArg::NativeRevokeBehavior behavior)
+  { routine_arg_.grant_option_only_ = option_only; routine_arg_.revoke_behavior_ = behavior; }
   void set_has_warning() { has_warning_ = true; }
   bool get_has_warning() const { return has_warning_; }
   virtual obcall::ObDDLArg &get_ddl_arg() 

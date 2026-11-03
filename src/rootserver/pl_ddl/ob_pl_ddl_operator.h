@@ -18,6 +18,9 @@
 #define OCEANBASE_ROOTSERVER_OB_DDL_PL_OPERATOR_H_
 
 #include "rootserver/ob_ddl_operator.h"
+#include "rootserver/pl_ddl/routine_id_reservation.h"
+#include "rootserver/pl_ddl/routine_version_reservation.h"
+#include "rootserver/pl_ddl/routine_cache_invalidation.h"
 
 namespace oceanbase
 {
@@ -38,13 +41,16 @@ public:
                       common::ObMySQLTransaction &trans,
                       share::schema::ObErrorInfo &error_info,
                       common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,
-                      const common::ObString *ddl_stmt_str/*=NULL*/);
+                      const common::ObString *ddl_stmt_str/*=NULL*/,
+                      RoutineIdReservation *reservation = nullptr,
+                      RoutineVersionReservation *version_reservation = nullptr);
   int replace_routine(share::schema::ObRoutineInfo &routine_info,
                       const share::schema::ObRoutineInfo *old_routine_info,
                       common::ObMySQLTransaction &trans,
                       share::schema::ObErrorInfo &error_info,
                       common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,
-                      const common::ObString *ddl_stmt_str/*=NULL*/);
+                      const common::ObString *ddl_stmt_str/*=NULL*/,
+                      RoutineVersionReservation *version_reservation = nullptr);
   int alter_routine(const share::schema::ObRoutineInfo &routine_info,
                     common::ObMySQLTransaction &trans,
                     share::schema::ObErrorInfo &error_info,
@@ -52,7 +58,9 @@ public:
   int drop_routine(const share::schema::ObRoutineInfo &routine_info,
                     common::ObMySQLTransaction &trans,
                      share::schema::ObErrorInfo &error_info,
-                     const common::ObString *ddl_stmt_str/*=NULL*/);
+                     const common::ObString *ddl_stmt_str/*=NULL*/,
+                     RoutineVersionReservation *version_reservation = nullptr,
+                     IRoutineCacheInvalidation *invalidation = nullptr);
   //----End of functions for managing routine----
 
 

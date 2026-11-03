@@ -18,6 +18,10 @@
 
 #include "ob_rpc_struct.h"
 #include "share/ob_server_struct.h"
+#include "share/schema/native_routine_admission.h"
+#include "share/schema/native_routine_signature.h"
+#include <set>
+#include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase
 {
@@ -2142,9 +2146,211 @@ OB_SERIALIZE_MEMBER((ObAlterUserRoleArg, ObDDLArg),
                     role_id_array_,
                     user_ids_);
 
+int NativeRoutinePrivilegeTarget::assign(const ObRoutineInfo &routine, bool signature_qualified)
+{
+  clear_actor();
+  resolved_ = false;
+  signature_qualified_ = false;
+  int ret = routine_.assign(routine);
+  if (OB_SUCC(ret)) {
+    resolved_ = true;
+    signature_qualified_ = signature_qualified;
+    if (!is_valid()) { resolved_ = signature_qualified_ = false; ret = OB_INVALID_ARGUMENT; }
+  }
+  return ret;
+}
+
+int NativeRoutinePrivilegeTarget::bind_actor(uint64_t actor, const ObIArray<uint64_t> &roles)
+{
+  if (!resolved_ || actor == 0 || actor > INT64_MAX || roles.count() > 16384) {
+    clear_actor(); return OB_INVALID_ARGUMENT;
+  }
+  try {
+    std::set<uint64_t> sorted;
+    for (int64_t i = 0; i < roles.count(); ++i) {
+      if (roles.at(i) == 0 || roles.at(i) > INT64_MAX) { clear_actor(); return OB_INVALID_ARGUMENT; }
+      sorted.insert(roles.at(i));
+    }
+    clear_actor(); // Collect first: roles may alias enabled_roles_.
+    if (!is_valid()) return OB_INVALID_ARGUMENT;
+    for (const auto role : sorted) {
+      const int ret = enabled_roles_.push_back(role);
+      if (ret != OB_SUCCESS) { clear_actor(); return ret; }
+    }
+    actor_id_ = actor;
+    return OB_SUCCESS;
+  } catch (const std::bad_alloc &) { clear_actor(); return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { clear_actor(); return OB_ERR_UNEXPECTED; }
+}
+
+bool NativeRoutinePrivilegeTarget::is_valid() const
+{
+  if (actor_id_ == OB_INVALID_ID) {
+    if (!enabled_roles_.empty()) return false;
+  } else {
+    if (!resolved_ || actor_id_ == 0 || actor_id_ > INT64_MAX || enabled_roles_.count() > 16384) return false;
+    uint64_t previous = 0;
+    for (int64_t i = 0; i < enabled_roles_.count(); ++i) {
+      if (enabled_roles_.at(i) <= previous || enabled_roles_.at(i) > INT64_MAX) return false;
+      previous = enabled_roles_.at(i);
+    }
+  }
+  return (!resolved_ && !signature_qualified_) || (resolved_ && routine_.is_native() && routine_.is_native_binding_valid() &&
+      routine_.get_routine_type() == ObRoutineType::ROUTINE_FUNCTION_TYPE &&
+      routine_.get_routine_id() > 0 && routine_.get_routine_id() <= INT64_MAX &&
+      routine_.get_database_id() > 0 && routine_.get_database_id() <= INT64_MAX &&
+      routine_.get_owner_id() > 0 && routine_.get_owner_id() <= INT64_MAX &&
+      !routine_.get_routine_name().empty() && routine_.get_schema_version() > 0 &&
+      routine_.get_overload() >= 0);
+}
+
+int NativeRoutinePrivilegeTarget::check(const ObRoutineInfo *current) const
+{
+  if (!resolved_ || !is_valid()) return OB_INVALID_ARGUMENT;
+  if (!current) return OB_ERR_SP_DOES_NOT_EXIST;
+  if (current->get_routine_id() != routine_.get_routine_id() ||
+      current->get_database_id() != routine_.get_database_id() ||
+      current->get_owner_id() != routine_.get_owner_id() ||
+      current->get_schema_version() != routine_.get_schema_version() ||
+      current->get_overload() != routine_.get_overload() ||
+      current->get_routine_name() != routine_.get_routine_name() ||
+      !NativeRoutineAdmission::same_signature(*current, routine_)) return OB_STATE_NOT_MATCH;
+  return OB_SUCCESS;
+}
+
+int NativeRoutinePrivilegeTarget::admit(ObSchemaGetterGuard &guard,
+    const ObString &database, const ObString &name, uint64_t object_id) const
+{
+  const int ret = revalidate(guard, database, name, object_id);
+  return ret != OB_SUCCESS ? ret : (resolved_ ? OB_NOT_SUPPORTED : OB_SUCCESS);
+}
+
+int NativeRoutinePrivilegeTarget::revalidate(ObSchemaGetterGuard &guard,
+    const ObString &database, const ObString &name, uint64_t object_id) const
+{
+  int ret = OB_SUCCESS;
+  uint64_t database_id = OB_INVALID_ID;
+  ObSEArray<const ObRoutineInfo *, 4> family;
+  if (!is_valid()) return OB_INVALID_ARGUMENT;
+  if (OB_FAIL(guard.get_database_id(database, database_id))) return ret;
+  if (database_id == OB_INVALID_ID) return resolved_ ? OB_STATE_NOT_MATCH : OB_SUCCESS;
+  if (resolved_) {
+    const ObRoutineInfo *current = nullptr;
+    if (database_id != routine_.get_database_id() || object_id != routine_.get_routine_id() ||
+        name.case_compare(routine_.get_routine_name()) != 0) return OB_STATE_NOT_MATCH;
+    if (OB_FAIL(guard.get_routine_info(object_id, current))) return ret;
+    if (OB_FAIL(check(current))) return ret;
+  }
+  // Untyped references must remain unique by name; typed references must remain
+  // unique by their declared input identity. Neither retries another object ID.
+  if (OB_FAIL(guard.get_standalone_function_infos(database_id, name, family))) return ret;
+  if (signature_qualified_) {
+    try {
+      std::string expected;
+      if (OB_FAIL(NativeRoutineSignature::input_identity(routine_, expected))) return ret;
+      const ObRoutineInfo *match = nullptr;
+      for (int64_t i = 0; i < family.count(); ++i) {
+        const auto *candidate = family.at(i);
+        if (!candidate) return OB_ERR_UNEXPECTED;
+        if (!candidate->is_native()) continue;
+        std::string signature;
+        if (OB_FAIL(NativeRoutineSignature::input_identity(*candidate, signature))) return ret;
+        if (signature == expected) {
+          if (match) return OB_ERR_FUNC_DUP;
+          match = candidate;
+        }
+      }
+      if (!match || match->get_routine_id() != object_id) return OB_STATE_NOT_MATCH;
+      return OB_SUCCESS;
+    } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+    catch (...) { return OB_ERR_UNEXPECTED; }
+  }
+  bool native = false;
+  for (int64_t i = 0; i < family.count(); ++i) {
+    if (!family.at(i)) return OB_ERR_UNEXPECTED;
+    native = native || family.at(i)->is_native();
+  }
+  if (native && family.count() != 1) return OB_ERR_FUNC_DUP;
+  if (native && !resolved_) return OB_SCHEMA_EAGAIN;
+  if (resolved_ && (!native || family.count() != 1 ||
+      family.at(0)->get_routine_id() != object_id)) return OB_STATE_NOT_MATCH;
+  return ret;
+}
+
+OB_DEF_SERIALIZE(NativeRoutinePrivilegeTarget)
+{
+  int ret = is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  const int64_t version = routine_.get_schema_version();
+  OB_UNIS_ENCODE(resolved_);
+  if (resolved_) {
+    const int64_t count = enabled_roles_.count();
+    LST_DO_CODE(OB_UNIS_ENCODE, routine_, version, signature_qualified_, actor_id_, count);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) OB_UNIS_ENCODE(enabled_roles_.at(i));
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(NativeRoutinePrivilegeTarget)
+{
+  int ret = OB_SUCCESS;
+  resolved_ = false;
+  signature_qualified_ = false;
+  routine_.reset();
+  clear_actor();
+  bool resolved = false;
+  OB_UNIS_DECODE(resolved);
+  if (OB_SUCC(ret) && resolved) {
+    ObRoutineInfo decoded;
+    int64_t version = 0;
+    bool signature_qualified = false;
+    uint64_t actor = OB_INVALID_ID;
+    ObSEArray<uint64_t, 4> roles;
+    int64_t count = 0;
+    LST_DO_CODE(OB_UNIS_DECODE, decoded, version, signature_qualified, actor, count);
+    if (OB_SUCC(ret) && (count < 0 || count > 16384 || (actor == OB_INVALID_ID && count != 0))) ret = OB_INVALID_ARGUMENT;
+    uint64_t previous = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      uint64_t role = 0;
+      OB_UNIS_DECODE(role);
+      if (OB_SUCC(ret) && (role <= previous || role > INT64_MAX)) ret = OB_INVALID_ARGUMENT;
+      if (OB_SUCC(ret)) ret = roles.push_back(role);
+      previous = role;
+    }
+    if (OB_SUCC(ret)) {
+      decoded.set_schema_version(version); // ObRoutineInfo's declaration codec omits it.
+      for (int64_t i = 0; i < decoded.get_routine_params().count(); ++i) {
+        if (!decoded.get_routine_params().at(i)) { ret = OB_INVALID_ARGUMENT; break; }
+        decoded.get_routine_params().at(i)->set_schema_version(version);
+      }
+      if (OB_SUCC(ret)) ret = assign(decoded, signature_qualified); // Own strings/parameters, not the wire buffer.
+      if (OB_SUCC(ret) && actor != OB_INVALID_ID) ret = bind_actor(actor, roles);
+      else if (OB_SUCC(ret) && !roles.empty()) ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  if (OB_FAIL(ret)) { resolved_ = signature_qualified_ = false; routine_.reset(); clear_actor(); }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(NativeRoutinePrivilegeTarget)
+{
+  int64_t len = 0;
+  const int64_t version = routine_.get_schema_version();
+  OB_UNIS_ADD_LEN(resolved_);
+  if (resolved_) {
+    const int64_t count = enabled_roles_.count();
+    LST_DO_CODE(OB_UNIS_ADD_LEN, routine_, version, signature_qualified_, actor_id_, count);
+    for (int64_t i = 0; i < count; ++i) OB_UNIS_ADD_LEN(enabled_roles_.at(i));
+  }
+  return len;
+}
+
 bool ObGrantArg::is_valid() const
 {
-  return true;
+  return native_target_.is_valid() &&
+      (native_target_.actor_id_ == OB_INVALID_ID || grantor_id_ == native_target_.actor_id_) && (!native_target_.resolved_ ||
+      (priv_level_ == OB_PRIV_ROUTINE_LEVEL && object_type_ == ObObjectType::FUNCTION &&
+       object_id_ == native_target_.routine_.get_routine_id() &&
+       table_.case_compare(native_target_.routine_.get_routine_name()) == 0 && roles_.empty()));
 }
 
 bool ObGrantArg::is_allow_when_disable_ddl() const
@@ -2182,13 +2388,17 @@ OB_DEF_SERIALIZE(ObGrantArg)
               sel_col_ids_,
               column_names_priv_,
               grantor_,
-              grantor_host_);
+              grantor_host_, native_target_);
 return ret;
 }
 
 OB_DEF_DESERIALIZE(ObGrantArg)
 {
   int ret = OB_SUCCESS;
+  native_target_.resolved_ = false;
+  native_target_.signature_qualified_ = false;
+  native_target_.routine_.reset();
+  native_target_.clear_actor();
   BASE_DESER((, ObDDLArg));
   LST_DO_CODE(OB_UNIS_DECODE,
 
@@ -2215,7 +2425,7 @@ OB_DEF_DESERIALIZE(ObGrantArg)
               sel_col_ids_,
               column_names_priv_,
               grantor_,
-              grantor_host_);
+              grantor_host_, native_target_);
 
   return ret;
 }
@@ -2248,7 +2458,7 @@ OB_DEF_SERIALIZE_SIZE(ObGrantArg)
               sel_col_ids_,
               column_names_priv_,
               grantor_,
-              grantor_host_);
+              grantor_host_, native_target_);
   return len;
 }
 
@@ -2306,25 +2516,120 @@ OB_SERIALIZE_MEMBER((ObRevokeTableArg, ObDDLArg),
 
 bool ObRevokeRoutineArg::is_valid() const
 {
-  return OB_INVALID_ID != user_id_
-      && !db_.empty() && !routine_.empty();
+  bool recipients_valid = user_id_ != OB_INVALID_ID;
+  if (!native_grantees_.empty()) {
+    recipients_valid = user_id_ == OB_INVALID_ID && native_target_.resolved_ &&
+        native_target_.actor_id_ != OB_INVALID_ID && native_grantees_.count() <= 16384;
+    uint64_t previous = 0;
+    for (int64_t i = 0; recipients_valid && i < native_grantees_.count(); ++i) {
+      const uint64_t id = native_grantees_.at(i);
+      recipients_valid = id > previous && id <= INT64_MAX;
+      previous = id;
+    }
+  }
+  return recipients_valid
+      && !db_.empty() && !routine_.empty() && native_target_.is_valid() &&
+      revoke_behavior_ >= REVOKE_DEFAULT && revoke_behavior_ <= REVOKE_CASCADE &&
+      (!has_native_revoke_options() || (native_target_.resolved_ && priv_set_ != 0 &&
+       !(priv_set_ & ~(OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE)))) &&
+      (native_target_.actor_id_ == OB_INVALID_ID || grantor_id_ == native_target_.actor_id_) &&
+      (!native_target_.resolved_ || (obj_type_ == uint64_t(ObObjectType::FUNCTION) &&
+       obj_id_ == native_target_.routine_.get_routine_id() &&
+       routine_.case_compare(native_target_.routine_.get_routine_name()) == 0));
 }
 
+int ObRevokeRoutineArg::set_native_grantees(const ObIArray<uint64_t> &grantees)
+{
+  ObSEArray<uint64_t, 4> copy;
+  int ret = OB_SUCCESS;
+  if (!native_target_.resolved_ || native_target_.actor_id_ == OB_INVALID_ID ||
+      grantees.empty() || grantees.count() > 16384) ret = OB_INVALID_ARGUMENT;
+  for (int64_t i = 0; OB_SUCC(ret) && i < grantees.count(); ++i) {
+    const uint64_t id = grantees.at(i);
+    if (id == 0 || id > INT64_MAX) ret = OB_INVALID_ARGUMENT;
+    else ret = copy.push_back(id);
+  }
+  // Copy before reset permits rebinding our own array. Failure clears the
+  // entire batch and leaves no valid single-recipient request behind.
+  native_grantees_.reset();
+  user_id_ = OB_INVALID_ID;
+  if (OB_SUCC(ret)) {
+    std::sort(copy.begin(), copy.end());
+    for (int64_t i = 0; OB_SUCC(ret) && i < copy.count(); ++i)
+      if (i == 0 || copy.at(i) != copy.at(i - 1)) ret = native_grantees_.push_back(copy.at(i));
+  }
+  if (OB_FAIL(ret)) native_grantees_.reset();
+  return ret;
+}
 
-OB_SERIALIZE_MEMBER((ObRevokeRoutineArg, ObDDLArg),
+int ObRevokeRoutineArg::admit_native_target(ObSchemaGetterGuard &guard) const
+{
+  if (!is_valid()) return OB_INVALID_ARGUMENT;
+  const int ret = native_target_.admit(guard, db_, routine_, obj_id_);
+  return ret != OB_SUCCESS ? ret : (has_native_revoke_options() ? OB_NOT_SUPPORTED : OB_SUCCESS);
+}
 
-                    user_id_,
-                    db_,
-                    routine_,
-                    priv_set_,
-                    grant_,
-                    obj_id_,
-                    obj_type_,
-                    grantor_id_,
-                    obj_priv_array_,
-                    revoke_all_ora_,
-                    grantor_,
-                    grantor_host_);
+OB_DEF_SERIALIZE(ObRevokeRoutineArg)
+{
+  int ret = OB_SUCCESS;
+  BASE_SER((, ObDDLArg));
+  LST_DO_CODE(OB_UNIS_ENCODE, user_id_, db_, routine_, priv_set_, grant_, obj_id_, obj_type_,
+      grantor_id_, obj_priv_array_, revoke_all_ora_, grantor_, grantor_host_, native_target_,
+      grant_option_only_, revoke_behavior_);
+  const int64_t count = native_grantees_.count();
+  OB_UNIS_ENCODE(count);
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) OB_UNIS_ENCODE(native_grantees_.at(i));
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObRevokeRoutineArg)
+{
+  int ret = OB_SUCCESS;
+  user_id_ = OB_INVALID_ID;
+  native_grantees_.reset();
+  grant_option_only_ = false;
+  revoke_behavior_ = REVOKE_DEFAULT;
+  native_target_.resolved_ = false;
+  native_target_.signature_qualified_ = false;
+  native_target_.routine_.reset();
+  native_target_.clear_actor();
+  BASE_DESER((, ObDDLArg));
+  LST_DO_CODE(OB_UNIS_DECODE, user_id_, db_, routine_, priv_set_, grant_, obj_id_, obj_type_,
+      grantor_id_, obj_priv_array_, revoke_all_ora_, grantor_, grantor_host_, native_target_,
+      grant_option_only_, revoke_behavior_);
+  int64_t count = 0;
+  OB_UNIS_DECODE(count);
+  if (OB_SUCC(ret) && (count < 0 || count > 16384)) ret = OB_INVALID_DATA;
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    uint64_t id = 0;
+    OB_UNIS_DECODE(id);
+    if (OB_SUCC(ret)) ret = native_grantees_.push_back(id);
+  }
+  if (OB_SUCC(ret) && !is_valid()) ret = OB_INVALID_DATA;
+  if (OB_FAIL(ret)) {
+    user_id_ = OB_INVALID_ID;
+    native_grantees_.reset();
+    native_target_.resolved_ = false;
+    native_target_.signature_qualified_ = false;
+    native_target_.routine_.reset();
+    native_target_.clear_actor();
+    grant_option_only_ = false;
+    revoke_behavior_ = REVOKE_DEFAULT;
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObRevokeRoutineArg)
+{
+  int64_t len = ObDDLArg::get_serialize_size();
+  LST_DO_CODE(OB_UNIS_ADD_LEN, user_id_, db_, routine_, priv_set_, grant_, obj_id_, obj_type_,
+      grantor_id_, obj_priv_array_, revoke_all_ora_, grantor_, grantor_host_, native_target_,
+      grant_option_only_, revoke_behavior_);
+  const int64_t count = native_grantees_.count();
+  OB_UNIS_ADD_LEN(count);
+  for (int64_t i = 0; i < count; ++i) OB_UNIS_ADD_LEN(native_grantees_.at(i));
+  return len;
+}
 
 bool ObRevokeSysPrivArg::is_valid() const
 {
@@ -2470,13 +2775,71 @@ OB_SERIALIZE_MEMBER((ObCreateRoutineArg, ObDDLArg),
 
 bool ObDropRoutineArg::is_valid() const
 {
-  return !routine_name_.empty() && routine_type_ != INVALID_ROUTINE_TYPE;
+  if (routine_name_.empty() || routine_type_ == INVALID_ROUTINE_TYPE) return false;
+  if (!native_target_resolved_) return !native_target_.is_native();
+  if (routine_type_ != ROUTINE_FUNCTION_TYPE) return false;
+  if (native_target_.get_routine_id() == OB_INVALID_ID) return if_exist_ && !native_target_.is_native();
+  return native_target_.is_native() && native_target_.is_native_binding_valid() && native_target_.get_schema_version() > 0 &&
+      native_target_.get_routine_type() == ROUTINE_FUNCTION_TYPE &&
+      native_target_.get_routine_name() == routine_name_;
 }
 
-OB_SERIALIZE_MEMBER((ObDropRoutineArg, ObDDLArg),
-                    db_name_,
-                    routine_name_, routine_type_,
-                    if_exist_, error_info_);
+int ObDropRoutineArg::check_native_target(const ObRoutineInfo *current, uint64_t database_id) const
+{
+  if (!is_valid() || !native_target_resolved_) return OB_INVALID_ARGUMENT;
+  const auto &expected = native_target_;
+  if (expected.get_routine_id() == OB_INVALID_ID) return current ? OB_STATE_NOT_MATCH : OB_SUCCESS;
+  if (expected.get_database_id() != database_id) return OB_STATE_NOT_MATCH;
+  if (!current) return if_exist_ ? OB_SUCCESS : OB_ERR_SP_DOES_NOT_EXIST;
+  return current->get_routine_id() == expected.get_routine_id() &&
+      current->get_database_id() == database_id && current->get_routine_name() == routine_name_ &&
+      current->get_overload() == expected.get_overload() &&
+      current->get_owner_id() == expected.get_owner_id() &&
+      current->get_schema_version() == expected.get_schema_version() &&
+      NativeRoutineAdmission::same_signature(*current, expected) ? OB_SUCCESS : OB_STATE_NOT_MATCH;
+}
+
+OB_DEF_SERIALIZE(ObDropRoutineArg)
+{
+  int ret = OB_SUCCESS;
+  BASE_SER((, ObDDLArg));
+  const int64_t target_version = native_target_.get_schema_version();
+  LST_DO_CODE(OB_UNIS_ENCODE, db_name_, routine_name_, routine_type_, if_exist_, error_info_,
+      native_target_resolved_, native_target_, target_version);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObDropRoutineArg)
+{
+  int ret = OB_SUCCESS;
+  BASE_DESER((, ObDDLArg));
+  native_target_resolved_ = false;
+  native_target_.reset();
+  ObRoutineInfo target;
+  int64_t target_version = OB_INVALID_VERSION;
+  LST_DO_CODE(OB_UNIS_DECODE, db_name_, routine_name_, routine_type_, if_exist_, error_info_,
+      native_target_resolved_, target, target_version);
+  // ObRoutineInfo's declaration wire omits schema versions and borrows some
+  // strings. A deletion target must instead own a version-pinned snapshot.
+  if (OB_SUCC(ret)) ret = native_target_.assign(target);
+  if (OB_SUCC(ret)) {
+    native_target_.set_schema_version(target_version);
+    for (int64_t i = 0; i < native_target_.get_routine_params().count(); ++i) {
+      native_target_.get_routine_params().at(i)->set_schema_version(target_version);
+    }
+    if (native_target_resolved_ && !is_valid()) ret = OB_INVALID_DATA;
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObDropRoutineArg)
+{
+  int64_t len = ObDDLArg::get_serialize_size();
+  const int64_t target_version = native_target_.get_schema_version();
+  LST_DO_CODE(OB_UNIS_ADD_LEN, db_name_, routine_name_, routine_type_, if_exist_, error_info_,
+      native_target_resolved_, native_target_, target_version);
+  return len;
+}
 
 bool ObCreatePackageArg::is_valid() const
 {

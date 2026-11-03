@@ -482,15 +482,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           // to string in ObRawExprWrapEnumSet::visit(ObSysFunRawExpr &expr) later.
         } else {
           if (ob_is_geometry_tc(dst_type.get_type())) {
-            ObCastMode cast_mode = cast_raw_expr->get_cast_mode();
-            const ObObj &param = type2.get_param();
-            ParseNode parse_node;
-            parse_node.value_ = param.get_int();
-            ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
-            if (OB_FAIL(ObGeoCastUtils::set_geo_type_to_cast_mode(geo_type, cast_mode))) {
-            } else {
-              cast_raw_expr->set_cast_mode(cast_mode);
-            }
+            ret = OB_NOT_SUPPORTED;
           }
           if (OB_SUCC(ret)) {
             // need_wrap is false, set calc_type to type1 itself.

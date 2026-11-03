@@ -99,106 +99,10 @@ struct ObExprEqualCheckContext;
 #endif
 #endif
 
-#define IS_SPATIAL_OP(op) \
-  (((op) == T_FUN_SYS_ST_INTERSECTS) \
-    || ((op) == T_FUN_SYS_ST_COVERS) \
-    || ((op) == T_FUN_SYS_ST_DWITHIN) \
-    || ((op) == T_FUN_SYS_ST_WITHIN) \
-    || ((op) == T_FUN_SYS_ST_CONTAINS) \
-    || ((op) == T_FUN_SYS_PRIV_ST_EQUALS) \
-    || ((op) == T_FUN_SYS_PRIV_ST_TOUCHES) \
-    || ((op) == T_FUN_SYS_ST_CROSSES) \
-    || ((op) == T_FUN_SYS_ST_OVERLAPS)) \
-
-#define IS_DOMAIN_OP(op) \
-  (((op) == T_FUN_SYS_JSON_MEMBER_OF) \
-    || ((op) == T_FUN_SYS_JSON_CONTAINS) \
-    || ((op) == T_FUN_SYS_JSON_OVERLAPS) \
-    || ((op) == T_FUN_SYS_ST_INTERSECTS) \
-    || ((op) == T_FUN_SYS_ST_COVERS) \
-    || ((op) == T_FUN_SYS_ST_DWITHIN) \
-    || ((op) == T_FUN_SYS_ST_WITHIN) \
-    || ((op) == T_FUN_SYS_ST_CONTAINS)) \
-
 #define IS_DOMAIN_JSON_OP(op) \
   (((op) == T_FUN_SYS_JSON_MEMBER_OF) \
     || ((op) == T_FUN_SYS_JSON_CONTAINS) \
-    || ((op) == T_FUN_SYS_JSON_OVERLAPS)) \
-
-#define IS_MYSQL_GEO_OP(op) \
-  (((op) == T_FUN_SYS_ST_GEOMFROMTEXT) \
-    || ((op) == T_FUN_SYS_ST_INTERSECTION) \
-    || ((op) == T_FUN_SYS_ST_AREA) \
-    || ((op) == T_FUN_SYS_ST_INTERSECTS) \
-    || ((op) == T_FUN_SYS_ST_X) \
-    || ((op) == T_FUN_SYS_ST_Y) \
-    || ((op) == T_FUN_SYS_ST_LATITUDE) \
-    || ((op) == T_FUN_SYS_ST_LONGITUDE) \
-    || ((op) == T_FUN_SYS_ST_TRANSFORM) \
-    || ((op) == T_FUN_SYS_POINT) \
-    || ((op) == T_FUN_SYS_LINESTRING) \
-    || ((op) == T_FUN_SYS_MULTIPOINT) \
-    || ((op) == T_FUN_SYS_MULTILINESTRING) \
-    || ((op) == T_FUN_SYS_POLYGON) \
-    || ((op) == T_FUN_SYS_MULTIPOLYGON) \
-    || ((op) == T_FUN_SYS_GEOMCOLLECTION) \
-    || ((op) == T_FUN_SYS_ST_COVERS) \
-    || ((op) == T_FUN_SYS_ST_ASTEXT) \
-    || ((op) == T_FUN_SYS_ST_BUFFER_STRATEGY) \
-    || ((op) == T_FUN_SYS_ST_BUFFER) \
-    || ((op) == T_FUN_SYS_SPATIAL_CELLID) \
-    || ((op) == T_FUN_SYS_SPATIAL_MBR) \
-    || ((op) == T_FUN_SYS_ST_GEOMFROMEWKB) \
-    || ((op) == T_FUN_SYS_ST_GEOMFROMWKB) \
-    || ((op) == T_FUN_SYS_ST_GEOMETRYFROMWKB) \
-    || ((op) == T_FUN_SYS_ST_GEOMFROMEWKT) \
-    || ((op) == T_FUN_SYS_ST_SRID) \
-    || ((op) == T_FUN_SYS_ST_ASWKT) \
-    || ((op) == T_FUN_SYS_ST_DISTANCE) \
-    || ((op) == T_FUN_SYS_ST_GEOMETRYFROMTEXT) \
-    || ((op) == T_FUN_SYS_ST_ISVALID) \
-    || ((op) == T_FUN_SYS_ST_ASWKB) \
-    || ((op) == T_FUN_SYS_ST_ASBINARY) \
-    || ((op) == T_FUN_SYS_ST_DISTANCE_SPHERE) \
-    || ((op) == T_FUN_SYS_ST_DWITHIN) \
-    || ((op) == T_FUN_SYS_ST_WITHIN) \
-    || ((op) == T_FUN_SYS_ST_CONTAINS) \
-    || ((op) == T_FUN_SYS_ST_CROSSES) \
-    || ((op) == T_FUN_SYS_ST_OVERLAPS) \
-    || ((op) == T_FUN_SYS_ST_UNION) \
-    || ((op) == T_FUN_SYS_ST_LENGTH) \
-    || ((op) == T_FUN_SYS_ST_DIFFERENCE) \
-    || ((op) == T_FUN_SYS_ST_ASGEOJSON) \
-    || ((op) == T_FUN_SYS_ST_CENTROID) \
-    || ((op) == T_FUN_SYS_ST_SYMDIFFERENCE)) \
-
-#define IS_PRIV_GEO_OP(op) \
-  (((op) == T_FUN_SYS_PRIV_ST_BUFFER) \
-    || ((op) == T_FUN_SYS_PRIV_ST_ASEWKB) \
-    || ((op) == T_FUN_SYS_PRIV_ST_TRANSFORM) \
-    || ((op) == T_FUN_SYS_PRIV_ST_SETSRID) \
-    || ((op) == T_FUN_SYS_PRIV_ST_BESTSRID) \
-    || ((op) == T_FUN_SYS_PRIV_ST_POINT) \
-    || ((op) == T_FUN_SYS_PRIV_ST_GEOGFROMTEXT) \
-    || ((op) == T_FUN_SYS_PRIV_ST_GEOGRAPHYFROMTEXT) \
-    || ((op) == T_FUN_SYS_PRIV_ST_ASEWKT) \
-    || ((op) == T_FUN_SYS_PRIV_ST_NUMINTERIORRINGS) \
-    || ((op) == T_FUN_SYS_PRIV_ST_ISCOLLECTION) \
-    || ((op) == T_FUN_SYS_PRIV_ST_EQUALS) \
-    || ((op) == T_FUN_SYS_PRIV_ST_TOUCHES) \
-    || ((op) == T_FUN_SYS_PRIV_ST_MAKEENVELOPE) \
-    || ((op) == T_FUN_SYS_PRIV_ST_CLIPBYBOX2D) \
-    || ((op) == T_FUN_SYS_PRIV_ST_POINTONSURFACE) \
-    || ((op) == T_FUN_SYS_PRIV_ST_GEOMETRYTYPE) \
-    || ((op) == T_FUN_SYS_PRIV_ST_ASMVTGEOM) \
-    || ((op) == T_FUN_SYS_PRIV_ST_MAKE_VALID) \
-    || ((op) == T_FUN_SYS_PRIV_ST_GEOHASH) \
-    || ((op) == T_FUN_SYS_PRIV_ST_MAKEPOINT)) \
-
-#define IS_GEO_OP(op) ((IS_MYSQL_GEO_OP(op)) || IS_PRIV_GEO_OP(op))
-
-#define IS_SPATIAL_EXPR(op) \
-  ((op) >= T_FUN_SYS_ST_LONGITUDE && (op) <= T_FUN_SYS_ST_LATITUDE)
+    || ((op) == T_FUN_SYS_JSON_OVERLAPS))
 
 #define IS_QUERY_JSON_EXPR(op) \
   (((op) == T_FUN_SYS_JSON_EXTRACT) \
@@ -1712,6 +1616,7 @@ struct ObRawExprExtraInfo
   // TODO: add OB_ASSERT for expr_type when access the extra info
   union {
     uint64_t value_;
+    uint64_t native_function_flags_; // T_FUN_UDF: verified implementation metadata, not SQL name.
     uint64_t cast_mode_; // T_FUN_SYS_CAST
                          // T_FUN_COLUMN_CONV
                          // T_FUN_SYS_ALIGN_DATE4CMP
@@ -1757,6 +1662,8 @@ struct ObRawExprExtraInfo
   };
 };
 static_assert(8 == sizeof(ObRawExprExtraInfo), "sizeof extra info must be 8 bytes");
+
+struct PluginExprType;
 
 class ObRawExpr
 {
@@ -1834,6 +1741,11 @@ public:
     set_data_type(common::ObMaxType);
   }
   virtual ~ObRawExpr();
+
+  const PluginExprType *get_plugin_type() const { return plugin_type_; }
+  int set_plugin_type(const PluginExprType &type);
+  int copy_plugin_type_from(const ObRawExpr &source);
+  void clear_plugin_type() { plugin_type_ = nullptr; expr_hash_ = 0; }
 
   inline void set_expr_class(ExprClass expr_class) { expr_class_ = expr_class; }
   inline ExprClass get_expr_class() const { return expr_class_; }
@@ -2131,6 +2043,8 @@ public:
   bool is_domain_expr() const;
   bool is_domain_json_expr() const;
   bool is_mysql_geo_expr() const;
+  bool is_index_value_expr(common::ObObjType type) const
+  { return get_expr_type() == T_FUN_SYS_INDEX_VALUE && get_data_type() == type; }
   ObGeoType get_geo_expr_result_type() const;
   void set_is_deterministic(bool is_deterministic) { is_deterministic_ = is_deterministic; }
   int get_geo_cast_result_type(ObGeoType& geo_type) const;
@@ -2245,6 +2159,7 @@ protected:
     };
   };
   uint64_t expr_hash_;
+  const PluginExprType *plugin_type_ = nullptr;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRawExpr);
 };
@@ -4199,6 +4114,9 @@ public:
   inline void set_pkg_id(uint64_t pkg_id){ pkg_id_ = pkg_id; }
   inline uint64_t get_pkg_id() const { return pkg_id_; }
   inline uint64_t get_udf_id() const { return udf_id_; }
+  uint64_t get_native_spatial_flags() const;
+  uint64_t get_native_function_flags() const { return extra_.native_function_flags_; }
+  void set_native_function_flags(uint64_t flags) { extra_.native_function_flags_ = flags; expr_hash_ = 0; }
   inline int64_t get_pkg_version() const { return pkg_schema_version_; }
   inline int64_t get_udf_version() const { return udf_schema_version_; }
   inline const ObIArray<int64_t> &get_subprogram_path() const { return subprogram_path_; }

@@ -1,3 +1,4 @@
+load("//bazel:plugin.bzl", "server_dev_headers")
 load(
     "//bazel:defs.bzl",
     "MODULE_CXX_COPTS",
@@ -14,6 +15,9 @@ load(
 load(
     "//src/sql:sql_source_inventory.bzl",
     "SQL_EXTRA_SOURCES",
+    "SQL_GIS_PLUGIN_ADAPTER_SOURCES",
+    "SQL_EXTENSION_RUNTIME_SOURCES",
+    "SQL_CORE_GIS_REPLACED_SOURCES",
     "SQL_SIMD_UNITY_GROUPS",
     "SQL_STANDALONE_SOURCES",
     "SQL_UNITY_GROUPS",
@@ -24,6 +28,7 @@ load(
     "PREPARE_SOURCES",
     "groups_without",
     "headers_outside",
+    "validate_plugin_sources",
 )
 load(
     "//src/sql:sql_runtime_deps.bzl",
@@ -35,6 +40,22 @@ load(
 )
 
 package(default_visibility = ["//visibility:private"])
+
+validate_plugin_sources(
+    SQL_UNITY_GROUPS + SQL_SIMD_UNITY_GROUPS,
+    SQL_STANDALONE_SOURCES + SQL_EXTRA_SOURCES,
+    SQL_GIS_PLUGIN_ADAPTER_SOURCES,
+    SQL_EXTENSION_RUNTIME_SOURCES,
+    SQL_CORE_GIS_REPLACED_SOURCES,
+)
+
+# Deliberate, version-bound compile-only access for the in-tree example.
+# The rule strips every link input before it crosses the plugin boundary.
+server_dev_headers(
+    name = "server_dev_headers",
+    deps = [":sql_runtime_internal_headers", ":sql_runtime_interface", "//src/sql/optimizer:optimizer"],
+    visibility = ["//plugins/server_dev_reference:__pkg__"],
+)
 
 _SQL_RUNTIME_ONLY_SHARE_DEPS = [
     "//src/share:checksum_persistence",
@@ -208,9 +229,9 @@ cc_library(
 _SQL_RUNTIME_UNITY_GROUPS = groups_without(
     SQL_UNITY_GROUPS,
     OPTIMIZER_GROUP_NAMES,
-    PREPARE_SOURCES,
+    PREPARE_SOURCES + SQL_CORE_GIS_REPLACED_SOURCES,
 ) + singleton_unity_groups(
-    SQL_STANDALONE_SOURCES,
+    SQL_STANDALONE_SOURCES + SQL_GIS_PLUGIN_ADAPTER_SOURCES + SQL_EXTENSION_RUNTIME_SOURCES,
     "sql_runtime_standalone",
 )
 
@@ -222,6 +243,7 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = singleton_unity_groups(
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
     "//rust:uuid_generator_headers",
     "//rust:config_headers",
+    "//rust:seekdb_rust_host_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",

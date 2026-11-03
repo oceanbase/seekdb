@@ -211,7 +211,7 @@ cc_library(
 
 
 _OBSERVER_RUNTIME_UNITY_GROUPS = OBSERVER_UNITY_GROUPS + singleton_unity_groups(
-    OBSERVER_STANDALONE_SOURCES,
+    OBSERVER_STANDALONE_SOURCES + ["src/observer/ob_server_plugin_runtime.cpp", "src/observer/plugin_catalog_composition.cpp"],
     "ob_server_standalone",
 )
 
@@ -222,6 +222,7 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":observer_internal_interface",
         "//rust:config_headers",
+        "//rust:seekdb_rust_host_headers",
     ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",
@@ -285,6 +286,7 @@ grouped_unity_cc_library(
     ),
     implementation_deps = [
         ":observer_internal_interface",
+        "//rust:seekdb_rust_host_headers",
     ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",

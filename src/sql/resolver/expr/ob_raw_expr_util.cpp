@@ -17,11 +17,16 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr_util.h"
+#include "sql/resolver/ddl/native_function_default.h"
+#include "share/schema/native_routine_signature.h"
+#include "sql/resolver/expr/plugin_expr_type.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/parser/ob_sql_parser.h"
 #include "sql/engine/expr/ob_expr_to_type.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -632,6 +637,11 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
 {
   int ret = OB_SUCCESS;
 
+  int64_t parameter_count = 0;
+  CK (OB_NOT_NULL(func_info));
+  OZ (share::schema::NativeRoutineSignature::call_count(*func_info,
+      udf_info.udf_param_num_ + udf_info.param_names_.count(), parameter_count));
+
 #define SET_RES_TYPE_BY_PL_TYPE(res_type, pl_type) \
   if (OB_SUCC(ret)) { \
     ObObjMeta meta; \
@@ -690,11 +700,11 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
     }
   }
   // Step2: process input parameters
-  for (int64_t i = 0; OB_SUCC(ret) && i < func_info->get_param_count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < parameter_count; ++i) {
     ObIRoutineParam *iparam = NULL;
     pl::ObPLDataType param_pl_type;
     ObRawExprResType param_type;
-    OZ (func_info->get_routine_param(i, iparam));
+    OZ (func_info->get_routine_param(share::schema::NativeRoutineSignature::parameter_index(*func_info, i), iparam));
     CK (OB_NOT_NULL(iparam));
     if (OB_FAIL(ret)) {
     } else if (iparam->is_schema_routine_param()) {
@@ -769,23 +779,30 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
   ObArray<ObRawExpr*> param_exprs;
   ObArray<ObString> param_names;
   ObUDFRawExpr *udf_raw_expr = udf_info.ref_expr_;
+  const auto *schema_routine = dynamic_cast<const share::schema::ObRoutineInfo *>(func_info);
+  const bool native = schema_routine != nullptr && schema_routine->is_native();
+  int64_t parameter_count = 0;
+  OZ (share::schema::NativeRoutineSignature::call_count(*func_info,
+      udf_info.udf_param_num_ + udf_info.param_names_.count(), parameter_count));
+  if (OB_FAIL(ret)) return ret;
+  if (share::schema::NativeRoutineSignature::variadic(*func_info) && !udf_info.param_names_.empty()) return OB_NOT_SUPPORTED;
   // Specify parameters by name and uniformly record them in param_names_ and param_exprs, so they must be equal here
   if (udf_info.param_names_.count() != udf_info.param_exprs_.count()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "names array not equal to exprs array count",
              K(ret), K(udf_info.param_names_.count()), K(udf_info.param_exprs_.count()));
-  } else if ((udf_info.udf_param_num_ + udf_info.param_names_.count()) > func_info->get_param_count()) {
+  } else if ((udf_info.udf_param_num_ + udf_info.param_names_.count()) > parameter_count) {
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     LOG_USER_ERROR(OB_ERR_SP_WRONG_ARG_NUM, "FUNCTION", udf_info.udf_name_.ptr(),
                    static_cast<uint32_t>(func_info->get_param_count()),
                    static_cast<uint32_t>(udf_info.udf_param_num_ + udf_info.param_names_.count()));
     SQL_LOG(WARN, "params count mismatch",
              K(ret), K(udf_info.udf_name_), K(func_info->get_param_count()), K(udf_info));
-  } else if (OB_FAIL(udf_raw_expr->extend_param_exprs(func_info->get_param_count()))) {
+  } else if (OB_FAIL(udf_raw_expr->extend_param_exprs(parameter_count))) {
   } else {
     // process the remaining parameters, default values or parameters specified by name
     // Step 1: First initialize an empty parameter list
-    int64_t count = func_info->get_param_count() - udf_info.udf_param_num_;
+    int64_t count = parameter_count - udf_info.udf_param_num_;
     for (int64_t i = 0; OB_SUCC(ret) && i < udf_info.udf_param_num_; ++i) {
       ObString empty;
       OZ (udf_raw_expr->add_param_name(empty));
@@ -838,6 +855,14 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
           SQL_LOG(WARN, "parameter is null",
                   K(ret), K(i), K(default_val), K(udf_info), K(default_node),
                   K(params.allocator_), K(params.expr_factory_), K(params.secondary_namespace_));
+        } else if (native) {
+          // Native calls have no PL frame to evaluate the NULL placeholders.
+          // Defaults undergo the same SQL conversion as explicit arguments.
+          if (!NativeFunctionDefault::supported(default_val)) ret = OB_NOT_SUPPORTED;
+          else {
+            OZ (ObResolverUtils::resolve_const_expr(params, *default_node, default_expr, nullptr));
+            OX (param_exprs.at(i) = default_expr);
+          }
         } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
                             *(params.expr_factory_), ObNullType, 0, const_default_expr))) {
         } else {
@@ -861,7 +886,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
       OB_ERR_UNEXPECTED, K(udf_info.udf_param_num_), K(param_exprs.count()), K(udf_raw_expr->get_param_count()));
   }
   if (OB_SUCC(ret)
-      && (func_info->get_param_count() != udf_info.udf_param_num_ + param_exprs.count())) {
+      && (parameter_count != udf_info.udf_param_num_ + param_exprs.count())) {
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     LOG_USER_ERROR(OB_ERR_SP_WRONG_ARG_NUM, "FUNCTION", udf_info.udf_name_.ptr(),
                    static_cast<uint32_t>(func_info->get_param_count()),
@@ -871,10 +896,10 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
              K(func_info->get_param_count()), K(udf_info));
   }
   // Step 4: Process function's OUT parameters
-  for (int64_t i = 0; OB_SUCC(ret) && i < func_info->get_param_count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < parameter_count; ++i) {
     ObIRoutineParam* iparam = NULL;
     pl::ObPLRoutineParamMode mode = pl::ObPLRoutineParamMode::PL_PARAM_INVALID;
-    OZ (func_info->get_routine_param(i, iparam));
+    OZ (func_info->get_routine_param(share::schema::NativeRoutineSignature::parameter_index(*func_info, i), iparam));
     CK (OB_NOT_NULL(iparam));
     OX (mode = static_cast<pl::ObPLRoutineParamMode>(iparam->get_mode()));
     if (OB_SUCC(ret)) {
@@ -1037,6 +1062,24 @@ do {                                                                            
     }
   }
   OV (udf_raw_expr->get_params_desc().count() == udf_raw_expr->get_param_count(), OB_ERR_UNEXPECTED, KPC(udf_raw_expr));
+  if (OB_SUCC(ret)) udf_raw_expr->set_native_function_flags(0);
+  if (OB_SUCC(ret) && native) {
+    // Optional planner metadata. A failed lookup cannot invent an index
+    // strategy; ordinary native binding/ACL checks still run during codegen.
+    seekdb_plugin_sql_binding_v1_t binding{};
+    std::vector<std::string> arguments;
+    if (PluginFunctionExpr::resolve_native_binding(*schema_routine, binding, arguments,
+        udf_raw_expr->get_param_count()) == OB_SUCCESS) {
+      uint64_t spatial = binding.flags & SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK;
+      const int64_t arity = spatial == SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN ? 3 : 2;
+      bool valid = spatial != 0 && (spatial & (spatial - 1)) == 0 && parameter_count == arity;
+      for (int64_t i = 0; valid && i < arity; ++i) {
+        const auto type = udf_raw_expr->get_params_type().at(i).get_type();
+        valid = i < 2 ? ob_is_geometry(type) : type == ObDoubleType;
+      }
+      udf_raw_expr->set_native_function_flags(valid ? binding.flags : binding.flags & ~SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK);
+    }
+  }
   return ret;
 }
 
@@ -3341,6 +3384,9 @@ int ObRawExprUtils::create_new_exec_param(ObRawExprFactory &expr_factory,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(exec_param->add_flag(IS_CONST))) {
   } else if (OB_FAIL(exec_param->add_flag(IS_DYNAMIC_PARAM))) {
+  } else if (OB_FAIL(exec_param->copy_plugin_type_from(*ref_expr))) {
+    // Optimizer-created parameters may reach codegen without another type
+    // deduction pass. Preserve logical identity as well as physical type.
   } else {
     exec_param->set_ref_expr(ref_expr, is_onetime);
     exec_param->set_param_index(-1);
@@ -3375,16 +3421,9 @@ int ObRawExprUtils::get_exec_param_expr(ObRawExprFactory &expr_factory,
   // we create a new one here
   if (OB_SUCC(ret) && NULL == param_expr) {
     ObExecParamRawExpr *exec_param = NULL;
-    if (OB_FAIL(expr_factory.create_raw_expr(T_QUESTIONMARK, exec_param))) {
-    } else if (OB_ISNULL(exec_param)) {
-      ret = OB_ERR_UNEXPECTED;
+    if (OB_FAIL(create_new_exec_param(expr_factory, outer_val_expr, exec_param))) {
     } else if (OB_FAIL(query_ref_exec_params->push_back(exec_param))) {
-    } else if (OB_FAIL(exec_param->add_flag(IS_CONST))) {
-    } else if (OB_FAIL(exec_param->add_flag(IS_DYNAMIC_PARAM))) {
     } else {
-      exec_param->set_ref_expr(outer_val_expr);
-      exec_param->set_param_index(-1);
-      exec_param->set_result_type(outer_val_expr->get_result_type());
       param_expr = exec_param;
     }
   }
@@ -3405,6 +3444,7 @@ int ObRawExprUtils::create_new_exec_param(ObQueryCtx *query_ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(exec_param->add_flag(IS_CONST))) {
   } else if (OB_FAIL(exec_param->add_flag(IS_DYNAMIC_PARAM))) {
+  } else if (OB_FAIL(exec_param->copy_plugin_type_from(*expr))) {
   } else {
     exec_param->set_ref_expr(expr, is_onetime);
     exec_param->set_param_index(*query_ctx);
@@ -3489,6 +3529,16 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
   int ret = OB_SUCCESS;
   CK(OB_NOT_NULL(session_info));
   CK(OB_NOT_NULL(column_schema));
+  ObColumnRefRawExpr *plugin_target = nullptr;
+  if (OB_SUCC(ret) && column_schema->get_extended_type_info().count() > 0 &&
+      (column_schema->get_extended_type_info().at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER) ||
+       column_schema->get_extended_type_info().at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2))) {
+    if (OB_FAIL(expr_factory.create_raw_expr(T_REF_COLUMN, plugin_target))) {
+    } else if (OB_FAIL(init_column_expr(*column_schema, session_info, *plugin_target))) {
+    } else if (OB_FAIL(PluginTypeEncodeExpr::build(expr_factory, *plugin_target, expr, session_info))) {
+    }
+  }
+  const uint64_t plugin_epoch = expr && expr->get_plugin_type() ? expr->get_plugin_type()->catalog_epoch_ : 0;
   if (OB_SUCC(ret)) {
     if (column_schema->is_fulltext_column() 
         || column_schema->is_spatial_generated_column() 
@@ -3509,6 +3559,11 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                               false,
                                               local_vars))) {
     }
+    if (OB_SUCC(ret) && plugin_target && plugin_target->get_plugin_type()) {
+      PluginExprType converted_type = *plugin_target->get_plugin_type();
+      if (plugin_epoch) converted_type.catalog_epoch_ = plugin_epoch;
+      ret = expr->set_plugin_type(converted_type);
+    }
   }
   return ret;
 }
@@ -3524,6 +3579,7 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
 {
   int ret = OB_SUCCESS;
   ObString column_conv_info;
+  uint64_t plugin_epoch = 0;
   const ObString &database_name = col_ref.get_database_name();
   const ObString &table_name = col_ref.get_table_name();
   const ObString &column_name = col_ref.get_column_name();
@@ -3576,7 +3632,10 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
         col_ref.is_vec_index_column()) {
       // Full text column will not violate constraints, and data will not be stored, skip casting
       // Space index column is a virtual column, skip casting
-    } else if (OB_FAIL(build_column_conv_expr(session_info,
+    } else if (OB_FAIL(PluginTypeEncodeExpr::build(expr_factory, col_ref, expr, session_info))) {
+    } else {
+      plugin_epoch = expr && expr->get_plugin_type() ? expr->get_plugin_type()->catalog_epoch_ : 0;
+      ret = build_column_conv_expr(session_info,
                                               expr_factory,
                                               col_ref.get_data_type(),
                                               obj_meta.get_collation_type(),
@@ -3587,7 +3646,12 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                               type_infos,
                                               expr, false, is_generated_column,
                                               local_vars,
-                                              local_var_id))) {
+                                              local_var_id);
+    }
+    if (OB_SUCC(ret) && col_ref.get_plugin_type()) {
+      PluginExprType converted_type = *col_ref.get_plugin_type();
+      if (plugin_epoch) converted_type.catalog_epoch_ = plugin_epoch;
+      ret = expr->set_plugin_type(converted_type);
     }
   }
   return ret;
@@ -4816,6 +4880,23 @@ int ObRawExprUtils::init_column_expr(const share::schema::ObColumnSchemaV2 &colu
   column_expr.set_is_rowkey_column(column_schema.is_rowkey_column());
   column_expr.set_srs_id(column_schema.get_srs_id());
   column_expr.set_udt_set_id(column_schema.get_udt_set_id());
+  column_expr.clear_plugin_type();
+  const auto &plugin_info = column_schema.get_extended_type_info();
+  if (plugin_info.count() > 0 &&
+      (plugin_info.at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER) ||
+       plugin_info.at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2))) {
+    seekdb_plugin_sql_binding_v1_t binding = {};
+    if (!share::plugin::decode_plugin_sql_type(plugin_info, binding)) return OB_INVALID_DATA;
+    PluginExprType type;
+    type.logical_id_ = ObString::make_string(binding.object_id);
+    type.physical_type_ = column_schema.get_data_type();
+    type.stored_ = true;
+    type.sql_name_ = ObString::make_string(binding.sql_name);
+    type.owner_ = ObString::make_string(binding.owner_plugin_id);
+    type.format_ = ObString::make_string(binding.physical_format_id);
+    type.format_version_ = binding.physical_format_version;
+    if (OB_FAIL(column_expr.set_plugin_type(type))) return ret;
+  }
   if (ob_is_string_type(column_schema.get_data_type())
       || ob_is_enumset_tc(column_schema.get_data_type())
       || ob_is_json_tc(column_schema.get_data_type())

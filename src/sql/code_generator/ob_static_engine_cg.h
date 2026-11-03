@@ -34,6 +34,8 @@ class ObLogDistinct;
 class ObMergeDistinctSpec;
 class ObHashDistinctSpec;
 class ObLogMaterial;
+class LogPluginCustom;
+class PluginCustomSpec;
 class ObMaterialSpec;
 class ObLogSort;
 class ObSortSpec;
@@ -273,6 +275,7 @@ private:
   int generate_recursive_union_all_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec);
 
   int generate_spec(ObLogMaterial &op, ObMaterialSpec &spec, const bool in_root_job);
+  int generate_spec(LogPluginCustom &op, PluginCustomSpec &spec, const bool in_root_job);
 
   int generate_spec(ObLogSort &op, ObSortSpec &spec, const bool in_root_job);
 
@@ -408,7 +411,8 @@ private:
   int fill_sort_funcs(
     const ObSortCollations &collations,
     ObSortFuncs &sort_funcs,
-    const ObIArray<ObExpr*> &sort_exprs);
+    const ObIArray<ObExpr*> &sort_exprs,
+    bool supports_plugin_ordering = false);
 
   int fill_compress_type(ObLogSort &op, ObCompressorType &compr_type);
   int get_query_compress_type(const ObLogPlan &log_plan, ObCompressorType &compress_type);

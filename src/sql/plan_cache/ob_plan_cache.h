@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_PLAN_CACHE_OB_PLAN_CACHE_
 
 #include "lib/net/ob_addr.h"
+#include <memory>
 #include "lib/hash/ob_hashmap.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/task/ob_timer.h"
@@ -31,6 +32,7 @@
 #include "sql/plan_cache/ob_lib_cache_object_manager.h"
 namespace oceanbase
 {
+namespace share { namespace schema { class RoutineInvalidationQueue; class RoutineCatalogTransaction; } }
 namespace observer
 {
   class ObGVSql;
@@ -213,6 +215,7 @@ class ObPlanCache
 {
 friend class ObCacheObjectFactory;
 friend class ObPlanCacheEliminationTask;
+friend class PlanCacheEvictionTestAccess;
 friend class observer::ObAllVirtualSqlPlan;
 friend class observer::ObGVSql;
 
@@ -234,6 +237,8 @@ public:
       int64_t hash_bucket,
       query::ObIPlanCacheAccessService &access_service);
   bool is_inited() { return inited_; }
+  // Precommit admission for caller catalog cache requests; never commits data.
+  int reserve_plugin_invalidations(share::schema::RoutineCatalogTransaction &journal, uint64_t transaction_id);
   query::ObIPlanCacheAccessService &access_service() const
   {
     OB_ASSERT_MSG(
@@ -458,6 +463,14 @@ private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
+  // This header is also consumed by targets without SQL's plugin definition.
+  // Keep layout identical; only construction/use depends on that definition.
+  // The out-of-line deleter avoids a Rust runtime dependency in disabled builds.
+  struct PluginInvalidationQueueDeleter {
+    void operator()(share::schema::RoutineInvalidationQueue *queue) const noexcept;
+  };
+  std::unique_ptr<share::schema::RoutineInvalidationQueue,
+                  PluginInvalidationQueueDeleter> plugin_invalidations_;
   query::ObIPlanCacheAccessService *access_service_;
   
   int64_t mem_limit_pct_;

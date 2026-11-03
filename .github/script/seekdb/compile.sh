@@ -30,6 +30,6 @@ flock --close "$CARGO_HOME/.rustup-install.lock" \
   python3 ./build.py init 2>&1 | tee "$task_dir/compile_init.output"
 # Cargo skips its cache locks on NFS. Fetch under a CI lock, then build without it.
 flock --close "$CARGO_HOME/.seekdb-vendor.lock" \
-  python3 ./build.py fetch "${args[@]}" //src/observer:seekdb 2>&1 | tee "$task_dir/compile_fetch.output"
-python3 ./build.py build --nofetch "${args[@]}" //src/observer:seekdb 2>&1 | tee "$task_dir/compile.output"
+  python3 ./build.py fetch "${args[@]}" //src/observer:seekdb //plugins:release 2>&1 | tee "$task_dir/compile_fetch.output"
+python3 ./build.py build --nofetch "${args[@]}" //src/observer:seekdb //plugins:release 2>&1 | tee "$task_dir/compile.output"
 echo "[compile.sh] total elapsed=$((SECONDS - started))s"

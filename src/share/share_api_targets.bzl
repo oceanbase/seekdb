@@ -455,6 +455,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_access": struct(
         hdrs = [
+            "schema/native_routine_create_slot.h",
             "schema/ob_dependency_info.h",
             "schema/ob_latest_schema_guard.h",
             "schema/ob_multi_version_schema_service.h",
@@ -497,6 +498,9 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_persistence": struct(
         hdrs = [
+            "schema/borrowed_sql_transaction.h",
+            "schema/catalog_dml_sql_helper.h",
+            "schema/native_routine_admission.h",
             "schema/ob_ai_model_sql_service.h",
             "schema/ob_database_sql_service.h",
             "schema/ob_ddl_sql_service.h",
@@ -519,6 +523,10 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_registry": struct(
         hdrs = [
+            "schema/native_routine_signature.h",
+            "schema/routine_catalog_savepoint.h",
+            "schema/routine_privilege_overlay.h",
+            "schema/routine_schema_overlay.h",
             "schema/ob_ai_model_mgr.h",
             "schema/ob_mock_fk_parent_table_mgr.h",
             "schema/ob_outline_mgr.h",

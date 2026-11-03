@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_simplify_visitor.h"
+#include "seekdb/geo/tile_grid.hpp"
 
 namespace oceanbase
 {
@@ -107,37 +108,11 @@ int ObGeoSimplifyVisitor::multi_point_visit(LINE &geo, int32_t min_point)
   if (sz < 3 || sz <= min_point) {
     // do not simplify
   } else if (tolerance_ == 0 && min_point <= 2) {
-    // O(n) simple version with tolerance 0
-    int32_t kept_idx = 0;  // keep first point
-    int32_t last_idx = sz - 1;
-    ObWkbGeomInnerPoint *kept_pt = &geo[kept_idx];
-    for (int32_t i = 1; i < last_idx; ++i) {
-      ObWkbGeomInnerPoint *cur_pt = &geo[i];
-      ObWkbGeomInnerPoint *next_pt = &geo[i + 1];
-      // if straight geo has point kept_pt(a) -> cur_pt(c) -> next_pt(b)
-      // then remove cur_pt(c), simplify as kept_pt(a) -> next_pt(b)
-      double ba_x = next_pt->get<0>() - kept_pt->get<0>();
-      double ba_y = next_pt->get<1>() - kept_pt->get<1>();
-      double ba_length = ba_x * ba_x + ba_y * ba_y;
-
-      double ca_x = cur_pt->get<0>() - kept_pt->get<0>();
-      double ca_y = cur_pt->get<1>() - kept_pt->get<1>();
-      double ca_ba = ca_x * ba_x + ca_y * ba_y;
-      double diff = ca_x * ba_y - ca_y * ba_x;
-      if (ca_ba < 0 || ca_ba > ba_length || diff != 0) {
-        ++kept_idx;
-        kept_pt = cur_pt;
-        if (kept_idx != i) {
-          geo[kept_idx] = *cur_pt;
-        }
-      }
-    }
-    ++kept_idx;
-    if (kept_idx != last_idx) {
-      // keep last point
-      geo[kept_idx] = geo[last_idx];
-      geo.resize(kept_idx + 1);
-    }
+    const size_t kept = seekdb::geo::cartesian::simplify_collinear(geo.size(),
+        [&](size_t i) { return geo[i].template get<0>(); },
+        [&](size_t i) { return geo[i].template get<1>(); },
+        [&](size_t dst, size_t src) { geo[dst] = geo[src]; });
+    if (kept != geo.size()) geo.resize(kept);
   } else {
     ObArray<bool> kept_idx;
     if (OB_FAIL(kept_idx.prepare_allocate(sz))) {

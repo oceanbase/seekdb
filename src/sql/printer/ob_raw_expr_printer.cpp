@@ -965,11 +965,6 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
       }
       break;
     }
-    case T_FUN_SYS_ST_ASMVT: {
-      if (OB_FAIL(print_st_asmvt(expr))) {
-      }
-      break;
-    }
     case T_FUNC_SYS_ARRAY_AGG: {
       if (OB_FAIL(print_array_agg_expr(expr))) {
       }
@@ -1320,34 +1315,6 @@ int ObRawExprPrinter::print_json_return_type(ObRawExpr *expr)
   return ret;
 }
 
-int ObRawExprPrinter::print_st_asmvt(ObAggFunRawExpr *expr)
-{
-  INIT_SUCC(ret);
-  DATA_PRINTF("_st_asmvt(");
-  size_t param_count = expr->get_param_count();
-  if (param_count < 3) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    int64_t extra_param_cnt = static_cast<ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_int() + 1;
-    if (extra_param_cnt >= param_count) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (expr->get_param_expr(extra_param_cnt)->get_expr_type() != T_REF_COLUMN) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObColumnRefRawExpr *col_expr = static_cast<ObColumnRefRawExpr*>(expr->get_param_expr(extra_param_cnt));
-      PRINT_IDENT_WITH_QUOT(col_expr->get_database_name());
-      DATA_PRINTF(".");
-      PRINT_IDENT_WITH_QUOT(col_expr->get_table_name());
-      DATA_PRINTF(".*");
-    }
-    for (size_t i = 1; i < extra_param_cnt && OB_SUCC(ret); i++) {
-      DATA_PRINTF(" ,");
-      PRINT_EXPR(expr->get_param_expr(i));
-    }
-    DATA_PRINTF(")");
-  }
-  return ret;
-}
 
 int ObRawExprPrinter::print_json_mergepatch(ObSysFunRawExpr *expr)
 {

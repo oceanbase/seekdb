@@ -263,6 +263,8 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
     } else if (OB_FAIL(deep_copy_str(src_schema.routine_body_, routine_body_))) {
     } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
     } else if (OB_FAIL(deep_copy_str(src_schema.route_sql_, route_sql_))) {
+    } else if (OB_FAIL(set_native_binding(src_schema.native_module_id_,
+                                         src_schema.native_implementation_id_, src_schema.native_abi_version_))) {
     } else if (OB_FAIL(routine_params_.reserve(src_schema.routine_params_.count()))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src_schema.routine_params_.count(); ++i) {
@@ -271,6 +273,7 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
       } else if (OB_FAIL(add_routine_param(*src_schema.routine_params_.at(i)))) {
       }
     }
+    if (OB_SUCC(ret) && !is_native_binding_valid()) ret = OB_INVALID_DATA;
     error_ret_ = ret;
   }
   return *this;
@@ -284,6 +287,63 @@ int ObRoutineInfo::assign(const ObRoutineInfo &other)
   return ret;
 }
 
+namespace {
+bool valid_native_routine_id(const ObString &id)
+{
+  if (id.empty() || id.length() > 255 || id.ptr() == nullptr) return false;
+  for (int64_t i = 0; i < id.length(); ++i) {
+    const unsigned char c = id.ptr()[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+          c == '.' || c == '_' || c == '-')) return false;
+  }
+  return true;
+}
+}
+
+bool ObRoutineInfo::is_native_binding_valid() const
+{
+  bool seen_variadic = false;
+  for (int64_t i = 0; i < routine_params_.count(); ++i) {
+    const auto *parameter = routine_params_.at(i);
+    if (!parameter) return false;
+    if (parameter->is_native_variadic()) {
+      if (!is_native() || seen_variadic || i + 1 != routine_params_.count() ||
+          parameter->is_ret_param() || !parameter->is_in_param() ||
+          !parameter->get_default_value().empty()) return false;
+      seen_variadic = true;
+    }
+  }
+  return native_abi_version_ == 0
+      ? native_module_id_.empty() && native_implementation_id_.empty()
+      : native_abi_version_ == 1 && routine_type_ == ROUTINE_FUNCTION_TYPE &&
+        package_id_ == OB_INVALID_ID && subprogram_id_ == 0 &&
+        valid_native_routine_id(native_module_id_) && valid_native_routine_id(native_implementation_id_);
+}
+
+int ObRoutineInfo::set_native_binding(const ObString &module_id,
+                                    const ObString &implementation_id, int64_t abi_version)
+{
+  int ret = OB_SUCCESS;
+  ObString module_copy, implementation_copy;
+  if (abi_version != 0 && abi_version != 1) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (abi_version == 0 ? (!module_id.empty() || !implementation_id.empty()) :
+      (!valid_native_routine_id(module_id) || !valid_native_routine_id(implementation_id))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(deep_copy_str(module_id, module_copy))) {
+  } else if (OB_FAIL(deep_copy_str(implementation_id, implementation_copy))) {
+    reset_string(module_copy);
+  } else {
+    // Publish all three fields together; source strings may alias this object.
+    reset_string(native_module_id_);
+    reset_string(native_implementation_id_);
+    native_module_id_ = module_copy;
+    native_implementation_id_ = implementation_copy;
+    native_abi_version_ = abi_version;
+  }
+  return ret;
+}
+
 bool ObRoutineInfo::is_user_field_valid() const
 {
   bool bret = false;
@@ -293,7 +353,8 @@ bool ObRoutineInfo::is_user_field_valid() const
         && (!routine_name_.empty())
         && (OB_INVALID_INDEX != overload_)
         && (OB_INVALID_INDEX != subprogram_id_)
-        && (INVALID_ROUTINE_TYPE != routine_type_);
+        && (INVALID_ROUTINE_TYPE != routine_type_)
+        && is_native_binding_valid();
   }
   return bret;
 }
@@ -329,6 +390,9 @@ void ObRoutineInfo::reset()
   reset_string(routine_body_);
   reset_string(comment_);
   reset_string(route_sql_);
+  reset_string(native_module_id_);
+  reset_string(native_implementation_id_);
+  native_abi_version_ = 0;
   routine_params_.reset();
   ObSchema::reset();
   tg_timing_event_ = TgTimingEvent::TG_TIMING_EVENT_INVALID;
@@ -346,6 +410,8 @@ int64_t ObRoutineInfo::get_convert_size() const
   len += routine_body_.length() + 1;
   len += comment_.length() + 1;
   len += route_sql_.length() + 1;
+  len += native_module_id_.length() + 1;
+  len += native_implementation_id_.length() + 1;
   len += (routine_params_.count()+1) * sizeof(ObRoutineParam *);
   len += routine_params_.get_data_size();
   ARRAY_FOREACH_NORET(routine_params_, i) {
@@ -455,7 +521,7 @@ int ObRoutineInfo::find_param_by_name(const ObString &name, int64_t &position) c
 
 OB_DEF_SERIALIZE(ObRoutineInfo)
 {
-  int ret = OB_SUCCESS;
+  int ret = is_native_binding_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
   int64_t param_cnt = routine_params_.count();
   LST_DO_CODE(OB_UNIS_ENCODE,
               database_id_,
@@ -481,6 +547,7 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
     } else if (OB_FAIL(routine_params_.at(i)->serialize(buf, buf_len, pos))) {
     }
   }
+  LST_DO_CODE(OB_UNIS_ENCODE, native_module_id_, native_implementation_id_, native_abi_version_);
   return ret;
 }
 
@@ -514,6 +581,15 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
     } else if (OB_FAIL(add_routine_param(routine_param))) {
     }
   }
+  // Appended fields preserve the old routine wire prefix. Own native IDs rather
+  // than borrowing the RPC/schema-refresh input buffer.
+  ObString native_module, native_implementation;
+  int64_t native_abi = 0;
+  LST_DO_CODE(OB_UNIS_DECODE, native_module, native_implementation, native_abi);
+  if (OB_SUCC(ret)) {
+    ret = set_native_binding(native_module, native_implementation, native_abi);
+    if (OB_SUCC(ret) && !is_native_binding_valid()) ret = OB_INVALID_DATA;
+  }
   return ret;
 }
 
@@ -544,6 +620,7 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineInfo)
       len += routine_params_.at(i)->get_serialize_size();
     }
   }
+  LST_DO_CODE(OB_UNIS_ADD_LEN, native_module_id_, native_implementation_id_, native_abi_version_);
   return len;
 }
 }  // namespace schema

@@ -455,6 +455,7 @@ template<typename GeometryType>
 int ObGeoBoxUtil::get_geog_line_box(const GeometryType &line, ObGeogBox &box)
 {
   int ret = OB_SUCCESS;
+  if (line.size() < 2) return OB_ERR_GIS_INVALID_DATA;
   bool start = false;
   ObPoint3d p3d1;
   ObPoint3d p3d2;

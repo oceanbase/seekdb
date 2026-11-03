@@ -17,6 +17,9 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_srs_info.h"
+#include "share/geo/srs_metadata_adapter.h"
+#include "seekdb/geo/srs_projection_parameters.hpp"
+#include "seekdb/geo/srs_semantics.hpp"
 #include "share/geo/ob_geo_common.h"
 #include "common/mysqlclient/ob_mysql_global.h"
 #include "lib/charset/ob_dtoa.h"
@@ -47,35 +50,8 @@ int ObSrsUtils::check_authority(const ObRsAuthority& auth, const char *target_au
 
 int ObSrsUtils::check_is_wgs84(const ObGeographicRs *rs, bool &is_wgs84)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_authority(rs->authority, "EPSG", 4326, false, is_wgs84))) {
-  } else if (is_wgs84 && (rs->axis.x.direction != ObAxisDirection::NORTH ||
-                          rs->axis.y.direction != ObAxisDirection::EAST)) {
-    is_wgs84 = false;
-  } else if (is_wgs84 && OB_FAIL(check_authority(rs->datum_info.spheroid.authority, "EPSG", 7030, true, is_wgs84))) {
-    LOG_WARN("faild to check authority is wgs84 or not", K(ret));
-  } else if (is_wgs84 && (rs->datum_info.spheroid.semi_major_axis != WGS_SEMI_MAJOR_AXIS ||
-             rs->datum_info.spheroid.inverse_flattening != WGS_INVERSE_FLATTENING)) {
-    is_wgs84 = false;
-  } else if (is_wgs84 && OB_FAIL(check_authority(rs->datum_info.authority, "EPSG", 6326, true, is_wgs84))) {
-    LOG_WARN("faild to check authority is wgs84 or not", K(ret), K(is_wgs84));
-  } else if (is_wgs84 && OB_FAIL(check_authority(rs->primem.authority, "EPSG", 8901, true, is_wgs84))) {
-    LOG_WARN("faild to check authority is wgs84 or not", K(ret), K(is_wgs84));
-  } else if (is_wgs84 && rs->primem.longtitude != WGS_PRIMEM_LONG) {
-    is_wgs84 = false;
-  } else if (is_wgs84 && OB_FAIL(check_authority(rs->unit.authority, "EPSG", 9122, true, is_wgs84))) {
-    LOG_WARN("faild to check authority is wgs84 or not", K(ret), K(is_wgs84));
-  } else if (is_wgs84 && rs->unit.conversion_factor != WGS_CONVERSION_FACTOR) {
-    is_wgs84 = false;
-  } else if (rs->datum_info.towgs84.is_valid) {
-    for (int i = 0; i < WGS84_PARA_NUM && is_wgs84; i++) {
-      if (rs->datum_info.towgs84.value[i] != 0.0) {
-        is_wgs84 = false;
-      }
-    }
-  }
-
-  return ret;
+  if (rs == nullptr) return OB_INVALID_ARGUMENT;
+  return seekdb::geo::srs::is_wgs84(*rs, ObSrsUtils::check_authority, is_wgs84);
 }
 
 // todo@dazhi: compare the param_name and param_alias when epsg isnot comparable ?
@@ -340,10 +316,7 @@ int ObGeographicSrs::init(uint32_t srs_id, const ObGeographicRs *rs)
   prime_meridian_ = rs->primem.longtitude;
   angular_factor_ = rs->unit.conversion_factor;
 
-  if (std::isnan(semi_major_axis_) || std::isinf(semi_major_axis_) || id_ >= UINT32_MAX
-      || std::isnan(inverse_flattening_) || std::isinf(inverse_flattening_)
-      || std::isnan(prime_meridian_) || std::isinf(prime_meridian_)
-      || std::isnan(angular_factor_) || std::isinf(angular_factor_)) {
+  if (!seekdb::geo::srs::valid_geographic(id_, semi_major_axis_, inverse_flattening_, prime_meridian_, angular_factor_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid srs value", K(id_), K(semi_major_axis_), K(inverse_flattening_), K(prime_meridian_), K(angular_factor_));
   } else {
@@ -366,108 +339,24 @@ int ObGeographicSrs::init(uint32_t srs_id, const ObGeographicRs *rs)
   return ret;
 }
 
-bool ObSrsItem::is_lat_long_order() const
-{
-  return srs_info_->srs_type() == ObSrsType::GEOGRAPHIC_SRS
-    && (srs_info_->axis_direction(0) == ObAxisDirection::SOUTH || srs_info_->axis_direction(0) == ObAxisDirection::NORTH);
-}
-
-bool ObSrsItem::is_latitude_north() const
-{
-  return (is_lat_long_order() && srs_info_->axis_direction(0) == ObAxisDirection::NORTH)
-         || srs_info_->axis_direction(1) == ObAxisDirection::NORTH;
-}
-
-bool ObSrsItem::is_longtitude_east() const
-{
-  return (is_lat_long_order() && srs_info_->axis_direction(1) == ObAxisDirection::EAST)
-         || srs_info_->axis_direction(0) == ObAxisDirection::EAST;
-}
-
-int ObSrsItem::from_radians_to_srs_unit(double radians, double &srs_unit_val) const
-{
-  int ret = OB_SUCCESS;
-  ObSrsType type = srs_info_->srs_type();
-  double angle_uint = srs_info_->angular_unit();
-  if (type == ObSrsType::GEOGRAPHIC_SRS && angle_uint > 0.0) {
-    srs_unit_val = radians / angle_uint;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid srs type", K(type), K(radians), K(angle_uint));
-  }
-  return ret;
-}
-
-int ObSrsItem::get_proj4_param(ObIAllocator *allocator, ObString &proj_param) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(srs_info_->get_proj4_param(allocator, proj_param))) {
-  } else if (proj_param.empty()) {
-    proj_param = get_proj4text();
-  }
-  return ret;
-}
-
 int ObGeographicSrs::get_proj4_param(ObIAllocator *allocator, ObString &proj4_param) const
 {
+  if (allocator == nullptr) return OB_INVALID_ARGUMENT;
+  return build_srs_geographic_proj4(*allocator, semi_major_axis_, inverse_flattening_, is_wgs84_, wgs84_, proj4_param);
+}
+
+
+int ObProjectedSrs::register_proj_params()
+{
+  simple_proj_prams_.reset();
+  const auto *schema = seekdb::geo::srs::find_projection(static_cast<int>(get_projection_type()));
   int ret = OB_SUCCESS;
-  proj4_param.reset();
-  if (is_wgs84_ || has_wgs84_value()) {
-    ObGeoStringBuffer string_buf(allocator);
-    char tmp_buf[FLOATING_POINT_BUFFER];
-    int length = 0;
-    if (OB_FAIL(string_buf.append("+proj=lonlat "))) {
-    } else {
-      length = ob_fcvt(semi_major_axis_, std::numeric_limits<double>::max_digits10, FLOATING_POINT_BUFFER - 1, tmp_buf, NULL);
-      if (OB_FAIL(string_buf.append("+a="))) {
-      } else if (OB_FAIL(string_buf.append(tmp_buf))) {
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (inverse_flattening_ == 0.0) {
-        length = ob_fcvt(inverse_flattening_, std::numeric_limits<double>::max_digits10, FLOATING_POINT_BUFFER - 1, tmp_buf, NULL);
-        if (OB_FAIL(string_buf.append(" +b="))) {
-        } else if (OB_FAIL(string_buf.append(tmp_buf))) {
-        }
-      } else {
-        length = ob_fcvt(inverse_flattening_, std::numeric_limits<double>::max_digits10, FLOATING_POINT_BUFFER - 1, tmp_buf, NULL);
-        if (OB_FAIL(string_buf.append(" +rf="))) {
-        } else if (OB_FAIL(string_buf.append(tmp_buf))) {
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(string_buf.append(" +towgs84="))) {
-      } else if (has_wgs84_value()) {
-        for (int i = 0; i < WGS84_PARA_NUM; i++) {
-          length = ob_fcvt(wgs84_[i], std::numeric_limits<double>::max_digits10, FLOATING_POINT_BUFFER - 1, tmp_buf, NULL);
-          if (OB_FAIL(string_buf.append(tmp_buf))) {
-          } else if (i != WGS84_PARA_NUM - 1 && OB_FAIL(string_buf.append(","))) {
-          }
-        }
-      } else {
-        if (OB_FAIL(string_buf.append("0,0,0,0,0,0,0"))) {
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(string_buf.append(" +no_defs"))) {
-      } else if (OB_FAIL(ob_write_string(*allocator, string_buf.string(), proj4_param, true))) {
-      }
+  if (schema != nullptr) {
+    for (size_t i = 0; OB_SUCC(ret) && i < schema->count; ++i) {
+      if (OB_FAIL(simple_proj_prams_.push_back(schema->codes[i]))) {}
     }
   }
   return ret;
-}
-
-uint32_t ObSrsItem::get_srid() const
-{
-  uint32_t srid = 0;
-  if (OB_NOT_NULL(srs_info_)) {
-    srid = srs_info_->get_srid();
-  }
-  return srid;
 }
 
 int ObProjectedSrs::init(uint64_t srs_id,  const ObProjectionRs *rs)
@@ -484,7 +373,7 @@ int ObProjectedSrs::init(uint64_t srs_id,  const ObProjectionRs *rs)
     if ((axis_dir_[0] == ObAxisDirection::INIT) ^
         (axis_dir_[1] == ObAxisDirection::INIT)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (FALSE_IT(register_proj_params())) {
+    } else if (OB_FAIL(register_proj_params())) {
     } else if (simple_proj_prams_.size() > 0 &&
                OB_FAIL(ObSrsUtils::get_simple_proj_params(rs->proj_params, simple_proj_prams_))) {
     }
@@ -498,95 +387,6 @@ int ObProjectedSrs::get_proj4_param(ObIAllocator *allocator, ObString &proj4_par
   return OB_SUCCESS;
 }
 
-int ObSrsItem::from_srs_unit_to_radians(double unit_value, double &radians) const
-{
-  int ret = OB_SUCCESS;
-
-  ObSrsType type = srs_info_->srs_type();
-  double angle_uint = srs_info_->angular_unit();
-  if (type == ObSrsType::GEOGRAPHIC_SRS && angle_uint > 0.0) {
-    radians = unit_value * angle_uint;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid srs type", K(type), K(radians), K(angle_uint));
-  }
-  return ret;
-}
-
-int ObSrsItem::latitude_convert_to_radians(double value, double &latitude) const
-{
-  int ret = OB_SUCCESS;
-  double radians = 0.0;
-  if (OB_FAIL(from_srs_unit_to_radians(value, radians))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    latitude = is_latitude_north() ? radians : (radians * (-1.0));
-  }
-  return ret;
-}
-
-int ObSrsItem::latitude_convert_from_radians(double latitude, double &value) const
-{
-  int ret = OB_SUCCESS;
-  double unit_value = 0.0;
-  if (OB_FAIL(from_radians_to_srs_unit(latitude, unit_value))) {
-  } else {
-    value = is_latitude_north() ? unit_value : (unit_value * (-1.0));
-  }
-  return ret;
-}
-
-int ObSrsItem::longtitude_convert_to_radians(double value, double &longtitude) const
-{
-  int ret = OB_SUCCESS;
-  double angle = angular_unit();
-  ObSrsType type = srs_info_->srs_type();
-  if (angle > 0.0 && type == ObSrsType::GEOGRAPHIC_SRS) {
-    double tmp = is_longtitude_east() ? value : (value * (-1.0));
-    longtitude = (tmp + prime_meridian()) * angle;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid srs type", K(type), K(angle), K(value));
-  }
-  return ret;
-}
-
-int ObSrsItem::longtitude_convert_from_radians(double longtitude, double &value) const
-{
-  int ret = OB_SUCCESS;
-  double angle = angular_unit();
-  ObSrsType type = srs_info_->srs_type();
-  if (angle > 0.0 && type == ObSrsType::GEOGRAPHIC_SRS) {
-    double tmp = longtitude / angle;
-    tmp -= prime_meridian();
-    value = is_longtitude_east() ? tmp : (tmp * (-1.0));
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid srs type", K(type), K(angle), K(longtitude));
-  }
-  return ret;  
-}
-
-double ObSrsItem::semi_minor_axis() const
-{
-  double semi_minor = 0.0;
-  if (srs_info_->srs_type() == ObSrsType::GEOGRAPHIC_SRS) {
-    double flat = srs_info_->inverse_flattening();
-    if (flat != 0.0) {
-      semi_minor = srs_info_->semi_major_axis() * (1 - 1 / flat);
-    } else {
-      semi_minor = srs_info_->semi_major_axis();
-    }
-  }
-
-  return semi_minor;
-}
-
-bool ObSrsItem::is_geographical_srs() const
-{
-  return srs_info_->srs_type() == ObSrsType::GEOGRAPHIC_SRS;
-}
-
 void ObGeographicSrs::set_bounds(double min_x, double min_y, double max_x, double max_y)
 {
   bounds_info_.minX_ = min_x;
@@ -595,12 +395,6 @@ void ObGeographicSrs::set_bounds(double min_x, double min_y, double max_x, doubl
   bounds_info_.maxY_ = max_y;
 }
 
-int64_t ObSrsBoundsItem::to_string(char *buf, const int64_t buf_len) const
-{
-  int64_t pos = 0;
-  J_KV(K(minX_), K(minY_), K(maxX_), K(maxY_));
-  return pos;
-}
 
 }  // namespace common
 }  // namespace oceanbase

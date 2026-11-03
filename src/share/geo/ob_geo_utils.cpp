@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_geo_utils.h"
+#include "seekdb/geo/geographic_box.hpp"
 #include "share/geo/ob_geo_wkb_visitor.h"
 #include "share/geo/ob_geo_wkb_size_visitor.h"
 #include "share/geo/ob_geo_to_wkt_visitor.h"
@@ -60,66 +61,6 @@ bool ObGeoTypeUtil::is_geo1_dimension_higher_than_geo2(ObGeoType type1, ObGeoTyp
 }
 
 
-int ObGeoTypeUtil::get_pg_reserved_prj4text(ObIAllocator *allocator, uint32_t srid, ObString &prj4_param)
-{
-  int ret = OB_SUCCESS;
-  const uint32_t MAX_PRJ4_LEN = 512;
-  char tmp_buf[MAX_PRJ4_LEN] = {0};
-  if (srid == SRID_WORLD_MERCATOR_PG) {
-    strncpy(tmp_buf, "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs",
-            MAX_PRJ4_LEN);
-  } else if (srid >= SRID_NORTH_UTM_START_PG && srid <= SRID_NORTH_UTM_END_PG) {
-    snprintf(tmp_buf, MAX_PRJ4_LEN, "+proj=utm +zone=%d +ellps=WGS84 +datum=WGS84 +units=m +no_defs",
-             srid - SRID_NORTH_UTM_START_PG + 1 );
-  } else if (srid == SRID_NORTH_LAMBERT_PG) {
-		strncpy(tmp_buf, "+proj=laea +lat_0=90 +lon_0=-40 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs",
-            MAX_PRJ4_LEN);
-  } else if (srid == SRID_NORTH_STEREO_PG) {
-		strncpy(tmp_buf, "+proj=stere +lat_0=90 +lat_ts=71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs",
-            MAX_PRJ4_LEN);
-  } else if (srid >= SRID_SOUTH_UTM_START_PG &&
-            srid <= SRID_SOUTH_UTM_END_PG) {
-    snprintf(tmp_buf, MAX_PRJ4_LEN, "+proj=utm +zone=%d +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs",
-             srid - SRID_SOUTH_UTM_START_PG + 1 );
-  } else if (srid == SRID_SOUTH_LAMBERT_PG) {
-		strncpy(tmp_buf, "+proj=laea +lat_0=-90 +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs",
-            MAX_PRJ4_LEN);
-  } else if (srid >= SRID_LAEA_START_PG && srid < SRID_LAEA_END_PG) {
-			int zone = srid - SRID_LAEA_START_PG;
-			int xzone = zone % 20;
-			int yzone = zone / 20;
-			double lat_0 = 30.0 * (yzone - 3) + 15.0;
-			double lon_0 = 0.0;
-			if  ( yzone == 2 || yzone == 3 ) {
-        lon_0 = 30.0 * (xzone - 6) + 15.0;
-      } else if ( yzone == 1 || yzone == 4 ) {
-        lon_0 = 45.0 * (xzone - 4) + 22.5;
-      } else if ( yzone == 0 || yzone == 5 ) {
-        lon_0 = 90.0 * (xzone - 2) + 45.0;
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-      }
-      if (OB_SUCC(ret)) {
-        while (lon_0 > 180) {
-          lon_0 -= 360;
-        }
-        while (lon_0 < -180) {
-          lon_0 += 360;
-        }
-        snprintf(tmp_buf, MAX_PRJ4_LEN, "+proj=laea +ellps=WGS84 +datum=WGS84 +lat_0=%g +lon_0=%g +units=m +no_defs",
-                 lat_0, lon_0);
-      }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-  }
-
-  if (OB_SUCC(ret)) {
-    ObString prj4_tmp = ObString::make_string(tmp_buf);
-    if (OB_FAIL(ob_write_string(*allocator, prj4_tmp, prj4_param, true))) {
-    }
-  }
-  return ret;
-}
 
 ObGeoType ObGeoTypeUtil::get_geo_type_by_name(ObString &name)
 {
@@ -931,7 +872,7 @@ double ObGeoTypeUtil::round_double(double x, int32_t dec, bool truncate)
 // ObGeoBoxUtil
 double ObGeoBoxUtil::vector_dot_product(const ObPoint3d &p3d1, const ObPoint3d &p3d2)
 {
-  return (p3d1.x * p3d2.x) + (p3d1.y * p3d2.y) + (p3d2.z * p3d2.z);
+  return seekdb::geo::spherical::dot(p3d1, p3d2);
 }
 
 void ObGeoBoxUtil::vector_cross_product(const ObPoint3d &p3d1, const ObPoint3d &p3d2, ObPoint3d &res)
@@ -957,57 +898,23 @@ void ObGeoBoxUtil::vector_minus(const ObPoint3d &p3d1, const ObPoint3d &p3d2, Ob
 
 bool ObGeoBoxUtil::is_same_point3d(const ObPoint3d &p3d1, const ObPoint3d &p3d2)
 {
-  bool res = true;
-  if (is_float_equal(p3d1.x, p3d2.x) || is_float_equal(p3d1.y, p3d2.y) ||
-      is_float_equal(p3d1.z, p3d2.z)) {
-    res = false;
-  }
-  return res;
+  return seekdb::geo::spherical::same(p3d1, p3d2);
 }
 
 void ObGeoBoxUtil::get_unit_normal_vector(const ObPoint3d &p3d1, const ObPoint3d &p3d2, ObPoint3d &res)
 {
-  double dot_res = vector_dot_product(p3d1, p3d2);
-  const double opposite_value = 0.95;
-  ObPoint3d p3d_tmp;
-
-  if (dot_res < 0) {
-    vector_add(p3d1, p3d2, p3d_tmp);
-    vector_3d_normalize(p3d_tmp);
-  } else if (dot_res > opposite_value) {
-    vector_minus(p3d1, p3d2, p3d_tmp);
-    vector_3d_normalize(p3d_tmp);
-  } else {
-    p3d_tmp = p3d2;
-  }
-  vector_cross_product(p3d1, p3d_tmp, res);
-  vector_3d_normalize(res);
+  const auto normal = seekdb::geo::spherical::normal(p3d1, p3d2);
+  res.x = normal.x; res.y = normal.y; res.z = normal.z;
 }
 
 void ObGeoBoxUtil::vector_2d_normalize(ObPoint2d &p2d)
 {
-  double len = sqrt(p2d.x * p2d.x + p2d.y * p2d.y);
-  if (is_float_equal(len, 0.0)) {
-    p2d.x = 0.0;
-    p2d.y = 0.0;
-  } else {
-    p2d.x /= len;
-    p2d.y /= len;
-  }
+  seekdb::geo::spherical::normalize2(p2d);
 }
 
 void ObGeoBoxUtil::vector_3d_normalize(ObPoint3d &p3d)
 {
-  double len = sqrt(p3d.x * p3d.x + p3d.y * p3d.y + p3d.z * p3d.z);
-  if (is_float_equal(len, 0.0)) {
-    p3d.x = 0.0;
-    p3d.y = 0.0;
-    p3d.z = 0.0;
-  } else {
-    p3d.x /= len;
-    p3d.y /= len;
-    p3d.z /= len;
-  }
+  seekdb::geo::spherical::normalize3(p3d);
 }
 
 int ObGeoBoxUtil::get_point_relative_location(const ObPoint2d &p1, const ObPoint2d &p2, const ObPoint2d &point)
@@ -1024,242 +931,67 @@ int ObGeoBoxUtil::get_point_relative_location(const ObPoint2d &p1, const ObPoint
 
 void ObGeoBoxUtil::convert_ll_to_cartesian3d(const ObWkbGeogInnerPoint &point, ObPoint3d &p3d)
 {
-  double radian_x = M_PI * point.get<0>() / 180.0;
-  double radian_y = M_PI * point.get<1>() / 180.0;
-  double cos_radian_y = cos(radian_y);
-  p3d.x = cos(radian_x) * cos_radian_y;
-  p3d.y = sin(radian_x) * cos_radian_y;
-  p3d.z = sin(radian_y);
+  const auto converted = seekdb::geo::spherical::from_degrees(point.get<0>(), point.get<1>());
+  p3d.x = converted.x; p3d.y = converted.y; p3d.z = converted.z;
 }
 
 bool ObGeoBoxUtil::is_completely_opposite(const ObPoint3d &p1, const ObPoint3d &p2)
 {
-  return is_float_equal(p1.x, -1 * p2.x) && is_float_equal(p1.y, -1 * p2.y)
-         && is_float_equal(p1.z, -1 * p2.z);
+  return seekdb::geo::spherical::opposite(p1, p2);
 }
 
 
 int ObGeoBoxUtil::caculate_line_box(ObPoint3d &start, ObPoint3d &end, ObGeogBox &box)
 {
-  int ret = OB_SUCCESS;
-  box.xmin = start.x;
-  box.xmax = start.x;
-  box.ymin = start.y;
-  box.ymax = start.y;
-  box.zmin = start.z;
-  box.zmax = start.z;
-  point_box_union(end, box);
-
-  if (is_same_point3d(start, end)) {
-    // do nothing
-  } else if (is_completely_opposite(start, end)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObPoint3d tmp;
-    ObPoint3d point3d;
-    get_unit_normal_vector(start, end, tmp);
-    get_unit_normal_vector(tmp, start, point3d);
-
-    ObPoint2d p2d1 = {1.0, 0.0};
-    ObPoint2d origin = {0.0, 0.0};
-    ObPoint2d p2d2;
-    p2d2.x = vector_dot_product(start, end);
-    p2d2.y = vector_dot_product(end, point3d);
-    int location = get_point_relative_location(p2d1, p2d2, origin);
-
-    ObPoint3d axis_points[6];
-    memset(axis_points, 0, 6 * sizeof(ObPoint3d));
-    axis_points[0].x = 1.0;
-    axis_points[1].x = -1.0;
-    axis_points[2].y = 1.0;
-    axis_points[3].y = -1.0;
-    axis_points[4].z = 1.0;
-    axis_points[5].z = -1.0;
-
-    for (uint8_t i = 0; i < 6; i++) {
-      ObPoint2d p2d_tmp;
-      p2d_tmp.x = vector_dot_product(axis_points[i], start);
-      p2d_tmp.x = vector_dot_product(axis_points[i], point3d);
-      vector_2d_normalize(p2d_tmp);
-      if (get_point_relative_location(p2d1, p2d2, p2d_tmp) != location) {
-        ObPoint3d p3d;
-        p3d.x = p2d_tmp.x * start.x + p2d_tmp.y * point3d.x;
-        p3d.y = p2d_tmp.x * start.y + p2d_tmp.y * point3d.y;
-        p3d.z = p2d_tmp.x * start.z + p2d_tmp.y * point3d.z;
-        point_box_union(p3d, box);
-      }
-    }
-  }
-  return OB_SUCCESS;
+  return seekdb::geo::spherical::line_box(start, end, box) ? OB_SUCCESS : OB_INVALID_ARGUMENT;
 }
 
 void ObGeoBoxUtil::do_set_poles(const double &xmin, const double &xmax,
                             const double &ymin, const double &ymax,
                             double &zmin, double &zmax)
 {
-  if (xmin < 0.0 && xmax > 0.0 && ymin < 0.0 && ymax > 0.0) {
-    if ((zmin > 0.0) && (zmax > 0.0)) {
-      zmax = 1.0;
-    } else if ((zmin < 0.0) && (zmax < 0.0)) {
-      zmin = -1.0;
-    } else {
-      zmin = -1.0;
-      zmax = 1.0;
-    }
-  }
+  seekdb::geo::spherical::set_poles(xmin, xmax, ymin, ymax, zmin, zmax);
 }
 
 void ObGeoBoxUtil::ob_geo_box_check_poles(ObGeogBox &box)
 {
-  do_set_poles(box.xmin, box.xmax, box.ymin, box.ymax, box.zmin, box.zmax);
-  do_set_poles(box.xmin, box.xmax, box.zmin, box.zmax, box.ymin, box.ymax);
-  do_set_poles(box.ymin, box.ymax, box.zmin, box.zmax, box.xmin, box.xmax);
+  seekdb::geo::spherical::check_poles(box);
 }
 
 void ObGeoBoxUtil::point_box_union(ObPoint3d &point, ObGeogBox &box)
 {
-  box.xmin = OB_MIN(point.x, box.xmin);
-  box.ymin = OB_MIN(point.y, box.ymin);
-  box.zmin = OB_MIN(point.z, box.zmin);
-  box.xmax = OB_MAX(point.x, box.xmax);
-  box.ymax = OB_MAX(point.y, box.ymax);
-  box.zmax = OB_MAX(point.z, box.zmax);
+  seekdb::geo::spherical::include_point(point, box);
 }
 
 void ObGeoBoxUtil::box_union(const ObGeogBox &box_tmp, ObGeogBox &box)
 {
-  box.xmin = OB_MIN(box_tmp.xmin, box.xmin);
-  box.ymin = OB_MIN(box_tmp.ymin, box.ymin);
-  box.zmin = OB_MIN(box_tmp.zmin, box.zmin);
-  box.xmax = OB_MAX(box_tmp.xmax, box.xmax);
-  box.ymax = OB_MAX(box_tmp.ymax, box.ymax);
-  box.zmax = OB_MAX(box_tmp.zmax, box.zmax);
+  seekdb::geo::spherical::merge(box_tmp, box);
 }
 
 double ObGeoBoxUtil::correct_longitude(double longitude)
 {
-  if (longitude > 360.0) {
-    longitude = remainder(longitude, 360.0);
-  } else if (longitude < -360.0) {
-    longitude = remainder(longitude, -360.0);
-  }
-
-  if (longitude > 180.0) {
-    longitude -= 360.0;
-  } else if (longitude < -180.0) {
-    longitude += 360.0;
-  }
-
-  if (longitude == -180.0) {
-    longitude = 180.0;
-  } else if (longitude == -360.0) {
-    longitude = 0.0;
-  }
-  return longitude;
+  return seekdb::geo::spherical::longitude(longitude);
 }
 
 double ObGeoBoxUtil::correct_latitude(double latitude)
 {
-  if (latitude > 360.0) {
-    latitude = remainder(latitude, 360.0);
-  } else if (latitude < -360.0) {
-    latitude = remainder(latitude, -360.0);
-  }
-
-  if (latitude > 180.0) {
-    latitude = 180.0 - latitude;
-  } else if (latitude < -180.0) {
-    latitude = -180.0 - latitude;
-  }
-
-  if (latitude > 90.0) {
-    latitude = 180.0 - latitude;
-  } else if (latitude < -90.0) {
-    latitude = -180.0 - latitude;
-  }
-  return latitude;
+  return seekdb::geo::spherical::latitude(latitude);
 }
 
 void ObGeoBoxUtil::get_box_center(const ObGeogBox &box, ObPoint2d &center)
 {
-  double box_serialized[6];
-  memcpy(box_serialized, &(box.xmin), sizeof(double) * 6);
-  ObPoint3d p3d = {0.0, 0.0, 0.0};
-
-  for (uint8_t i = 0; i < 8; i++) {
-    ObPoint3d tmp;
-    tmp.x = box_serialized[i / 4];
-    tmp.y = box_serialized[2 + ((i % 4) / 2)];
-    tmp.z = box_serialized[4 + (i % 2)];
-    vector_3d_normalize(tmp);
-    p3d.x += tmp.x;
-    p3d.y += tmp.y;
-    p3d.z += tmp.z;
-  }
-  p3d.x /= 8.0;
-  p3d.y /= 8.0;
-  p3d.z /= 8.0;
-  vector_3d_normalize(p3d);
-  double longitude = atan2(p3d.y, p3d.x);
-  double latitude = asin(p3d.z);
-  center.x = correct_longitude(180.0 * longitude / M_PI);
-  center.y = correct_latitude(180.0 * latitude / M_PI);
+  const auto middle = seekdb::geo::spherical::center(box);
+  center.x = middle.x; center.y = middle.y;
 }
 
 double ObGeoBoxUtil::caculate_box_angular_height(const ObGeogBox &box)
 {
-  double box_serialized[6];
-  memcpy(box_serialized, &(box.xmin), sizeof(double) * 6);
-  double height_min = FLT_MAX;
-  double height_max = -1 * FLT_MAX;
-  uint8_t corner_num = 8;
-
-  for (uint8_t i = 0; i < corner_num; i++) {
-    ObPoint3d tmp;
-    tmp.x = box_serialized[i / 4];
-    tmp.y = box_serialized[2 + ((i % 4) / 2)];
-    tmp.z = box_serialized[4 + (i % 2)];
-    vector_3d_normalize(tmp);
-    if (height_min > tmp.z) {
-      height_min = tmp.z;
-    }
-    if (height_max < tmp.z) {
-      height_max = tmp.z;
-    }
-  }
-  return asin(height_max) - asin(height_min);
+  return seekdb::geo::spherical::angular_height(box);
 }
 
 double ObGeoBoxUtil::caculate_box_angular_width(const ObGeogBox &box)
 {
-  double box_serialized[6];
-  memcpy(box_serialized, &(box.xmin), sizeof(double) * 6);
-  ObPoint3d p3d[3];
-  double max_angular = -1 * FLT_MAX;
-
-  double product = sqrt(box.xmin * box.xmin + box.ymin * box.ymin);
-  p3d[0].x = box.xmin / product;
-  p3d[0].y = box.ymin / product;
-
-  for (uint8_t l = 0; l < 2; l++) {
-    max_angular = -1 * FLT_MAX;
-    for (uint8_t c = 0; c < 4; c++) {
-      ObPoint3d tmp;
-      tmp.x = box_serialized[c / 2];
-      tmp.y = box_serialized[2 + (c % 2)];
-      tmp.z = 0.0;
-      product = sqrt(tmp.x * tmp.x + tmp.y * tmp.y);
-      tmp.x /= product;
-      tmp.y /= product;
-      double dot_product = tmp.x * p3d[l].x + tmp.y * p3d[l].y;
-      double angle = acos(dot_product > 1.0 ? 1.0 : dot_product);
-      if (max_angular < angle) {
-        p3d[l + 1] = tmp;
-        max_angular = angle;
-      }
-    }
-  }
-  return max_angular;
+  return seekdb::geo::spherical::angular_width(box);
 }
 
 int ObGeoBoxUtil::get_geog_point_box(const ObWkbGeogInnerPoint &point, ObGeogBox &box)
@@ -1278,6 +1010,7 @@ int ObGeoBoxUtil::get_geog_point_box(const ObWkbGeogInnerPoint &point, ObGeogBox
 int ObGeoBoxUtil::get_geog_poly_box(const ObWkbGeogPolygon &poly, ObGeogBox &box)
 {
   int ret = OB_SUCCESS;
+  if (poly.size() == 0) return OB_ERR_GIS_INVALID_DATA;
   ObGeogBox box_tmp;
 
   const ObWkbGeogLinearRing& exterior = poly.exterior_ring();

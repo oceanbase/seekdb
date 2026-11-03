@@ -35,6 +35,7 @@ class ObSchemaGetterGuard;
 }
 namespace sql
 {
+class PluginFunctionExtraInfo;
 typedef common::ParamStore ParamStore;
 
 // struct ObSqlCtx;
@@ -48,7 +49,7 @@ public:
       subprogram_path_(alloc), result_type_(), params_type_(alloc), params_desc_(alloc),
       reserved_udt_udf_(false), loc_(0), reserved_udt_cons_(false),
       is_called_in_sql_(false),
-      is_deterministic_(false)
+      is_deterministic_(false), allocator_(alloc), native_(nullptr), native_schema_version_(0)
   {
   }
 
@@ -70,6 +71,9 @@ public:
   bool reserved_udt_cons_;
   bool is_called_in_sql_;
   bool is_deterministic_;
+  common::ObIAllocator &allocator_;
+  PluginFunctionExtraInfo *native_;
+  int64_t native_schema_version_;
 };
 class ObSqlCtx;
 class ObUDFParamDesc;
@@ -123,6 +127,8 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_native(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_native_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, int64_t size);
 
   static int build_udf_ctx(int64_t udf_ctx_id,
                            int64_t param_num,

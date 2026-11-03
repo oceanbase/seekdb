@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps")
+
+exports_files(["include/plugin_runtime.h"])
+
+rust_library(
+    name = "plugin_runtime",
+    crate_name = "seekdb_plugin_runtime",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2021",
+    deps = all_crate_deps(normal = True),
+    aliases = aliases(),
+    visibility = ["//rust:__subpackages__"],
+)
+
+rust_binary(
+    name = "server_dev_contract",
+    crate_root = "examples/server_dev_contract.rs",
+    srcs = ["examples/server_dev_contract.rs"],
+    edition = "2021",
+    deps = [":plugin_runtime"],
+    visibility = ["//plugins:__pkg__"],
+)

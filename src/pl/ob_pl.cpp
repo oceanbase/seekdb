@@ -155,8 +155,13 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
     if (OB_FAIL(ret)) {
     } else {
       share::schema::ObSchemaGetterGuard schema_guard;
-      
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      const ObSqlCtx *parent_sql_ctx = ctx.exec_ctx_->get_sql_ctx();
+      const auto *parent_guard = parent_sql_ctx == nullptr ? nullptr : parent_sql_ctx->schema_guard_;
+      if (OB_ISNULL(parent_sql_ctx)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      } else if (parent_guard != nullptr && parent_guard->has_routine_overlay()
+                 && OB_FAIL(schema_guard.inherit_routine_overlay(*parent_guard))) {
       } else {
         ObPL pl;
         share::schema::ObSchemaGetterGuard *old_schema_guard = ctx.exec_ctx_->get_sql_ctx()->schema_guard_;
@@ -642,15 +647,21 @@ void ObPLContext::reset_exec_env(int &ret)
 int ObPLContext::set_role_id_array(ObPLFunction &routine,
                                    share::schema::ObSchemaGetterGuard &guard)
 {
+  return set_role_id_array(routine.is_invoker_right(), routine.get_priv_user(), guard);
+}
+
+int ObPLContext::set_role_id_array(bool invoker_right, const ObString &definer,
+                                  share::schema::ObSchemaGetterGuard &guard)
+{
   int ret = OB_SUCCESS;
   /* All roles are disabled in any named PL/SQL block (stored procedure, function, or trigger)
      that executes with definer's rights. Roles are not used for privilege checking
      and you cannot set roles within a definer's rights procedure. */
-if (!routine.is_invoker_right() &&
-             0 != routine.get_priv_user().length()
+if (!invoker_right &&
+             0 != definer.length()
              /* Compatible with existing stored procedures, where the priv_user of existing stored procedures is empty. MySQL stored procedures default to definer behavior,
               after OB MySQL mode is made to default to invoker behavior, OB MySQL mode will also default to definer behavior after supporting definer */) {
-    ObString priv_user = routine.get_priv_user();
+    ObString priv_user = definer;
     ObString user_name = priv_user.split_on('@');
     ObString host_name = priv_user;
     uint64_t priv_user_id = OB_INVALID_ID;
@@ -660,7 +671,7 @@ if (!routine.is_invoker_right() &&
     if (OB_SUCC(ret) && OB_ISNULL(user_info)) {
       ret = OB_ERR_USER_NOT_EXIST;
       LOG_WARN("fail to get priv user id",
-                                           K(user_name), K(host_name), K(routine.get_priv_user()));
+                                           K(user_name), K(host_name), K(definer));
     }
     OX (priv_user_id = user_info->get_user_id());
     /* save priv user id, and set new priv user id, change grantee_id, for priv check */
@@ -712,6 +723,57 @@ void ObPLContext::reset_role_id_array(int &ret)
     session_info_->set_db_priv_set(old_db_priv_set_);
     need_reset_role_id_array_ = false;
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
+  }
+}
+
+int ObPLContext::enter_native(ObSQLSessionInfo &session, ObExecContext &execution,
+    const ObRoutineInfo &routine, ObSchemaGetterGuard &guard)
+{
+  int ret = OB_SUCCESS;
+  if (is_inited()) return OB_INIT_TWICE;
+  if (!routine.is_native() || !routine.is_native_binding_valid()) return OB_INVALID_ARGUMENT;
+  session_info_ = &session;
+  my_exec_ctx_ = &execution;
+  old_db_priv_set_ = session.get_db_priv_set();
+  last_insert_id_ = session.get_local_last_insert_id();
+  ObExecEnv target;
+  OZ (exec_env_.load(session, &execution.get_allocator()));
+  OX (need_reset_exec_env_ = true);
+  OZ (target.init(routine.get_exec_env()));
+  OZ (target.store(session));
+  if (OB_SUCC(ret) && session.get_database_id() != routine.get_database_id()) {
+    const ObDatabaseSchema *database = nullptr;
+    OZ (guard.get_database_schema(routine.get_database_id(), database));
+    CK (database != nullptr);
+    OZ (database_name_.append(session.get_database_name()));
+    OX (database_id_ = session.get_database_id());
+    OX (need_reset_default_database_ = true);
+    OZ (session.set_default_database(database->get_database_name_str()));
+    OX (session.set_database_id(routine.get_database_id()));
+  }
+  OZ (set_role_id_array(routine.is_invoker_right(), routine.get_priv_user(), guard));
+  ObPrivSet database_priv = OB_PRIV_SET_EMPTY;
+  OZ (guard.get_db_priv_set(session.get_priv_user_id(), session.get_database_name(), database_priv));
+  OX (session.set_db_priv_set(database_priv));
+  return ret;
+}
+
+void ObPLContext::leave_native(int &ret)
+{
+  if (is_inited()) {
+    reset_role_id_array(ret);
+    reset_default_database(ret);
+    reset_exec_env(ret);
+    session_info_->set_db_priv_set(old_db_priv_set_);
+    if (last_insert_id_ != session_info_->get_local_last_insert_id()) {
+      ObObj value;
+      value.set_uint64(last_insert_id_);
+      int status = session_info_->update_sys_variable(SYS_VAR_LAST_INSERT_ID, value);
+      if (status == OB_SUCCESS) status = session_info_->update_sys_variable(SYS_VAR_IDENTITY, value);
+      if (ret == OB_SUCCESS) ret = status;
+    }
+    session_info_ = nullptr;
+    my_exec_ctx_ = nullptr;
   }
 }
 
@@ -1617,9 +1679,12 @@ int ObPL::get_pl_function(ObExecContext &ctx,
         if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
           ret = OB_ERR_SP_DOES_NOT_EXIST;
         }
+        const bool provisional = ctx.get_sql_ctx()->schema_guard_->has_routine_overlay();
+        // Compilation against an Extension-private view must not alter the
+        // ordinary error/dependency catalog through an independent transaction.
         OZ (error_info.delete_error(
-            *ctx.get_sql_proxy(), routine_info, share::server_is_write_enabled()));
-        if (need_update_schema) {
+            *ctx.get_sql_proxy(), routine_info, share::server_is_write_enabled() && !provisional));
+        if (need_update_schema && !provisional) {
           OZ (ObPLBuilder::update_schema_object_dep_info(routine->get_dependency_table(),
                                                           routine->get_owner(),
                                                           routine_id,

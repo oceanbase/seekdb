@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_length.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace bg = boost::geometry;
@@ -34,7 +35,7 @@ static int eval_length_without_strategy(const ObGeometry *g, double &result)
   if (OB_ISNULL(geo_condidate)) {
     ret = OB_ERR_GIS_INVALID_DATA;
   } else {
-    result = bg::length(*geo_condidate);
+    result = seekdb::geo::cartesian::length(*geo_condidate);
   }
   return ret;
 }

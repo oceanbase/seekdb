@@ -236,6 +236,7 @@ namespace sql
 
   private:
     ObOptimizerContext &ctx_;
+    int optimize_core(ObDMLStmt &stmt, ObLogPlan *&plan);
     DISALLOW_COPY_AND_ASSIGN(ObOptimizer);
   };
 }

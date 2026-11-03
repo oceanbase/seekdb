@@ -1965,8 +1965,7 @@ int ObOptEstCostModel::cost_one_qual(const ObRawExpr *expr, double &cost)
     cost += cost_params_.get_comparison_cost(sys_stat_, ObJsonTC);
   } else if (expr->has_flag(CNT_MATCH_EXPR)) {
     cost += cost_params_.get_functional_lookup_per_row_cost(sys_stat_);
-  } else if (IS_SPATIAL_OP(expr->get_expr_type())
-       || IS_GEO_OP(expr->get_expr_type()) 
+  } else if (expr->get_result_type().is_geometry()
        || expr->is_spatial_expr()) {
     cost += cost_params_.get_comparison_cost(sys_stat_, ObGeometryTC);
   } else if (expr->is_udf_expr()) {
@@ -2079,8 +2078,7 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
   } else {
     double rows = expr->is_const_expr() && card > 0 ? card : 1;
     bool need_calc_child_cost = true;
-    if (IS_SPATIAL_OP(expr->get_expr_type())
-       || IS_GEO_OP(expr->get_expr_type())
+    if (expr->get_result_type().is_geometry()
        || expr->is_json_expr()) {
       cost += cost_params_.get_comparison_cost(sys_stat_, ObGeometryTC) / rows;
     } else if (expr->is_udf_expr()) {

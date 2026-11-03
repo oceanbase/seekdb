@@ -35,6 +35,7 @@
 #include "sql/engine/expr/ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_array_map.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 
 namespace oceanbase
 {
@@ -75,6 +76,14 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
 {
   MEMSET(ALLOC_FUNS_, 0, sizeof(ALLOC_FUNS_));
   // Add ObExpr extra info structure, need to register here
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_FUNCTION, PluginFunctionExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_TABLE_FUNCTION, PluginTableFunctionExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_TYPE_ENCODE, PluginTypeEncodeExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_CAST, PluginCastExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_TYPE_VALUE, PluginTypeValueExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_TYPE_COMPARE, PluginTypeComparisonExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_TYPE_BETWEEN, PluginTypeComparisonExtraInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_PLUGIN_TYPE_IN, PluginTypeComparisonExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_CALC_PARTITION_ID, CalcPartitionBaseInfo);
   REG_EXTRA_INFO(T_FUN_ENUM_TO_STR, ObEnumSetInfo);
   REG_EXTRA_INFO(T_FUN_SET_TO_STR, ObEnumSetInfo);

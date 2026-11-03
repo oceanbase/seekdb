@@ -39,6 +39,7 @@ def _cc_library_impl(
             "@platforms//os:windows": ["//bazel/third_party:windows_headers"],
             "//conditions:default": [],
         }),
+        deps = kwargs.pop("deps", []) + ["//include:plugin_sdk", "//include:geo_algorithms"],
         linkstatic = True,
         local_defines = local_defines + logging_defines() + platform_local_defines() + sanity.local_defines,
         target_compatible_with = target_compatible_with + sanity.target_compatible_with,

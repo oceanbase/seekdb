@@ -1,0 +1,29 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.rust-candidate"
+package_version = "1.0.0"
+build_id = "rust-candidate-v18"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 1
+data_format_version = 0
+entrypoint = "libseekdb_rust_candidate.so"
+api_profile = "server-dev"
+server_headers = []
+exports = []
+capabilities = ["extension.registration.v1"]
+
+[[provides]]
+service_id = "org.seekdb.rust-candidate.subproblem-policy"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-candidate.join-policy"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-candidate.policy"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-candidate.spool"
+version = "1.0.0"

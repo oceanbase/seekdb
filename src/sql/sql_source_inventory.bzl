@@ -208,6 +208,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/basic/ob_limit_op.cpp",
             "src/sql/engine/basic/ob_material_op_impl.cpp",
             "src/sql/engine/basic/ob_material_op.cpp",
+            "src/sql/engine/basic/plugin_custom_op.cpp",
             "src/sql/engine/basic/ob_monitoring_dump_op.cpp",
             "src/sql/engine/basic/ob_pushdown_filter.cpp",
             "src/sql/engine/basic/ob_ra_datum_store.cpp",
@@ -246,6 +247,9 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/cmd/ob_database_executor.cpp",
             "src/sql/engine/cmd/ob_dcl_executor.cpp",
             "src/sql/engine/cmd/ob_empty_query_executor.cpp",
+            "src/sql/engine/cmd/create_extension_executor.cpp",
+            "src/sql/engine/cmd/alter_extension_executor.cpp",
+            "src/sql/engine/cmd/drop_extension_executor.cpp",
             "src/sql/engine/cmd/ob_get_diagnostics_executor.cpp",
             "src/sql/engine/cmd/ob_index_executor.cpp",
             "src/sql/engine/cmd/ob_kill_executor.cpp",
@@ -748,16 +752,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_vec_chunk.cpp",
             "src/sql/engine/expr/ob_expr_embedded_vec.cpp",
             "src/sql/engine/expr/ob_expr_topn_filter.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_makeenvelope.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_clipbybox2d.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_pointonsurface.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_geometrytype.cpp",
-            "src/sql/engine/expr/ob_expr_st_crosses.cpp",
-            "src/sql/engine/expr/ob_expr_st_overlaps.cpp",
-            "src/sql/engine/expr/ob_expr_st_union.cpp",
-            "src/sql/engine/expr/ob_expr_st_length.cpp",
-            "src/sql/engine/expr/ob_expr_st_difference.cpp",
-            "src/sql/engine/expr/ob_expr_st_asgeojson.cpp",
         ],
     ),
     struct(
@@ -765,23 +759,10 @@ SQL_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/sql/engine/expr/ob_expr_collection_construct.cpp",
-            "src/sql/engine/expr/ob_expr_st_symdifference.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_asmvtgeom.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_makevalid.cpp",
             "src/sql/engine/expr/ob_expr_lock_func.cpp",
             "src/sql/engine/expr/ob_expr_extract_value.cpp",
             "src/sql/engine/expr/ob_expr_update_xml.cpp",
             "src/sql/engine/expr/ob_expr_sql_udt_utils.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_numinteriorrings.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_iscollection.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_equals.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_touches.cpp",
-            "src/sql/engine/expr/ob_expr_st_dwithin.cpp",
-            "src/sql/engine/expr/ob_expr_st_aswkb.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_asewkb.cpp",
-            "src/sql/engine/expr/ob_expr_st_distance_sphere.cpp",
-            "src/sql/engine/expr/ob_expr_st_contains.cpp",
-            "src/sql/engine/expr/ob_expr_st_within.cpp",
             "src/sql/engine/expr/ob_expr_sql_mode_convert.cpp",
             "src/sql/engine/expr/ob_expr_can_access_trigger.cpp",
             "src/sql/engine/expr/ob_expr_mysql_proc_info.cpp",
@@ -789,45 +770,17 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_prefix_pattern.cpp",
             "src/sql/engine/expr/ob_expr_xml_func_helper.cpp",
             "src/sql/engine/expr/ob_expr_multi_mode_func_helper.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_transform.cpp",
-            "src/sql/engine/expr/ob_expr_st_covers.cpp",
-            "src/sql/engine/expr/ob_expr_st_bestsrid.cpp",
-            "src/sql/engine/expr/ob_expr_st_astext.cpp",
         ],
     ),
     struct(
         name = "ob_sql_engine_expr_9",
         language = "c++",
         srcs = [
-            "src/sql/engine/expr/ob_expr_priv_st_setsrid.cpp",
-            "src/sql/engine/expr/ob_expr_st_geometryfromtext.cpp",
-            "src/sql/engine/expr/ob_expr_st_buffer.cpp",
-            "src/sql/engine/expr/ob_expr_st_geomfromewkb.cpp",
-            "src/sql/engine/expr/ob_expr_st_geomfromwkb.cpp",
-            "src/sql/engine/expr/ob_expr_st_geomfromewkt.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_geogfromtext.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_geographyfromtext.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_geohash.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_makepoint.cpp",
-            "src/sql/engine/expr/ob_expr_st_asewkt.cpp",
-            "src/sql/engine/expr/ob_expr_st_srid.cpp",
-            "src/sql/engine/expr/ob_expr_st_distance.cpp",
-            "src/sql/engine/expr/ob_expr_st_isvalid.cpp",
             "src/sql/engine/expr/ob_expr_errno.cpp",
             "src/sql/engine/expr/ob_expr_lob_utils.cpp",
             "src/sql/engine/expr/ob_expr_format_bytes.cpp",
             "src/sql/engine/expr/ob_expr_format_pico_time.cpp",
             "src/sql/engine/expr/ob_geo_expr_utils.cpp",
-            "src/sql/engine/expr/ob_expr_spatial_cellid.cpp",
-            "src/sql/engine/expr/ob_expr_spatial_mbr.cpp",
-            "src/sql/engine/expr/ob_expr_point.cpp",
-            "src/sql/engine/expr/ob_expr_priv_st_point.cpp",
-            "src/sql/engine/expr/ob_expr_spatial_collection.cpp",
-            "src/sql/engine/expr/ob_expr_st_geomfromtext.cpp",
-            "src/sql/engine/expr/ob_expr_st_intersects.cpp",
-            "src/sql/engine/expr/ob_expr_st_area.cpp",
-            "src/sql/engine/expr/ob_expr_st_x.cpp",
-            "src/sql/engine/expr/ob_expr_st_transform.cpp",
             "src/sql/engine/expr/ob_expr_word_count.cpp",
         ],
     ),
@@ -973,7 +926,6 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_vector_continuous_0",
         language = "c++",
         srcs = [
-            "src/sql/engine/expr/ob_expr_st_centroid.cpp",
         ],
     ),
     struct(
@@ -1082,6 +1034,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_json_table.cpp",
             "src/sql/optimizer/ob_log_limit.cpp",
             "src/sql/optimizer/ob_log_material.cpp",
+            "src/sql/optimizer/log_plugin_custom.cpp",
             "src/sql/optimizer/ob_log_monitoring_dump.cpp",
             "src/sql/optimizer/ob_log_operator_factory.cpp",
         ],
@@ -1272,6 +1225,9 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/cmd/ob_call_procedure_resolver.cpp",
             "src/sql/resolver/cmd/ob_call_procedure_stmt.cpp",
             "src/sql/resolver/cmd/ob_empty_query_resolver.cpp",
+            "src/sql/resolver/cmd/create_extension_resolver.cpp",
+            "src/sql/resolver/cmd/alter_extension_resolver.cpp",
+            "src/sql/resolver/cmd/drop_extension_resolver.cpp",
             "src/sql/resolver/cmd/ob_get_diagnostics_resolver.cpp",
             "src/sql/resolver/cmd/ob_get_diagnostics_stmt.cpp",
             "src/sql/resolver/cmd/ob_kill_resolver.cpp",
@@ -1598,6 +1554,8 @@ SQL_STANDALONE_SOURCES = [
     "src/sql/engine/expr/ob_expr_array_sort.cpp",
     "src/sql/engine/expr/ob_expr_in.cpp",
     "src/sql/engine/expr/ob_expr_mul.cpp",
+    "src/sql/engine/expr/plugin_function_expr.cpp",
+    "src/sql/engine/expr/plugin_sql_context.cpp",
 ]
 
 SQL_EXTRA_SOURCES = [
@@ -1622,6 +1580,25 @@ SQL_EXTRA_SOURCES = [
     "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_5.cpp",
     "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_6.cpp",
     "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp",
+]
+
+# Host-side ABI adapters; geometry implementations remain in the GIS DSO.
+SQL_GIS_PLUGIN_ADAPTER_SOURCES = [
+    "src/sql/engine/expr/index_value_expr.cpp",
+    "src/sql/engine/expr/ob_geo_plugin_stubs.cpp",
+]
+
+SQL_EXTENSION_RUNTIME_SOURCES = [
+    "src/sql/engine/expr/caller_catalog_transaction.cpp",
+    "src/sql/resolver/ddl/extension_script.cpp",
+    "src/sql/resolver/ddl/extension_routine_batch.cpp",
+    "src/sql/resolver/ddl/extension_routine_resolver.cpp",
+]
+
+# References to existing baseline owners, NOT additional compilation units.
+# Full paths prevent a same-named file in another directory from being pruned.
+SQL_CORE_GIS_REPLACED_SOURCES = [
+    "src/sql/engine/expr/ob_geo_expr_utils.cpp",
 ]
 
 SQL_PARSER_SOURCES = [

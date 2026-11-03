@@ -54,12 +54,13 @@ public:
   virtual int inner_open() override;
   virtual int inner_rescan() override;
   virtual int inner_get_next_row() override;
-  //virtual int inner_get_next_batch(int64_t max_row_cnt) override;
+  virtual int inner_get_next_batch(int64_t max_row_cnt) override;
   virtual int inner_close() override;
   virtual void destroy() override;
 private:
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
+  int inner_get_next_row_plugin();
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;

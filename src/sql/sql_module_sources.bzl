@@ -83,3 +83,18 @@ def groups_without(groups, excluded_group_names, excluded_sources):
             (missing_groups, missing_paths),
         )
     return result
+
+def validate_plugin_sources(groups, standalone, adapters, runtime, replaced):
+    """Keep host adapters uniquely owned and reject stale GIS replacements."""
+    baseline = [path for group in groups for path in group.srcs] + standalone
+    seen = {}
+    for path in baseline + adapters + runtime:
+        if not path.startswith("src/sql/") or ".." in path.split("/"):
+            fail("SQL source outside src/sql: " + path)
+        if path in seen:
+            fail("duplicate SQL source: " + path)
+        seen[path] = True
+    if len(adapters) != 2 or len(runtime) != 4:
+        fail("SQL plugin inventory requires 2 GIS adapters and 4 runtime sources")
+    if len(replaced) != 1 or replaced[0] not in baseline:
+        fail("GIS replacement must reference a distinct baseline owner")

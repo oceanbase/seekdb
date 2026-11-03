@@ -1,0 +1,19 @@
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "server_dev_contract_tool",
+    actual = "//rust/plugin-runtime:server_dev_contract",
+)
+
+# Public binaries and SQL scripts are shipped separately from the server.
+filegroup(
+    name = "release",
+    srcs = ["//plugins/gis:seekdb_gis_plugin_package", "//plugins/sql_packages:packages", "//include:plugin_sdk_package"],
+)
+
+genrule(
+    name = "server_dev_entry",
+    srcs = ["//cmake:ServerDevEntry.cpp.in"],
+    outs = ["server_dev_entry.cpp"],
+    cmd = "cp $< $@",
+)

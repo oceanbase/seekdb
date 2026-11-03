@@ -20,6 +20,7 @@
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/ob_slice_calc.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
+#include <functional>
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -60,6 +61,7 @@ int ObSliceIdxCalc::get_slice_indexes(
   const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
+  published_tablet_batch_size_ = 0;
   switch(CALC_TYPE) {
     CALL_GET_SLICE_INNER(ALL_TO_ONE, ObAllToOneSliceIdxCalc, get_slice_indexes_inner, exprs, eval_ctx, slice_idx_array, skip)
     CALL_GET_SLICE_INNER(SM_REPART_RANDOM, ObSlaveMapPkeyRandomIdxCalc, get_slice_indexes_inner, exprs, eval_ctx, slice_idx_array, skip)
@@ -91,6 +93,8 @@ int ObSliceIdxCalc::get_slice_idx_batch(const ObIArray<ObExpr*> &exprs, ObEvalCt
                               int64_t *&indexes)
 {
   int ret = OB_SUCCESS;
+  published_tablet_batch_size_ = 0;
+  indexes = nullptr;
   switch(CALC_TYPE) {
     CALL_GET_SLICE_INNER(ALL_TO_ONE, ObAllToOneSliceIdxCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
     CALL_GET_SLICE_INNER(AFFINITY_REPART, ObAffinitizedRepartSliceIdxCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
@@ -99,12 +103,25 @@ int ObSliceIdxCalc::get_slice_idx_batch(const ObIArray<ObExpr*> &exprs, ObEvalCt
     CALL_GET_SLICE_INNER(HASH, ObHashSliceIdCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
     CALL_GET_SLICE_INNER(HYBRID_HASH_RANDOM, ObHybridHashRandomSliceIdCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
     CALL_GET_SLICE_INNER(SM_REPART_RANDOM, ObSlaveMapPkeyRandomIdxCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
+    CALL_GET_SLICE_INNER(SM_REPART_RANGE, ObSlaveMapPkeyRangeIdxCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
     default : {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected slice calc type", K(CALC_TYPE));
     }
   }
+  if (OB_SUCC(ret) && batch_size > 0 && indexes && tablet_ids_ && support_vectorized_tablet_ids()) {
+    published_tablet_batch_size_ = batch_size;
+  }
   return ret;
+}
+
+int ObSliceIdxCalc::get_previous_batch_tablet_ids(int64_t batch_size, const int64_t *&tablet_ids) const
+{
+  tablet_ids = nullptr;
+  if (!support_vectorized_calc_ || !support_vectorized_tablet_ids()) return OB_NOT_SUPPORTED;
+  if (batch_size <= 0 || batch_size != published_tablet_batch_size_ || !tablet_ids_) return OB_STATE_NOT_MATCH;
+  tablet_ids = tablet_ids_;
+  return OB_SUCCESS;
 }
 
 int ObSliceIdxCalc::get_previous_row_tablet_id(ObObj &tablet_id)
@@ -182,10 +199,23 @@ int ObSliceIdxCalc::calc_for_null_aware(const ObExpr &expr, const int64_t task_c
 int ObRepartSliceIdxCalc::get_part_id_by_one_level_sub_ch_map(int64_t &part_id)
 {
   int ret = OB_SUCCESS;
+  part_id = OB_INVALID_ID;
   if (px_repart_ch_map_.size() > 0) {
-    ObTabletID tablet_id(px_repart_ch_map_.begin()->first);
+    int64_t first_part_id = OB_INVALID_ID;
     int64_t subpart_id = OB_INVALID_ID;
-    if (OB_FAIL(table_schema_.get_part_id_by_tablet(tablet_id, part_id, subpart_id))) {
+    for (auto iter = px_repart_ch_map_.begin(); OB_SUCC(ret) && iter != px_repart_ch_map_.end(); ++iter) {
+      int64_t current_part_id = OB_INVALID_ID;
+      if (OB_FAIL(table_schema_.get_part_id_by_tablet(ObTabletID(iter->first), current_part_id, subpart_id))) {
+      } else if (OB_INVALID_ID == first_part_id) {
+        first_part_id = current_part_id;
+      } else if (first_part_id != current_part_id) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("one-level subpartition channels span different first partitions",
+                 K(ret), K(first_part_id), K(current_part_id));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      part_id = first_part_id;
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -214,6 +244,7 @@ int ObRepartSliceIdxCalc::get_sub_part_id_by_one_level_first_ch_map(
 int ObRepartSliceIdxCalc::get_tablet_id(ObEvalCtx &eval_ctx, int64_t &tablet_id, ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
+  published_tablet_batch_size_ = 0;
   ObDatum *tablet_id_datum = NULL;
   if (OB_ISNULL(calc_part_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -239,6 +270,7 @@ int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
                                          const int64_t batch_size, int64_t *&tablet_ids)
 {
   int ret = OB_SUCCESS;
+  published_tablet_batch_size_ = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(calc_part_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -246,6 +278,7 @@ int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
   } else if (OB_FAIL(ObSliceIdxCalc::setup_tablet_ids(eval_ctx))) {
   } else {
     ObDatumVector tablet_id_datums = calc_part_id_expr_->locate_expr_datumvector(eval_ctx);
+    for (int64_t i = 0; i < batch_size; ++i) ObSliceIdxCalc::tablet_ids_[i] = OB_INVALID_INDEX;
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i)) {
         continue;
@@ -259,7 +292,7 @@ int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
         }
       }
       if (OB_SUCC(ret)) {
-        tablet_id_ = tablet_ids[i];
+        tablet_id_ = ObSliceIdxCalc::tablet_ids_[i];
       }
     }
     if (OB_SUCC(ret)) {
@@ -537,6 +570,7 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<Ob
 int ObRepartSliceIdxCalc::init()
 {
   int ret = OB_SUCCESS;
+  published_tablet_batch_size_ = 0;
   if (px_repart_ch_map_.created()) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(build_repart_ch_map(px_repart_ch_map_))) {
@@ -920,9 +954,15 @@ int ObSlaveMapPkeyRangeIdxCalc::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init())) {
+    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(nullptr == calc_part_id_expr_ || sort_exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(calc_part_id_expr_), K(sort_exprs_.count()));
+  } else if (OB_ISNULL(sort_cmp_.sort_cmp_funs_) || OB_ISNULL(sort_cmp_.sort_collations_) ||
+             sort_cmp_.sort_cmp_funs_->count() != sort_exprs_.count() ||
+             sort_cmp_.sort_collations_->count() != sort_exprs_.count()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init())) {
   } else if (OB_FAIL(sort_key_.reserve(sort_exprs_.count()))) {
   } else if (OB_FAIL(build_partition_range_channel_map(part_range_map_))) {
   } else {
@@ -973,6 +1013,9 @@ int ObSlaveMapPkeyRangeIdxCalc::build_partition_range_channel_map(
   int ret = OB_SUCCESS;
   part_range_channel_map.destroy();
   ObPxSqcHandler *handler = exec_ctx_.get_sqc_handler();
+  if (OB_ISNULL(handler)) {
+    return OB_NOT_INIT;
+  }
   const Ob2DArray<ObPxTabletRange> &part_ranges = handler->get_partition_ranges();
   if (OB_FAIL(part_range_channel_map.create(DEFAULT_PARTITION_COUNT, common::ObModIds::OB_SQL_PX))) {
   } else {
@@ -1051,15 +1094,18 @@ bool ObSlaveMapPkeyRangeIdxCalc::Compare::operator()(
   int &ret = ret_;
   if (OB_FAIL(ret)) {
     // already fail
-  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)
-             || OB_ISNULL(access_ctx_)) {
+  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(l), K(r));
+  } else if (sort_collations_->count() != sort_cmp_funs_->count() ||
+             l.count() < sort_cmp_funs_->count() || r.count() < sort_cmp_funs_->count()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cnt; i++) {
-      if (OB_FAIL(
-              sort_cmp_funs_->at(i).cmp_func_(l.at(i), r.at(i), cmp, access_ctx_))) {
+      if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+              expressions_, context_, l.at(i), r.at(i), cmp, access_ctx_))) {
       } else if (cmp < 0) {
         less = sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -1074,9 +1120,11 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
     const int64_t tablet_id,
     const ObPxTabletRange::DatumKey &sort_key,
     ObEvalCtx &eval_ctx,
-    int64_t &task_idx)
+    int64_t &task_idx, int64_t &ddl_slice_id)
 {
   int ret = OB_SUCCESS;
+  task_idx = OB_INVALID_INDEX;
+  ddl_slice_id = OB_INVALID_INDEX;
   const ObDatumAccessContext *access_ctx = nullptr;
   PartitionRangeChannelInfo *item = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -1086,26 +1134,29 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
   } else if (OB_UNLIKELY(sort_key.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+  } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
   } else if (OB_FAIL(part_range_map_.get_refactored(tablet_id, item))) {
   } else if (OB_UNLIKELY(nullptr == item || item->tablet_id_ != tablet_id)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    sort_cmp_.set_access_ctx(access_ctx);
+    sort_cmp_.reset(access_ctx, eval_ctx);
     ObPxTabletRange::RangeCut &range_cut = item->range_cut_;
     ObPxTabletRange::RangeCut::iterator found_it = std::lower_bound(
-        range_cut.begin(), range_cut.end(), sort_key, sort_cmp_);
+        range_cut.begin(), range_cut.end(), sort_key, std::ref(sort_cmp_));
     if (OB_FAIL(sort_cmp_.ret_)) {
     } else {
       const int64_t range_idx = found_it - range_cut.begin();
-      if (nullptr != ddl_slice_id_expr_) {
-        ObTabletSliceParam slice_param(range_cut.count() + 1, range_idx);
-        ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(slice_param.slice_id_);
-      }
       int64_t ch_idx = -1;
       if (OB_FAIL(calc_ch_idx(range_cut.count() + 1, item->channels_.count(), range_idx, ch_idx))) {
       } else if (ch_idx < 0 || ch_idx >= item->channels_.count()) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid channel index", K(ret), K(ch_idx), K(*item));
+      } else if (item->channels_.at(ch_idx) < 0) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
       } else {
+        ObTabletSliceParam slice_param(range_cut.count() + 1, range_idx);
+        ddl_slice_id = slice_param.slice_id_;
         task_idx = item->channels_.at(ch_idx);
       }
     }
@@ -1120,12 +1171,15 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
 {
   int ret = OB_SUCCESS;
   int64_t tablet_id = OB_INVALID_INDEX;
-  int64_t slice_idx = 0;
+  int64_t ddl_slice_id = OB_INVALID_INDEX;
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
+  } else if (FALSE_IT(slice_idx_array.at(0) = OB_INVALID_INDEX)) {
   } else if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(exprs.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(exprs.count()));
+  } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
   } else {
     sort_key_.reuse();
@@ -1141,13 +1195,71 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(get_task_idx(tablet_id, sort_key_, eval_ctx, slice_idx_array.at(0)))) {
+      if (OB_FAIL(get_task_idx(tablet_id, sort_key_, eval_ctx, slice_idx_array.at(0), ddl_slice_id))) {
+      } else if (nullptr != ddl_slice_id_expr_) {
+        ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(ddl_slice_id);
       }
     }
   }
   return ret;
 }
-// TODO: implement the pkey range vectorization 1.0 interface.
+int ObSlaveMapPkeyRangeIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
+    ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size, int64_t *&indexes)
+{
+  int ret = OB_SUCCESS;
+  indexes = nullptr;
+  ObSEArray<int64_t, 16> ddl_ids;
+  ObEvalCtx::BatchInfoScopeGuard frame(eval_ctx);
+  if (batch_size < 0 || batch_size > eval_ctx.max_batch_size_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (batch_size == 0) {
+  } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
+  } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
+  } else if (OB_FAIL(setup_tablet_ids(eval_ctx))) {
+  } else if (OB_FAIL(ddl_ids.prepare_allocate(batch_size))) {
+  } else {
+    frame.set_batch_size(batch_size);
+    for (int64_t i = 0; i < batch_size; ++i) slice_indexes_[i] = OB_INVALID_INDEX;
+    if (OB_FAIL(get_tablet_ids(eval_ctx, skip, batch_size, tablet_ids_))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < sort_exprs_.count(); ++i) {
+      if (OB_ISNULL(sort_exprs_.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(sort_exprs_.at(i)->eval_batch(eval_ctx, skip, batch_size))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) if (!skip.at(i)) {
+      frame.set_batch_idx(i);
+      sort_key_.reuse();
+      for (int64_t key = 0; OB_SUCC(ret) && key < sort_exprs_.count(); ++key) {
+        ObDatum *datum = nullptr;
+        if (OB_FAIL(sort_exprs_.at(key)->eval(eval_ctx, datum))) {
+        } else if (OB_ISNULL(datum)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(sort_key_.push_back(*datum))) {
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(get_task_idx(tablet_ids_[i], sort_key_, eval_ctx,
+                                             slice_indexes_[i], ddl_ids.at(i)))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
+    }
+    if (OB_SUCC(ret)) {
+      // No row publishes a DDL output until the whole batch is routable.
+      if (ddl_slice_id_expr_) {
+        for (int64_t i = 0; i < batch_size; ++i) if (!skip.at(i)) {
+          frame.set_batch_idx(i);
+          ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(ddl_ids.at(i));
+        }
+      }
+      indexes = slice_indexes_;
+    }
+  }
+  return ret;
+}
 
 /*******************                 ObSlaveMapPkeyHashIdxCalc                 ********************/
 int ObSlaveMapPkeyHashIdxCalc::init()
@@ -1281,9 +1393,13 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
   int ret = OB_SUCCESS;
   const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
+  } else if (FALSE_IT(slice_idx_array.at(0) = OB_INVALID_INDEX)) {
+  } else if (task_cnt_ <= 0) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+  } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
   } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
     slice_idx_array.at(0) = 0;
     if (nullptr != ddl_slice_id_expr_) {
@@ -1297,19 +1413,25 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
       if (OB_ISNULL(dist_exprs_->at(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(dist_exprs_->at(i)->eval(eval_ctx, datum))) {
+      } else if (OB_ISNULL(datum)) {
+        ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(sort_key.push_back(*datum))) {
       }
     }
     if (OB_SUCC(ret)) {
-      Compare sort_cmp(&sort_cmp_funs_, &sort_collations_, access_ctx);
+      Compare sort_cmp(&sort_cmp_funs_, &sort_collations_, access_ctx, dist_exprs_, &eval_ctx);
       ObPxTabletRange::RangeCut &range_cut = const_cast<ObPxTabletRange::RangeCut &>(range_->range_cut_);
       ObPxTabletRange::RangeCut::iterator found_it = std::lower_bound(
-        range_cut.begin(), range_cut.end(), sort_key, sort_cmp);
-      const int64_t range_idx = found_it - range_cut.begin();
-      slice_idx_array.at(0) = range_idx % task_cnt_;
-      if (nullptr != ddl_slice_id_expr_) {
-        ObTabletSliceParam slice_param(range_->range_cut_.count() + 1, range_idx);
-        ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(slice_param.slice_id_);
+        range_cut.begin(), range_cut.end(), sort_key, std::ref(sort_cmp));
+      if (OB_FAIL(sort_cmp.ret_)) {
+      } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
+      } else {
+        const int64_t range_idx = found_it - range_cut.begin();
+        slice_idx_array.at(0) = range_idx % task_cnt_;
+        if (nullptr != ddl_slice_id_expr_) {
+          ObTabletSliceParam slice_param(range_->range_cut_.count() + 1, range_idx);
+          ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(slice_param.slice_id_);
+        }
       }
     }
   }
@@ -1324,59 +1446,89 @@ int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
 {
   int ret = OB_SUCCESS;
   const ObDatumAccessContext *access_ctx = nullptr;
-  if (OB_ISNULL(dist_exprs_)) {
+  indexes = nullptr;
+  if (task_cnt_ <= 0 || batch_size < 0 || batch_size > eval_ctx.max_batch_size_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (batch_size == 0) {
+    // No rows or outputs to publish.
+  } else if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+  } else if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
   } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
     for (int64_t idx = 0; idx < batch_size; ++idx) {
-      slice_indexes_[idx] = 0;
+      slice_indexes_[idx] = skip.at(idx) ? OB_INVALID_INDEX : 0;
     }
     indexes = slice_indexes_;
     if (nullptr != ddl_slice_id_expr_) {
-      ObDatum *ddl_slice_id_datums = ddl_slice_id_expr_->locate_datums_for_update(eval_ctx, batch_size);
+      ObEvalCtx::BatchInfoScopeGuard frame(eval_ctx);
+      frame.set_batch_size(batch_size);
       ObTabletSliceParam slice_param(1, 0);
       for (int64_t idx = 0; idx < batch_size; ++idx) {
-        ddl_slice_id_datums[idx].set_int(slice_param.slice_id_);
+        if (!skip.at(idx)) {
+          frame.set_batch_idx(idx);
+          ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(slice_param.slice_id_);
+        }
       }
     }
   } else {
-    Compare sort_cmp(&sort_cmp_funs_, &sort_collations_, access_ctx);
+    Compare sort_cmp(&sort_cmp_funs_, &sort_collations_, access_ctx, dist_exprs_, &eval_ctx);
     ObPxTabletRange::DatumKey sort_key;
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
     batch_info_guard.set_batch_size(batch_size);
+    for (int64_t idx = 0; idx < batch_size; ++idx) slice_indexes_[idx] = OB_INVALID_INDEX;
+    // Evaluate distribution keys in batches before probing their boundaries.
+    // Calling eval() first for each row would scalarize nested plugin functions.
+    for (int64_t i = 0; OB_SUCC(ret) && i < dist_exprs_->count(); ++i) {
+      if (OB_ISNULL(dist_exprs_->at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(dist_exprs_->at(i)->eval_batch(eval_ctx, skip, batch_size))) {
+      }
+    }
     for (int64_t idx = 0; OB_SUCC(ret) && idx < batch_size; ++idx) {
       if (skip.at(idx)) {
         continue;
       } else {
         batch_info_guard.set_batch_idx(idx);
         ObDatum *datum = nullptr;
-        ObDatum *ddl_slice_id_datum = nullptr;
-        if (nullptr != ddl_slice_id_expr_) {
-          ddl_slice_id_datum = &ddl_slice_id_expr_->locate_datums_for_update(eval_ctx, batch_size)[idx];
-        }
         for (int64_t i = 0; i < dist_exprs_->count() && OB_SUCC(ret); ++i) {
           if (OB_ISNULL(dist_exprs_->at(i))) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(dist_exprs_->at(i)->eval(eval_ctx, datum))) {
+          } else if (OB_ISNULL(datum)) {
+            ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(sort_key.push_back(*datum))) {
           }
         }
         if (OB_SUCC(ret)) {
           ObPxTabletRange::RangeCut &range_cut = const_cast<ObPxTabletRange::RangeCut &>(range_->range_cut_);
           ObPxTabletRange::RangeCut::iterator found_it = std::lower_bound(
-            range_cut.begin(), range_cut.end(), sort_key, sort_cmp);
-          int64_t range_idx = found_it - range_cut.begin();
-          slice_indexes_[idx] = range_idx % task_cnt_;
-          if (nullptr != ddl_slice_id_datum) {
-            ObTabletSliceParam slice_param(range_->range_cut_.count() + 1, range_idx);
-            ddl_slice_id_datum->set_int(slice_param.slice_id_);
+            range_cut.begin(), range_cut.end(), sort_key, std::ref(sort_cmp));
+          if (OB_FAIL(sort_cmp.ret_)) {
+          } else {
+            // Stage range positions. Do not publish routing or DDL slice IDs
+            // until every active row has completed successfully.
+            slice_indexes_[idx] = found_it - range_cut.begin();
           }
         }
         sort_key.reuse();
       }
     }
-    indexes = slice_indexes_;
+    if (OB_SUCC(ret) && OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
+    }
+    if (OB_SUCC(ret)) {
+      for (int64_t idx = 0; idx < batch_size; ++idx) if (!skip.at(idx)) {
+        const int64_t range_idx = slice_indexes_[idx];
+        if (ddl_slice_id_expr_) {
+          batch_info_guard.set_batch_idx(idx);
+          ObTabletSliceParam slice_param(range_->range_cut_.count() + 1, range_idx);
+          ddl_slice_id_expr_->locate_datum_for_write(eval_ctx).set_int(slice_param.slice_id_);
+        }
+        slice_indexes_[idx] = range_idx % task_cnt_;
+      }
+      indexes = slice_indexes_;
+    }
   }
   return ret;
 }
@@ -1389,15 +1541,18 @@ bool ObRangeSliceIdCalc::Compare::operator()(
   int &ret = ret_;
   if (OB_FAIL(ret)) {
     // already fail
-  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)
-             || OB_ISNULL(access_ctx_)) {
+  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(l), K(r));
+  } else if (sort_collations_->count() != sort_cmp_funs_->count() ||
+             l.count() < sort_cmp_funs_->count() || r.count() < sort_cmp_funs_->count()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cnt; i++) {
-      if (OB_FAIL(
-              sort_cmp_funs_->at(i).cmp_func_(l.at(i), r.at(i), cmp, access_ctx_))) {
+      if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+              expressions_, context_, l.at(i), r.at(i), cmp, access_ctx_))) {
       } else if (cmp < 0) {
         less = sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {

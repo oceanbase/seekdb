@@ -47,6 +47,14 @@ public:
                         common::ObISQLClient &sql_client);
 
 protected:
+  // Persistent Extension membership is a schema invariant, independent of the
+  // optional native runtime. Check under the SAME active DDL transaction before
+  // deleting a schema object. Admission and deletion also share the schema DDL
+  // locks: a missing-row SELECT alone does not serialize a concurrent install.
+  int check_extension_member_drop(common::ObISQLClient &sql_client,
+                                  uint64_t database_id,
+                                  ObSchemaType object_class,
+                                  uint64_t object_id);
   virtual int log_operation(ObSchemaOperation &ddl_operation,
                             common::ObISQLClient &sql_client,
                             common::ObSqlString *public_sql_string = NULL);

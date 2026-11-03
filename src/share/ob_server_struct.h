@@ -50,8 +50,14 @@ namespace obmysql
 class ObDiag;
 } // end of namespace obmysql
 
+namespace observer
+{
+class ObServerPluginRuntime;
+}
+
 namespace share
 {
+namespace plugin { class IPluginRuntimeService; }
 class ObTabletTableOperator;
 class LocalStore;
 class ObRsMgr;
@@ -86,6 +92,7 @@ struct ObGlobalContext
   bool sys_package_ready_;
   // Process-wide primary/standby mode.
   share::ObServerRole::Role server_role_;
+  share::plugin::IPluginRuntimeService *plugin_runtime_;
   
   static ObGlobalContext& get_instance();
   void init();

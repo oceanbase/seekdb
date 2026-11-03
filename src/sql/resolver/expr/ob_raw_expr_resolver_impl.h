@@ -154,8 +154,8 @@ private:
                             bool &is_nmb_literal,
                             ObRawExpr *&interval_expr,
                             ObRawExpr *&date_unit_expr);
-  int process_geo_func_node(const ParseNode *node, ObRawExpr *&expr);
-  int set_geo_func_name(ObSysFunRawExpr *func_expr, const ObItemType func_type);
+  int process_collection_func_node(const ParseNode *node, ObRawExpr *&expr);
+  int set_collection_func_name(ObSysFunRawExpr *func_expr, const ObItemType func_type);
   int process_vector_func_node(const ParseNode *node, ObRawExpr *&expr);
   int process_vector_similarity_func_node(const ParseNode *node, ObRawExpr *&expr);
   bool is_win_expr_valid_scope(ObStmtScope scope) const;

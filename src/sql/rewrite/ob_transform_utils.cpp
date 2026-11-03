@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 
 #include "ob_transform_utils.h"
+#include "seekdb/plugin/extension_spi.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/rewrite/ob_equal_analysis.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -2534,21 +2535,19 @@ int ObTransformUtils::get_simple_filter_column(const ObDMLStmt *stmt,
       case T_OP_GE:
       case T_OP_GT:
       case T_OP_NE:
-      case T_FUN_SYS_ST_INTERSECTS:
-      case T_FUN_SYS_ST_COVERS:
-      case T_FUN_SYS_ST_DWITHIN:
-      case T_FUN_SYS_ST_WITHIN:
-      case T_FUN_SYS_ST_CONTAINS:
-      case T_FUN_SYS_PRIV_ST_EQUALS:
-      case T_FUN_SYS_PRIV_ST_TOUCHES:
-      case T_FUN_SYS_ST_CROSSES:
-      case T_FUN_SYS_ST_OVERLAPS:
+      case T_FUN_UDF:
       {
+        // Native SQL names are user-defined. Only verified implementation
+        // metadata grants a UDF the same candidate-column semantics as GIS.
+        if (T_FUN_UDF == expr->get_expr_type() && !expr->is_spatial_expr()) {
+          break;
+        }
+        const bool is_dwithin = (T_FUN_UDF == expr->get_expr_type()
+                && static_cast<const ObUDFRawExpr *>(expr)->get_native_spatial_flags()
+                    == SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN);
         ObRawExpr *left = NULL;
         ObRawExpr *right = NULL;
-        if (T_FUN_SYS_ST_DWITHIN == expr->get_expr_type() && 3 != expr->get_param_count()) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (2 != expr->get_param_count() && T_FUN_SYS_ST_DWITHIN != expr->get_expr_type()) {
+        if ((is_dwithin ? 3 : 2) != expr->get_param_count()) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_ISNULL(left = expr->get_param_expr(0)) ||
                    OB_ISNULL(right = expr->get_param_expr(1))) {
@@ -10097,7 +10096,7 @@ int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
                                                        *ctx->allocator_);
     ob_setup_tsi_warning_buffer(old_warning_buf);
     if (OB_SUCCESS != tmp_ret) {
-      if (IS_SPATIAL_EXPR(expr->get_expr_type())) {
+      if (expr->is_spatial_expr()) {
         ret = tmp_ret;
         LOG_WARN("failed to probe static expr warning", K(ret), K(*expr));
       } else {

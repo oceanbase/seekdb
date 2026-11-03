@@ -18,6 +18,7 @@
 
 #include "ob_geo_func_buffer.h"
 #include "share/geo/ob_geo_func_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 #include "share/geo/ob_geo_longtitude_correct_visitor.h"
 
 using namespace oceanbase::common;
@@ -121,35 +122,35 @@ private:
     } else {
       switch (ObGeoBufferStrategyStateType(strategy.state_num_)) {
         case ObGeoBufferStrategyStateType::JR_ER_PC: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JR_ER_PS: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JR_EF_PC: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JR_EF_PS: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_ER_PC: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_ER_PS: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_EF_PC: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_EF_PS: {
-          bg::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*geo_tree, *geo_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
           break;
         }
         default: {
@@ -253,51 +254,51 @@ private:
 
       switch (ObGeoBufferStrategyStateType(strategy->state_num_)) {
         case ObGeoBufferStrategyStateType::JR_ER_PC: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_round_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JR_ER_PS: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_round_s, point_square_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JR_EF_PC: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_flat_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JR_EF_PS: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_round_s, end_flat_s, point_square_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_ER_PC: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_round_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_ER_PS: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_round_s, point_square_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_EF_PC: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_flat_s, point_circle_s);
           break;
         }
         case ObGeoBufferStrategyStateType::JM_EF_PS: {
-          bg::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
-          bg::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
-          bg::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpt, *mpt_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*ml, *ml_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
+          seekdb::geo::cartesian::buffer(*mpo, *mpo_res, distance_s, side_s, join_miter_s, end_flat_s, point_square_s);
           break;
         }
         default: {

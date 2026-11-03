@@ -18,6 +18,7 @@
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_isvalid.h"
 #include "share/geo/ob_geo_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace bg = boost::geometry;
@@ -43,7 +44,7 @@ static int eval_isvalid_without_strategy(const ObGeometry *g,
     ret = OB_ERR_NULL_VALUE;
   } else {
     bg::validity_failure_type reason;
-    result = bg::is_valid(*geo_condidate, reason);
+    result = seekdb::geo::cartesian::is_valid(*geo_condidate, reason);
     if (!result && context.get_val_count() > 0) {
       ObGeoNormalVal *ret_errno = const_cast<ObGeoNormalVal *>(context.get_val_arg(0));
       ret_errno->int64_ =  static_cast<int64_t>(reason);

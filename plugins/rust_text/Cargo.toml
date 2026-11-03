@@ -1,0 +1,19 @@
+[package]
+name = "seekdb-rust-text"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+name = "seekdb_rust_text"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+seekdb-extension = { path = "../../rust/extension-sdk" }
+
+[profile.release]
+panic = "unwind"
+lto = "thin"
+codegen-units = 1

@@ -67,7 +67,8 @@ public:
   int add_routine(common::ObISQLClient &sql_client,
                   const ObRoutineInfo &routine_info,
                   bool is_replace = false,
-                  bool only_history = false);
+                  bool only_history = false,
+                  bool clear_native_binding = false);
 private:
   int gen_package_dml(const ObPackageInfo &package_info,
                       ObDMLSqlSplicer &dml);
@@ -80,7 +81,8 @@ private:
                   int64_t new_schema_version);
   int gen_routine_dml(const ObRoutineInfo &routine_info,
                       ObDMLSqlSplicer &dml,
-                      bool is_replace = false);
+                      bool is_replace = false,
+                      bool clear_native_binding = false);
   int del_routine(common::ObISQLClient &sql_client,
                   const ObRoutineInfo &routine_info,
                   int64_t new_schema_version);

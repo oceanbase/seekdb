@@ -20,6 +20,8 @@ pub use logger::*;
 pub use mvt;
 pub use regex_engine;
 pub use sql_nio as network;
+#[cfg(feature = "plugins")]
+pub use seekdb_plugin_runtime::*;
 #[cfg(not(target_family = "wasm"))]
 pub use standby_rpc;
 pub use uuid_generator;

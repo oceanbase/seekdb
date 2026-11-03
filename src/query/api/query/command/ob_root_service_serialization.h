@@ -37,19 +37,29 @@ inline lib::ObMutex &root_service_serial_mutex()
   return mutex;
 }
 
+inline bool &root_service_serial_active()
+{
+  RLOCAL_STATIC(bool, active) = false;
+  return active;
+}
+
 // Lock acquisition obeys the caller's worker deadline. The callable executes
 // under the process-wide Root Service serialization lock and returns an OceanBase
 // error code.
 template <typename F>
 inline int serialize_root_service_call(F &&fn)
 {
+  // Synchronous semantic callbacks can reach Query again. Re-entering this
+  // non-recursive mutex would deadlock (or wait for the outer caller's deadline).
+  if (root_service_serial_active()) return common::OB_STATE_NOT_MATCH;
   int ret = root_service_serial_mutex().lock(THIS_WORKER.get_timeout_ts());
   if (OB_SUCCESS != ret) {
   } else {
     struct UnlockGuard
     {
-      ~UnlockGuard() { root_service_serial_mutex().unlock(); }
+      ~UnlockGuard() { root_service_serial_active() = false; root_service_serial_mutex().unlock(); }
     } guard;
+    root_service_serial_active() = true;
     ret = fn();
   }
   return ret;

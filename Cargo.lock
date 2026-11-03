@@ -1491,6 +1491,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
+name = "seekdb-host"
+version = "0.1.0"
+dependencies = [
+ "config",
+ "seekdb-plugin-runtime",
+ "sql-nio",
+]
+
+[[package]]
+name = "seekdb-plugin-runtime"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "seekdb-rust"
 version = "0.1.0"
 dependencies = [
@@ -1500,6 +1517,7 @@ dependencies = [
  "logger",
  "mvt",
  "regex-engine",
+ "seekdb-plugin-runtime",
  "sql-nio",
  "standby-rpc",
  "uuid-generator",

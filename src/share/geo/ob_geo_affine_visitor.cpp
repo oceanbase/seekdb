@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_affine_visitor.h"
+#include "seekdb/geo/tile_grid.hpp"
 
 namespace oceanbase
 {
@@ -36,8 +37,10 @@ void ObGeoAffineVisitor::affine(PtType *point)
 {
   double x = point->x();
   double y = point->y();
-  point->x(affine_->x_fac1 * x + affine_->y_fac1 * y + affine_->x_off);
-  point->y(affine_->x_fac2 * x + affine_->y_fac2 * y + affine_->y_off);
+  seekdb::geo::cartesian::affine_xy(x, y, affine_->x_fac1, affine_->y_fac1,
+      affine_->x_fac2, affine_->y_fac2, affine_->x_off, affine_->y_off);
+  point->x(x);
+  point->y(y);
 }
 
 int ObGeoAffineVisitor::visit(ObGeographPoint *geo)

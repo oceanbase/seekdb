@@ -13,9 +13,19 @@
 # limitations under the License.
 
 load("//bazel:rust.bzl", "rust_modules")
+load("//bazel:defs.bzl", "cc_library")
 load(":modules.bzl", "MODULES")
 
 package(default_visibility = ["//visibility:private"])
+
+# The existing plugin ABI remains available to host adapters. Its Rust
+# implementation is linked through the single production archive below.
+cc_library(
+    name = "seekdb_rust_host_headers",
+    hdrs = ["//rust/plugin-runtime:include/plugin_runtime.h"],
+    includes = ["plugin-runtime/include"],
+    visibility = ["//visibility:public"],
+)
 
 rust_modules(
     modules = MODULES,

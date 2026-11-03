@@ -910,7 +910,7 @@ int ObLogTableScan::get_mbr_column_exprs(const uint64_t table_id,
         ret = OB_ERR_UNEXPECTED;
       } else if (table_id == col_item->table_id_ &&
                  OB_NOT_NULL(col_item->expr_->get_dependant_expr()) &&
-                 col_item->expr_->get_dependant_expr()->get_expr_type() == T_FUN_SYS_SPATIAL_MBR &&
+                 col_item->expr_->get_dependant_expr()->is_index_value_expr(ObVarcharType) &&
                  OB_FAIL(temp_exprs.push_back(col_item->expr_))) {
       } else { /*do nothing*/}
     }

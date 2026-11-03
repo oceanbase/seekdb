@@ -174,7 +174,7 @@ public:
   inline uint64_t get_package_id() const { return package_id_; }
   inline const common::ObString &get_routine_name() const { return routine_name_; }
   inline uint64_t get_overload() const { return overload_; }
-  inline ObRoutineType get_routine_type() { return routine_type_; }
+  inline ObRoutineType get_routine_type() const { return routine_type_; }
   TO_STRING_KV(K_(database_id), K_(package_id), K_(routine_name), K_(overload), K_(routine_type));
 private:
   uint64_t database_id_;
@@ -271,6 +271,10 @@ public:
                          uint64_t overload, ObRoutineType routine_type,
                          const ObSimpleRoutineSchema *&routine_schema) const;
   int get_routine_schema(uint64_t routine_id, const ObSimpleRoutineSchema *&routine_schema) const;
+  // All standalone function slots, including sparse slots, in slot order.
+  // The pointers belong to this schema snapshot; no SQL overload selection occurs here.
+  int get_standalone_function_schemas(uint64_t database_id, const common::ObString &name,
+      common::ObIArray<const ObSimpleRoutineSchema *> &schemas) const;
   int get_routine_schemas_in_runtime(common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
   int get_routine_schemas_in_database(
               uint64_t database_id,
@@ -291,13 +295,21 @@ private:
   inline static bool equal_with_routine_id(const ObSimpleRoutineSchema *lhs,
                                                   const ObRoutineId &routine_id);
   int rebuild_routine_hashmap();
+  static int compare_routine_name(const ObSimpleRoutineSchema *lhs,
+                                 const ObRoutineNameHashWrapper &rhs);
+  static bool compare_name_key(const ObSimpleRoutineSchema *lhs,
+                               const ObRoutineNameHashWrapper &rhs);
+  static bool compare_names(const ObSimpleRoutineSchema *lhs, const ObSimpleRoutineSchema *rhs);
+  static bool equal_names(const ObSimpleRoutineSchema *lhs, const ObSimpleRoutineSchema *rhs);
 private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;
   RoutineInfos routine_infos_;
+  RoutineInfos routine_name_infos_;
   RoutineIdMap routine_id_map_;
   RoutineNameMap routine_name_map_;
   bool is_inited_;
+  bool name_index_valid_;
 };
 }  // namespace schema
 }  // namespace share

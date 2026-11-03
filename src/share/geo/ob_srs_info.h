@@ -18,6 +18,7 @@
 #define OCEANBASE_LIB_GEO_OB_SRS_INFO_
 
 #include <math.h>
+#include <new>
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_vector.h"
 #include "lib/allocator/page_arena.h"
@@ -33,7 +34,7 @@ namespace  common
 {
 
 const static uint32_t OB_GEO_DEFAULT_GEOGRAPHY_SRID = 4326;
-const static double OB_GEO_BOUNDS_DELTA = 0.01;
+constexpr double OB_GEO_BOUNDS_DELTA = 0.01;
 
 #define WGS84_PARA_NUM 7
 #define AXIS_DIRECTION_NUM 2
@@ -123,7 +124,7 @@ enum class ObProjectionType
 
 struct ObRsAuthority
 {
-  bool is_valid;
+  bool is_valid = false;
   common::ObString org_name;
   common::ObString org_code;
 };
@@ -176,7 +177,7 @@ struct ObRsUnit
 struct ObRsAxis
 {
   common::ObString name;
-  ObAxisDirection direction;
+  ObAxisDirection direction = ObAxisDirection::INIT;
 };
 
 struct ObRsAxisPair
@@ -215,6 +216,19 @@ struct ObProjectionPram
 struct ObProjectionPrams
 {
   common::ObVector<ObProjectionPram> vals;
+  ObProjectionPrams() = default;
+  // Spirit/variant copy attributes internally. ObVector's copy operators
+  // discard allocation errors; never turn a failed copy into a valid but
+  // truncated projection definition. Parser entry points translate this.
+  ObProjectionPrams(const ObProjectionPrams &other)
+  {
+    if (vals.assign(other.vals) != OB_SUCCESS) throw std::bad_alloc{};
+  }
+  ObProjectionPrams &operator=(const ObProjectionPrams &other)
+  {
+    if (this != &other && vals.assign(other.vals) != OB_SUCCESS) throw std::bad_alloc{};
+    return *this;
+  }
 };
 
 // Projected SRS definition
@@ -347,7 +361,7 @@ public:
   ObAxisDirection axis_direction(uint8_t axis_index) const { return axis_dir_[axis_index]; }
 
   virtual ObProjectionType get_projection_type() const = 0;
-  virtual void register_proj_params() = 0;
+  int register_proj_params();
   uint32_t get_srid() const override { return id_; }
   void set_bounds(double min_x, double min_y, double max_x, double max_y) { geographic_srs_.set_bounds(min_x, min_y, max_x, max_y); }
   int set_proj4text(ObIAllocator &allocator, const ObString &src_proj4) { return geographic_srs_.set_proj4text(allocator, src_proj4); }
@@ -365,13 +379,6 @@ protected:
   ObVector<ObSimpleProjPram, common::ObFIFOAllocator> simple_proj_prams_; // should be filled by subclass 
 };
 
-#define OB_GEO_REG_PROJ_PARAMS(...) \
-const static int arr[] = __VA_ARGS__; \
-for (int32_t i = 0; i < ARRAYSIZEOF(arr); ++i) { \
-  simple_proj_prams_.push_back(arr[i]); \
-}
-
-
 // Unknown Projection Method
 // EPSG CODE: 0
 // Projection Parameters EPSG CODE: None
@@ -383,7 +390,6 @@ public:
   virtual ~ObUnknownProjectedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::UNKNOWN; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {} ); } // supported projection parameters
 };
 
 // Popular Visualisation Pseudo Mercator Projection Method
@@ -396,7 +402,6 @@ public:
   virtual ~ObPopularVisualPseudoMercatorSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::POPULAR_VISUAL_PSEUDO_MERCATOR; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8801, 8802, 8806, 8807} ); } // supported projection parameters
 };
 
 // Lambert Azimuthal Equal Area (Spherical) Projection Method 
@@ -409,7 +414,6 @@ public:
   virtual ~ObLambertAzimuthalEqualAreaSphericalSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_AZIMUTHAL_EQUAL_AREA_SPHERICAL; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8801, 8802, 8806, 8807} ); } // supported projection parameters
 };
 
 // Equidistant Cylindrical Projection Method
@@ -422,7 +426,6 @@ public:
   virtual ~ObEquidistantCylindricalSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::EQUIDISTANT_CYLINDRICAL; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8823, 8802, 8806, 8807} ); } // supported projection parameters
 };
 
 // Equidistant Cylindrical (Spherical) Projection Method
@@ -435,7 +438,6 @@ public:
   virtual ~ObEquidistantCylindricalSphericalSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::EQUIDISTANT_CYLINDRICAL_SPHERICAL; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8823, 8802, 8806, 8807} ); } // supported projection parameters
 };
 
 // Krovak (North Orientated) Projection Method
@@ -448,7 +450,6 @@ public:
   virtual ~ObKrovakNorthOrientatedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::KROVAK_NORTH_ORIENTATED; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8811, 8833, 1036, 8818, 8819, 8806, 8807} ); } // supported projection parameters
 };
 
 // Krovak Modified Projection Method
@@ -461,7 +462,6 @@ public:
   virtual ~ObKrovakModifiedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::KROVAK_MODIFIED; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8811, 8833, 1036, 8818, 8819, 8806, 8807, 8617, 8618, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035} ); } // supported projection parameters
 };
 
 // Krovak Modified (North Orientated) Projection Method
@@ -474,7 +474,6 @@ public:
   virtual ~ObKrovakModifiedNorthOrientatedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::KROVAK_MODIFIED_NORTH_ORIENTATED; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8811, 8833, 1036, 8818, 8819, 8806, 8807, 8617, 8618, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035} ); } // supported projection parameters
 };
 
 // Lambert Conic Conformal (2SP Michigan) Projection Method
@@ -487,7 +486,6 @@ public:
   virtual ~ObLambertConicConformal2SPMichiganSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CONIC_CONFORMAL_2SP_MICHIGAN; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8821, 8822, 8823, 8824, 8826, 8827, 1038} ); } // supported projection parameters
 };
 
 // Colombia Urban Projection Method
@@ -500,7 +498,6 @@ public:
   virtual ~ObColombiaUrbanSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::COLOMBIA_URBAN; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807, 1039 } ); } // supported projection parameters
 };
 
 // Lambert Conic Conformal (1SP) Projection Method
@@ -513,7 +510,6 @@ public:
   virtual ~ObLambertConicConformal1SPSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CONIC_CONFORMAL_1SP; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8805, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Lambert Conic Conformal (2SP) Projection Method
@@ -526,7 +522,6 @@ public:
   virtual ~ObLambertConicConformal2SPSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CONIC_CONFORMAL_2SP; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8821, 8822, 8823, 8824, 8826, 8827 } ); } // supported projection parameters
 };
 
 // Lambert Conic Conformal (2SP Belgium) Projection Method
@@ -539,7 +534,6 @@ public:
   virtual ~ObLambertConicConformal2SPBelgiumSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CONIC_CONFORMAL_2SP_BELGIUM; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8821, 8822, 8823, 8824, 8826, 8827 } ); } // supported projection parameters
 };
 
 // Mercator (variant A) Projection Method
@@ -552,7 +546,6 @@ public:
   virtual ~ObMercatorvariantASrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::MERCATOR_VARIANT_A; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8805, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Mercator (variant B) Projection Method
@@ -565,7 +558,6 @@ public:
   virtual ~ObMercatorvariantBSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::MERCATOR_VARIANT_B; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8823, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Cassini-Soldner Projection Method
@@ -577,8 +569,7 @@ public:
   ObCassiniSoldnerSrs(common::ObIAllocator *allocator) : ObProjectedSrs(allocator) {}
   virtual ~ObCassiniSoldnerSrs() {}
 
-  ObProjectionType get_projection_type() const override { return ObProjectionType::MERCATOR_VARIANT_B; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
+  ObProjectionType get_projection_type() const override { return ObProjectionType::CASSINI_SOLDNER; };
 };
 
 // Transverse Mercator Projection Method
@@ -591,7 +582,6 @@ public:
   virtual ~ObTransverseMercatorSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::TRANSVERSE_MERCATOR; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8801, 8802, 8805, 8806, 8807} ); } // supported projection parameters
 };
 
 // Transverse Mercator (South Orientated) Projection Method
@@ -604,7 +594,6 @@ public:
   virtual ~ObTransverseMercatorSouthOrientatedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::TRANSVERSE_MERCATOR_SOUTH_ORIENTATED; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8801, 8802, 8805, 8806, 8807} ); } // supported projection parameters
 };
 
 // Oblique Stereographic Projection Method
@@ -617,7 +606,6 @@ public:
   virtual ~ObObliqueStereographicSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::OBLIQUE_STEREOGRAPHIC; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8801, 8802, 8805, 8806, 8807} ); } // supported projection parameters
 };
 
 // Polar Stereographic (variant A) Projection Method
@@ -630,7 +618,6 @@ public:
   virtual ~ObPolarStereographicVariantASrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::POLAR_STEREOGRAPHIC_VARIANT_A; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( {8801, 8802, 8805, 8806, 8807} ); } // supported projection parameters
 };
 
 // New Zealand Map Grid Projection Method
@@ -643,7 +630,6 @@ public:
   virtual ~ObNewZealandMapGridSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::NEW_ZEALAND_MAP_GRID; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Hotine Oblique Mercator (variant A) Projection Method
@@ -656,7 +642,6 @@ public:
   virtual ~ObHotineObliqueMercatorvariantASrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::HOTINE_OBLIQUE_MERCATOR_VARIANT_A; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8811, 8812, 8813, 8814, 8815, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Laborde Oblique Mercator Projection Method
@@ -669,7 +654,6 @@ public:
   virtual ~ObLabordeObliqueMercatorSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LABORDE_OBLIQUE_MERCATOR; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8811, 8812, 8813, 8815, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Hotine Oblique Mercator (variant B) Projection Method
@@ -682,7 +666,6 @@ public:
   virtual ~ObHotineObliqueMercatorVariantBSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::HOTINE_OBLIQUE_MERCATOR_VARIANT_B; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8811, 8812, 8813, 8814, 8815, 8816, 8817 } ); } // supported projection parameters
 };
 
 // Tunisia Mining Grid Projection Method
@@ -695,7 +678,6 @@ public:
   virtual ~ObTunisiaMiningGridSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::TUNISIA_MINING_GRID; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8821, 8822, 8826, 8827 } ); } // supported projection parameters
 };
 
 // Lambert Conic Near-Conformal Projection Method
@@ -708,7 +690,6 @@ public:
   virtual ~ObLambertConicNearConformalSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CONIC_NEAR_CONFORMAL; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8805, 8806, 8807 } ); } // supported projection parameters
 };
 
 // American Polyconic Projection Method
@@ -721,7 +702,6 @@ public:
   virtual ~ObAmericanPolyconicSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::AMERICAN_POLYCONIC; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Krovak Projection Method
@@ -734,7 +714,6 @@ public:
   virtual ~ObKrovakSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::KROVAK; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8811, 8833, 1036, 8818, 8819, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Lambert Azimuthal Equal Area Projection Method
@@ -747,7 +726,6 @@ public:
   virtual ~ObLambertAzimuthalEqualAreaSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_AZIMUTHAL_EQUAL_AREA; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Albers Equal Area Projection Method
@@ -760,7 +738,6 @@ public:
   virtual ~ObAlbersEqualAreaSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::ALBERS_EQUAL_AREA; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8821, 8822, 8823, 8824, 8826, 8827 } ); } // supported projection parameters
 }; 
 
 // Transverse Mercator Zoned Grid System Projection Method
@@ -773,7 +750,6 @@ public:
   virtual ~ObTransverseMercatorZonedGridSystemSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::TRANSVERSE_MERCATOR_ZONED_GRID_SYSTEM; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8830, 8831, 8805, 8806, 8807 } ); } // supported projection parameters
 }; 
 
 // Lambert Conic Conformal (West Orientated) Projection Method
@@ -786,7 +762,6 @@ public:
   virtual ~ObLambertConicConformalWestOrientatedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CONIC_CONFORMAL_WEST_ORIENTATED; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8805, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Bonne (South Orientated) Projection Method
@@ -799,7 +774,6 @@ public:
   virtual ~ObBonneSouthOrientatedSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::BONNE_SOUTH_ORIENTATED; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Polar Stereographic (variant B) Projection Method
@@ -812,7 +786,6 @@ public:
   virtual ~ObPolarStereographicVariantBSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::POLAR_STEREOGRAPHIC_VARIANT_B; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8832, 8833, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Polar Stereographic (variant C) Projection Method
@@ -825,7 +798,6 @@ public:
   virtual ~ObPolarStereographicVariantCSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::POLAR_STEREOGRAPHIC_VARIANT_C; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8832, 8833, 8826, 8827 } ); } // supported projection parameters
 };
 
 // Guam Projection Projection Method
@@ -838,7 +810,6 @@ public:
   virtual ~ObGuamProjectionSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::GUAM_PROJECTION; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Modified Azimuthal Equidistant Projection Method
@@ -851,7 +822,6 @@ public:
   virtual ~ObModifiedAzimuthalEquidistantSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::MODIFIED_AZIMUTHAL_EQUIDISTANT; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Hyperbolic Cassini-Soldner Projection Method
@@ -864,7 +834,6 @@ public:
   virtual ~ObHyperbolicCassiniSoldnerSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::HYPERBOLIC_CASSINI_SOLDNER; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8801, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Lambert Cylindrical Equal Area (Spherical) Projection Method
@@ -877,7 +846,6 @@ public:
   virtual ~ObLambertCylindricalEqualAreaSphericalSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CYLINDRICAL_EQUAL_AREA_SPHERICAL; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8823, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 // Lambert Cylindrical Equal Area Projection Method
@@ -890,7 +858,6 @@ public:
   virtual ~ObLambertCylindricalEqualAreaSrs() {}
 
   ObProjectionType get_projection_type() const override { return ObProjectionType::LAMBERT_CYLINDRICAL_EQUAL_AREA; };
-  void register_proj_params() override { OB_GEO_REG_PROJ_PARAMS( { 8823, 8802, 8806, 8807 } ); } // supported projection parameters
 };
 
 class ObSrsItem

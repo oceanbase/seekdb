@@ -1500,6 +1500,24 @@ int ObPrivMgr::get_obj_privs_in_ur_and_obj(const ObObjPrivSortKey &obj_key,
   return ret;
 }
 
+int ObPrivMgr::get_obj_privs_in_ur_and_obj(const ObObjPrivSortKey &key,
+    ObIArray<const ObObjPriv *> &rows) const
+{
+  int ret = OB_SUCCESS;
+  rows.reset();
+  const ObUrObjId identity(key.grantee_id_, key.obj_id_, key.obj_type_, key.col_id_);
+  for (auto i = obj_privs_.lower_bound(identity, ObObjPriv::cmp_ur_obj_id);
+      OB_SUCC(ret) && i != obj_privs_.end(); ++i) {
+    const auto *row = *i;
+    if (!row) ret = OB_ERR_UNEXPECTED;
+    else if (row->get_grantee_id() != key.grantee_id_ || row->get_obj_id() != key.obj_id_ ||
+        row->get_objtype() != key.obj_type_ || row->get_col_id() != key.col_id_) break;
+    else ret = rows.push_back(row);
+  }
+  if (OB_FAIL(ret)) rows.reset();
+  return ret;
+}
+
 int ObPrivMgr::get_sys_privs_in_runtime(ObIArray<const ObSysPriv *> &sys_privs) const
 {
   int ret = OB_SUCCESS;

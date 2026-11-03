@@ -6401,7 +6401,7 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
         column.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
       } else if (T_FUN_SYS_HYBRID_VEC_CHUNK == root_expr_type) {
         column.add_column_flag(GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG);
-      } else if (T_FUN_SYS_SPATIAL_CELLID == root_expr_type || T_FUN_SYS_SPATIAL_MBR == root_expr_type) {
+      } else if (T_FUN_SYS_INDEX_VALUE == root_expr_type) {
         column.add_column_flag(SPATIAL_INDEX_GENERATED_COLUMN_FLAG);
       } else if (T_FUN_SYS_JSON_QUERY == root_expr_type) {
         if (ObMulValueIndexBuilderUtil::is_multivalue_array_column(col_def)) {

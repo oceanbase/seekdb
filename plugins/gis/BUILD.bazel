@@ -1,0 +1,225 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:plugin.bzl", "native_plugin")
+
+# Explicit private archive graph: no server library or host symbol dependency.
+
+cc_library(
+    name = "gis_absl_log_severity",
+    srcs = ["@third_party_native//:lib64/libabsl_log_severity.a"],
+    deps = [],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_raw_logging_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_raw_logging_internal.a"],
+    deps = [":gis_absl_log_severity"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_spinlock_wait",
+    srcs = ["@third_party_native//:lib64/libabsl_spinlock_wait.a"],
+    deps = [],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_base",
+    srcs = ["@third_party_native//:lib64/libabsl_base.a"],
+    deps = [":gis_absl_log_severity",":gis_absl_raw_logging_internal",":gis_absl_spinlock_wait"],
+    linkopts = ["-lpthread","-lrt"],
+)
+
+cc_library(
+    name = "gis_absl_city",
+    srcs = ["@third_party_native//:lib64/libabsl_city.a"],
+    deps = [":gis_absl_base"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_throw_delegate",
+    srcs = ["@third_party_native//:lib64/libabsl_throw_delegate.a"],
+    deps = [":gis_absl_raw_logging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_int128",
+    srcs = ["@third_party_native//:lib64/libabsl_int128.a"],
+    deps = [],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_strings_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_strings_internal.a"],
+    deps = [":gis_absl_base",":gis_absl_raw_logging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_strings",
+    srcs = ["@third_party_native//:lib64/libabsl_strings.a"],
+    deps = [":gis_absl_strings_internal",":gis_absl_base",":gis_absl_int128",":gis_absl_raw_logging_internal",":gis_absl_throw_delegate"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_bad_optional_access",
+    srcs = ["@third_party_native//:lib64/libabsl_bad_optional_access.a"],
+    deps = [":gis_absl_raw_logging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_bad_variant_access",
+    srcs = ["@third_party_native//:lib64/libabsl_bad_variant_access.a"],
+    deps = [":gis_absl_raw_logging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_low_level_hash",
+    srcs = ["@third_party_native//:lib64/libabsl_low_level_hash.a"],
+    deps = [":gis_absl_base",":gis_absl_int128"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_hash",
+    srcs = ["@third_party_native//:lib64/libabsl_hash.a"],
+    deps = [":gis_absl_city",":gis_absl_base",":gis_absl_throw_delegate",":gis_absl_int128",":gis_absl_strings",":gis_absl_bad_optional_access",":gis_absl_bad_variant_access",":gis_absl_low_level_hash"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_exponential_biased",
+    srcs = ["@third_party_native//:lib64/libabsl_exponential_biased.a"],
+    deps = [],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_malloc_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_malloc_internal.a"],
+    deps = [":gis_absl_base",":gis_absl_raw_logging_internal"],
+    linkopts = ["-lpthread"],
+)
+
+cc_library(
+    name = "gis_absl_graphcycles_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_graphcycles_internal.a"],
+    deps = [":gis_absl_base",":gis_absl_malloc_internal",":gis_absl_raw_logging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_civil_time",
+    srcs = ["@third_party_native//:lib64/libabsl_civil_time.a"],
+    deps = [],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_time_zone",
+    srcs = ["@third_party_native//:lib64/libabsl_time_zone.a"],
+    deps = [],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_time",
+    srcs = ["@third_party_native//:lib64/libabsl_time.a"],
+    deps = [":gis_absl_base",":gis_absl_civil_time",":gis_absl_int128",":gis_absl_raw_logging_internal",":gis_absl_strings",":gis_absl_time_zone"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_debugging_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_debugging_internal.a"],
+    deps = [":gis_absl_raw_logging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_stacktrace",
+    srcs = ["@third_party_native//:lib64/libabsl_stacktrace.a"],
+    deps = [":gis_absl_debugging_internal"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_demangle_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_demangle_internal.a"],
+    deps = [":gis_absl_base"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_symbolize",
+    srcs = ["@third_party_native//:lib64/libabsl_symbolize.a"],
+    deps = [":gis_absl_debugging_internal",":gis_absl_demangle_internal",":gis_absl_base",":gis_absl_malloc_internal",":gis_absl_raw_logging_internal",":gis_absl_strings"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_synchronization",
+    srcs = ["@third_party_native//:lib64/libabsl_synchronization.a"],
+    deps = [":gis_absl_graphcycles_internal",":gis_absl_raw_logging_internal",":gis_absl_time",":gis_absl_base",":gis_absl_malloc_internal",":gis_absl_stacktrace",":gis_absl_symbolize"],
+    linkopts = ["-lpthread"],
+)
+
+cc_library(
+    name = "gis_absl_hashtablez_sampler",
+    srcs = ["@third_party_native//:lib64/libabsl_hashtablez_sampler.a"],
+    deps = [":gis_absl_base",":gis_absl_exponential_biased",":gis_absl_synchronization"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_raw_hash_set",
+    srcs = ["@third_party_native//:lib64/libabsl_raw_hash_set.a"],
+    deps = [":gis_absl_base",":gis_absl_bad_optional_access",":gis_absl_hashtablez_sampler"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_absl_str_format_internal",
+    srcs = ["@third_party_native//:lib64/libabsl_str_format_internal.a"],
+    deps = [":gis_absl_strings",":gis_absl_int128",":gis_absl_throw_delegate"],
+    linkopts = [],
+)
+
+cc_library(
+    name = "gis_s2_crypto",
+    srcs = ["@third_party_native//:lib/libcrypto.a"],
+    deps = [],
+    linkopts = ["-ldl","-lpthread"],
+)
+
+cc_library(
+    name = "gis_s2",
+    srcs = ["@third_party_native//:lib64/libs2.a"],
+    deps = [":gis_absl_hash",":gis_absl_raw_hash_set",":gis_absl_str_format_internal",":gis_absl_synchronization",":gis_absl_throw_delegate",":gis_absl_spinlock_wait",":gis_s2_crypto"],
+    linkopts = ["-lm"],
+)
+
+native_plugin(
+    name = "seekdb_gis_plugin",
+    srcs = glob(["*.c", "*.cpp", "*.h", "*.ipp"]),
+    output_name = "seekdb_gis.so",
+    # The bundled Boost MPL predates Clang's enum constexpr range diagnostic.
+    extra_cxxopts = ["-Wno-enum-constexpr-conversion"],
+    deps = [
+        ":gis_s2",
+        "//include:geo_algorithms",
+        "//bazel/third_party:boost_headers",
+        "//bazel/third_party:s2_headers",
+        "//bazel/third_party:absl_headers",
+        "//bazel/third_party:openssl_headers",
+        "//bazel/third_party:fast_float_headers",
+    ],
+    sql = ["sql/gis.control", "sql/gis--1.0.sql"],
+)
