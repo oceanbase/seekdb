@@ -752,4 +752,89 @@ operator	cardinality	hit_count
 VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
+issue1512: compact membership, hint threshold 4
+cached_plans	values_operators
+1	0
+issue1512: duplicated membership, 3 distinct values
+cached_plans	values_operators
+1	0
+issue1512: 4 distinct values still rewrite
+cached_plans	values_operators
+1	1
+issue1512: 5 distinct values still rewrite
+cached_plans	values_operators
+1	1
+issue1512: duplicated NOT IN remains inline
+id
+4
+5
+7
+cached_plans	values_operators
+1	0
+issue1512: valid hint 1 forces rewriting
+cached_plans	values_operators
+1	1
+issue1512: hint 8 keeps a six-value list inline
+cached_plans	values_operators
+1	0
+issue1512: invalid hint 0 retains the default threshold
+cached_plans	values_operators
+1	0
+issue1512: exact and ANN results agree for compact and repeated lists
+ids
+1,2,3
+id
+1
+2
+3
+ids
+4,5,7,8,9
+ids
+1,2,3
+id
+1
+2
+3
+ids
+4,5,7,8,9
+issue1512: unsupported types and NULL retain SQL semantics
+ids
+1,2
+ids
+NULL
+ids
+1,2,3
+ids
+1,2
+ids
+1,2,3
+ids
+1,2,3
+ids
+1,2
+ids
+8,9
+issue1512: cached parameter slots remain intact when values change
+ids
+2,3
+ids
+3,4,5
+ids
+2,3
+ids
+3,4,5
+ids
+2,3
+issue1512: PREPARE retains unknown and trailing parameter positions
+ids
+2,3
+ids
+5
+ids
+3
+issue1512: 3072 duplicated values at the default threshold
+cached_plans	values_operators
+1	0
+ids
+1,2,3
 alter system set vector_memory_limit = 0;
