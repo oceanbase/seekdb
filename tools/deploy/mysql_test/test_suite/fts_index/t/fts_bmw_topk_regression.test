@@ -51,7 +51,12 @@ select count(*) from (select id from fts_bmw_topk_regression where match(content
 select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 4;
 select count(*) from (select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 4) t;
 select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 5 offset 4;
---echo ========= hits equal to limit =========
+--echo ========= hits equal to limit: topk heap fills exactly at the k-th =========
+select id from fts_bmw_topk_regression where match(content) against('量子计算') limit 2;
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('量子计算') limit 2) t;
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 9;
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 9 offset 1;
+--echo ========= hits below limit =========
 select id from fts_bmw_topk_regression where match(content) against('稳定') limit 4;
 select count(*) from fts_bmw_topk_regression where match(content) against('稳定');
 --echo ========= hits below limit =========

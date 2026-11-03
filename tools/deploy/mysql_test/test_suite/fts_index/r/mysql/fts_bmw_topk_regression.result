@@ -63,7 +63,36 @@ id
 2
 8
 7
-========= hits equal to limit =========
+========= hits equal to limit: topk heap fills exactly at the k-th =========
+select id from fts_bmw_topk_regression where match(content) against('量子计算') limit 2;
+id
+10
+11
+select count(*) from (select id from fts_bmw_topk_regression where match(content) against('量子计算') limit 2) t;
+count(*)
+2
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 9;
+id
+5
+3
+6
+12
+1
+4
+2
+8
+7
+select id from fts_bmw_topk_regression where match(content) against('倒排索引') limit 9 offset 1;
+id
+3
+6
+12
+1
+4
+2
+8
+7
+========= hits below limit =========
 select id from fts_bmw_topk_regression where match(content) against('稳定') limit 4;
 id
 8
