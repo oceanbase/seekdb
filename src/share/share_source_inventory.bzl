@@ -286,13 +286,6 @@ SHARE_UNITY_GROUPS = [
         ],
     ),
     struct(
-        name = "ob_share_geo_1",
-        language = "c",
-        srcs = [
-            "src/share/geo/ob_vector_tile.pb-c.c",
-        ],
-    ),
-    struct(
         name = "ob_share_geo_2",
         language = "c++",
         srcs = [

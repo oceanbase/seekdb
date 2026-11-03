@@ -13,6 +13,7 @@ rust_static_library(
         "//conditions:default": ["default", "native-network", "plugins"],
     }),
     deps = all_crate_deps(normal = True) + [
+        "//rust/mvt",
         "//rust/config",
         "//rust/in-process:in_process",
         "//rust/local",
@@ -22,7 +23,10 @@ rust_static_library(
         "//rust/uuid-generator:uuid_generator",
     ] + select({
         "@platforms//os:emscripten": [],
-        "//conditions:default": ["//rust/plugin-runtime:plugin_runtime"],
+        "//conditions:default": [
+            "//rust/plugin-runtime:plugin_runtime",
+            "//rust/standby-rpc:standby_rpc",
+        ],
     }),
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),

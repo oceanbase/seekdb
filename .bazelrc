@@ -13,6 +13,9 @@ build --force_pic
 build --compilation_mode=opt
 build --@rules_rust//rust/settings:lto=thin
 build --@rules_rust//rust/settings:codegen_units=1
+build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build:clippy --output_groups=clippy_checks
+build:clippy --@rules_rust//rust/settings:clippy_flag=-Dwarnings
 # SLP spends most of this generated parser's compile time on location copies.
 build:linux --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize

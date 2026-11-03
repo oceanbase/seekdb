@@ -733,9 +733,6 @@ int inner_main(int argc, char *argv[])
     MPRINT("    Start seekdb with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
       MPRINT("Start seekdb as a daemon failed. Did you started seekdb already?");
-    } else if (!restore_allocator_after_fork()) {
-      ret = OB_ERR_UNEXPECTED;
-      MPRINT("Failed to restore allocator state after starting daemon process.");
     }
   } else if (opts->nodaemon_) {
     if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {

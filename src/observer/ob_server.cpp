@@ -33,6 +33,7 @@
 #include "observer/ob_server.h"
 #include "observer/ob_server_plugin_runtime.h"
 #include "lib/alloc/alloc_func.h"
+#include "lib/allocator/ob_jemalloc.h"
 #include "observer/ob_system_package_load_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
@@ -608,6 +609,13 @@ int ObServer::wait_until_refreshed(
   return share::ObChangeStreamMgr::wait_refresh_scn(
       mysql_proxy, timeout_us);
 }
+
+int ObServer::get_min_dep_lsn(palf::LSN &min_dep_lsn)
+{
+  return OB_ISNULL(mods_change_stream_mgr_)
+      ? common::OB_NOT_INIT
+      : mods_change_stream_mgr_->get_min_dep_lsn(min_dep_lsn);
+}
 } // namespace observer
 } // namespace oceanbase
 using namespace oceanbase::share::schema;
@@ -967,11 +975,18 @@ int ObServer::init(const ObServerOptions &opts)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
+  // Daemon startup has already forked. Configure allocator defaults before the
+  // logger or server workers can create further arenas.
+  const int allocator_config_ret = jemalloc_configure_runtime();
+
   // Config loading can fail before the rest of the server is initialized.
   // Start the log writer first so the offending config key is
   // recorded in observer.log.
   if (OB_FAIL(OB_LOGGER.init())) {
     LOG_ERROR("async log init error", KR(ret));
+  }
+  if (OB_SUCC(ret) && 0 != allocator_config_ret) {
+    LOG_WARN("failed to configure jemalloc runtime", K(allocator_config_ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
@@ -1707,17 +1722,25 @@ int ObServer::wait_for_server_runtime()
 {
   int ret = OB_SUCCESS;
   bool synced = false;
+  bool replay_ready = false;
   bool timestamp_ready = false;
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
-  while (OB_SUCC(ret) && !stop_ && (!synced || !timestamp_ready)) {
+  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
     if (OB_FAIL(startup_result_.error())) {
       LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
       break;
     }
     synced = server_runtime_controller_.has_synced();
-    if (synced && !timestamp_ready) {
+    if (synced && !replay_ready) {
+      if (OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
+        LOG_WARN("standby startup replay did not become ready", KR(ret));
+      } else if (!stop_) {
+        replay_ready = true;
+      }
+    }
+    if (OB_SUCC(ret) && !stop_ && replay_ready && !timestamp_ready) {
       SCN gts;
       if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
         if (OB_EAGAIN == ret) {
@@ -1728,16 +1751,12 @@ int ObServer::wait_for_server_runtime()
         timestamp_ready = true;
       }
     }
-    if (!synced || !timestamp_ready) {
+    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
       ob_usleep(10 * 1000);
     }
   }
-  if (OB_SUCC(ret) && !stop_
-      && OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
-    LOG_WARN("standby startup replay did not become ready", KR(ret));
-  }
-  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(timestamp_ready));
-  if (OB_SUCC(ret) && !stop_ && synced && timestamp_ready) {
+  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready), K(timestamp_ready));
+  if (OB_SUCC(ret) && !stop_ && synced && replay_ready && timestamp_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");

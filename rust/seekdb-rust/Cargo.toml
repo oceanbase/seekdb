@@ -13,6 +13,7 @@ native-network = ["sql-nio/native-network"]
 plugins = ["dep:seekdb-plugin-runtime"]
 
 [dependencies]
+mvt = { path = "../mvt" }
 sql-nio = { path = "../sql-nio", default-features = false }
 logger = { path = "../logger" }
 config = { path = "../config" }
@@ -21,3 +22,6 @@ seekdb-plugin-runtime = { path = "../plugin-runtime", optional = true }
 in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
 uuid-generator = { path = "../uuid-generator" }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+standby-rpc = { path = "../standby-rpc" }

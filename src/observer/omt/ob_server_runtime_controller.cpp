@@ -1223,6 +1223,7 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(global_iterator_pool, storage::ObGlobalIteratorPool);
     BIND_SERVICE(diagnose_tablet_mgr, compaction::ObDiagnoseTabletMgr);
     BIND_SERVICE(change_stream_mgr, share::ObChangeStreamMgr);
+    BIND_SERVICE(change_stream_service, query::ObIChangeStreamService);
     BIND_SERVICE(vector_index_service, query::ObIVectorIndexService);
     BIND_SERVICE(data_access_service, sql::ObDataAccessService);
     BIND_SERVICE(dag_warning_history_manager, share::ObDagWarningHistoryManager);
@@ -1406,7 +1407,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
       mods_change_stream_mgr_,
-      *mods_log_storage_adapter_,
+      *mods_log_service_->get_palf_env(),
       schema_publish_signal_,
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));
@@ -1672,6 +1673,7 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObGlobalIteratorPool);
   UNBIND_SERVICE(compaction::ObDiagnoseTabletMgr);
   UNBIND_SERVICE(share::ObChangeStreamMgr);
+  UNBIND_SERVICE(query::ObIChangeStreamService);
   UNBIND_SERVICE(query::ObIVectorIndexService);
   UNBIND_SERVICE(sql::ObDataAccessService);
   UNBIND_SERVICE(share::ObDagWarningHistoryManager);

@@ -24,7 +24,8 @@
 #include <cstddef>
 #include <cstring>
 
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
+#if defined(__linux__) && !defined(__ANDROID__) \
+    && defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
 
 #define ALLOC_HOOK_ATTR(s) __attribute__((s))
 #define ALLOC_HOOK_EXPORT __attribute__((visibility("default")))

@@ -388,6 +388,7 @@ _STORAGE_EXACT_HEADER_DEPS = [
     ":tablet_autoincrement_state",
     "//src/data_plane:lock_wait_service",
     "//src/query:ai_endpoint_resolver",
+    "//src/query:change_stream_service",
     "//src/query:scheduler_interface",
     "//src/query:vector_embedding_runtime",
     "//src/query:vector_index_interface",

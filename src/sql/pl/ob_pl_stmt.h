@@ -21,6 +21,7 @@
 #include "sql/pl/ob_pl_user_type.h"
 #include "share/statement/ob_stmt_type.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "lib/container/ob_2d_array.h"
 
 namespace oceanbase {
 namespace sql {
@@ -203,48 +204,53 @@ private:
 
 class ObPLStmt;
 
+// Small segments grow on demand without moving previously published entries.
+template <typename T>
+using PLTableArray = common::Ob2DArray<T, 8 * sizeof(T), common::ObWrapperAllocator,
+    false, common::ObSEArray<T *, 4, common::ObWrapperAllocator>>;
+
 class ObPLLabelTable
 {
 public:
   enum ObPLLabelType {LABEL_INVALID, LABEL_BLOCK, LABEL_CONTROL};
 public:
-  ObPLLabelTable() : count_(0) {}
+  explicit ObPLLabelTable(common::ObIAllocator &allocator)
+    : labels_(common::ObWrapperAllocator(allocator)) {}
   virtual ~ObPLLabelTable() {}
 
-  inline int64_t get_count() const  { return count_; }
-  inline const common::ObString *get_label(int64_t idx) const { return idx < 0 || idx >= count_ ? NULL : &(labels_[idx].label_); }
-  inline ObPLLabelType get_label_type(int64_t idx) const { return idx < 0 || idx >= count_ ? LABEL_INVALID : labels_[idx].type_; }
+  inline int64_t get_count() const  { return labels_.count(); }
+  inline const common::ObString *get_label(int64_t idx) const { return idx < 0 || idx >= get_count() ? NULL : &(labels_.at(idx).label_); }
+  inline ObPLLabelType get_label_type(int64_t idx) const { return idx < 0 || idx >= get_count() ? LABEL_INVALID : labels_.at(idx).type_; }
   inline ObPLStmt *get_next_stmt(int64_t idx) const
   {
-    return idx < 0 || idx >= count_ ? NULL : labels_[idx].next_stmt_;
+    return idx < 0 || idx >= get_count() ? NULL : labels_.at(idx).next_stmt_;
   }
   inline void set_next_stmt(int64_t idx, ObPLStmt *stmt) {
-    if (idx >= 0 && idx < count_) {
-      labels_[idx].next_stmt_ = stmt;
+    if (idx >= 0 && idx < get_count()) {
+      labels_.at(idx).next_stmt_ = stmt;
     }
   }
   inline void set_end_flag(int64_t idx, bool end_flag) {
-    if (idx >= 0 && idx < count_) {
-      labels_[idx].is_end_ = end_flag;
+    if (idx >= 0 && idx < get_count()) {
+      labels_.at(idx).is_end_ = end_flag;
     }
   }
   inline bool is_ended(int64_t idx) const {
-    return (idx >= 0 && idx < count_) ? labels_[idx].is_end_ : false;
+    return (idx >= 0 && idx < get_count()) ? labels_.at(idx).is_end_ : false;
   }
   inline bool get_is_goto_dst(int64_t idx) const {
-    return (idx >= 0 && idx < count_) ? labels_[idx].is_goto_dst_ : false;
+    return (idx >= 0 && idx < get_count()) ? labels_.at(idx).is_goto_dst_ : false;
   }
   inline void set_is_goto_dst(int64_t idx, bool flag) {
-    if (idx >= 0 && idx < count_) {
-      labels_[idx].is_goto_dst_ = flag;
+    if (idx >= 0 && idx < get_count()) {
+      labels_.at(idx).is_goto_dst_ = flag;
     }
   }
   int add_label(const common::ObString &name, const ObPLLabelType &type, ObPLStmt *stmt);
 
-  TO_STRING_KV(K_(count), K_(labels));
+  TO_STRING_KV("count", get_count(), K_(labels));
 
 private:
-  int64_t count_;
   // All declared labels (block labels and regular statements are the same, placed inside the parent block), and correspond one-to-one with the label table in ObPLFunction
   typedef struct ObPLLabel
   {
@@ -257,7 +263,7 @@ private:
     bool is_goto_dst_;
     bool is_end_;
   } ObPLLabel;
-  ObPLLabel labels_[FUNC_MAX_LABELS];
+  PLTableArray<ObPLLabel> labels_;
 };
 
 class ObPLUserTypeTable
@@ -374,21 +380,20 @@ public:
 class ObPLConditionTable
 {
 public:
-  ObPLConditionTable() : count_(0) {}
+  explicit ObPLConditionTable(common::ObIAllocator &allocator)
+    : conditions_(common::ObWrapperAllocator(allocator)) {}
   virtual ~ObPLConditionTable() {}
 
-  inline int64_t get_count() const  { return count_; }
-  inline const ObPLCondition *get_conditions() const  { return conditions_; }
-  inline const ObPLCondition *get_condition(int64_t idx) const { return idx < 0 || idx >= count_ ? NULL : &conditions_[idx]; }
+  inline int64_t get_count() const  { return conditions_.count(); }
+  inline const ObPLCondition *get_condition(int64_t idx) const { return idx < 0 || idx >= get_count() ? NULL : &conditions_.at(idx); }
 
   int init(ObPLConditionTable &parent_condition_table);
   int add_condition(const common::ObString &name, const ObPLConditionValue &value);
 
-  TO_STRING_KV(K_(count), K_(conditions));
+  TO_STRING_KV("count", get_count(), K_(conditions));
 
 private:
-  int64_t count_;
-  ObPLCondition conditions_[FUNC_MAX_CONDITIONS];
+  PLTableArray<ObPLCondition> conditions_;
 };
 
 class ObPLSql
@@ -1023,7 +1028,16 @@ private:
   ObPLDependencyTable *dependency_table_;
 };
 
-class ObPLBlockNS : public ObPLINS
+// Symbol lookup shared by expression resolution and PL compilation.
+class IPLSymbolResolver : public ObPLINS
+{
+public:
+  virtual int resolve_symbol(const common::ObString &name, ObPLExternalNS::ExternalType &kind,
+      ObPLDataType &type, uint64_t &parent_id, int64_t &index,
+      bool resolve_external = true) const = 0;
+};
+
+class ObPLBlockNS : public IPLSymbolResolver
 {
 public:
   enum BlockType {
@@ -1211,7 +1225,7 @@ public:
                            int64_t &var_idx) const;
   int resolve_symbol(const common::ObString &var_name, ObPLExternalNS::ExternalType &type,
                      ObPLDataType &data_type, uint64_t &parent_id, int64_t &var_idx,
-                     bool resolve_external = true) const;
+                     bool resolve_external = true) const override;
   inline const ObPLRoutineTable *get_routine_table() const { return routine_table_; }
   inline void set_routine_table(ObPLRoutineTable *routine_table) { routine_table_ = routine_table; }
   int get_routine_info(int64_t routine_idx, const ObPLRoutineInfo *&routine) const;
@@ -1333,8 +1347,8 @@ public:
        expr_factory_(allocator),
        symbol_table_(allocator),
        user_type_table_(),
-       label_table_(),
-       condition_table_(),
+       label_table_(allocator),
+       condition_table_(allocator),
        cursor_table_(allocator),
        routine_table_(allocator),
        dependency_table_(),
@@ -1629,8 +1643,7 @@ public:
   const ObPLLabelTable *get_label_table() const;
   const ObPLVar *get_variable(int64_t i) const { return NULL == get_symbol_table() ? NULL : get_symbol_table()->get_symbol(i); }
   const ObPLConditionTable *get_condition_table() const;
-  const ObPLCondition *get_conditions() const;
-  inline const ObPLCondition *get_condition(int64_t i) const { return NULL == get_conditions() ? NULL : &(get_conditions()[i]); }
+  const ObPLCondition *get_condition(int64_t i) const;
   const ObPLCursorTable *get_cursor_table() const;
   const common::ObIArray<ObPLCursor *> *get_cursors() const;
   inline const ObPLCursor *get_cursor(int64_t i) const

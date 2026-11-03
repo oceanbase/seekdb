@@ -62,15 +62,17 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: cargo-${{ runner.os }}-
 
-      - name: Prepare generated Rust configuration
-        run: |
-          ./build.py init
-          ./build.py build --lockfile_mode=error //rust/config:generated_config.rs
-          echo "CONFIG_RS=$PWD/build/bin/rust/config/generated_config.rs" >> "$GITHUB_ENV"
+      - name: Initialize build dependencies
+        run: ./build.py init
 
       - name: clippy (deny warnings)
-        working-directory: rust
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        run: ./build.py build --lockfile_mode=error --config=clippy //rust/... //bazel/prost-codegen:prost_codegen
+
+      - name: Expose generated sources to Cargo
+        run: |
+          echo "MVT_PROTO_RS=$PWD/build/bin/rust/mvt/generated/vector_tile.rs" >> "$GITHUB_ENV"
+          echo "STANDBY_PROTO_RS=$PWD/build/bin/rust/standby-rpc/generated/standbyservice.rs" >> "$GITHUB_ENV"
+          echo "CONFIG_RS=$PWD/build/bin/rust/config/generated_config.rs" >> "$GITHUB_ENV"
 
       - name: Rust workspace tests
         working-directory: rust
