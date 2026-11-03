@@ -7,6 +7,7 @@ target_include_directories(
   ob_base_without_pass INTERFACE
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/query/api
   ${CMAKE_CURRENT_SOURCE_DIR}/plugin/include
   ${CMAKE_CURRENT_SOURCE_DIR}/objit/include)
 
