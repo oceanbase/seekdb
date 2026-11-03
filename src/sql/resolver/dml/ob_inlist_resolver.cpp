@@ -28,6 +28,67 @@ using namespace common;
 
 namespace sql
 {
+namespace
+{
+// Keep a repeated, small integer domain in the scalar IN operator. This only
+// chooses a plan shape: every original value/parameter remains in the predicate.
+// In particular, no equality constraint is assumed for later plan-cache reuse.
+constexpr int64_t SMALL_INTEGER_DOMAIN_LIMIT = 16;
+
+bool has_small_integer_domain(const ParseNode &list,
+                              const bool is_question_mark,
+                              const ParamStore *param_store)
+{
+  uint64_t values[SMALL_INTEGER_DOMAIN_LIMIT];
+  uint8_t kinds[SMALL_INTEGER_DOMAIN_LIMIT];
+  int64_t distinct_count = 0;
+  for (int64_t i = 0; i < list.num_child_; ++i) {
+    const ParseNode *node = list.children_[i];
+    uint64_t value = 0;
+    uint8_t kind = 0;
+    if (OB_ISNULL(node)) {
+      return false;
+    } else if (is_question_mark) {
+      if (OB_ISNULL(param_store) || node->value_ < 0 || node->value_ >= param_store->count()) {
+        return false;
+      }
+      const ObObjParam &obj = param_store->at(node->value_);
+      if (obj.is_null()) {
+      } else if (ob_is_int_tc(obj.get_type())) {
+        kind = 1;
+        value = static_cast<uint64_t>(obj.get_int());
+      } else if (ob_is_uint_tc(obj.get_type())) {
+        kind = 2;
+        value = obj.get_uint64();
+      } else {
+        return false;
+      }
+    } else if (T_NULL == node->type_) {
+    } else if (T_INT == node->type_) {
+      kind = 1;
+      value = static_cast<uint64_t>(node->value_);
+    } else if (T_UINT64 == node->type_) {
+      kind = 2;
+      value = static_cast<uint64_t>(node->value_);
+    } else {
+      return false;
+    }
+    bool found = false;
+    for (int64_t j = 0; !found && j < distinct_count; ++j) {
+      found = kinds[j] == kind && values[j] == value;
+    }
+    if (!found) {
+      if (distinct_count == SMALL_INTEGER_DOMAIN_LIMIT) {
+        return false;
+      }
+      kinds[distinct_count] = kind;
+      values[distinct_count++] = value;
+    }
+  }
+  return true;
+}
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -281,6 +342,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
   is_enable = false;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
+  bool has_threshold_hint = false;
   // 1. check basic requests
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -301,7 +363,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         threshold = session_info->get_inlist_rewrite_threshold();
         const ObGlobalHint &global_hint = stmt->get_query_ctx()->get_global_hint();
         if (OB_FAIL(global_hint.opt_params_.get_integer_opt_param(
-                                              ObOptParamHint::INLIST_REWRITE_THRESHOLD, threshold))) {
+                                              ObOptParamHint::INLIST_REWRITE_THRESHOLD, threshold, has_threshold_hint))) {
         }
       }
     }
@@ -350,6 +412,11 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt
+          && !has_threshold_hint && threshold > SMALL_INTEGER_DOMAIN_LIMIT
+          && has_small_integer_domain(in_list, is_question_mark, param_store)) {
+        is_enable = false;
+      }
     }
   }
   return ret;
