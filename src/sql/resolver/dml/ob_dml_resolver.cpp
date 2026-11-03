@@ -5344,7 +5344,19 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
+      // inner_product() returns the raw dot product, so a larger value means a closer
+      // neighbour.  The IP vector index keeps negative inner product in ascending
+      // order, which is exactly the ordering of "ORDER BY inner_product(...) DESC",
+      // so that form can be served by the index.  The ASC form would have to visit
+      // every row and therefore keeps falling back to an exact scan on purpose.
+      // Rejecting both forms (the previous behaviour) made the DESC form fall back
+      // as well, which cost up to 24x ANN latency on unit-normalized data (#1470).
+      bool has_usable_approx_sort_expr = (T_FUN_SYS_INNER_PRODUCT != tmp_expr->get_expr_type());
+      if (T_FUN_SYS_INNER_PRODUCT == tmp_expr->get_expr_type()) {
+        has_usable_approx_sort_expr =
+            (common::ObOrderType::DESC == stmt->get_order_item(0).order_type_);
+      }
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid && has_usable_approx_sort_expr) {
         stmt->set_has_vec_approx(true);
       }
       if (OB_SUCC(ret) && !has_const) {
