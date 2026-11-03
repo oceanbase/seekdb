@@ -1,0 +1,28 @@
+#owner: competition
+# Regression for contiguous integer NOT IN ranges (issue #1513).
+--disable_warnings
+drop table if exists t_not_in_integer_range;
+drop table if exists t_not_in_bigint_range;
+--enable_warnings
+
+create table t_not_in_integer_range (id int primary key, age int, key idx_age(age));
+insert into t_not_in_integer_range values
+  (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,null),(8,-2147483648),(9,2147483647);
+
+select id from t_not_in_integer_range where age not in (3,4,5) order by id;
+select id from t_not_in_integer_range where age not in (3,5) order by id;
+select count(*) as null_not_in_rows from t_not_in_integer_range where age not in (3,4,5,null);
+
+# The three excluded integers form one gap; the index needs only two ranges.
+--replace_regex /[0-9]+[ ]+\|[0-9]+[ ]+\|/ROWS|TIME|/ /,[ ]+$/,/
+explain select /*+ INDEX(t_not_in_integer_range idx_age) */ id
+  from t_not_in_integer_range where age not in (3,4,5);
+
+create table t_not_in_bigint_range (id int primary key, age bigint not null, key idx_age(age));
+insert into t_not_in_bigint_range values
+  (1,9223372036854775805),(2,9223372036854775806),(3,9223372036854775807);
+select id from t_not_in_bigint_range
+  where age not in (9223372036854775806,9223372036854775807) order by id;
+
+drop table t_not_in_integer_range;
+drop table t_not_in_bigint_range;

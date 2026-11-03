@@ -30,6 +30,7 @@
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include <limits>
 
 namespace oceanbase
 {
@@ -614,7 +615,29 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
         if (OB_FAIL(generate_one_range(*always_false_tmp_range_))) {
         }
       } else {
+        const ObRangeColumnMeta *column_meta = pre_range_graph_->get_column_meta(cur_node->min_offset_);
+        if (OB_ISNULL(column_meta)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected range column meta", K(ret), K(cur_node->min_offset_));
+        }
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_in_param->in_param_.count() + 1; ++i) {
+          // There is no integer key strictly between consecutive excluded values.
+          // Avoid materializing an empty range for every value in a large NOT IN list.
+          if (i > 0 && i < tmp_in_param->in_param_.count() &&
+              ob_is_int_tc(column_meta->column_type_.get_type())) {
+            const ObObj *left = tmp_in_param->in_param_.at(i - 1);
+            const ObObj *right = tmp_in_param->in_param_.at(i);
+            if (OB_NOT_NULL(left) && OB_NOT_NULL(right) &&
+                ob_is_int_tc(left->get_type()) && ob_is_int_tc(right->get_type())) {
+              const int64_t left_value = left->get_int();
+              const int64_t right_value = right->get_int();
+              if (left_value == right_value ||
+                  (left_value < std::numeric_limits<int64_t>::max() &&
+                   left_value + 1 == right_value)) {
+                continue;
+              }
+            }
+          }
           ObTmpRange *new_range = nullptr;
           if (pre_node_offset != -1 && add_last) {
             tmp_range_lists_[pre_node_offset].remove_last();

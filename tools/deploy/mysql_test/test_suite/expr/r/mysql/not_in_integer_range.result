@@ -1,0 +1,47 @@
+drop table if exists t_not_in_integer_range;
+drop table if exists t_not_in_bigint_range;
+create table t_not_in_integer_range (id int primary key, age int, key idx_age(age));
+insert into t_not_in_integer_range values
+  (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,null),(8,-2147483648),(9,2147483647);
+select id from t_not_in_integer_range where age not in (3,4,5) order by id;
+id
+1
+2
+6
+8
+9
+select id from t_not_in_integer_range where age not in (3,5) order by id;
+id
+1
+2
+4
+6
+8
+9
+select count(*) as null_not_in_rows from t_not_in_integer_range where age not in (3,4,5,null);
+null_not_in_rows
+0
+explain select /*+ INDEX(t_not_in_integer_range idx_age) */ id
+  from t_not_in_integer_range where age not in (3,4,5);
+Query Plan
+===========================================================================
+|ID|OPERATOR        |NAME                           |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|t_not_in_integer_range(idx_age)|ROWS|TIME|
+===========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_not_in_integer_range.id]), filter(nil), rowset=16
+      access([t_not_in_integer_range.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t_not_in_integer_range.age], [t_not_in_integer_range.id]), range(NULL,MAX ; 3,MIN), (5,MAX ; MAX,MAX),
+      range_cond([(T_OP_NOT_IN, t_not_in_integer_range.age, (3, 4, 5))])
+create table t_not_in_bigint_range (id int primary key, age bigint not null, key idx_age(age));
+insert into t_not_in_bigint_range values
+  (1,9223372036854775805),(2,9223372036854775806),(3,9223372036854775807);
+select id from t_not_in_bigint_range
+  where age not in (9223372036854775806,9223372036854775807) order by id;
+id
+1
+drop table t_not_in_integer_range;
+drop table t_not_in_bigint_range;
