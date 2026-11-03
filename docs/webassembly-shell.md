@@ -301,6 +301,9 @@ both `NoModificationAllowedError` and Safari's `InvalidStateError` while waiting
 for exclusive OPFS access, with bounded retries that preserve the final error.
 
 The current engine uses a 512 MiB initial Wasm memory, can grow to 2 GiB, and
-prewarms 64 pthread workers. These build settings make the shell most suitable
+prewarms 16 pthread workers; it creates more when its threads need them. Every
+pthread worker instantiates the whole engine, which costs Safari about 37 MB per
+worker, so the page needs about 2.4 GB in Safari and does not fit the 1.5 GB a
+4 GB iPhone allows a page. These build settings make the shell most suitable
 for a desktop browser. The engine binary is large, and startup can take several
 seconds on the first load.
