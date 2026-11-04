@@ -77,6 +77,11 @@ public:
   ObInListResolver(ObDMLResolver *cur_resolver)
     : cur_resolver_(cur_resolver) {}
   virtual ~ObInListResolver() {}
+  static int check_inlist_rewrite_threshold(const ParseNode &in_list,
+                                           const ParamStore *param_store,
+                                           const bool is_prepare_stmt,
+                                           const int64_t threshold,
+                                           bool &is_enable);
   static int check_inlist_rewrite_enable(const ParseNode &in_list,
                                          const ObItemType op_type,
                                          const ObRawExpr &left_expr,
