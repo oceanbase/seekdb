@@ -1,4 +1,0 @@
-exports_files([
-    "module_dependency_aspect.bzl",
-    "module_policy.bzl",
-])
