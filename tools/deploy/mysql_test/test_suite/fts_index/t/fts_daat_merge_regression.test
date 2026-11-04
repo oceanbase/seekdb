@@ -1,0 +1,76 @@
+# owner: seekdb-taskI
+# owner group: storage
+# tags: fts
+# description: fts DAAT merge regression. Freezes the merge output semantics of
+#   the DAAT path: multi-token hit sets with both the frozen engine natural
+#   order and the explicit docid-ascending order by id list, same-doc repeated
+#   tokens and multi-token relevance accumulation (dedup: one row per doc),
+#   MATCH + LIMIT/OFFSET without order by (the limit picks the first rows of
+#   the engine output order, so the row order is part of the frozen
+#   semantics), boolean mode AND/OR/NOT with space separated single-token
+#   words, order-by-match relevance ranking + limit, and the empty hit set
+#   edge. All outputs are deterministic doc ids and counts; the whole case
+#   must be byte-stable across repeated runs.
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_daat_merge_regression;
+--enable_warnings
+
+create table fts_daat_merge_regression(
+    id bigint auto_increment primary key,
+    title varchar(256) not null,
+    content text not null,
+    fulltext key fts_dmr_tc(title, content) with parser ik PARSER_PROPERTIES=(ik_mode='smart'),
+    fulltext key fts_dmr_c(content) with parser ik PARSER_PROPERTIES=(ik_mode='smart')
+);
+
+insert into fts_daat_merge_regression(title, content) values
+('数据库全文索引', '数据库与全文索引基础概念'),
+('分词器入门', '分词器把文本切分为词项'),
+('倒排索引原理', '倒排索引是全文索引的核心结构'),
+('分词器分词器分词器', '分词器 分词器 分词器 重复词项'),
+('OceanBase 数据库', 'OceanBase 是稳定的数据库'),
+('数据库数据库数据库', '数据库 数据库 数据库 重复词项'),
+('检索与分词器', '检索质量取决于分词器实现'),
+('稳定的搜索引擎', '稳定高效的全文检索引擎'),
+('OceanBase 稳定内核', 'OceanBase 数据库内核稳定高效'),
+('性能优化', '查询性能优化与索引设计'),
+('倒排索引压缩', '倒排索引压缩编码降低存储成本'),
+('数据库与倒排索引', '数据库与倒排索引结合使用'),
+('分词器与数据库', '分词器配合数据库支撑全文索引');
+
+--echo ========= multi token: hit set, engine natural order and docid ascending order =========
+select id from fts_daat_merge_regression where match(title, content) against('分词器 数据库');
+select id from fts_daat_merge_regression where match(title, content) against('分词器 数据库') order by id;
+select count(*) from fts_daat_merge_regression where match(title, content) against('分词器 数据库');
+select id from fts_daat_merge_regression where match(title, content) against('全文索引 倒排索引');
+select id from fts_daat_merge_regression where match(title, content) against('全文索引 倒排索引') order by id;
+select id from fts_daat_merge_regression where match(title, content) against('OceanBase 稳定');
+select id from fts_daat_merge_regression where match(title, content) against('OceanBase 稳定') order by id;
+--echo ========= same doc repeated tokens: dedup and relevance accumulation =========
+select id from fts_daat_merge_regression where match(content) against('分词器');
+select id from fts_daat_merge_regression where match(content) against('分词器') order by id;
+select count(*) from fts_daat_merge_regression where match(content) against('分词器');
+select id from fts_daat_merge_regression where match(content) against('数据库');
+select count(*) from fts_daat_merge_regression where match(content) against('数据库');
+select id from fts_daat_merge_regression where match(content) against('倒排索引') order by id;
+--echo ========= match + limit/offset without order by (row order is semantics) =========
+select id from fts_daat_merge_regression where match(title, content) against('分词器 数据库') limit 4;
+select id from fts_daat_merge_regression where match(title, content) against('分词器 数据库') limit 40;
+select count(*) from (select id from fts_daat_merge_regression where match(title, content) against('分词器 数据库') limit 3) t;
+select id from fts_daat_merge_regression where match(title, content) against('分词器 数据库') limit 3 offset 2;
+select id from fts_daat_merge_regression where match(title, content) against('全文索引 倒排索引') limit 3;
+select id, title from fts_daat_merge_regression where match(content) against('数据库') limit 2 offset 3;
+--echo ========= boolean mode: and / or / not =========
+select id from fts_daat_merge_regression where match(content) against('+分词器 +数据库' in boolean mode);
+select id from fts_daat_merge_regression where match(content) against('分词器 倒排' in boolean mode);
+select id from fts_daat_merge_regression where match(content) against('+数据库 -倒排' in boolean mode);
+select count(*) from fts_daat_merge_regression where match(content) against('+全文索引 +分词器' in boolean mode);
+select id from fts_daat_merge_regression where match(content) against('+OceanBase +稳定' in boolean mode);
+--echo ========= order by match relevance + limit =========
+select id from fts_daat_merge_regression where match(content) against('分词器 数据库') order by match(content) against('分词器 数据库') desc, id limit 5;
+select id from fts_daat_merge_regression where match(content) against('数据库') order by match(content) against('数据库') desc, id limit 4;
+select id from fts_daat_merge_regression where match(content) against('倒排索引') order by match(content) against('倒排索引') desc, id limit 3;
+--echo ========= empty hit set edge =========
+select id from fts_daat_merge_regression where match(content) against('量子加密') limit 5;
+select count(*) from fts_daat_merge_regression where match(content) against('量子加密');
