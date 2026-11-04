@@ -1583,6 +1583,7 @@ void ObSQLSessionInfo::ObCachedRuntimeConfig::refresh()
       px_join_skew_minfreq_ = config::_px_join_skew_minfreq();
       enable_decimal_int_type_ = config::_enable_decimal_int_type();
       enable_mysql_compatible_dates_ = config::_enable_mysql_compatible_dates();
+      enable_file_sql_ = false; // default OFF for security
       // 7. print_sample_ppm_ for flt
       ATOMIC_STORE(&print_sample_ppm_, config::_print_sample_ppm());
     }
