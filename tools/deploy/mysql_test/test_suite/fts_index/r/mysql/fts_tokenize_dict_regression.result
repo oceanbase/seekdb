@@ -1,0 +1,153 @@
+========= block 1: ik fixed literal outputs =========
+select tokenize('全文索引是数据库的一种高效检索技术', 'ik') as i1;
+i1
+["一种", "高效", "是", "数据库", "技术", "全文索引", "检索", "的"]
+select tokenize('倒排索引倒排索引检索检索检索', 'ik') as i2;
+i2
+["倒排", "索引", "检索"]
+select tokenize('a,,b;;;c,,,d!!!???。。。？？！', 'ik') as i3;
+i3
+["a", "c", "b", "d"]
+select tokenize('中English混合text测试2026', 'ik') as i4;
+i4
+["text", "中", "混合", "2026", "english", "测试"]
+select tokenize('一', 'ik') as i5;
+i5
+["一"]
+select tokenize('一一一', 'ik') as i6;
+i6
+["一一一"]
+========= block 2: beng fixed literal outputs =========
+select tokenize('The quick brown fox jumps over the lazy dog', 'beng') as b1;
+b1
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('database database Database DATABASE', 'beng') as b2;
+b2
+["database"]
+select tokenize('full-text well-known state-of-the-art', 'beng') as b3;
+b3
+["text", "well", "full", "known", "state", "art"]
+select tokenize('a', 'beng') as b4;
+b4
+[]
+select tokenize('aaa', 'beng') as b5;
+b5
+["aaa"]
+========= block 3: repeated words keep aggregated counts =========
+select tokenize('alpha beta alpha gamma alpha', 'beng', '[{"output": "all"}]') as n1;
+n1
+{"tokens": [{"gamma": 1}, {"alpha": 3}, {"beta": 1}], "doc_len": 5}
+select tokenize('优化 优化 数据库 优化 全文索引 数据库 优化', 'ik', '[{"output": "all"}]') as n2;
+n2
+{"tokens": [{"优化": 4}, {"数据库": 2}, {"全文索引": 1}], "doc_len": 7}
+select tokenize('检索 系统 检索 数据库 检索', 'ik', '[{"output": "all"}]') as n3;
+n3
+{"tokens": [{"数据库": 1}, {"检索": 3}, {"系统": 1}], "doc_len": 5}
+========= block 4: long texts, deterministic fingerprints =========
+select char_length(cast(tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，The final part is in English for mixed tokenization.', 'ik') as char)) as l1;
+l1
+164
+select md5(cast(tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，The final part is in English for mixed tokenization.', 'ik') as char)) as f1;
+f1
+9faef66e0656e386cdfb0d846f13db7a
+select char_length(cast(tokenize(repeat('The quick brown fox jumps over the lazy dog. ', 24), 'beng') as char)) as l2;
+l2
+2
+select md5(cast(tokenize(repeat('The quick brown fox jumps over the lazy dog. ', 24), 'beng') as char)) as f2;
+f2
+d751713988987e9331980363e24189ce
+select char_length(cast(tokenize(repeat('a', 1100), 'beng') as char)) as l3;
+l3
+2
+select md5(cast(tokenize(repeat('a', 1100), 'beng') as char)) as f3;
+f3
+d751713988987e9331980363e24189ce
+========= block 5: emoji corpus, ik and beng =========
+select tokenize('🔥"🚀"', 'ik') as e1;
+e1
+[]
+select tokenize('🚀"🔥"', 'ik') as e2;
+e2
+[]
+select tokenize('🔥🚀🔥🚀🔥', 'ik') as e3;
+e3
+[]
+select tokenize('🔥"🚀"', 'beng') as e5;
+e5
+["🚀"]
+select tokenize('🚀"🔥"', 'beng') as e6;
+e6
+["🔥"]
+select tokenize('🔥数据库🔥数据库🔥', 'ik', '[{"output": "all"}]') as e4;
+e4
+{"tokens": [{"数据库": 2}], "doc_len": 2}
+========= block 6: repeat blocks 1-4 and 5 byte identically =========
+select tokenize('全文索引是数据库的一种高效检索技术', 'ik') as i1b;
+i1b
+["一种", "高效", "是", "数据库", "技术", "全文索引", "检索", "的"]
+select tokenize('倒排索引倒排索引检索检索检索', 'ik') as i2b;
+i2b
+["倒排", "索引", "检索"]
+select tokenize('a,,b;;;c,,,d!!!???。。。？？！', 'ik') as i3b;
+i3b
+["a", "c", "b", "d"]
+select tokenize('中English混合text测试2026', 'ik') as i4b;
+i4b
+["text", "中", "混合", "2026", "english", "测试"]
+select tokenize('一', 'ik') as i5b;
+i5b
+["一"]
+select tokenize('一一一', 'ik') as i6b;
+i6b
+["一一一"]
+select tokenize('The quick brown fox jumps over the lazy dog', 'beng') as b1b;
+b1b
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('database database Database DATABASE', 'beng') as b2b;
+b2b
+["database"]
+select tokenize('full-text well-known state-of-the-art', 'beng') as b3b;
+b3b
+["text", "well", "full", "known", "state", "art"]
+select tokenize('a', 'beng') as b4b;
+b4b
+[]
+select tokenize('aaa', 'beng') as b5b;
+b5b
+["aaa"]
+select tokenize('alpha beta alpha gamma alpha', 'beng', '[{"output": "all"}]') as n1b;
+n1b
+{"tokens": [{"gamma": 1}, {"alpha": 3}, {"beta": 1}], "doc_len": 5}
+select tokenize('优化 优化 数据库 优化 全文索引 数据库 优化', 'ik', '[{"output": "all"}]') as n2b;
+n2b
+{"tokens": [{"优化": 4}, {"数据库": 2}, {"全文索引": 1}], "doc_len": 7}
+select tokenize('检索 系统 检索 数据库 检索', 'ik', '[{"output": "all"}]') as n3b;
+n3b
+{"tokens": [{"数据库": 1}, {"检索": 3}, {"系统": 1}], "doc_len": 5}
+select md5(cast(tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，The final part is in English for mixed tokenization.', 'ik') as char)) as f1b;
+f1b
+9faef66e0656e386cdfb0d846f13db7a
+select md5(cast(tokenize(repeat('The quick brown fox jumps over the lazy dog. ', 24), 'beng') as char)) as f2b;
+f2b
+d751713988987e9331980363e24189ce
+select md5(cast(tokenize(repeat('a', 1100), 'beng') as char)) as f3b;
+f3b
+d751713988987e9331980363e24189ce
+select tokenize('🔥"🚀"', 'ik') as e1b;
+e1b
+[]
+select tokenize('🚀"🔥"', 'ik') as e2b;
+e2b
+[]
+select tokenize('🔥🚀🔥🚀🔥', 'ik') as e3b;
+e3b
+[]
+select tokenize('🔥"🚀"', 'beng') as e5b;
+e5b
+["🚀"]
+select tokenize('🚀"🔥"', 'beng') as e6b;
+e6b
+["🔥"]
+select tokenize('🔥数据库🔥数据库🔥', 'ik', '[{"output": "all"}]') as e4b;
+e4b
+{"tokens": [{"数据库": 2}], "doc_len": 2}
