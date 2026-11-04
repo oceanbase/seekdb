@@ -1,0 +1,130 @@
+drop table if exists ip_desc_ann;
+drop table if exists ip_desc_no_index;
+create table ip_desc_ann (id int primary key, v vector(2),
+vector index idx_v(v) with (distance=inner_product, type=hnsw));
+insert into ip_desc_ann values (1, [1,0]), (2, [2,0]), (3, [0,1]), (4, null);
+select id, inner_product(v, [1,0]) as score from ip_desc_ann
+order by inner_product(v, [1,0]) desc approximate limit 3;
+id	score
+2	2
+1	1
+3	0
+select id from ip_desc_ann
+order by negative_inner_product(v, [1,0]) asc approximate limit 3;
+id
+2
+1
+3
+select id from ip_desc_ann
+order by inner_product(v, [1,0]) asc approximate limit 3;
+id
+4
+3
+1
+select id from ip_desc_ann
+order by inner_product(v, [1,0]) desc nulls first approximate limit 3;
+id
+4
+2
+1
+create table ip_desc_no_index (id int primary key, v vector(2));
+insert into ip_desc_no_index values (1, [1,0]), (2, [2,0]), (3, null);
+select id from ip_desc_no_index order by inner_product(v, [1,0]) asc;
+id
+3
+1
+2
+select id from ip_desc_no_index order by inner_product(v, [1,0]) asc nulls last;
+id
+1
+2
+3
+select id from ip_desc_no_index order by inner_product(v, [1,0]) desc nulls first;
+id
+3
+2
+1
+select id from ip_desc_no_index order by inner_product(v, [1,0]) desc;
+id
+2
+1
+3
+select id from ip_desc_no_index
+order by inner_product(v, [1,0]) desc approximate limit 3;
+id
+2
+1
+3
+explain select id, inner_product(v, [1,0]) as score from ip_desc_ann
+order by inner_product(v, [1,0]) desc nulls last approximate limit 3;
+Query Plan
+===============================================================
+|ID|OPERATOR         |NAME              |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------
+|0 |VECTOR INDEX SCAN|ip_desc_ann(idx_v)|4       |15          |
+===============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ip_desc_ann.id], [inner_product(ip_desc_ann.v, cast(array(1, 0), ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([ip_desc_ann.id], [ip_desc_ann.v]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([ip_desc_ann.__vid_0], [ip_desc_ann.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
+select id, inner_product(v, [1,0]) as score from ip_desc_ann
+order by inner_product(v, [1,0]) desc nulls last approximate limit 3;
+id	score
+2	2
+1	1
+3	0
+explain select id from ip_desc_ann
+order by inner_product(v, [1,0]) desc nulls first approximate limit 3;
+Query Plan
+========================================================
+|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------
+|0 |TOP-N SORT       |           |3       |3           |
+|1 |└─TABLE FULL SCAN|ip_desc_ann|4       |3           |
+========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ip_desc_ann.id]), filter(nil), rowset=16
+      sort_keys([inner_product(ip_desc_ann.v, cast(array(1, 0), ARRAY(18, -1))), DESC]), topn(3)
+  1 - output([ip_desc_ann.id], [ip_desc_ann.v]), filter(nil), rowset=16
+      access([ip_desc_ann.id], [ip_desc_ann.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([ip_desc_ann.id]), range(MIN ; MAX)always true
+explain select id from ip_desc_ann
+order by inner_product(v, [1,0]) asc approximate limit 3;
+Query Plan
+========================================================
+|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------
+|0 |TOP-N SORT       |           |3       |3           |
+|1 |└─TABLE FULL SCAN|ip_desc_ann|4       |3           |
+========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ip_desc_ann.id]), filter(nil), rowset=16
+      sort_keys([inner_product(ip_desc_ann.v, cast(array(1, 0), ARRAY(18, -1))), ASC]), topn(3)
+  1 - output([ip_desc_ann.id], [ip_desc_ann.v]), filter(nil), rowset=16
+      access([ip_desc_ann.id], [ip_desc_ann.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([ip_desc_ann.id]), range(MIN ; MAX)always true
+explain select id from ip_desc_no_index
+order by inner_product(v, [1,0]) desc approximate limit 3;
+Query Plan
+=============================================================
+|ID|OPERATOR         |NAME            |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------
+|0 |TOP-N SORT       |                |3       |3           |
+|1 |└─TABLE FULL SCAN|ip_desc_no_index|3       |3           |
+=============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ip_desc_no_index.id]), filter(nil), rowset=16
+      sort_keys([inner_product(ip_desc_no_index.v, cast(array(1, 0), ARRAY(18, -1))), DESC]), topn(3)
+  1 - output([ip_desc_no_index.id], [ip_desc_no_index.v]), filter(nil), rowset=16
+      access([ip_desc_no_index.id], [ip_desc_no_index.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([ip_desc_no_index.id]), range(MIN ; MAX)always true
+drop table ip_desc_ann;
+drop table ip_desc_no_index;

@@ -10425,9 +10425,13 @@ sort_key
 ;
 
 sort_key:
-expr opt_asc_desc
+expr opt_asc_desc opt_null_pos
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_KEY, 2, $1, $2);
+  if (NULL != $3) {
+    /* Distinguish an explicit NULLS clause from MySQL's default ordering. */
+    $2->value_ = $3->value_ + 2;
+  }
   if (NULL == $1->str_value_) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }

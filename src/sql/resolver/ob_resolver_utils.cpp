@@ -5613,10 +5613,10 @@ int ObResolverUtils::set_direction_by_mode(const ParseNode &sort_node, OrderItem
   if (OB_ISNULL(sort_node.children_) || sort_node.num_child_ < 2 || OB_ISNULL(sort_node.children_[1])) {
     ret = OB_INVALID_ARGUMENT;
   } else if (T_SORT_ASC == sort_node.children_[1]->type_) {
-    if (opt_nulls) {
-      if (1 == sort_node.children_[1]->value_) {
+    if (opt_nulls || sort_node.children_[1]->value_ > 2) {
+      if (1 == sort_node.children_[1]->value_ || 3 == sort_node.children_[1]->value_) {
         order_item.order_type_ = NULLS_LAST_ASC;
-      } else if (2 == sort_node.children_[1]->value_) {
+      } else if (2 == sort_node.children_[1]->value_ || 4 == sort_node.children_[1]->value_) {
         order_item.order_type_ = NULLS_FIRST_ASC;
       } else {
         ret = OB_INVALID_ARGUMENT;
@@ -5625,10 +5625,10 @@ int ObResolverUtils::set_direction_by_mode(const ParseNode &sort_node, OrderItem
       order_item.order_type_ = NULLS_FIRST_ASC;
     }
   } else if (T_SORT_DESC == sort_node.children_[1]->type_) {
-    if (opt_nulls) {
-      if (1 == sort_node.children_[1]->value_) {
+    if (opt_nulls || sort_node.children_[1]->value_ > 2) {
+      if (1 == sort_node.children_[1]->value_ || 3 == sort_node.children_[1]->value_) {
         order_item.order_type_ = NULLS_LAST_DESC;
-      } else if (2 == sort_node.children_[1]->value_) {
+      } else if (2 == sort_node.children_[1]->value_ || 4 == sort_node.children_[1]->value_) {
         order_item.order_type_ = NULLS_FIRST_DESC;
       } else {
         ret = OB_INVALID_ARGUMENT;
