@@ -41,7 +41,7 @@ int ObFTCacheDict::init()
 
 int ObFTCacheDict::match(const ObString &single_word, ObDATrieHit &hit) const
 {
-  return reader_.match_with_hit(single_word, hit, hit);
+  return match_with_hit(single_word, hit, hit);
 }
 
 int ObFTCacheDict::match(const ObString &words, bool &is_match) const
@@ -69,11 +69,54 @@ int ObFTCacheDict::match(const ObString &words, bool &is_match) const
   return ret;
 }
 
+int ObFTCacheDict::find_code_memo(const ObString &single_word, ObFTWordCode &code) const
+{
+  int ret = OB_SUCCESS;
+  bool found = false;
+  const int64_t len = single_word.length();
+  if (OB_UNLIKELY(len <= 0 || len > 4)) {
+    // not a single character, or wider than the memo key: no memo
+    if (OB_FAIL(reader_.find_code(single_word, code, found))) {
+    } else if (!found) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  } else {
+    const unsigned char *p = reinterpret_cast<const unsigned char *>(single_word.ptr());
+    uint64_t key = static_cast<uint64_t>(len);
+    for (int64_t i = 0; i < len; ++i) {
+      key = (key << 8) | p[i];
+    }
+    const uint64_t slot = (key * 0x9E3779B97F4A7C15ULL) >> 56;
+    const CharCodeMemo &memo = memo_[slot];
+    if (0 != memo.valid_ && memo.key_ == key) {
+      code = memo.code_;
+    } else if (OB_FAIL(reader_.find_code(single_word, code, found))) {
+    } else if (!found) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else {
+      memo_[slot].key_ = key;
+      memo_[slot].code_ = code;
+      memo_[slot].valid_ = 1;
+    }
+  }
+  return ret;
+}
+
 int ObFTCacheDict::match_with_hit(const ObString &single_word,
                                   const ObDATrieHit &last_hit,
                                   ObDATrieHit &hit) const
 {
-  return reader_.match_with_hit(single_word, last_hit, hit);
+  int ret = OB_SUCCESS;
+  ObFTWordCode code = 0;
+  hit.set_unmatch();
+  if (OB_FAIL(find_code_memo(single_word, code))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+      hit.set_unmatch();
+    }
+  } else if (OB_FAIL(reader_.step_with_code(code, single_word.length(), last_hit, hit))) {
+  }
+  return ret;
 }
 
 int ObFTCacheDict::make_and_fetch_cache_entry(const ObFTDictDesc &desc,
