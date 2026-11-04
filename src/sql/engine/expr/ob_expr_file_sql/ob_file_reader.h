@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_FILE_READER_H_
 
 #include "lib/string/ob_string.h"
-#include "lib/container/ob_se_array.h"
+#include "common/ob_i_allocator.h"
 
 namespace oceanbase
 {
@@ -28,18 +28,15 @@ namespace sql
 class ObFileReader
 {
 public:
-  ObFileReader() {}
-  virtual ~ObFileReader() {}
-
-  // Read entire file content into string
+  // Read entire file content into memory
   static int read_file(const common::ObString& path,
                        common::ObIAllocator& allocator,
                        common::ObString& content);
 
-  // Validate file path for security
+  // Validate file path (security check)
   static int validate_path(const common::ObString& path);
 
-  // Check if file exists and is readable
+  // Check file permissions
   static int check_file_permissions(const common::ObString& path);
 
   // Get file size
