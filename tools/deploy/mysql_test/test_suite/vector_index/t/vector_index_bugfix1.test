@@ -663,3 +663,86 @@ order by p.cardinality, p.plan_id;
 drop table t_issue1439_or_selectivity;
 
 alter system set vector_memory_limit = 0;
+
+# Issue #1512: a repeated small integer domain must not become a VALUES subquery.
+# Keep the threshold small so that both sides of the boundary have short lists.
+create table t_issue1512_integer_domain (
+  id int primary key, category bigint, embedding vector(3));
+insert into t_issue1512_integer_domain values
+  (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),(3,3,'[3,0,0]'),
+  (4,4,'[4,0,0]'),(5,5,'[5,0,0]'),(6,1,'[6,0,0]'),
+  (7,2,'[7,0,0]'),(8,3,'[8,0,0]'),(9,null,'[9,0,0]'),
+  (10,-1,'[10,0,0]');
+create vector index idx_issue1512 on t_issue1512_integer_domain(embedding)
+  with (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate);
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as matching_rows
+from t_issue1512_integer_domain where category in (1,2,3,1,2,3,1,2,3,1,2,3);
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as nonmatching_rows
+from t_issue1512_integer_domain where category not in (1,2,3,1,2,3,1,2,3,1,2,3);
+select /*+ index(t idx_issue1512) opt_param('inlist_rewrite_threshold',4) */ id
+from t_issue1512_integer_domain t where category in (1,2,3,1,2,3,1,2,3,1,2,3)
+order by l2_distance(embedding,'[0,0,0]') approximate limit 2;
+select count(*) as unexpected_values_operators
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement,'t_issue1512_integer_domain') > 0
+  and p.operator = 'VALUES TABLE ACCESS';
+
+# Reaching the distinct-value threshold still uses the existing rewrite.
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as boundary_rows
+from t_issue1512_integer_domain where category in (1,2,3,4,1,2,3,4);
+select count(*) > 0 as retains_values_rewrite
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement,'t_issue1512_integer_domain') > 0
+  and p.operator = 'VALUES TABLE ACCESS';
+
+# Preserve NULL/NOT IN, string coercion and signed-integer semantics.
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as null_in_rows
+from t_issue1512_integer_domain where category in (1,1,2,2,null,null);
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as null_not_in_rows
+from t_issue1512_integer_domain where category not in (1,1,2,2,null,null);
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as string_in_rows
+from t_issue1512_integer_domain where category in ('1','1','2','2','1','2');
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as signed_in_rows
+from t_issue1512_integer_domain where category in (-1,1,-1,1,-1,1);
+
+# Reusing a parameterized plan must not discard any original list position.
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as cached_in_rows
+from t_issue1512_integer_domain where category in (1,1,1,1,1,1);
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as cached_in_rows
+from t_issue1512_integer_domain where category in (1,2,3,4,5,6);
+
+# A threshold of one explicitly keeps the VALUES rewrite even for one value.
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold',1) */ count(*) as forced_rewrite_rows
+from t_issue1512_integer_domain where category in (1,1,1,1);
+select count(*) > 0 as retains_forced_rewrite
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement,'t_issue1512_integer_domain') > 0
+  and p.operator = 'VALUES TABLE ACCESS';
+
+# Prepared parameters must retain all positions across different executions.
+prepare issue1512_ps from 'select /*+ opt_param(''inlist_rewrite_threshold'',4) */ count(*) as prepared_rows from t_issue1512_integer_domain where category in (?,?,?,?)';
+set @p1=1,@p2=1,@p3=1,@p4=1;
+execute issue1512_ps using @p1,@p2,@p3,@p4;
+set @p1=3,@p2=4,@p3=5,@p4=null;
+execute issue1512_ps using @p1,@p2,@p3,@p4;
+deallocate prepare issue1512_ps;
+drop table t_issue1512_integer_domain;
+
+# Unsigned values beyond INT64_MAX remain distinct and are not narrowed.
+create table t_issue1512_unsigned_domain (value bigint unsigned);
+insert into t_issue1512_unsigned_domain values
+  (0),(9223372036854775808),(18446744073709551615),(null);
+select /*+ opt_param('inlist_rewrite_threshold',4) */ count(*) as unsigned_in_rows
+from t_issue1512_unsigned_domain where value in
+  (9223372036854775808,18446744073709551615,9223372036854775808,18446744073709551615);
+select count(*) as unexpected_unsigned_values_operators
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement,'t_issue1512_unsigned_domain') > 0
+  and p.operator = 'VALUES TABLE ACCESS';
+drop table t_issue1512_unsigned_domain;
