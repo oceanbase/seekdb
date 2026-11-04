@@ -36,7 +36,12 @@ class ObInfoSchemaGlobalStatusTable : public common::ObVirtualTableScannerIterat
 
   enum VARIABLE {
     THREADS_CONNECTED = 0,
-    UPTIME
+    UPTIME,
+    EXPRESSION_PREPARES,
+    EXPRESSION_PROGRAMS,
+    EXPRESSION_ROWS,
+    EXPRESSION_BATCHES,
+    EXPRESSION_FILTER_ROWS
   };
 
   typedef common::hash::ObHashMap<common::ObString, common::ObObj> AllStatus;

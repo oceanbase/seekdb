@@ -20,6 +20,7 @@
 #include "ob_operator_factory.h"
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/engine/expr/expression_program.h"
 
 namespace oceanbase
 {
@@ -469,6 +470,32 @@ ObOperator::~ObOperator()
   ObOperator::destroy();
 }
 
+void ObOperator::destroy_expression_program()
+{
+  if (expression_program_ != nullptr) {
+    expression_program_->~ExpressionProgram();
+    ctx_.get_allocator().free(expression_program_);
+    expression_program_ = nullptr;
+  }
+  expression_program_checked_ = false;
+}
+
+int ObOperator::eval_expression_program(ObBitVector *skip, int64_t rows, bool batch,
+                                       bool &used, bool &all_filtered, bool &all_active)
+{
+  int ret = OB_SUCCESS;
+  used = false;
+  if (!expression_program_checked_) {
+    expression_program_checked_ = true;
+    ret = ExpressionProgram::create(*this, expression_program_);
+  }
+  if (OB_SUCC(ret) && expression_program_ != nullptr) {
+    used = true;
+    ret = expression_program_->execute(skip, rows, batch, all_filtered, all_active);
+  }
+  return ret;
+}
+
 int ObOperator::set_children_pointer(ObOperator **children, const uint32_t child_cnt)
 {
   int ret = OB_SUCCESS;
@@ -881,6 +908,7 @@ int ObOperator::setup_op_feedback_info()
 int ObOperator::get_next_row()
 {
   int ret = OB_SUCCESS;
+  bool expression_program_used = false;
   begin_cpu_time_counting();
   if (OB_FAIL(check_stack_once())) {
   }
@@ -914,7 +942,14 @@ int ObOperator::get_next_row()
         } else if (OB_FAIL(try_check_status())) {
         } else {
           bool filtered = false;
-          if (!spec_.filters_.empty()) {
+          bool all_active = true;
+          if (OB_FAIL(eval_expression_program(nullptr, 1, false, expression_program_used,
+                                              filtered, all_active))) {
+          } else if (expression_program_used) {
+            if (filtered) {
+              continue;
+            }
+          } else if (!spec_.filters_.empty()) {
             if (OB_FAIL(filter_row(filtered))) {
             } else {
               if (filtered) {
@@ -951,8 +986,8 @@ int ObOperator::get_next_row()
     if (OB_ITER_END == ret) {
       row_reach_end_ = true;
     } else if (OB_SUCC(ret)) {
-      if (spec_.get_phy_plan()->is_vectorized()
-          || spec_.get_phy_plan()->is_contains_assignment()) {
+      if (!expression_program_used && (spec_.get_phy_plan()->is_vectorized()
+          || spec_.get_phy_plan()->is_contains_assignment())) {
         ObDatum *res = NULL;
         FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
           if (OB_FAIL((*e)->eval(eval_ctx_, res))) {
@@ -1053,6 +1088,7 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
       }
       int64_t op_max_row_cnt = min(max_row_cnt, get_spec().max_batch_size_);
       bool all_filtered = false;
+      bool expression_program_used = expression_program_ != nullptr;
       while (OB_SUCC(ret) && !brs_.end_) {
         if (OB_UNLIKELY(stash_rows_cnt_ > 0)) {
           if (OB_FAIL(pop_stash_rows(op_max_row_cnt))) {
@@ -1073,18 +1109,21 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
           all_filtered = false;
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(try_check_status_by_rows(brs_.size_))) {
-          } else if (!spec_.filters_.empty()) {
-            if (OB_FAIL(filter_rows(spec_.filters_,
+          } else if (OB_FAIL(eval_expression_program(brs_.skip_, brs_.size_, true,
+                                                     expression_program_used, all_filtered,
+                                                     brs_.all_rows_active_))) {
+          } else if (!expression_program_used && !spec_.filters_.empty()) {
+            ret = filter_rows(spec_.filters_,
                                     *brs_.skip_,
                                     brs_.size_,
                                     all_filtered,
-                                    brs_.all_rows_active_))) {
-            } else if (all_filtered) {
-              brs_.skip_->reset(brs_.size_);
-              brs_.size_ = 0;
-              // keep brs_.end_ unchanged.
-              continue;
-            }
+                                    brs_.all_rows_active_);
+          }
+          if (OB_SUCC(ret) && all_filtered) {
+            brs_.skip_->reset(brs_.size_);
+            brs_.size_ = 0;
+            // keep brs_.end_ unchanged.
+            continue;
           }
         }
 #ifndef NDEBUG
@@ -1097,7 +1136,7 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
       }
 
       // do project
-      if (OB_SUCC(ret) && brs_.size_ > 0) {
+      if (OB_SUCC(ret) && brs_.size_ > 0 && !expression_program_used) {
         FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
           ret = (*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_);
           (*e)->get_eval_info(eval_ctx_).projected_ = true;

@@ -100,6 +100,11 @@ STAT_EVENT_ADD_DEF(TX_DATA_READ_TX_CTX_COUNT, "tx data read tx ctx count", ObSta
 STAT_EVENT_ADD_DEF(TX_DATA_READ_TX_DATA_MEMTABLE_COUNT, "tx data read tx data memtable count", ObStatClassIds::TRANS, 30085, false, true, true)
 STAT_EVENT_ADD_DEF(TX_DATA_READ_TX_DATA_SSTABLE_COUNT, "tx data read tx data sstable count", ObStatClassIds::TRANS, 30086, false, true, true)
 // SQL
+STAT_EVENT_ADD_DEF(RUST_EXPRESSION_PREPARES, "rust expression prepares", ObStatClassIds::SQL, 40970, true, true, true)
+STAT_EVENT_ADD_DEF(RUST_EXPRESSION_PROGRAMS, "rust expression programs", ObStatClassIds::SQL, 40971, true, true, true)
+STAT_EVENT_ADD_DEF(RUST_EXPRESSION_ROWS, "rust expression rows", ObStatClassIds::SQL, 40972, true, true, true)
+STAT_EVENT_ADD_DEF(RUST_EXPRESSION_BATCHES, "rust expression batches", ObStatClassIds::SQL, 40973, true, true, true)
+STAT_EVENT_ADD_DEF(RUST_EXPRESSION_FILTER_ROWS, "rust expression filter rows", ObStatClassIds::SQL, 40974, true, true, true)
 STAT_EVENT_ADD_DEF(SQL_SELECT_COUNT, "sql select count", ObStatClassIds::SQL, 40000, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_SELECT_TIME, "sql select time", ObStatClassIds::SQL, 40001, false, true, true)
 STAT_EVENT_ADD_DEF(SQL_INSERT_COUNT, "sql insert count", ObStatClassIds::SQL, 40002, false, true, true)

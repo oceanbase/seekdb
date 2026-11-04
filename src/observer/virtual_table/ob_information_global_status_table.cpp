@@ -19,6 +19,7 @@
 #include "observer/ob_server_runtime_access.h"
 #include "share/ob_time_utility2.h"
 #include "sql/session/ob_sql_session_mgr.h"
+#include "lib/stat/ob_diagnose_info.h"
 
 namespace oceanbase
 {
@@ -31,6 +32,11 @@ const char * const ObInfoSchemaGlobalStatusTable::variables_name[] =
 {
   "Threads_connected",
   "Uptime",
+  "Rust_expression_prepares",
+  "Rust_expression_programs",
+  "Rust_expression_rows",
+  "Rust_expression_batches",
+  "Rust_expression_filter_rows",
   NULL,
 };
 
@@ -62,6 +68,8 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
     SERVER_LOG(WARN, "global_ctx_ is NULL or session_mgr_ is NULL", K(ret));
   } else {
     ObObj obj;
+    ObDiagnoseRuntimeInfo runtime_info(allocator_);
+    ret = ObDIGlobalRuntimeCache::get_instance().get_runtime_info(runtime_info);
     for (int64_t i = 0; OB_SUCC(ret) && NULL != variables_name[i]; ++i) {
       obj.reset();
       switch (i) {
@@ -77,6 +85,25 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
           int64_t uptime = ObTimeUtility2::extract_second(ObTimeUtility::current_time())
               - ObTimeUtility2::extract_second(global_ctx_->start_time_);
           obj.set_int(uptime);
+          break;
+        }
+      case EXPRESSION_PREPARES:
+      case EXPRESSION_PROGRAMS:
+      case EXPRESSION_ROWS:
+      case EXPRESSION_BATCHES:
+      case EXPRESSION_FILTER_ROWS: {
+          const int16_t events[] = {
+            ObStatEventIds::RUST_EXPRESSION_PREPARES,
+            ObStatEventIds::RUST_EXPRESSION_PROGRAMS,
+            ObStatEventIds::RUST_EXPRESSION_ROWS,
+            ObStatEventIds::RUST_EXPRESSION_BATCHES,
+            ObStatEventIds::RUST_EXPRESSION_FILTER_ROWS,
+          };
+          int64_t value = 0;
+          if (OB_SUCC(ret) && OB_FAIL(runtime_info.get_stat(events[i - EXPRESSION_PREPARES], value))) {
+          } else if (OB_SUCC(ret)) {
+            obj.set_int(value);
+          }
           break;
         }
       default: {

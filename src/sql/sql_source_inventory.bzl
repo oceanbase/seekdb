@@ -1582,6 +1582,7 @@ SQL_SIMD_UNITY_GROUPS = [
 ]
 
 SQL_STANDALONE_SOURCES = [
+    "src/sql/engine/expr/expression_program.cpp",
     "src/sql/engine/aggregate/ob_aggregate_processor.cpp",
     "src/sql/engine/expr/ob_expr_add.cpp",
     "src/sql/engine/expr/ob_expr_array_sort.cpp",

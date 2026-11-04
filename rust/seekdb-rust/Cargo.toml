@@ -16,6 +16,7 @@ mvt = { path = "../mvt" }
 sql-nio = { path = "../sql-nio", default-features = false }
 logger = { path = "../logger" }
 number-parser = { path = "../number-parser" }
+expression-program = { path = "../expression-program" }
 config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }

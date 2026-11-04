@@ -1,0 +1,27 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "expression_program_cases",
+    srcs = ["test_expression_program.cpp"],
+    alwayslink = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//rust:expression_program_headers",
+    ],
+)
+
+cc_test(
+    name = "test_expression_program",
+    size = "small",
+    linkstatic = True,
+    linkopts = ["-lstdc++"],
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":expression_program_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

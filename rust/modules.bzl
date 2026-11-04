@@ -20,6 +20,10 @@ MODULES = {
     },
     "logger": {"bridge": "src/bridge.rs"},
     "number-parser": {"bridge": "src/bridge.rs"},
+    "expression-program": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/host.h"],
+    },
     "sql-nio": {
         "bridge": "src/bridge.rs",
         "headers": ["include/callbacks.h"],

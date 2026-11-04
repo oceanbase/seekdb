@@ -44,6 +44,7 @@ class ObOpSpec;
 class ObOperator;
 class ObOpInput;
 class ObExecFeedbackNode;
+class ExpressionProgram;
 
 struct ObPhyOpSeriCtx
 {
@@ -552,6 +553,9 @@ protected:
   }
 
 private:
+  int eval_expression_program(ObBitVector *skip, int64_t rows, bool batch,
+                              bool &used, bool &all_filtered, bool &all_active);
+  void destroy_expression_program();
   int filter_batch_rows(const ObExprPtrIArray &exprs,
                         ObBitVector &skip,
                         const int64_t bsize,
@@ -573,6 +577,8 @@ protected:
   ObEvalCtx eval_ctx_;
   const common::ObDatumAccessContext *datum_access_ctx_;
   common::ObFixedArray<ObEvalInfo *, common::ObIAllocator> eval_infos_;
+  ExpressionProgram *expression_program_ = nullptr;
+  bool expression_program_checked_ = false;
   ObOpInput *input_;
 
   ObOperator *parent_;
@@ -689,6 +695,7 @@ int ObOpSpec::find_target_specs(T &spec, const FILTER &f, common::ObIArray<T *> 
 
 inline void ObOperator::destroy()
 {
+  destroy_expression_program();
   #ifdef ENABLE_DEBUG_LOG
    if (OB_LIKELY(nullptr != dummy_mem_context_)) {
     DESTROY_CONTEXT(dummy_mem_context_);

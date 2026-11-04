@@ -511,6 +511,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "expression-program"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+]
+
+[[package]]
 name = "fancy-regex"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1519,6 +1526,7 @@ name = "seekdb-rust"
 version = "0.1.0"
 dependencies = [
  "config",
+ "expression-program",
  "in-process",
  "local",
  "logger",
