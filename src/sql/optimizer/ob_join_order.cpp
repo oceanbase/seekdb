@@ -1929,6 +1929,75 @@ int ObJoinOrder::add_access_filters(AccessPath *path,
       }
     }
     if (FAILEDx(ObOptimizerUtil::remove_item(path->filter_, remove_dup))) {
+    } else if (stmt->has_vec_approx()) {
+      // Remove weaker upper bounds on the same signed integer column.
+      // Only T_INT literals are considered; leave casts and parameters intact.
+      ObSEArray<ObRawExpr *, 4> simplified_filters;
+      for (int64_t i = 0; OB_SUCC(ret) && i < path->filter_.count(); ++i) {
+        ObRawExpr *current = path->filter_.at(i);
+        bool redundant = false;
+
+        const bool current_supported =
+            OB_NOT_NULL(current)
+            && current->get_expr_type() == T_OP_LT
+            && current->get_param_count() == 2
+            && OB_NOT_NULL(current->get_param_expr(0))
+            && OB_NOT_NULL(current->get_param_expr(1))
+            && current->get_param_expr(0)->is_column_ref_expr()
+            && (current->get_param_expr(0)->get_result_type().get_type() == ObIntType || current->get_param_expr(0)->get_result_type().get_type() == ObInt32Type)
+            && current->get_param_expr(1)->get_expr_type() == T_INT
+            && current->get_param_expr(1)->is_const_raw_expr()
+            && current->get_param_expr(1)->get_result_type().get_type() == ObIntType
+            && !current->get_param_expr(1)->is_param_expr()
+            && !static_cast<const ObConstRawExpr *>(
+                   current->get_param_expr(1))->get_value().is_unknown()
+            && static_cast<const ObConstRawExpr *>(
+                   current->get_param_expr(1))->get_value().get_type() == ObIntType;
+
+        if (current_supported) {
+          const int64_t current_bound =
+              static_cast<const ObConstRawExpr *>(
+                  current->get_param_expr(1))->get_value().get_int();
+
+          for (int64_t j = 0;
+               !redundant && j < path->filter_.count();
+               ++j) {
+            ObRawExpr *candidate = path->filter_.at(j);
+            if (i == j || OB_ISNULL(candidate)
+                || candidate->get_expr_type() != T_OP_LT
+                || candidate->get_param_count() != 2
+                || OB_ISNULL(candidate->get_param_expr(0))
+                || OB_ISNULL(candidate->get_param_expr(1))
+                || !candidate->get_param_expr(0)->is_column_ref_expr()
+                || (candidate->get_param_expr(0)->get_result_type().get_type() != ObIntType && candidate->get_param_expr(0)->get_result_type().get_type() != ObInt32Type)
+                || candidate->get_param_expr(1)->get_expr_type() != T_INT
+                || !candidate->get_param_expr(1)->is_const_raw_expr()
+                || candidate->get_param_expr(1)->get_result_type().get_type() != ObIntType
+                || candidate->get_param_expr(1)->is_param_expr()
+                || static_cast<const ObConstRawExpr *>(
+                     candidate->get_param_expr(1))->get_value().is_unknown()
+                || static_cast<const ObConstRawExpr *>(
+                     candidate->get_param_expr(1))->get_value().get_type() != ObIntType
+                || !current->get_param_expr(0)->same_as(
+                       *candidate->get_param_expr(0))) {
+              // Cannot safely compare these predicates.
+            } else {
+              const int64_t candidate_bound =
+                  static_cast<const ObConstRawExpr *>(
+                      candidate->get_param_expr(1))->get_value().get_int();
+              redundant = candidate_bound < current_bound
+                          || (candidate_bound == current_bound && j < i);
+            }
+          }
+        }
+
+        if (!redundant && OB_FAIL(simplified_filters.push_back(current))) {
+          LOG_WARN("failed to append vector scan filter", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(path->filter_.assign(simplified_filters))) {
+        LOG_WARN("failed to assign simplified vector scan filters", K(ret));
+      }
     }
   }
   return ret;
