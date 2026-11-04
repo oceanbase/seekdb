@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -54,6 +55,67 @@ struct InListRewriteInfo {
     param_types_.reuse();
   }
 };
+
+namespace
+{
+// Only refine the cost decision. Keep every expression and parameter position
+// intact so a cached inline plan still evaluates later parameter values.
+bool has_small_integer_domain(const ParseNode &list,
+                              const ParamStore *params,
+                              const int64_t threshold)
+{
+  bool supported = nullptr != list.children_;
+  bool has_null = false;
+  ObSEArray<int64_t, 16> values;
+  for (int64_t i = 0; supported && i < list.num_child_; ++i) {
+    const ParseNode *node = list.children_[i];
+    int64_t value = 0;
+    bool is_null = false;
+    if (nullptr == node) {
+      supported = false;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_NULL == node->type_) {
+      is_null = true;
+    } else if (T_QUESTIONMARK == node->type_ && nullptr != params
+               && node->value_ >= 0 && node->value_ < params->count()) {
+      const ObObjParam &param = params->at(node->value_);
+      if (param.is_null()) {
+        is_null = true;
+      } else if (param.is_int()) {
+        value = param.get_int();
+      } else {
+        supported = false;
+      }
+    } else {
+      // Preserve the original decision for unsigned, coerced, string, row,
+      // nonconstant and prepare-time unknown operands.
+      supported = false;
+    }
+    if (supported) {
+      if (is_null) {
+        has_null = true;
+      } else if (OB_SUCCESS != values.push_back(value)) {
+        // Optional cost refinement must not turn an allocation failure into a
+        // new query failure. The existing values-table path remains available.
+        supported = false;
+      }
+    }
+  }
+  bool small = false;
+  if (supported) {
+    std::sort(values.begin(), values.end());
+    int64_t distinct = has_null ? 1 : 0;
+    for (int64_t i = 0; distinct < threshold && i < values.count(); ++i) {
+      if (0 == i || values.at(i) != values.at(i - 1)) {
+        ++distinct;
+      }
+    }
+    small = distinct < threshold;
+  }
+  return small;
+}
+} // namespace
 
 int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
 {
@@ -350,6 +412,10 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt && threshold > 1
+          && !is_prepare_stmt && has_small_integer_domain(in_list, param_store, threshold)) {
+        is_enable = false;
+      }
     }
   }
   return ret;
