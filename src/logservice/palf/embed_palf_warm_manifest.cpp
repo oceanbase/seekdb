@@ -160,7 +160,8 @@ int save_embed_palf_warm_manifest(const char *log_stream_dir, const EmbedPalfWar
   char tmp_path[common::FileDirectoryUtils::MAX_PATH] = {'\0'};
   EmbedPalfWarmManifest to_write = manifest;
   // Callers pass snapshots only; magic/version are assigned below before write.
-  if (OB_ISNULL(log_stream_dir) || !manifest.meta_.is_valid() || !manifest.redo_.is_valid()) {
+  // 'meta_' is legacy: PALF metadata is no longer stored in a LogStorage.
+  if (OB_ISNULL(log_stream_dir) || !manifest.redo_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(build_manifest_path_(log_stream_dir, EMBED_PALF_WARM_MANIFEST_FILE, path, sizeof(path)))) {
   } else if (OB_FAIL(build_manifest_path_(log_stream_dir, EMBED_PALF_WARM_MANIFEST_TMP_FILE,

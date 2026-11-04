@@ -80,9 +80,11 @@ struct EmbedPalfWarmManifest
 
   bool is_valid() const
   {
+    // PALF metadata now lives in the LocalStore KV, so only the redo log storage
+    // snapshot can be captured and replayed. 'meta_' is kept for format
+    // compatibility and is expected to be invalid on new manifests.
     return EMBED_PALF_WARM_MANIFEST_MAGIC == magic_
            && EMBED_PALF_WARM_MANIFEST_VERSION == version_
-           && meta_.is_valid()
            && redo_.is_valid();
   }
 };
