@@ -51,6 +51,7 @@ psmall_test=[
 'executor.full_join',
 'executor.trx',
 'explain',
+'expr.arithmetic_identity',
 'expr.collation_expr',
 'expr.expr_ceil',
 'expr.expr_floor',
