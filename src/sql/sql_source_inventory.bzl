@@ -749,6 +749,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_mid.cpp",
             "src/sql/engine/expr/ob_expr_mod.cpp",
             "src/sql/engine/expr/ob_expr_tokenize.cpp",
+            "src/sql/engine/expr/ob_expr_file_sql_gate.cpp",
             "src/sql/engine/expr/ob_expr_gtid.cpp",
             "src/sql/engine/expr/ob_expr_inner_table_option_printer.cpp",
         ],

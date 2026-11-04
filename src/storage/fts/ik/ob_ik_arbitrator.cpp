@@ -115,15 +115,9 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   ObIKTokenChain *chain = nullptr;
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
-    // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
+    // The first pass already decoded and classified this position, so read the
+    // cached answer instead of running the charset decode again.
+    if (OB_FAIL(ctx.char_info_at(current, char_len, type))) {
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -166,10 +160,8 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                                    ctx.fulltext() + current,
-                                                    ctx.fulltext_len() - current,
-                                                    char_len))) {
+            ObFTCharUtil::CharType ignored_type;
+            if (OB_FAIL(ctx.char_info_at(current, char_len, ignored_type))) {
               break;
             } else {
               ObIKToken token;

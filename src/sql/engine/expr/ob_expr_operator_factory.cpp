@@ -379,6 +379,7 @@
 #include "sql/engine/expr/ob_expr_array_cardinality.h"
 #include "sql/engine/expr/ob_expr_tokenize.h"
 #include "sql/engine/expr/ob_expr_lock_func.h"
+#include "sql/engine/expr/ob_expr_file_sql_gate.h"
 #include "sql/engine/expr/ob_expr_decode_trace_id.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
 #include "sql/engine/expr/ob_expr_get_path.h"
@@ -658,6 +659,8 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprVersion);
     REG_OP(ObExprObVersion);
     REG_OP(ObExprConnectionId);
+  REG_OP(ObExprFileSqlGate);
+  REG_OP(ObExprFileSqlReject);
     REG_OP(ObExprCharset);
     REG_OP(ObExprCollation);
     REG_OP(ObExprCoercibility);

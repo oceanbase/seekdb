@@ -134,11 +134,13 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
                                    const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-  // proces by char with all segmenters
+  // The caller already resolved the character and its type for this cursor
+  // position, so hand them to the segmenters directly instead of letting each
+  // of them look the same character up again.
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    if (OB_FAIL((*iter)->do_process(ctx, ch, char_len, type))) {
     }
   }
   return ret;
