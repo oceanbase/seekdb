@@ -1083,13 +1083,13 @@ DEFINE_SQL_TOPIC(
 "  [DEFAULT] CHARACTER SET [=] charset_name\n"
 "  | [DEFAULT] COLLATE [=] collation_name\n"
 "  | COMMENT [=] 'string'\n"
-"  | COMPRESSION [=] {'none' | 'zstd_1.3.8' | 'zlib_1.0'}\n"
+"  | COMPRESSION [=] {'none' | 'zstd' | 'zlib_1.0'}\n"
 "  | BLOCK_SIZE [=] size\n"
 "  | PROGRESSIVE_MERGE_NUM [=] num\n"
 "  | AUTO_INCREMENT [=] num\n"
 "\n"
 "用于创建本地表。支持普通列、主键、索引、表选项和分区定义。",
-"CREATE TABLE test (c1 INT PRIMARY KEY, c2 VARCHAR(64)) COMPRESSION = 'zstd_1.3.8';",
+"CREATE TABLE test (c1 INT PRIMARY KEY, c2 VARCHAR(64)) COMPRESSION = 'zstd';",
 "www.taobao.com")
 
 
@@ -1141,7 +1141,7 @@ DEFINE_SQL_TOPIC(
 "  [DEFAULT] CHARACTER SET [=] charset_name\n"
 "  | [DEFAULT] COLLATE [=] collation_name\n"
 "  | COMMENT [=] 'string'\n"
-"  | COMPRESS_METHOD [=] {'none' | 'zstd_1.3.8' | 'zlib_1.0'}\n"
+"  | COMPRESS_METHOD [=] {'none' | 'zstd' | 'zlib_1.0'}\n"
 "  | BLOCK_SIZE [=] size\n"
 "  | PROGRESSIVE_MERGE_NUM [=] num\n"
 "  | AUTO_INCREMENT [=] num\n"

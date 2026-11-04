@@ -210,6 +210,7 @@ public:
   virtual void destroy() = 0;
   virtual int  decompress(const char *src, int64_t src_size, int64_t &consumed_size,
                           char *dest, int64_t dest_capacity, int64_t &decompressed_size) = 0;
+  virtual int finish() = 0;
 
   virtual ObCSVGeneralFormat::ObCSVCompression compression_format() const = 0;
 
@@ -271,11 +272,13 @@ public:
 
   int decompress(const char *src, int64_t src_size, int64_t &consumed_size,
                  char *dest, int64_t dest_capacity, int64_t &decompressed_size) override;
+  int finish() override;
 
   ObCSVGeneralFormat::ObCSVCompression compression_format() const override { return compression_format_; }
 
 private:
   std::optional<rust::Box<compression::StreamDecoder>> decoder_;
+  bool stream_finished_ = false;
 
   ObCSVGeneralFormat::ObCSVCompression compression_format_;
 };
@@ -294,13 +297,14 @@ public:
 
   int decompress(const char *src, int64_t src_size, int64_t &consumed_size,
                  char *dest, int64_t dest_capacity, int64_t &decompressed_size) override;
+  int finish() override;
 
   ObCSVGeneralFormat::ObCSVCompression compression_format() const override
   {
     return ObCSVGeneralFormat::ObCSVCompression::ZSTD;
   }
 private:
-  void *zstd_stream_context_ = nullptr;
+  std::optional<rust::Box<compression::ZstdDecoder>> decoder_;
 };
 
 } // namespace sql

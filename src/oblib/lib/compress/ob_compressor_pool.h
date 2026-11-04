@@ -18,9 +18,8 @@
 #define OB_COMPRESSOR_POOL_H_
 
 #include "lib/compress/ob_compressor.h"
-#include "lib/allocator/ob_vslice_alloc.h"
 #include "none/ob_none_compressor.h"
-#include "zstd_1_3_8/ob_zstd_compressor_1_3_8.h"
+#include "zstd_compressor.h"
 #include "zlib/ob_zlib_compressor.h"
 
 namespace oceanbase
@@ -45,9 +44,8 @@ private:
   ObCompressorPool();
   virtual ~ObCompressorPool() {}
 
-  ObVSliceAlloc allocator_;
   ObNoneCompressor none_compressor;
-  zstd_1_3_8::ObZstdCompressor_1_3_8 zstd_compressor_1_3_8;
+  ZstdCompressor zstd_compressor_;
   ObZlibCompressor zlib_compressor;
 };
 

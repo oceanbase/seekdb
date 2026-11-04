@@ -823,7 +823,7 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
   } else if (stat.get_llc_bitmap_size() <= 0) {
     // do nothing
   } else if (OB_FAIL(get_compressed_llc_bitmap(allocator,
-                                               bitmap_compress_lib_name[ObOptStatCompressType::ZSTD_1_3_8_COMPRESS],
+                                               bitmap_compress_lib_name[ObOptStatCompressType::ZSTD_COMPRESS],
                                                stat.get_llc_bitmap(),
                                                stat.get_llc_bitmap_size(),
                                                llc_comp_buf,
@@ -858,7 +858,7 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
         OB_FAIL(dml_splicer.add_column("histogram_type", stat.get_histogram().get_type())) ||
         OB_FAIL(dml_splicer.add_column("global_stats", 0)) ||
         OB_FAIL(dml_splicer.add_column("user_stats", 0)) ||
-        OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_1_3_8_COMPRESS))) {
+        OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_COMPRESS))) {
     } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
     } else { /*do nothing*/ }
   }
@@ -1181,7 +1181,7 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           char *bitmap_buf = NULL;
           if (OB_SUCC(ret) && llc_bitmap_size > 0) {
             int64_t compress_type = ObOptStatCompressType::MAX_COMPRESS;
-            EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_1_3_8_COMPRESS);
+            EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_COMPRESS);
             if (OB_SUCC(ret)) {
               if (OB_UNLIKELY(compress_type < 0 || compress_type >= ObOptStatCompressType::MAX_COMPRESS)) {
                 ret = OB_ERR_UNEXPECTED;

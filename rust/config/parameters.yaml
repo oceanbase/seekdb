@@ -210,10 +210,10 @@
 
 - name: default_compress_func
   type: STR_WITH_CHECKER
-  default: "zstd_1.3.8"
+  default: "zstd"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
-  description: "default compress function name for create new table, values: none, zlib_1.0, zstd_1.3.8"
+  description: "default compress function name for create new table, values: none, zlib_1.0, zstd"
   checker: "common::ObConfigCompressFuncChecker"
 
 - name: default_row_format

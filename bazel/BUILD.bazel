@@ -11,7 +11,6 @@ exports_files([
     "compile_config.bzl",
     "build_settings.bzl",
     "final_link.bzl",
-    "localized_partial_link.bzl",
 ])
 
 cargo_build_script_environment(

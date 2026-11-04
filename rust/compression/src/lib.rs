@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Compression and checksum primitives backed by zlib-rs.
+//! Compression and checksum primitives.
 //!
 //! One-shot operations borrow caller-owned buffers. Streaming objects own
 //! their compressor state and can be reset without retaining input or output
 //! slices between calls.
 
 mod bridge;
+pub mod zstd;
 
 use std::fmt;
 use zlib_rs::{Deflate, DeflateConfig, DeflateFlush, Inflate, InflateFlush, ReturnCode, Status};

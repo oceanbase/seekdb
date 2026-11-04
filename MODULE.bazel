@@ -54,6 +54,13 @@ crate.annotation(
     patches = ["//bazel:spdlog-rs-emscripten.diff"],
     patch_args = ["-p1"],
 )
+# cc-rs uses this build-script budget for its parallel C compiler workers.
+crate.annotation(
+    crate = "zstd-sys",
+    version = "2.1.2+zstd.1.5.7",
+    repositories = ["rust_crates"],
+    build_script_env = {"NUM_JOBS": "4"},
+)
 _RUST_PLATFORMS = [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",

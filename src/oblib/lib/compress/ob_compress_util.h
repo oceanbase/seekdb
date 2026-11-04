@@ -28,7 +28,7 @@ enum ObCompressorType : uint8_t
 {
   INVALID_COMPRESSOR             = 0,
   NONE_COMPRESSOR                = 1,
-  ZSTD_1_3_8_COMPRESSOR          = 2,
+  ZSTD_COMPRESSOR          = 2,
   ZLIB_COMPRESSOR                = 3,
 
   MAX_COMPRESSOR
@@ -38,7 +38,7 @@ const char *const all_compressor_name[] =
 {
   "",
   "none",
-  "zstd_1.3.8",
+  "zstd",
   "zlib_1.0",
 };
 
@@ -48,12 +48,12 @@ const char *const compress_funcs[] =
 {
   "none",
   "zlib_1.0",
-  "zstd_1.3.8",
+  "zstd",
 };
 
 const char *const perf_compress_funcs[] =
 {
-  "zstd_1.3.8",
+  "zstd",
 };
 
 const char *const sql_temp_store_compress_funcs[] =
@@ -66,22 +66,4 @@ const char *const sql_temp_store_compress_funcs[] =
 } /* namespace oceanbase */
 
 using oceanbase::common::ObIAllocator;
-static void *ob_zstd_malloc(void *opaque, size_t size)
-{
-  void *buf = NULL;
-  if (NULL != opaque) {
-    ObIAllocator *allocator = reinterpret_cast<ObIAllocator*> (opaque);
-    buf = allocator->alloc(size);
-  }
-  return buf;
-}
-
-static void ob_zstd_free(void *opaque, void *address)
-{
-  if (NULL != opaque) {
-    ObIAllocator *allocator = reinterpret_cast<ObIAllocator*> (opaque);
-    allocator->free(address);
-  }
-}
-
 #endif /* OB_COMPRESSOR_UTIL_H_ */

@@ -21,12 +21,10 @@ namespace oceanbase
 namespace common
 {
 ObCompressorPool::ObCompressorPool()
-    :allocator_(ObMemAttr("Compressor"), OB_MALLOC_BIG_BLOCK_SIZE),
-     none_compressor(),
-     zstd_compressor_1_3_8(allocator_),
+    :none_compressor(),
+     zstd_compressor_(),
      zlib_compressor()
 {
-  allocator_.set_nway(32);
 }
 ObCompressorPool &ObCompressorPool::get_instance()
 {
@@ -57,8 +55,8 @@ int ObCompressorPool::get_compressor(const ObCompressorType &compressor_type,
     case NONE_COMPRESSOR:
       compressor = &none_compressor;
       break;
-    case ZSTD_1_3_8_COMPRESSOR:
-      compressor = &zstd_compressor_1_3_8;
+    case ZSTD_COMPRESSOR:
+      compressor = &zstd_compressor_;
       break;
     case ZLIB_COMPRESSOR:
       compressor = &zlib_compressor;
@@ -80,8 +78,8 @@ int ObCompressorPool::get_compressor_type(const char *compressor_name,
     LIB_LOG(WARN, "invalid compressor name argument, ", K(ret), KP(compressor_name));
   } else if (!STRCASECMP(compressor_name, "none")) {
     compressor_type = NONE_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "zstd_1.3.8")) {
-    compressor_type = ZSTD_1_3_8_COMPRESSOR;
+  } else if (!STRCASECMP(compressor_name, "zstd")) {
+    compressor_type = ZSTD_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "zlib_1.0")) {
     compressor_type = ZLIB_COMPRESSOR;
   } else {
