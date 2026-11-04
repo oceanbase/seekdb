@@ -575,3 +575,5 @@ seekdb が役立つなら、**star で他の人にも届けましょう。** ⭐
 ## 📄 ライセンス
 
 seekdb は [OceanBase](https://en.oceanbase.com/) チームが開発 — Alipay、Taobao、DiDi、Xiaomi などの本番環境で稼働しているデータベースエンジンと同一基盤です。[Apache License, Version 2.0](LICENSE) に基づく完全なオープンソースプロジェクトです。
+
+OB-P:_nTQ0GiQfyNccdr7eBEM2A
