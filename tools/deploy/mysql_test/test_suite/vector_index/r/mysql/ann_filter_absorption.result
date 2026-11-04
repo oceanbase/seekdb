@@ -1,0 +1,28 @@
+# ANN filter absorption keeps vector access and SQL NULL semantics
+# The filter must be absorbed, not merely return equivalent rows.
+absorbed
+1
+uses_ann
+1
+id
+1
+2
+5
+id
+1
+2
+5
+# Repeated clauses and nullable predicates
+id
+1
+2
+5
+id
+4
+# Cached plans must respect changing parameter equality
+id
+1
+2
+5
+id
+1
