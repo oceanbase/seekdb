@@ -269,9 +269,27 @@ int ObAddWordT<MapType>::groupby_word(const ObFTWord &word, const int64_t word_f
     // per-word memcpy is skipped. Any other producer still goes through
     // dup_word(); on the update path the copied bytes are simply left unused
     // in the parse arena, which is reset wholesale at the end of the call.
-    // set_or_update() never re-points the stored key on the update path, so
-    // the aggregation result is identical to the previous flow and the map
-    // insertion order (hence the TOKENIZE output order) is unchanged.
+    // Deliberate semantic difference from the pre-Task-C code. The old code
+    // called set_refactored(word, count, 1/*overwrite*/) on every occurrence,
+    // so the stored key was re-pointed at the token handed in by the parser.
+    // In the beng path casedown is off and casedown_word() returns dst = src,
+    // i.e. a view of the normalizer's reuse buffer, so the key of an existing
+    // entry pointed at memory that get_next_token() overwrites for the next
+    // token: the key bytes changed after insertion. Both the retained token
+    // and the iteration order could therefore depend on what was left in that
+    // buffer. Measured on 5bce9e06d: '🔥"🚀"' -> ["🚀"], but
+    // '🔥"🚀"zzz' -> ["zzz", "🚀"] and '🔥"🚀"abc' -> ["🚀", "abc"] (the
+    // collision is two different emoji that compare equal under
+    // utf8mb4_general_ci). That is a read of recycled memory, not a contract.
+    //
+    // This implementation materializes the first key in the parse arena and
+    // never re-points it on the update path, so the same input always produces
+    // the same token bytes and the same order. The observable difference is
+    // limited to collation-equal but byte-different keys (14 of the 476 emoji
+    // corpus cases); the frozen 52-row TOKENIZE snapshot, the official
+    // fts_index suite and the benchmark texts are unaffected. Do not restore
+    // the transient-key overwrite: that would re-introduce the
+    // use-after-recycle.
     ObFTWord stable_word;
     if (flag_.casedown()) {
       stable_word = word;

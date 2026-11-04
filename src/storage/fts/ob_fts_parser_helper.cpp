@@ -521,7 +521,9 @@ int ObFTParseHelper::make_token_array_json(
   //
   // Every element is a JSON string, encoded as [vertype][vi64 length][bytes],
   // and the elements are emitted in the very same map iteration order the tree
-  // path used, so the decoded JSON text stays byte-identical.
+  // path used, so the decoded JSON text stays byte-identical. The document
+  // header is emitted as well so the value is a canonical binary document and
+  // its byte length matches the tree path.
   uint64_t node_total_size = 0;
   for (ObFTWordMap::const_iterator it = words.begin(); it != words.end(); ++it) {
     const ObString token = it->first.get_word().get_string();
@@ -558,16 +560,27 @@ int ObFTParseHelper::make_token_array_json(
   meta.set_is_continuous(true);
   meta.calc_entry_array();
 
+  // The tree path produced a root container whose binary starts with the
+  // 8 byte JSON document header: ObJsonBinSerializer::serialize() calls
+  // add_doc_header_v0() before the node and records the total document length
+  // in it. A bin without that header is not a canonical document --
+  // should_pack_diff() sees a zero extend segment and reports
+  // OB_ERR_UNEXPECTED, and consumers such as JSON_STORAGE_SIZE() observe a
+  // value that is 8 bytes shorter than the tree path. Emit the same header and
+  // keep every node offset relative to the array node start, i.e. subtract the
+  // header length when computing value offsets.
   ObJsonBuffer buffer(allocator_);
-  if (OB_FAIL(buffer.reserve(obj_size))) {
+  const int64_t start_pos = sizeof(ObJsonBinDocHeader);
+  if (OB_FAIL(ObJsonBin::add_doc_header_v0(buffer))) {
+  } else if (OB_FAIL(buffer.reserve(obj_size))) {
   } else if (OB_FAIL(meta.to_header(buffer))) {
   } else {
-    char *buf_ptr = buffer.ptr();
+    char *buf_ptr = buffer.ptr() + start_pos;
     uint64_t index = 0;
     for (ObFTWordMap::const_iterator it = words.begin();
          OB_SUCC(ret) && it != words.end(); ++it, ++index) {
       const ObString token = it->first.get_word().get_string();
-      const uint64_t value_offset = buffer.length();
+      const uint64_t value_offset = buffer.length() - start_pos;
       if (OB_FAIL(ObJsonBinSerializer::set_value_entry(
               meta, buf_ptr, static_cast<int>(index), value_offset,
               static_cast<uint8_t>(ObJsonBin::get_string_vertype()), false))) {
@@ -575,9 +588,13 @@ int ObFTParseHelper::make_token_array_json(
                      ObJsonBin::get_string_vertype(), token, buffer))) {
       } else {
         // append may reallocate the buffer, refresh the entry writer
-        buf_ptr = buffer.ptr();
+        buf_ptr = buffer.ptr() + start_pos;
       }
     }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObJsonBin::set_doc_header_v0(buffer, buffer.length(), false))) {
   }
 
   if (OB_SUCC(ret)) {

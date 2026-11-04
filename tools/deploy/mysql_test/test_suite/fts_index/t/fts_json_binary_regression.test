@@ -1,0 +1,67 @@
+# owner: seekdb-taskF
+# owner group: storage
+# tags: fts
+# description: Task F regression. (F-1) TOKENIZE builds its token array JSON
+#   directly, but it must emit the same canonical binary document the tree
+#   path produced: the 8 byte JSON document header (so should_pack_diff() sees
+#   a normal root document and json_storage_size()/json_extract()/JSON columns
+#   see the same bytes as before). (F-2) Task C stores a materialized copy of
+#   the first token as the word map key instead of re-pointing the key at the
+#   parser's transient buffer, so the beng emoji collision output is
+#   deterministic: the retained emoji must not depend on the trailing token.
+#   All outputs are deterministic text/counts; the case must be byte stable
+#   across runs.
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_json_bin_regression;
+--enable_warnings
+
+--echo ========= F-1: canonical doc header (json_storage_size) =========
+select json_storage_size(tokenize('a', 'ik')) as s;
+select json_storage_size(tokenize('', 'ik')) as s;
+select json_storage_size(tokenize('hello world', 'beng')) as s;
+select json_storage_size(tokenize('数据库全文索引', 'ik')) as s;
+select json_storage_size(tokenize('数据库全文索引 分词器', 'ik')) as s;
+# the tree path over the same token array text must report the same size
+select json_storage_size(tokenize('a', 'ik')) = json_storage_size(cast('["a"]' as json)) as same;
+select json_storage_size(tokenize('', 'ik')) = json_storage_size(cast('[]' as json)) as same;
+select json_storage_size(tokenize('hello world', 'beng')) = json_storage_size(cast(tokenize('hello world', 'beng') as char)) as same;
+select json_storage_size(tokenize('数据库全文索引 分词器', 'ik')) = json_storage_size(cast(tokenize('数据库全文索引 分词器', 'ik') as char)) as same;
+
+--echo ========= F-1: json consumers see a canonical document =========
+select json_type(tokenize('hello world', 'beng')) as t;
+select json_length(tokenize('hello world', 'beng')) as n;
+select json_extract(tokenize('hello world', 'beng'), '$[0]') as e0;
+select json_unquote(json_extract(tokenize('hello world', 'beng'), '$[1]')) as u1;
+
+create table fts_json_bin_regression(j json);
+insert into fts_json_bin_regression values (tokenize('hello world', 'beng'));
+insert into fts_json_bin_regression values (tokenize('', 'ik'));
+select j, json_storage_size(j) as s, json_length(j) as n, json_extract(j, '$[1]') as e1
+    from fts_json_bin_regression;
+
+--echo ========= F-2: beng emoji key retention is deterministic =========
+select tokenize('🔥"🚀"', 'beng') as r1;
+select tokenize('🚀"🔥"', 'beng') as r2;
+select tokenize('🔥"🚀"zzz', 'beng') as r3;
+select tokenize('🔥"🚀"abc', 'beng') as r4;
+select tokenize('🔥"🚀"🔥', 'beng') as r5;
+# the retained emoji does not depend on the trailing word
+select json_extract(tokenize('🔥"🚀"zzz', 'beng'), '$[1]') as emoji_after_zzz;
+select json_extract(tokenize('🔥"🚀"abc', 'beng'), '$[0]') as emoji_after_abc;
+# and repeats are byte identical
+select tokenize('🔥"🚀"zzz', 'beng') as r3_again;
+select tokenize('🔥"🚀"abc', 'beng') as r4_again;
+
+--echo ========= F-2: ik path (casedown, emoji dropped) =========
+select tokenize('🔥"🚀"', 'ik') as i1;
+select tokenize('🚀"🔥"', 'ik') as i2;
+select tokenize('🔥"🚀"zzz', 'ik') as i3;
+select tokenize('🔥"🚀"abc', 'ik') as i4;
+select tokenize('🔥"🚀"🔥', 'ik') as i5;
+select tokenize('🔥"🚀"zzz', 'ik') as i3_again;
+select tokenize('🔥"🚀"abc', 'ik') as i4_again;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_json_bin_regression;
+--enable_warnings
