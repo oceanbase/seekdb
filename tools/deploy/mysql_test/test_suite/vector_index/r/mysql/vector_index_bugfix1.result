@@ -753,3 +753,80 @@ VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
 alter system set vector_memory_limit = 0;
+drop table if exists t_ann_absorb;
+create table t_ann_absorb (
+id int primary key, category int, parity varchar(8), v vector(3),
+key idx_category(category),
+vector key idx_v(v) with (distance=l2, type=hnsw, lib=vsag,
+m=16, ef_construction=128, sync_mode=immediate)
+) organization heap;
+insert into t_ann_absorb values
+(1,1,'even','[1,0,0]'), (2,1,null,'[2,0,0]'),
+(3,2,'even','[3,0,0]'), (4,null,'even','[4,0,0]'),
+(5,null,null,'[5,0,0]'), (6,2,'odd','[6,0,0]'),
+(7,1,'odd','[7,0,0]');
+select id from t_ann_absorb where category = 1
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+1
+2
+7
+select id from t_ann_absorb
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+1
+2
+7
+id
+1
+2
+7
+Query Plan
+=======================================================================
+|ID|OPERATOR                               |NAME                      |
+-----------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_ann_absorb(idx_category)|
+=======================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann_absorb.id]), filter([t_ann_absorb.category = 1]), rowset=16
+      access([t_ann_absorb.__pk_increment], [t_ann_absorb.category], [t_ann_absorb.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t_ann_absorb.category], [t_ann_absorb.__pk_increment]), range(1,MIN ; 1,MAX)
+select id from t_ann_absorb
+where category = 1 or (category = 1 and parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+1
+2
+7
+select id from t_ann_absorb
+where not (category = 1 and (category = 1 or parity = 'even'))
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+3
+6
+select id from t_ann_absorb
+where category = 1 and (category = 2 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+1
+select id from t_ann_absorb
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+1
+2
+7
+select id from t_ann_absorb
+where category = 1 and (category = 2 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+id
+1
+select id from t_ann_absorb
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 1,1;
+id
+2
+drop table t_ann_absorb;
