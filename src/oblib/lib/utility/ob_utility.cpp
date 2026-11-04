@@ -40,7 +40,14 @@ static inline ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) 
   ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
   ov.OffsetHigh = (DWORD)(offset >> 32);
   DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) { return -1; }
+  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) {
+    const DWORD error = GetLastError();
+    // The caller may have already accumulated a short read. EOF must not
+    // discard those bytes by turning the next positional read into an error.
+    if (ERROR_HANDLE_EOF == error) return 0;
+    errno = ERROR_INVALID_HANDLE == error ? EBADF : EIO;
+    return -1;
+  }
   return (ssize_t)nread;
 }
 #define pwrite ob_pwrite

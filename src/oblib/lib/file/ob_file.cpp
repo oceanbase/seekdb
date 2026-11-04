@@ -62,6 +62,17 @@ static inline int64_t ob_pwrite(int fd, const void *buf, int64_t count, int64_t 
   if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) return -1;
   return (int64_t)written;
 }
+static inline bool ob_utf8_path(const char *path, wchar_t *wide, const int capacity) {
+  if (NULL == path || 0 == MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, capacity)) {
+    errno = EINVAL;
+    return false;
+  }
+  return true;
+}
+static inline int ob_open_utf8(const char *path, int flags, int mode) {
+  wchar_t wide_path[4096];
+  return ob_utf8_path(path, wide_path, 4096) ? _wopen(wide_path, flags, mode) : -1;
+}
 static inline int64_t ob_pread(int fd, void *buf, int64_t count, int64_t offset) {
   HANDLE h = (HANDLE)_get_osfhandle(fd);
   OVERLAPPED ov = {};
@@ -103,11 +114,13 @@ int open(const ObString &fname, const T &file, int &fd)
     if (NULL == fname_ptr) {
       _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
-    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags()
+    } else if (-1 == (fd =
 #ifdef _WIN32
-            | _O_BINARY
+            ob_open_utf8(fname_ptr, file.get_open_flags() | _O_BINARY, file.get_open_mode())
+#else
+            ::open(fname_ptr, file.get_open_flags(), file.get_open_mode())
 #endif
-            , file.get_open_mode()))) {
+            )) {
       if (ENOENT == errno) {
         ret = OB_FILE_NOT_EXIST;
       } else if (EEXIST == errno) {
@@ -1057,8 +1070,10 @@ int64_t get_file_size(const char *fname)
   // MSVCRT's `struct stat::st_size` is 32-bit (_off_t = long); files larger
   // than 2 GiB get a truncated size. Use _stat64 to report the real size.
   struct _stat64 st;
+  wchar_t wide_path[4096];
   if (NULL != fname
-      && 0 == _stat64(fname, &st)) {
+      && ob_utf8_path(fname, wide_path, 4096)
+      && 0 == _wstat64(wide_path, &st)) {
     ret = st.st_size;
   }
 #else
