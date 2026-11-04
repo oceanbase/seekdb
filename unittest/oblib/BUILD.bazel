@@ -22,3 +22,14 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
+
+cc_test(
+    name = "test_sql_string_identifier",
+    srcs = ["test_sql_string_identifier.cpp"],
+    linkstatic = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//src/oblib:oblib_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
