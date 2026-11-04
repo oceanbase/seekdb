@@ -1,0 +1,855 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/schema/graph_schema.h"
+#include "share/schema/ob_table_schema.h"
+#include "share/schema/ob_column_schema.h"
+#include "share/schema/ob_schema_utils.h"
+#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_tree.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+using namespace common;
+
+namespace
+{
+constexpr uint64_t GRAPH_CATALOG_FORMAT_VERSION = 1;
+
+int add_graph_json_field(ObJsonObject &object, const char *key,
+                         const ObJsonNode &value, ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  // Clone scalar temporaries into the arena. Strings borrow schema storage,
+  // which remains valid until the complete document has been printed.
+  ObJsonNode *node = value.clone(&allocator);
+  if (node == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    ret = object.add(ObString::make_string(key), node);
+  }
+  return ret;
+}
+
+int add_graph_json_columns(ObJsonObject &object, const char *key,
+                           const uint64_t *columns, int64_t count,
+                           ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  ObJsonArray *array = OB_NEWx(ObJsonArray, &allocator, &allocator);
+  if (array == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    ObJsonNode *node = ObJsonUint(columns[i]).clone(&allocator);
+    if (node == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      ret = array->append(node);
+    }
+  }
+  if (OB_SUCC(ret)) { ret = object.add(ObString::make_string(key), array); }
+  return ret;
+}
+
+int graph_json_field(const ObIJsonBase &object, const char *key, ObIJsonBase *&value)
+{
+  int ret = OB_SUCCESS;
+  value = nullptr;
+  if (object.json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (OB_FAIL(object.get_object_value(ObString::make_string(key), value))) {
+    if (ret == OB_SEARCH_NOT_FOUND) { ret = OB_DESERIALIZE_ERROR; }
+  } else if (value == nullptr) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  return ret;
+}
+
+int graph_json_uint(const ObIJsonBase &node, uint64_t &value)
+{
+  int ret = OB_SUCCESS;
+  if (node.json_type() == ObJsonNodeType::J_UINT) {
+    value = node.get_uint();
+  } else if (node.json_type() == ObJsonNodeType::J_INT && node.get_int() >= 0) {
+    value = static_cast<uint64_t>(node.get_int());
+  } else {
+    // Do not round floating-point IDs or coerce strings/null into identities.
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  return ret;
+}
+
+int graph_json_uint_field(const ObIJsonBase &object, const char *key, uint64_t &value)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *node = nullptr;
+  if (OB_FAIL(graph_json_field(object, key, node))) {
+  } else if (OB_FAIL(graph_json_uint(*node, value))) {
+  }
+  return ret;
+}
+
+int graph_json_string_field(const ObIJsonBase &object, const char *key, ObString &value)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *node = nullptr;
+  if (OB_FAIL(graph_json_field(object, key, node))) {
+  } else if (node->json_type() != ObJsonNodeType::J_STRING
+             || node->get_data_length() > INT32_MAX) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else {
+    value.assign_ptr(node->get_data(), node->get_data_length());
+  }
+  return ret;
+}
+
+int graph_json_array_field(const ObIJsonBase &object, const char *key, ObIJsonBase *&array)
+{
+  int ret = graph_json_field(object, key, array);
+  if (OB_SUCC(ret) && array->json_type() != ObJsonNodeType::J_ARRAY) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  return ret;
+}
+
+int graph_json_columns(const ObIJsonBase &object, const char *key,
+                       uint64_t *columns, int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *array = nullptr;
+  if (OB_FAIL(graph_json_array_field(object, key, array))) {
+  } else if (array->element_count() == 0
+             || array->element_count() > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else {
+    count = array->element_count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ObIJsonBase *value = nullptr;
+      if (OB_FAIL(array->get_array_element(i, value))) {
+      } else if (value == nullptr) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_uint(*value, columns[i]))) {
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
+int GraphSchema::to_catalog_json(ObSqlString &json) const
+{
+  int ret = OB_SUCCESS;
+  json.reset();
+  // All nodes share one arena; only the final JSON text escapes this scope.
+  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+  ObJsonObject root(&allocator);
+  ObJsonArray elements(&allocator);
+  ObJsonArray properties(&allocator);
+  ObJsonBuffer buffer(&allocator);
+  if (!is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(add_graph_json_field(root, "format_version", ObJsonUint(GRAPH_CATALOG_FORMAT_VERSION), allocator))) {
+  } else if (OB_FAIL(add_graph_json_field(root, "graph_id", ObJsonUint(graph_id_), allocator))) {
+  } else if (OB_FAIL(add_graph_json_field(root, "database_id", ObJsonUint(database_id_), allocator))) {
+  } else if (OB_FAIL(add_graph_json_field(root, "define_user_id", ObJsonUint(define_user_id_), allocator))) {
+  } else if (OB_FAIL(add_graph_json_field(root, "schema_version", ObJsonInt(schema_version_), allocator))) {
+  } else if (OB_FAIL(add_graph_json_field(root, "name", ObJsonString(name_), allocator))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < elements_.count(); ++i) {
+    const GraphElement &e = elements_.at(i);
+    ObJsonObject *element = OB_NEWx(ObJsonObject, &allocator, &allocator);
+    if (element == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(add_graph_json_field(*element, "kind",
+        ObJsonString(ObString::make_string(e.is_vertex() ? "vertex" : "edge")), allocator))) {
+    } else if (OB_FAIL(add_graph_json_field(*element, "id", ObJsonUint(e.id_), allocator))) {
+    } else if (OB_FAIL(add_graph_json_field(*element, "table_id", ObJsonUint(e.table_id_), allocator))) {
+    } else if (OB_FAIL(add_graph_json_field(*element, "label", ObJsonString(e.label_), allocator))) {
+    } else if (OB_FAIL(add_graph_json_columns(*element, "key_columns", e.key_columns_, e.key_count_, allocator))) {
+    }
+    if (OB_SUCC(ret) && !e.is_vertex()) {
+      if (OB_FAIL(add_graph_json_field(*element, "source_id", ObJsonUint(e.source_id_), allocator))) {
+      } else if (OB_FAIL(add_graph_json_field(*element, "destination_id", ObJsonUint(e.destination_id_), allocator))) {
+      } else if (OB_FAIL(add_graph_json_columns(*element, "source_columns",
+                                              e.source_columns_, e.source_key_count_, allocator))) {
+      } else if (OB_FAIL(add_graph_json_columns(*element, "destination_columns",
+                                              e.destination_columns_, e.destination_key_count_, allocator))) {
+      }
+    }
+    if (OB_SUCC(ret)) { ret = elements.append(element); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < properties_.count(); ++i) {
+    const GraphProperty &p = properties_.at(i);
+    ObJsonObject *property = OB_NEWx(ObJsonObject, &allocator, &allocator);
+    if (property == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(add_graph_json_field(*property, "element_id", ObJsonUint(p.element_id_), allocator))) {
+    } else if (OB_FAIL(add_graph_json_field(*property, "column_id", ObJsonUint(p.column_id_), allocator))) {
+    } else if (OB_FAIL(add_graph_json_field(*property, "name", ObJsonString(p.name_), allocator))) {
+    } else if (OB_FAIL(properties.append(property))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(root.add(ObString::make_string("elements"), &elements))) {
+    } else if (OB_FAIL(root.add(ObString::make_string("properties"), &properties))) {
+    } else if (OB_FAIL(root.print(buffer, true))) {
+    } else if (OB_FAIL(json.append(buffer.ptr(), buffer.length()))) {
+    }
+  }
+  return ret;
+}
+
+int GraphSchema::from_catalog_definition(const ObString &definition)
+{
+  int ret = OB_SUCCESS;
+  GraphSchema decoded;
+  if (definition.empty()) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else {
+    ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+    ObJsonNode *root = nullptr;
+    ObIJsonBase *elements = nullptr;
+    ObIJsonBase *properties = nullptr;
+    uint64_t format_version = 0;
+    uint64_t schema_version = 0;
+    ObString name;
+    ObArray<GraphElement> element_values;
+    ObArray<GraphProperty> property_values;
+    // Require strict JSON with unique keys. Reject embedded NULs rather than
+    // silently parsing a prefix.
+    if (MEMCHR(definition.ptr(), '\0', definition.length()) != nullptr) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(ObJsonParser::get_tree(&allocator, definition, root,
+               ObJsonParser::JSN_STRICT_FLAG | ObJsonParser::JSN_UNIQUE_FLAG))) {
+    } else if (root == nullptr) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(graph_json_uint_field(*root, "format_version", format_version))) {
+    } else if (format_version != GRAPH_CATALOG_FORMAT_VERSION) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "property graph catalog JSON format version");
+    } else if (OB_FAIL(graph_json_uint_field(*root, "graph_id", decoded.graph_id_))) {
+    } else if (OB_FAIL(graph_json_uint_field(*root, "database_id", decoded.database_id_))) {
+    } else if (OB_FAIL(graph_json_uint_field(*root, "define_user_id", decoded.define_user_id_))) {
+    } else if (OB_FAIL(graph_json_uint_field(*root, "schema_version", schema_version))) {
+    } else if (schema_version == 0 || schema_version > INT64_MAX) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(graph_json_string_field(*root, "name", name))) {
+    } else if (OB_FAIL(decoded.set_name(name))) {
+    } else if (OB_FAIL(graph_json_array_field(*root, "elements", elements))) {
+    } else if (OB_FAIL(graph_json_array_field(*root, "properties", properties))) {
+    } else {
+      decoded.schema_version_ = static_cast<int64_t>(schema_version);
+    }
+    for (uint64_t i = 0; OB_SUCC(ret) && i < elements->element_count(); ++i) {
+      GraphElement e;
+      ObString kind;
+      ObIJsonBase *node = nullptr;
+      if (OB_FAIL(elements->get_array_element(i, node))) {
+      } else if (node == nullptr) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_string_field(*node, "kind", kind))) {
+      } else if (kind != "vertex" && kind != "edge") {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_uint_field(*node, "id", e.id_))) {
+      } else if (OB_FAIL(graph_json_uint_field(*node, "table_id", e.table_id_))) {
+      } else if (OB_FAIL(graph_json_string_field(*node, "label", e.label_))) {
+      } else if (OB_FAIL(graph_json_columns(*node, "key_columns", e.key_columns_, e.key_count_))) {
+      }
+      if (OB_SUCC(ret) && kind == "edge") {
+        if (OB_FAIL(graph_json_uint_field(*node, "source_id", e.source_id_))) {
+        } else if (e.source_id_ == OB_INVALID_ID) {
+          ret = OB_DESERIALIZE_ERROR;
+        } else if (OB_FAIL(graph_json_uint_field(*node, "destination_id", e.destination_id_))) {
+        } else if (OB_FAIL(graph_json_columns(*node, "source_columns", e.source_columns_, e.source_key_count_))) {
+        } else if (OB_FAIL(graph_json_columns(*node, "destination_columns", e.destination_columns_, e.destination_key_count_))) {
+        }
+      }
+      if (OB_SUCC(ret)) { ret = element_values.push_back(e); }
+    }
+    for (uint64_t i = 0; OB_SUCC(ret) && i < properties->element_count(); ++i) {
+      GraphProperty p;
+      ObIJsonBase *node = nullptr;
+      if (OB_FAIL(properties->get_array_element(i, node))) {
+      } else if (node == nullptr) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_uint_field(*node, "element_id", p.element_id_))) {
+      } else if (OB_FAIL(graph_json_uint_field(*node, "column_id", p.column_id_))) {
+      } else if (OB_FAIL(graph_json_string_field(*node, "name", p.name_))) {
+      } else if (OB_FAIL(property_values.push_back(p))) {
+      }
+    }
+    if (OB_SUCC(ret)) { ret = decoded.set_elements(element_values); }
+    if (OB_SUCC(ret)) { ret = decoded.set_properties(property_values); }
+  }
+  if (OB_SUCC(ret)) {
+    if (!decoded.is_valid()) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else {
+      // Commit only a completely validated definition, with owned strings.
+      ret = assign(decoded);
+    }
+  }
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(GraphProperty, element_id_, column_id_, name_);
+
+OB_DEF_SERIALIZE(GraphElement)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, id_, table_id_, label_, key_count_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < key_count_; ++i) {
+    OB_UNIS_ENCODE(key_columns_[i]);
+  }
+  LST_DO_CODE(OB_UNIS_ENCODE, source_id_, destination_id_,
+              source_key_count_, destination_key_count_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < source_key_count_; ++i) {
+    OB_UNIS_ENCODE(source_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < destination_key_count_; ++i) {
+    OB_UNIS_ENCODE(destination_columns_[i]);
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(GraphElement)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE, id_, table_id_, label_, key_count_);
+  if (OB_SUCC(ret) && (key_count_ <= 0
+      || key_count_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < key_count_; ++i) {
+    OB_UNIS_DECODE(key_columns_[i]);
+  }
+  LST_DO_CODE(OB_UNIS_DECODE, source_id_, destination_id_,
+              source_key_count_, destination_key_count_);
+  if (OB_SUCC(ret)
+      && (source_key_count_ < 0
+          || source_key_count_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER
+          || destination_key_count_ < 0
+          || destination_key_count_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < source_key_count_; ++i) {
+    OB_UNIS_DECODE(source_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < destination_key_count_; ++i) {
+    OB_UNIS_DECODE(destination_columns_[i]);
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(GraphElement)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, id_, table_id_, label_, key_count_);
+  for (int64_t i = 0; i < key_count_; ++i) {
+    OB_UNIS_ADD_LEN(key_columns_[i]);
+  }
+  LST_DO_CODE(OB_UNIS_ADD_LEN, source_id_, destination_id_,
+              source_key_count_, destination_key_count_);
+  for (int64_t i = 0; i < source_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(source_columns_[i]);
+  }
+  for (int64_t i = 0; i < destination_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(destination_columns_[i]);
+  }
+  return len;
+}
+
+bool GraphElement::references_column(uint64_t column_id) const
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < key_count_; ++i) {
+    found = key_columns_[i] == column_id;
+  }
+  for (int64_t i = 0; !found && i < source_key_count_; ++i) {
+    found = source_columns_[i] == column_id;
+  }
+  for (int64_t i = 0; !found && i < destination_key_count_; ++i) {
+    found = destination_columns_[i] == column_id;
+  }
+  return found;
+}
+
+GraphSchema::GraphSchema() = default;
+GraphSchema::GraphSchema(ObIAllocator *allocator) : ObSchema(allocator) {}
+
+void GraphSchema::reset()
+{
+  elements_.reset();
+  properties_.reset();
+  name_.reset();
+  graph_id_ = database_id_ = define_user_id_ = OB_INVALID_ID;
+  schema_version_ = OB_INVALID_VERSION;
+  ObSchema::reset();
+}
+
+const GraphElement *GraphSchema::get_element(uint64_t id) const
+{
+  const GraphElement *result = nullptr;
+  for (int64_t i = 0; result == nullptr && i < elements_.count(); ++i) {
+    if (elements_.at(i).id_ == id) {
+      result = &elements_.at(i);
+    }
+  }
+  return result;
+}
+
+const GraphElement *GraphSchema::get_element(const ObString &label) const
+{
+  const GraphElement *result = nullptr;
+  for (int64_t i = 0; result == nullptr && i < elements_.count(); ++i) {
+    if (ObSchemaNameComparator().compare(elements_.at(i).label_, label) == 0) {
+      result = &elements_.at(i);
+    }
+  }
+  return result;
+}
+
+bool GraphSchema::is_valid() const
+{
+  return graph_id_ != OB_INVALID_ID && schema_version_ > 0 && is_valid_definition();
+}
+
+bool GraphSchema::is_valid_definition() const
+{
+  bool valid = ObSchema::is_valid() && database_id_ != OB_INVALID_ID
+      && define_user_id_ != OB_INVALID_ID && !name_.empty() && !elements_.empty();
+  bool has_vertex = false;
+  for (int64_t i = 0; valid && i < elements_.count(); ++i) {
+    const GraphElement &e = elements_.at(i);
+    valid = e.id_ != OB_INVALID_ID && e.table_id_ != OB_INVALID_ID
+        && !e.label_.empty() && e.key_count_ >= 1
+        && e.key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER;
+    for (int64_t j = 0; valid && j < i; ++j) {
+      const GraphElement &prev = elements_.at(j);
+      valid = e.id_ != prev.id_ && e.table_id_ != prev.table_id_
+          && ObSchemaNameComparator().compare(e.label_, prev.label_) != 0;
+    }
+    for (int64_t k = 0; valid && k < e.key_count_; ++k) {
+      valid = e.key_columns_[k] != OB_INVALID_ID;
+      for (int64_t previous = 0; valid && previous < k; ++previous) {
+        valid = e.key_columns_[k] != e.key_columns_[previous];
+      }
+    }
+    if (e.is_vertex()) {
+      has_vertex = true;
+      valid = valid && e.destination_id_ == OB_INVALID_ID
+          && e.source_key_count_ == 0 && e.destination_key_count_ == 0;
+    } else {
+      const GraphElement *source = get_element(e.source_id_);
+      const GraphElement *dest = get_element(e.destination_id_);
+      valid = valid && source != nullptr && dest != nullptr
+          && source->is_vertex() && dest->is_vertex()
+          && e.source_key_count_ >= 1
+          && e.source_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
+          && e.destination_key_count_ >= 1
+          && e.destination_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
+          && e.source_key_count_ == source->key_count_
+          && e.destination_key_count_ == dest->key_count_;
+      for (int64_t k = 0; valid && k < e.source_key_count_; ++k) {
+        valid = e.source_columns_[k] != OB_INVALID_ID;
+        for (int64_t previous = 0; valid && previous < k; ++previous) {
+          valid = e.source_columns_[k] != e.source_columns_[previous];
+        }
+      }
+      for (int64_t k = 0; valid && k < e.destination_key_count_; ++k) {
+        valid = e.destination_columns_[k] != OB_INVALID_ID;
+        for (int64_t previous = 0; valid && previous < k; ++previous) {
+          valid = e.destination_columns_[k] != e.destination_columns_[previous];
+        }
+      }
+    }
+  }
+  for (int64_t i = 0; valid && i < properties_.count(); ++i) {
+    const GraphProperty &p = properties_.at(i);
+    valid = get_element(p.element_id_) != nullptr
+        && p.column_id_ != OB_INVALID_ID && !p.name_.empty();
+    for (int64_t j = 0; valid && j < i; ++j) {
+      const GraphProperty &prev = properties_.at(j);
+      valid = p.element_id_ != prev.element_id_
+          || (ObSchemaNameComparator().compare(p.name_, prev.name_) != 0 && p.column_id_ != prev.column_id_);
+    }
+  }
+  return valid && has_vertex;
+}
+
+int GraphSchema::set_elements(const ObIArray<GraphElement> &elements)
+{
+  int ret = OB_SUCCESS;
+  if (&elements != &elements_) {
+    GraphElement *buffer = nullptr;
+    if (elements.count() > 0 && nullptr == (buffer = static_cast<GraphElement *>(
+        alloc(sizeof(GraphElement) * elements.count())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < elements.count(); ++i) {
+      new (buffer + i) GraphElement(elements.at(i));
+      ret = deep_copy_str(elements.at(i).label_, buffer[i].label_);
+    }
+    if (OB_SUCC(ret)) { elements_.init(elements.count(), buffer, elements.count()); }
+  }
+  error_ret_ = ret;
+  return ret;
+}
+
+int GraphSchema::set_properties(const ObIArray<GraphProperty> &properties)
+{
+  int ret = OB_SUCCESS;
+  if (&properties != &properties_) {
+    GraphProperty *buffer = nullptr;
+    if (properties.count() > 0 && nullptr == (buffer = static_cast<GraphProperty *>(
+        alloc(sizeof(GraphProperty) * properties.count())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < properties.count(); ++i) {
+      new (buffer + i) GraphProperty(properties.at(i));
+      ret = deep_copy_str(properties.at(i).name_, buffer[i].name_);
+    }
+    if (OB_SUCC(ret)) { properties_.init(properties.count(), buffer, properties.count()); }
+  }
+  error_ret_ = ret;
+  return ret;
+}
+
+int GraphSchema::assign(const GraphSchema &other)
+{
+  int ret = OB_SUCCESS;
+  if (this != &other) {
+    reset();
+    graph_id_ = other.graph_id_;
+    database_id_ = other.database_id_;
+    define_user_id_ = other.define_user_id_;
+    schema_version_ = other.schema_version_;
+    if (OB_FAIL(set_name(other.name_))) {
+    }
+    if (OB_SUCC(ret)) { ret = set_elements(other.elements_); }
+    if (OB_SUCC(ret)) { ret = set_properties(other.properties_); }
+    error_ret_ = ret;
+  }
+  return ret;
+}
+
+int64_t GraphSchema::get_deep_copy_size() const
+{
+  int64_t size = sizeof(*this) + name_.length() + 1;
+  for (int64_t i = 0; i < elements_.count(); ++i) {
+    size += sizeof(GraphElement) + elements_.at(i).label_.length() + 1;
+  }
+  for (int64_t i = 0; i < properties_.count(); ++i) {
+    size += sizeof(GraphProperty) + properties_.at(i).name_.length() + 1;
+  }
+  return size;
+}
+
+bool GraphSchema::references_table(uint64_t table_id) const
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < elements_.count(); ++i) {
+    found = elements_.at(i).table_id_ == table_id;
+  }
+  return found;
+}
+
+bool GraphSchema::references_column(uint64_t table_id, uint64_t column_id) const
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < elements_.count(); ++i) {
+    const GraphElement &e = elements_.at(i);
+    if (e.table_id_ == table_id) {
+      found = e.references_column(column_id);
+      for (int64_t j = 0; !found && j < properties_.count(); ++j) {
+        found = properties_.at(j).element_id_ == e.id_
+            && properties_.at(j).column_id_ == column_id;
+      }
+    }
+  }
+  return found;
+}
+
+namespace
+{
+const ObTableSchema *find_graph_base_table(
+    const ObIArray<const ObTableSchema *> &tables, uint64_t id)
+{
+  const ObTableSchema *result = nullptr;
+  for (int64_t i = 0; result == nullptr && i < tables.count(); ++i) {
+    if (tables.at(i) != nullptr && tables.at(i)->get_table_id() == id) {
+      result = tables.at(i);
+    }
+  }
+  return result;
+}
+
+// Endpoint columns play the same role as child columns of a foreign key. Keep
+// their compatibility rules aligned with ordinary SQL keys: types must match
+// (including signedness), and character keys must use the same collation with
+// enough width to represent the referenced vertex key.
+bool graph_endpoint_type_matches(const ObColumnSchemaV2 &endpoint,
+                                 const ObColumnSchemaV2 &vertex_key)
+{
+  const ObObjType endpoint_type = endpoint.get_data_type();
+  const ObObjType vertex_type = vertex_key.get_data_type();
+  bool matches = endpoint_type == vertex_type
+      || (ob_is_decimal_int_tc(endpoint_type) && ob_is_number_tc(vertex_type))
+      || (ob_is_number_tc(endpoint_type) && ob_is_decimal_int_tc(vertex_type));
+  if (matches && ob_is_string_type(endpoint_type)) {
+    matches = endpoint.get_collation_type() == vertex_key.get_collation_type()
+        && endpoint.get_data_length() >= vertex_key.get_data_length();
+  }
+  if (matches) {
+    const ObIArray<ObString> &endpoint_values = endpoint.get_extended_type_info();
+    const ObIArray<ObString> &vertex_values = vertex_key.get_extended_type_info();
+    matches = endpoint_values.count() == vertex_values.count();
+    for (int64_t i = 0; matches && i < endpoint_values.count(); ++i) {
+      matches = endpoint_values.at(i) == vertex_values.at(i);
+    }
+  }
+  return matches;
+}
+}
+
+int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) const
+{
+  int ret = is_valid_definition() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  for (int64_t i = 0; OB_SUCC(ret) && i < elements_.count(); ++i) {
+    const GraphElement &e = elements_.at(i);
+    const ObTableSchema *table = find_graph_base_table(tables, e.table_id_);
+    if (table == nullptr || table->get_database_id() != database_id_
+        || !table->is_user_table() || table->is_ctas_tmp_table()
+        || table->is_offline_ddl_table() || table->is_user_hidden_table()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph mappings other than current-database persistent user tables without an active offline DDL");
+    } else if (table->get_rowkey_info().get_size() != e.key_count_) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph element keys that do not match the complete base-table primary key");
+    } else {
+      for (int64_t k = 0; OB_SUCC(ret) && k < e.key_count_; ++k) {
+        uint64_t pk = OB_INVALID_ID;
+        const ObColumnSchemaV2 *col = table->get_column_schema(e.key_columns_[k]);
+        if (OB_FAIL(table->get_rowkey_info().get_column_id(k, pk))) {
+        } else if (pk != e.key_columns_[k] || col == nullptr || col->is_hidden()
+                   || col->is_generated_column() || col->is_nullable()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "graph element keys other than direct, non-null primary-key columns in primary-key order");
+        }
+      }
+      for (int direction = 0; OB_SUCC(ret) && !e.is_vertex() && direction < 2; ++direction) {
+        const int64_t count = direction == 0 ? e.source_key_count_ : e.destination_key_count_;
+        const uint64_t *cols = direction == 0 ? e.source_columns_ : e.destination_columns_;
+        const GraphElement *vertex = get_element(
+            direction == 0 ? e.source_id_ : e.destination_id_);
+        const ObTableSchema *vertex_table = vertex == nullptr
+            ? nullptr : find_graph_base_table(tables, vertex->table_id_);
+        if (OB_ISNULL(vertex) || OB_ISNULL(vertex_table)
+            || vertex->key_count_ != count) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph endpoint vertex metadata is inconsistent", K(ret),
+                   K(e), K(direction), KPC(vertex), KPC(vertex_table));
+        }
+        for (int64_t k = 0; OB_SUCC(ret) && k < count; ++k) {
+          const ObColumnSchemaV2 *col = table->get_column_schema(cols[k]);
+          const ObColumnSchemaV2 *vertex_col = vertex_table->get_column_schema(
+              vertex->key_columns_[k]);
+          if (col == nullptr || vertex_col == nullptr || col->is_hidden()
+              || col->is_generated_column()
+              || !graph_endpoint_type_matches(*col, *vertex_col)) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                           "graph endpoint key columns whose SQL types do not match the referenced vertex key");
+          }
+        }
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < properties_.count(); ++i) {
+    const GraphProperty &p = properties_.at(i);
+    const GraphElement *e = get_element(p.element_id_);
+    const ObTableSchema *table = find_graph_base_table(tables, e->table_id_);
+    const ObColumnSchemaV2 *col = table->get_column_schema(p.column_id_);
+    if (col == nullptr || col->is_hidden() || col->is_generated_column()
+        || ObSchemaNameComparator().compare(col->get_column_name_str(), p.name_) != 0) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph properties other than existing direct, non-hidden columns with matching names");
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+      const GraphProperty &prev = properties_.at(j);
+      if (ObSchemaNameComparator().compare(p.name_, prev.name_) == 0) {
+        const ObTableSchema *prev_table = find_graph_base_table(
+            tables, get_element(prev.element_id_)->table_id_);
+        const ObColumnSchemaV2 *prev_col = prev_table->get_column_schema(prev.column_id_);
+        if (col->get_meta_type() != prev_col->get_meta_type()
+            || col->get_accuracy() != prev_col->get_accuracy()
+            || col->get_extended_type_info().count() != prev_col->get_extended_type_info().count()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "different SQL types for the same graph property name");
+        }
+        for (int64_t k = 0; OB_SUCC(ret) && k < col->get_extended_type_info().count(); ++k) {
+          if (col->get_extended_type_info().at(k) != prev_col->get_extended_type_info().at(k)) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "different ENUM or SET values for the same graph property name");
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE(GraphSchema)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, graph_id_, database_id_, define_user_id_, schema_version_,
+              name_);
+  OB_UNIS_ENCODE(elements_.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < elements_.count(); ++i) {
+    OB_UNIS_ENCODE(elements_.at(i));
+  }
+  OB_UNIS_ENCODE(properties_.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < properties_.count(); ++i) {
+    OB_UNIS_ENCODE(properties_.at(i));
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(GraphSchema)
+{
+  int ret = OB_SUCCESS;
+  GraphSchema decoded;
+  ObSEArray<GraphElement, 4> elements;
+  ObSEArray<GraphProperty, 8> properties;
+  LST_DO_CODE(OB_UNIS_DECODE, decoded.graph_id_, decoded.database_id_, decoded.define_user_id_,
+              decoded.schema_version_, decoded.name_);
+  int64_t element_count = 0;
+  int64_t property_count = 0;
+  OB_UNIS_DECODE(element_count);
+  if (OB_SUCC(ret) && (element_count <= 0 || element_count > data_len - pos)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < element_count; ++i) {
+    GraphElement element;
+    OB_UNIS_DECODE(element);
+    if (OB_SUCC(ret)) { ret = elements.push_back(element); }
+  }
+  OB_UNIS_DECODE(property_count);
+  if (OB_SUCC(ret) && (property_count < 0 || property_count > data_len - pos)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < property_count; ++i) {
+    GraphProperty property;
+    OB_UNIS_DECODE(property);
+    if (OB_SUCC(ret)) { ret = properties.push_back(property); }
+  }
+  if (OB_SUCC(ret)) { ret = decoded.set_elements(elements); }
+  if (OB_SUCC(ret)) { ret = decoded.set_properties(properties); }
+  if (OB_SUCC(ret)) {
+    if (!decoded.is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = assign(decoded);
+    }
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(GraphSchema)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, graph_id_, database_id_, define_user_id_, schema_version_,
+              name_);
+  OB_UNIS_ADD_LEN(elements_.count());
+  for (int64_t i = 0; i < elements_.count(); ++i) { OB_UNIS_ADD_LEN(elements_.at(i)); }
+  OB_UNIS_ADD_LEN(properties_.count());
+  for (int64_t i = 0; i < properties_.count(); ++i) { OB_UNIS_ADD_LEN(properties_.at(i)); }
+  return len;
+}
+int GraphMgr::deep_copy(const GraphMgr &other)
+{
+  int ret = OB_SUCCESS;
+  if (this != &other) {
+    reset();
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.graphs_.count(); ++i) {
+      ret = add(*other.graphs_.at(i));
+    }
+  }
+  return ret;
+}
+
+int GraphMgr::add(const GraphSchema &schema)
+{
+  int ret = OB_SUCCESS;
+  GraphSchema *copy = nullptr;
+  if (!schema.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, schema, copy))) {
+  } else {
+    int64_t index = 0;
+    while (index < graphs_.count() && graphs_.at(index)->get_graph_id() != schema.get_graph_id()) {
+      ++index;
+    }
+    if (index == graphs_.count()) { ret = graphs_.push_back(copy); }
+    else { graphs_.at(index) = copy; }
+  }
+  return ret;
+}
+
+int GraphMgr::remove(uint64_t graph_id)
+{
+  int ret = OB_ENTRY_NOT_EXIST;
+  for (int64_t i = 0; i < graphs_.count(); ++i) {
+    if (graphs_.at(i)->get_graph_id() == graph_id) {
+      ret = graphs_.remove(i);
+      break;
+    }
+  }
+  return ret;
+}
+
+const GraphSchema *GraphMgr::get(uint64_t graph_id) const
+{
+  const GraphSchema *result = nullptr;
+  for (int64_t i = 0; result == nullptr && i < graphs_.count(); ++i) {
+    if (graphs_.at(i)->get_graph_id() == graph_id) { result = graphs_.at(i); }
+  }
+  return result;
+}
+
+const GraphSchema *GraphMgr::get(uint64_t database_id, const ObString &name,
+                                  ObNameCaseMode mode) const
+{
+  const GraphSchema *result = nullptr;
+  ObSchemaNameComparator comparator(mode, database_id);
+  for (int64_t i = 0; result == nullptr && i < graphs_.count(); ++i) {
+    if (graphs_.at(i)->get_database_id() == database_id
+        && comparator.compare(graphs_.at(i)->get_name(), name) == 0) {
+      result = graphs_.at(i);
+    }
+  }
+  return result;
+}
+} // namespace schema
+} // namespace share
+} // namespace oceanbase

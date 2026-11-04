@@ -1,0 +1,34 @@
+SELECT URL_DECODE('a%20b') AS decoded, URL_ENCODE('a b') AS encoded;
+SELECT URL_ENCODE('AZaz09-._~') AS unreserved,
+       URL_ENCODE('/?&=+#%') AS reserved,
+       URL_DECODE('%2f%3F%26%3d%2B%23%25') AS decoded;
+SELECT URL_ENCODE('中文') AS encoded, URL_DECODE('%E4%B8%AD%E6%96%87') AS decoded;
+SELECT URL_ENCODE(NULL) IS NULL AS null_encode, URL_DECODE(NULL) IS NULL AS null_decode,
+       LENGTH(URL_ENCODE('')) AS empty_encode, LENGTH(URL_DECODE('')) AS empty_decode;
+SELECT URL_ENCODE(123) AS encoded, URL_DECODE(123) AS decoded,
+       HEX(URL_DECODE('%00')) AS nul_byte;
+--error ER_WRONG_ARGUMENTS
+SELECT URL_DECODE('%GG');
+SELECT URL_DECODE('still%20works') AS decoded;
+
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS url_codec_rows;
+--enable_warnings
+CREATE TABLE url_codec_rows(id INT PRIMARY KEY, c VARCHAR(100) COLLATE utf8mb4_general_ci);
+INSERT INTO url_codec_rows VALUES (1,'a b'),(2,'中文'),(3,''),(4,NULL);
+--enable_query_log
+SELECT id,CONCAT('[',URL_ENCODE(c),']') AS encoded,
+       CONCAT('[',URL_DECODE(URL_ENCODE(c)),']') AS roundtrip
+FROM url_codec_rows ORDER BY id;
+SELECT DISTINCT COLLATION(URL_ENCODE(c))=COLLATION(c) AS encode_preserves_collation,
+                COLLATION(URL_DECODE(c))=COLLATION(c) AS decode_preserves_collation FROM url_codec_rows;
+PREPARE url_codec_ps FROM 'SELECT URL_DECODE(?) AS decoded';
+SET @url_input='a%20b';
+EXECUTE url_codec_ps USING @url_input;
+SET @url_input=NULL;
+EXECUTE url_codec_ps USING @url_input;
+DEALLOCATE PREPARE url_codec_ps;
+--disable_query_log
+DROP TABLE url_codec_rows;
+--enable_query_log

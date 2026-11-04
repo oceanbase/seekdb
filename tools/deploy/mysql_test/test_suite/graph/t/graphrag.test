@@ -1,0 +1,71 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+DROP TABLE IF EXISTS graph_rag_chunks;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+CREATE TABLE graph_rag_chunks (
+  chunk_id BIGINT PRIMARY KEY,
+  person_id BIGINT NOT NULL,
+  document_id BIGINT NOT NULL,
+  source_uri VARCHAR(64) NOT NULL,
+  source_version BIGINT NOT NULL,
+  embedding VECTOR(3),
+  VECTOR INDEX graph_rag_embedding_hnsw(embedding)
+    WITH (type=hnsw,distance=l2,lib=vsag)
+);
+INSERT INTO graph_rag_chunks VALUES
+  (100,1,1000,'doc://alice',7,'[0,0,0]'),
+  (101,2,1001,'doc://bob',3,'[1,0,0]'),
+  (102,3,1002,'doc://carol',9,'[2,0,0]'),
+  (103,4,1003,'doc://loop',2,'[8,0,0]'),
+  (104,5,1004,'doc://isolated',1,'[9,0,0]');
+--enable_query_log
+
+--echo exact_knn_seed_to_bounded_walk_to_source_rows
+WITH exact_seeds AS (
+  SELECT chunk_id,person_id,document_id,source_uri,source_version,
+         l2_distance(embedding,'[0,0,0]') AS score
+  FROM graph_rag_chunks
+  ORDER BY score,chunk_id LIMIT 2
+)
+SELECT s.chunk_id AS seed_chunk,s.person_id AS seed_id,s.score AS seed_score,
+       p.match_no,p.step_no,
+       JSON_VALUE(p.from_identity,'$.KEY_VALUE.id') AS from_id,
+       JSON_VALUE(p.edge_identity,'$.KEY_VALUE.id') AS edge_id,
+       JSON_VALUE(p.to_identity,'$.KEY_VALUE.id') AS to_id,
+       reached.document_id,reached.chunk_id,reached.source_uri,reached.source_version
+FROM exact_seeds s,
+LATERAL (
+  SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.person_id)-[e IS knows]->{0,2}(b IS person)
+    ONE ROW PER STEP (v1,step_e,v2)
+    COLUMNS(MATCHNUM() AS match_no,ELEMENT_NUMBER(step_e) AS step_no,
+            VERTEX_ID(v1) AS from_identity,
+            EDGE_ID(step_e) AS edge_identity,
+            VERTEX_ID(v2) AS to_identity)) g
+) p
+JOIN graph_rag_chunks reached
+  ON reached.person_id=CAST(COALESCE(
+       JSON_VALUE(p.to_identity,'$.KEY_VALUE.id'),
+       JSON_VALUE(p.from_identity,'$.KEY_VALUE.id')) AS SIGNED)
+ORDER BY seed_score,seed_chunk,match_no,step_no,reached.chunk_id;
+
+--echo approximate_knn_composition_smoke
+WITH approx_seeds AS (
+  SELECT chunk_id,person_id,l2_distance(embedding,'[0,0,0]') AS score
+  FROM graph_rag_chunks
+  ORDER BY score APPROXIMATE LIMIT 2
+)
+SELECT COUNT(*) > 0 AS composed
+FROM approx_seeds s,
+LATERAL (
+  SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.person_id)-[e IS knows]->{1}(b IS person)
+    COLUMNS(b.id AS reached_id,COUNT(e.id) AS hops)) g
+) p;
+
+DROP TABLE graph_rag_chunks;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

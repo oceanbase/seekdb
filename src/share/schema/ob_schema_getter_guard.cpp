@@ -2094,6 +2094,58 @@ inline bool ObSchemaGetterGuard::check_inner_stat() const
 
 // OB_INVALID_VERSION means schema doesn't exist.
 // bugfix: 
+int ObSchemaGetterGuard::get_graph_schema(uint64_t graph_id, const GraphSchema *&schema)
+{
+  int ret = OB_SUCCESS;
+  const ObSchemaMgr *mgr = nullptr;
+  schema = nullptr;
+  if (!check_inner_stat()) {
+    ret = OB_INNER_STAT_ERROR;
+  } else if (graph_id == OB_INVALID_ID) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(check_lazy_guard(mgr))) {
+  } else {
+    schema = mgr->get_graph_schema(graph_id);
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::get_graph_schema(uint64_t database_id, const ObString &name,
+                                         const GraphSchema *&schema)
+{
+  int ret = OB_SUCCESS;
+  const ObSchemaMgr *mgr = nullptr;
+  ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+  schema = nullptr;
+  if (!check_inner_stat()) {
+    ret = OB_INNER_STAT_ERROR;
+  } else if (database_id == OB_INVALID_ID || name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(check_lazy_guard(mgr))) {
+  } else if (OB_FAIL(mgr->get_runtime_name_case_mode(mode))) {
+  } else {
+    schema = mgr->get_graph_schema(database_id, name, mode);
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::get_graph_schemas(ObIArray<const GraphSchema *> &schemas)
+{
+  int ret = OB_SUCCESS;
+  const ObSchemaMgr *mgr = nullptr;
+  schemas.reset();
+  if (!check_inner_stat()) {
+    ret = OB_INNER_STAT_ERROR;
+  } else if (OB_FAIL(check_lazy_guard(mgr))) {
+  } else {
+    const ObIArray<GraphSchema *> &graphs = mgr->get_graph_schemas();
+    for (int64_t i = 0; OB_SUCC(ret) && i < graphs.count(); ++i) {
+      ret = schemas.push_back(graphs.at(i));
+    }
+  }
+  return ret;
+}
+
 int ObSchemaGetterGuard::get_schema_version(
     const ObSchemaType schema_type,
     const uint64_t schema_id,
@@ -2150,6 +2202,11 @@ int ObSchemaGetterGuard::get_schema_version(
       }
     case DATABASE_SCHEMA : {
         GET_SCHEMA_VERSION_NT(database, ObSimpleDatabaseSchema);
+        break;
+      }
+    case PROPERTY_GRAPH_SCHEMA : {
+        GET_SCHEMA_VERSION_NT(graph, GraphSchema);
+        GET_DATABASE_ID();
         break;
       }
     case TABLE_SCHEMA : {

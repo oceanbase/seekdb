@@ -490,7 +490,8 @@ int ObLogTableScan::generate_access_exprs()
   } else if (has_es_match() && OB_FAIL(prepare_match_dep_exprs())) {
   } else if (OB_FAIL(generate_necessary_domain_exprs())) {
   } else if (OB_FAIL(allocate_group_id_expr())) {
-  } else if (NULL != group_id_expr_ && use_batch_ && OB_FAIL(access_exprs_.push_back(group_id_expr_))) {
+  } else if (NULL != group_id_expr_ && use_batch_
+             && OB_FAIL(add_var_to_array_no_dup(access_exprs_, group_id_expr_))) {
   } else if (OB_FAIL(append_array_no_dup(access_exprs_, rowkey_exprs_))) {
   } else if (OB_FAIL(append_array_no_dup(access_exprs_, part_exprs_))) {
   } else if (is_spatial_index_ && OB_FAIL(append_array_no_dup(access_exprs_, spatial_exprs_))) {
@@ -960,6 +961,9 @@ int ObLogTableScan::allocate_group_id_expr()
   ObRawExpr *group_id_expr = nullptr;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (!use_group_id() || group_id_expr_ != nullptr) {
+    // get_op_exprs() may be called more than once while a graph operator
+    // registers child DAS expressions. Keep the same pseudo column instance.
   } else if (use_group_id() && OB_FAIL(ObOptimizerUtil::allocate_group_id_expr(get_plan(), group_id_expr))) {
   } else {
     group_id_expr_ = group_id_expr;
@@ -999,7 +1003,7 @@ int ObLogTableScan::generate_necessary_rowkey_and_partkey_exprs()
   } else if (OB_FAIL(get_mbr_column_exprs(table_id_, spatial_exprs_))) {
   } else if (is_table_without_pk && is_index_global_ && index_back_ &&
              OB_FAIL(get_part_column_exprs(table_id_, ref_table_id_, part_exprs_))) {
-  } else if ((has_lob_column || need_get_rowkey_exprs())
+  } else if ((has_lob_column || need_get_rowkey_exprs()) && rowkey_exprs_.empty()
       && OB_FAIL(get_plan()->get_rowkey_exprs(table_id_, ref_table_id_, rowkey_exprs_))) {
   } else { /*do nothing*/ }
   return ret;
@@ -3906,8 +3910,22 @@ int ObLogTableScan::generate_filter_monotonicity()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_filter_exprs().count(); ++i) {
       col_exprs.reuse();
-      if (OB_ISNULL(filter_expr = get_filter_exprs().at(i))) {
+      bool monotonicity_generated = false;
+      filter_expr = get_filter_exprs().at(i);
+      if (OB_ISNULL(filter_expr)) {
         ret = OB_ERR_UNEXPECTED;
+      } else {
+        for (int64_t j = 0;
+             !monotonicity_generated && j < filter_monotonicity_.count();
+             ++j) {
+          monotonicity_generated =
+              filter_expr == filter_monotonicity_.at(j).filter_expr_;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (monotonicity_generated) {
+        // get_op_exprs() can be revisited while graph DAS expressions are
+        // registered. Reuse the existing assist expressions in that case.
       } else if (T_OP_GT != filter_expr->get_expr_type() &&
                  T_OP_GE != filter_expr->get_expr_type() &&
                  T_OP_LT != filter_expr->get_expr_type() &&

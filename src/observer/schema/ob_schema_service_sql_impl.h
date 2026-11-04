@@ -33,6 +33,7 @@
 #include "share/schema/ob_trigger_sql_service.h"
 #include "share/schema/ob_sys_variable_sql_service.h"
 #include "share/schema/ob_ai_model_sql_service.h"
+#include "share/schema/graph_sql_service.h"
 #include "lib/string/ob_string.h"
 
 namespace oceanbase
@@ -100,6 +101,8 @@ public:
   GET_DDL_SQL_SERVICE_FUNC(Trigger, trigger)
   GET_DDL_SQL_SERVICE_FUNC(SysVariable, sys_variable)
   GET_DDL_SQL_SERVICE_FUNC(AiModel, ai_model)
+  // The legacy macro prepends Ob; new GraphSqlService follows the unprefixed type naming rule.
+  GraphSqlService &get_graph_sql_service() override { return graph_service_; }
 
   /* sequence_id related */
   virtual int init_sequence_id_by_sys_leader_epoch(const int64_t sys_leader_epoch);
@@ -184,6 +187,7 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE(obj_mysql_priv, ObObjMysqlPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE(ai_model, ObAiModelSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE(graph, GraphSchema);
 
   // Get incremental schema operations between (base_version, new_schema_version].
   virtual int get_increment_schema_operations(const ObRefreshSchemaStatus &schema_status,
@@ -279,6 +283,7 @@ public:
   //get table schema of a table id list by schema version
   GET_BATCH_SCHEMAS_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE(ai_model, ObAiModelSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE(graph, GraphSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE(obj_mysql_priv, ObObjMysqlPriv);
 
   //batch will split big query into batch query, each time MAX_IN_QUERY_PER_TIME
@@ -338,6 +343,7 @@ public:
   FETCH_SCHEMAS_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   FETCH_SCHEMAS_FUNC_DECLARE(obj_mysql_priv, ObObjMysqlPriv);
   FETCH_SCHEMAS_FUNC_DECLARE(ai_model, ObAiModelSchema);
+  FETCH_SCHEMAS_FUNC_DECLARE(graph, GraphSchema);
 
   int fetch_mock_fk_parent_table_column_info(
       const ObRefreshSchemaStatus &schema_status,
@@ -888,6 +894,7 @@ private:
 
   ObSysVariableSqlService sys_variable_service_;
   ObAiModelSqlService ai_model_service_;
+  GraphSqlService graph_service_;
 
   ObClusterSchemaStatus cluster_schema_status_;
   const ObServerSchemaService *schema_service_;

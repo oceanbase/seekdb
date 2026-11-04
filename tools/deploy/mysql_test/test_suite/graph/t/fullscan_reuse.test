@@ -1,0 +1,97 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+CREATE TABLE fs_seeds(binding_id INT PRIMARY KEY,seed BIGINT,cutoff BIGINT);
+INSERT INTO fs_seeds VALUES(1,1,2020),(2,1,2022),(3,5,2020),(4,5,2022),(5,3,2020);
+--enable_query_log
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='fullscan_reuse'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2020]->{0,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='fullscan_correlated'
+SELECT s.binding_id,g.endpoint FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->{1,2}(b IS person)
+ COLUMNS(b.id AS endpoint)) p) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS fullscan_reuse_eligible FROM plan_table
+ WHERE statement_id='fullscan_reuse' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%access=full-scan, mode=WALK, runtime=native%adjacency_reuse=eligible%';
+SELECT COUNT(*) AS parameterized_correlated_reuse FROM plan_table
+ WHERE statement_id='fullscan_correlated' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%adjacency_reuse=eligible%';
+DROP TABLE plan_table;
+--echo unindexed_cycles_keep_complete_path_multiplicity
+SELECT s.binding_id,g.endpoint,g.hops,g.edges FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=2020]->{0,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p
+) g ORDER BY s.binding_id,g.hops,CAST(g.edges AS CHAR);
+--echo mixed_hit_and_miss_sources_and_empty_adjacency
+INSERT INTO graph_knows VALUES(30,1,3,2030),(31,2,5,2030);
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{1,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+--echo incoming_reuse_keeps_edge_and_step_evidence
+SELECT s.binding_id,g.hops,g.step_no,g.src,g.eid,g.dst FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)<-[e IS knows WHERE e.since>=2020]-{1,2}(b IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(COUNT(e.id) AS hops,ELEMENT_NUMBER(se) AS step_no,v1.id AS src,se.id AS eid,v2.id AS dst)) p
+) g ORDER BY s.binding_id,g.hops,g.eid,g.step_no,g.src,g.dst;
+--echo correlated_predicates_must_not_reuse_another_binding_cutoff
+SELECT s.binding_id,g.endpoint,g.hops FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->{1,2}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p
+) g ORDER BY s.binding_id,g.hops,g.endpoint;
+SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[e IS knows WHERE RAND(1)<1]->{1,2}(b IS person)
+ COLUMNS(b.id AS endpoint)) p
+) g GROUP BY s.binding_id ORDER BY s.binding_id;
+--echo statement_boundaries_and_read_your_writes
+PREPARE fs_cached FROM 'SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=?]->{1}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.binding_id ORDER BY s.binding_id';
+SET @cutoff=2020;
+EXECUTE fs_cached USING @cutoff;
+START TRANSACTION;
+DELETE FROM graph_person WHERE id=2;
+EXECUTE fs_cached USING @cutoff;
+ROLLBACK;
+SET @cutoff=2022;
+EXECUTE fs_cached USING @cutoff;
+DEALLOCATE PREPARE fs_cached;
+--disable_query_log
+CREATE TABLE fs_digit(n INT PRIMARY KEY);
+INSERT INTO fs_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO graph_knows
+ SELECT 1000+d0.n+10*d1.n+100*d2.n+1000*d3.n,1,5,2030
+ FROM fs_digit d0,fs_digit d1,fs_digit d2,fs_digit d3
+ WHERE d0.n+10*d1.n+100*d2.n+1000*d3.n<5000;
+--enable_query_log
+--echo full_scan_page_completion_and_repeated_seeds
+SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[e IS knows]->{1}(b IS person)
+ COLUMNS(b.id AS endpoint)) p
+) g GROUP BY s.binding_id ORDER BY s.binding_id;
+--disable_query_log
+let $saved_hash_area_size=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+ALTER SYSTEM SET _hash_area_size='4M';
+sleep 6;
+--enable_query_log
+--echo optional_cache_budget_does_not_truncate_the_full_scan
+SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[e IS knows]->{1}(b IS person)
+ COLUMNS(b.id AS endpoint)) p
+) g GROUP BY s.binding_id ORDER BY s.binding_id;
+--disable_query_log
+eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
+sleep 6;
+--enable_query_log
+DROP TABLE fs_digit,fs_seeds;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

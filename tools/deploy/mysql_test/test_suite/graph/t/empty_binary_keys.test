@@ -1,0 +1,34 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS geb_graph;
+--disable_warnings
+DROP TABLE IF EXISTS geb_e,geb_v;
+--enable_warnings
+CREATE TABLE geb_v(id VARBINARY(20) PRIMARY KEY);
+CREATE TABLE geb_e(edge_id INT PRIMARY KEY,src VARBINARY(20),dst VARBINARY(20),kind VARBINARY(20));
+INSERT INTO geb_v VALUES(''),('A'),('B');
+INSERT INTO geb_e VALUES(1,'','A',''),(2,'','B','other'),(3,'A','','');
+CREATE PROPERTY GRAPH geb_graph VERTEX TABLES(geb_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(geb_e KEY(edge_id) SOURCE KEY(src) REFERENCES geb_v(id)
+DESTINATION KEY(dst) REFERENCES geb_v(id) LABEL link PROPERTIES(edge_id,kind));
+--let $geb_query=SELECT HEX(source) AS source,HEX(destination) AS destination,hops FROM GRAPH_TABLE(geb_graph MATCH (a IS node WHERE a.id IN(X''))-[e IS link WHERE e.kind IN(X'')]->{0,2}(b IS node) COLUMNS(a.id AS source,b.id AS destination,COUNT(e.edge_id) AS hops)) g ORDER BY hops,destination
+--enable_query_log
+--echo fullscan_zero_hop_and_cycle_through_empty_key
+eval $geb_query;
+--echo indexed_expansion_keeps_empty_edge_filter
+CREATE INDEX geb_out ON geb_e(src,kind,dst);
+eval $geb_query;
+--echo fixed_join_uses_the_same_empty_literal_semantics
+SELECT HEX(source) AS source,HEX(destination) AS destination FROM GRAPH_TABLE(geb_graph MATCH
+(a IS node WHERE a.id IN(X''))-[e IS link WHERE e.kind IN(X'')]->(b IS node)
+COLUMNS(a.id AS source,b.id AS destination)) g;
+--echo prepared_seed_rescan_preserves_empty_binary_identity
+PREPARE geb_ps FROM 'SELECT HEX(destination) AS destination,hops FROM GRAPH_TABLE(geb_graph MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.kind IN(X'''')]->{0,2}(b IS node) COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops)) g ORDER BY hops,destination';
+SET @seed=X'';
+EXECUTE geb_ps USING @seed;
+SET @seed=X'41';
+EXECUTE geb_ps USING @seed;
+SET @seed=X'';
+EXECUTE geb_ps USING @seed;
+DEALLOCATE PREPARE geb_ps;
+DROP PROPERTY GRAPH geb_graph;
+DROP TABLE geb_e,geb_v;

@@ -1,0 +1,50 @@
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS async_minor_freeze_retry;
+--enable_warnings
+CREATE TABLE async_minor_freeze_retry(id INT PRIMARY KEY, v INT);
+INSERT INTO async_minor_freeze_retry VALUES(1,11),(2,22);
+--let $tablet_id = query_get_value(SELECT m.tablet_id FROM oceanbase.__all_table t JOIN oceanbase.__all_tablet_to_table m ON t.table_id=m.table_id WHERE t.table_name='async_minor_freeze_retry', tablet_id, 1)
+
+# A transient freeze admission failure must not discard the asynchronous
+# request. Three consecutive failures also catch a single-retry workaround.
+ALTER SYSTEM SET_TP tp_name='ERRSIM_FREEZER_FREEZE_FAILURE',error_code=4263,occur=3,frequency=0;
+ALTER SYSTEM MINOR FREEZE;
+--let $wait_timeout = 60
+--let $wait_condition = SELECT COUNT(*) > 0 FROM oceanbase.__all_virtual_table_mgr WHERE tablet_id=$tablet_id AND table_type IN (11,12,19) AND size>0
+--source mysql_test/include/wait_condition.inc
+ALTER SYSTEM SET_TP tp_name='ERRSIM_FREEZER_FREEZE_FAILURE',error_code=0,frequency=0;
+--enable_query_log
+SELECT * FROM async_minor_freeze_retry ORDER BY id;
+--disable_query_log
+
+# A completed request must release its pending flag for a subsequent freeze;
+# EAGAIN is the other supported transient admission error.
+--let $previous_scn = `SELECT MAX(end_log_scn) FROM oceanbase.__all_virtual_table_mgr WHERE tablet_id=$tablet_id AND table_type IN (11,12,19)`
+UPDATE async_minor_freeze_retry SET v=v+1;
+ALTER SYSTEM SET_TP tp_name='ERRSIM_FREEZER_FREEZE_FAILURE',error_code=4023,occur=3,frequency=0;
+ALTER SYSTEM MINOR FREEZE;
+--let $wait_timeout = 60
+--let $wait_condition = SELECT COUNT(*) > 0 FROM oceanbase.__all_virtual_table_mgr WHERE tablet_id=$tablet_id AND table_type IN (11,12,19) AND size>0 AND end_log_scn>$previous_scn
+--source mysql_test/include/wait_condition.inc
+ALTER SYSTEM SET_TP tp_name='ERRSIM_FREEZER_FREEZE_FAILURE',error_code=0,frequency=0;
+--enable_query_log
+SELECT * FROM async_minor_freeze_retry ORDER BY id;
+--disable_query_log
+
+# Exhausting the admission retry budget must also release the pending flag.
+--let $previous_scn = `SELECT MAX(end_log_scn) FROM oceanbase.__all_virtual_table_mgr WHERE tablet_id=$tablet_id AND table_type IN (11,12,19)`
+UPDATE async_minor_freeze_retry SET v=v+1;
+ALTER SYSTEM SET_TP tp_name='ERRSIM_FREEZER_FREEZE_FAILURE',error_code=4263,frequency=1;
+ALTER SYSTEM MINOR FREEZE;
+--real_sleep 12
+ALTER SYSTEM SET_TP tp_name='ERRSIM_FREEZER_FREEZE_FAILURE',error_code=0,frequency=0;
+ALTER SYSTEM MINOR FREEZE;
+--let $wait_timeout = 60
+--let $wait_condition = SELECT COUNT(*) > 0 FROM oceanbase.__all_virtual_table_mgr WHERE tablet_id=$tablet_id AND table_type IN (11,12,19) AND size>0 AND end_log_scn>$previous_scn
+--source mysql_test/include/wait_condition.inc
+--enable_query_log
+SELECT * FROM async_minor_freeze_retry ORDER BY id;
+--disable_query_log
+DROP TABLE async_minor_freeze_retry;
+--enable_query_log

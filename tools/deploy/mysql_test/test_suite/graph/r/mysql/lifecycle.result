@@ -1,0 +1,148 @@
+START TRANSACTION;
+DELETE FROM graph_person WHERE id=2;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+COUNT(*)
+2
+ROLLBACK;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+COUNT(*)
+5
+START TRANSACTION;
+INSERT INTO graph_person VALUES (99,'New endpoint',20);
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+COUNT(*)
+6
+ROLLBACK;
+PREPARE graph_cached FROM 'SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g';
+PREPARE graph_filter_cached FROM 'SELECT name FROM GRAPH_TABLE(graph_social MATCH(p IS person WHERE p.id=?) COLUMNS(p.name AS name)) g';
+SET @graph_id=1;
+EXECUTE graph_filter_cached USING @graph_id;
+name
+Alice
+SET @graph_id=2;
+EXECUTE graph_filter_cached USING @graph_id;
+name
+Bob
+DEALLOCATE PREPARE graph_filter_cached;
+EXECUTE graph_cached;
+COUNT(*)
+5
+SELECT COUNT(*)=1 AS uses_native_lifecycle FROM plan_table WHERE statement_id='native_lifecycle' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%runtime=native%';
+uses_native_lifecycle
+1
+PREPARE graph_native_cached FROM 'SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR)';
+EXECUTE graph_native_cached;
+destination	edges
+2	[10]
+2	[11]
+3	[10, 12]
+3	[11, 12]
+base_table_rows_before_dropping_graph
+SELECT * FROM graph_person ORDER BY id;
+id	name	age
+1	Alice	30
+2	Bob	NULL
+3	Carol	25
+4	NULL	40
+5	Isolated	50
+SELECT * FROM graph_company ORDER BY id;
+id	name
+1	Acme
+SELECT * FROM graph_knows ORDER BY id;
+id	src	dst	since
+10	1	2	2020
+11	1	2	2021
+12	2	3	2022
+13	3	1	2023
+14	4	4	2024
+15	1	99	2025
+16	NULL	2	2026
+17	98	2	2027
+SELECT * FROM graph_works ORDER BY id;
+id	src	dst
+20	1	1
+DROP PROPERTY GRAPH graph_social;
+dropping_graph_preserves_all_vertex_and_edge_rows
+SELECT * FROM graph_person ORDER BY id;
+id	name	age
+1	Alice	30
+2	Bob	NULL
+3	Carol	25
+4	NULL	40
+5	Isolated	50
+SELECT * FROM graph_company ORDER BY id;
+id	name
+1	Acme
+SELECT * FROM graph_knows ORDER BY id;
+id	src	dst	since
+10	1	2	2020
+11	1	2	2021
+12	2	3	2022
+13	3	1	2023
+14	4	4	2024
+15	1	99	2025
+16	NULL	2	2026
+17	98	2	2027
+SELECT * FROM graph_works ORDER BY id;
+id	src	dst
+20	1	1
+EXECUTE graph_native_cached;
+ERROR 42S02: Table 'test.graph_social' doesn't exist
+CREATE TABLE graph_remap_vertex(id BIGINT PRIMARY KEY);
+CREATE TABLE graph_remap_edge(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT);
+INSERT INTO graph_remap_vertex VALUES(1),(7),(8);
+INSERT INTO graph_remap_edge VALUES(70,1,7),(71,1,7),(72,7,8);
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES(graph_remap_vertex KEY(id) LABEL person PROPERTIES(id))
+EDGE TABLES(graph_remap_edge KEY(id) SOURCE KEY(src) REFERENCES graph_remap_vertex(id)
+DESTINATION KEY(dst) REFERENCES graph_remap_vertex(id) LABEL knows PROPERTIES(id));
+cached_native_path_uses_recreated_graph_mapping
+EXECUTE graph_native_cached;
+destination	edges
+7	[70]
+7	[71]
+8	[70, 72]
+8	[71, 72]
+DEALLOCATE PREPARE graph_native_cached;
+EXECUTE graph_cached;
+COUNT(*)
+3
+DEALLOCATE PREPARE graph_cached;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_remap_edge,graph_remap_vertex;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE graph_vertex2(tenant BIGINT,id BIGINT,name VARCHAR(40),PRIMARY KEY(tenant,id));
+CREATE TABLE graph_edge2(tenant BIGINT,id BIGINT,src_tenant BIGINT,src BIGINT,dst_tenant BIGINT,dst BIGINT,PRIMARY KEY(tenant,id));
+INSERT INTO graph_vertex2 VALUES(1,1,'one'),(2,1,'two'),(2,2,'three');
+INSERT INTO graph_edge2 VALUES(1,1,1,1,2,1),(1,2,2,1,2,2);
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES(graph_vertex2 KEY(tenant,id) LABEL person PROPERTIES(tenant,id,name))
+EDGE TABLES(graph_edge2 KEY(tenant,id) SOURCE KEY(src_tenant,src) REFERENCES graph_vertex2(tenant,id)
+DESTINATION KEY(dst_tenant,dst) REFERENCES graph_vertex2(tenant,id) LABEL link PROPERTIES(tenant,id));
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person)-[e IS link]->(b IS person)
+COLUMNS(a.name AS source,b.name AS destination)) g ORDER BY source;
+source	destination
+one	two
+two	three
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_vertex2 KEY(tenant,id) LABEL person PROPERTIES(tenant,id))
+EDGE TABLES(graph_edge2 KEY(tenant,id) SOURCE KEY(src,src_tenant) REFERENCES graph_vertex2(id,tenant)
+DESTINATION KEY(dst_tenant,dst) REFERENCES graph_vertex2(tenant,id) LABEL link PROPERTIES(id));
+ERROR 0A000: graph endpoint references that do not match the complete vertex key in order not supported
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_edge2,graph_vertex2;
+CREATE DATABASE graph_dropdb;
+USE graph_dropdb;
+CREATE TABLE vertices(id BIGINT PRIMARY KEY);
+CREATE PROPERTY GRAPH saved VERTEX TABLES(vertices KEY(id) LABEL item PROPERTIES(id));
+INSERT INTO vertices VALUES(1);
+SELECT COUNT(*) FROM GRAPH_TABLE(saved MATCH(v IS item) COLUMNS(v.id AS id)) g;
+COUNT(*)
+1
+DROP DATABASE graph_dropdb;
+USE test;
+CREATE DATABASE graph_dropdb;
+USE graph_dropdb;
+SHOW CREATE PROPERTY GRAPH saved;
+ERROR 42S02: Table 'graph_dropdb.saved' doesn't exist
+CREATE TABLE vertices(id BIGINT PRIMARY KEY);
+CREATE PROPERTY GRAPH saved VERTEX TABLES(vertices KEY(id) LABEL item PROPERTIES(id));
+DROP DATABASE graph_dropdb;
+USE test;

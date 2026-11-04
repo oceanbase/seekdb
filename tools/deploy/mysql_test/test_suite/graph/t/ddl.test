@@ -1,0 +1,209 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+SHOW CREATE PROPERTY GRAPH graph_social;
+--error ER_TABLE_EXISTS_ERROR
+CREATE TABLE graph_social(id BIGINT PRIMARY KEY);
+--error ER_TABLE_EXISTS_ERROR
+CREATE PROPERTY GRAPH graph_person VERTEX TABLES (graph_person KEY(id) LABEL person PROPERTIES(id));
+--error ER_TABLE_EXISTS_ERROR
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES (graph_person KEY(id) LABEL person PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
+  graph_person KEY(id) LABEL same PROPERTIES(id),graph_company KEY(id) LABEL same PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
+  graph_person KEY(id) LABEL first PROPERTIES(id),graph_person KEY(id) LABEL second PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (graph_person KEY(age) LABEL person PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+DROP TABLE graph_person;
+--error ER_NOT_SUPPORTED_YET
+RENAME TABLE graph_person TO graph_renamed;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person DROP COLUMN name;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person CHANGE COLUMN name nickname VARCHAR(40);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_knows MODIFY COLUMN src INT;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person DROP PRIMARY KEY;
+ALTER TABLE graph_person ADD COLUMN unrelated INT;
+CREATE INDEX graph_age_index ON graph_person(age);
+DROP INDEX graph_age_index ON graph_person;
+--echo added_columns_do_not_become_properties
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (p IS person) COLUMNS(p.unrelated AS value)) g;
+DROP PROPERTY GRAPH graph_social;
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--error ER_NO_SUCH_TABLE
+SHOW CREATE PROPERTY GRAPH graph_social;
+--error ER_NO_SUCH_TABLE
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE graph_bad_key(id INT PRIMARY KEY);
+CREATE PROPERTY GRAPH graph_key_type VERTEX TABLES(graph_bad_key KEY(id) LABEL item PROPERTIES(id));
+DROP PROPERTY GRAPH graph_key_type;
+DROP TABLE graph_bad_key;
+CREATE TABLE graph_bad_key(id BIGINT UNSIGNED PRIMARY KEY);
+CREATE PROPERTY GRAPH graph_key_type VERTEX TABLES(graph_bad_key KEY(id) LABEL item PROPERTIES(id));
+DROP PROPERTY GRAPH graph_key_type;
+DROP TABLE graph_bad_key;
+CREATE TABLE graph_failed(id BIGINT PRIMARY KEY);
+--error ER_BAD_FIELD_ERROR
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_failed KEY(id) LABEL item PROPERTIES(missing));
+--error ER_NO_SUCH_TABLE
+SHOW CREATE PROPERTY GRAPH graph_invalid;
+DROP TABLE graph_failed;
+--error ER_NO_SUCH_TABLE
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_missing_table KEY(id) LABEL item PROPERTIES(id));
+CREATE TABLE graph_enum_a(id BIGINT PRIMARY KEY,state ENUM('a','b'));
+CREATE TABLE graph_enum_b(id BIGINT PRIMARY KEY,state ENUM('a','c'));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+ graph_enum_a KEY(id) LABEL first PROPERTIES(state),graph_enum_b KEY(id) LABEL second PROPERTIES(state));
+CREATE PROPERTY GRAPH graph_enum VERTEX TABLES(graph_enum_a KEY(id) LABEL item PROPERTIES(state));
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_enum_a MODIFY state ENUM('a','c');
+DROP PROPERTY GRAPH graph_enum;
+DROP TABLE graph_enum_a,graph_enum_b;
+
+--echo mapped_column_and_composite_key_ddl_guards
+CREATE DATABASE graph_ddl_move;
+CREATE TABLE graph_ddl_guard (
+  tenant BIGINT NOT NULL,id BIGINT NOT NULL,alternate BIGINT NOT NULL,
+  name VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
+  amount DECIMAL(12,2),PRIMARY KEY(tenant,id)
+);
+INSERT INTO graph_ddl_guard VALUES(1,2,3,'alpha',12.50);
+CREATE PROPERTY GRAPH graph_guard_one VERTEX TABLES(
+  graph_ddl_guard KEY(tenant,id) LABEL item PROPERTIES(name,amount));
+CREATE PROPERTY GRAPH graph_guard_two VERTEX TABLES(
+  graph_ddl_guard KEY(tenant,id) LABEL item PROPERTIES(name,amount));
+--error ER_NOT_SUPPORTED_YET
+RENAME TABLE graph_ddl_guard TO graph_ddl_move.graph_ddl_guard;
+# Change one mapped-column characteristic at a time.
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard MODIFY amount DECIMAL(14,2);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard MODIFY amount DECIMAL(12,3);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(40) CHARACTER SET binary;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(id,tenant);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(tenant,alternate);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(tenant,id,alternate);
+# Rejected DDL must leave the original mapping and schema intact.
+SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,CHARACTER_SET_NAME,COLLATION_NAME
+FROM information_schema.columns
+WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='graph_ddl_guard'
+ORDER BY ORDINAL_POSITION;
+SELECT COLUMN_NAME,SEQ_IN_INDEX FROM information_schema.statistics
+WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='graph_ddl_guard' AND INDEX_NAME='PRIMARY'
+ORDER BY SEQ_IN_INDEX;
+SELECT COUNT(*) AS moved_tables FROM information_schema.tables
+WHERE TABLE_SCHEMA='graph_ddl_move' AND TABLE_NAME='graph_ddl_guard';
+SELECT * FROM GRAPH_TABLE(graph_guard_one MATCH(v IS item)
+  COLUMNS(v.name AS name,v.amount AS amount)) g;
+--echo remaining_graph_still_protects_shared_table
+DROP PROPERTY GRAPH graph_guard_one;
+--error ER_NOT_SUPPORTED_YET
+DROP TABLE graph_ddl_guard;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard DROP COLUMN name;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(id,tenant);
+SELECT * FROM GRAPH_TABLE(graph_guard_two MATCH(v IS item)
+  COLUMNS(v.name AS name,v.amount AS amount)) g;
+DROP PROPERTY GRAPH graph_guard_two;
+# Positive controls: the same operations are valid without graph dependencies.
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+ALTER TABLE graph_ddl_guard MODIFY amount DECIMAL(14,2);
+ALTER TABLE graph_ddl_guard MODIFY amount DECIMAL(12,3);
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL;
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+ALTER TABLE graph_ddl_guard MODIFY name VARCHAR(40) CHARACTER SET binary;
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(id,tenant);
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(tenant,alternate);
+ALTER TABLE graph_ddl_guard DROP PRIMARY KEY, ADD PRIMARY KEY(tenant,id,alternate);
+ALTER TABLE graph_ddl_guard DROP COLUMN name;
+RENAME TABLE graph_ddl_guard TO graph_ddl_move.graph_ddl_guard;
+SELECT * FROM graph_ddl_move.graph_ddl_guard;
+DROP TABLE graph_ddl_move.graph_ddl_guard;
+DROP DATABASE graph_ddl_move;
+
+--echo graph_identifier_collation_matches_column_names
+SET NAMES utf8mb4;
+CREATE TABLE graph_identifier_a(id BIGINT PRIMARY KEY, `État` INT);
+CREATE TABLE graph_identifier_b(id BIGINT PRIMARY KEY, `état` VARCHAR(10));
+INSERT INTO graph_identifier_a VALUES(1,7);
+CREATE PROPERTY GRAPH graph_identifiers VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL `Élément` PROPERTIES(id,`état`));
+SELECT value FROM GRAPH_TABLE(graph_identifiers
+ MATCH(p IS `élément` WHERE p.`ÉTAT` = 7) COLUMNS(p.`état` AS value)) g;
+DROP PROPERTY GRAPH graph_identifiers;
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL first PROPERTIES(`État`),
+ graph_identifier_b KEY(id) LABEL second PROPERTIES(`état`));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL `Élément` PROPERTIES(id),
+ graph_identifier_b KEY(id) LABEL `élément` PROPERTIES(id));
+CREATE TABLE graph_identifier_edge(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT);
+CREATE PROPERTY GRAPH graph_identifiers VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL item PROPERTIES(id,`État`))
+ EDGE TABLES(graph_identifier_edge KEY(id)
+ SOURCE KEY(src) REFERENCES graph_identifier_a(id)
+ DESTINATION KEY(dst) REFERENCES graph_identifier_a(id) LABEL link PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_identifiers
+ MATCH(`É` IS item)-[e IS link]->(`é` IS item) COLUMNS(e.id AS id)) g;
+DROP PROPERTY GRAPH graph_identifiers;
+DROP TABLE graph_identifier_edge,graph_identifier_a,graph_identifier_b;
+--echo graph_mapping_error_details
+CREATE TABLE graph_key_pair(a BIGINT,b BIGINT,PRIMARY KEY(a,b));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_key_pair KEY(a) LABEL item PROPERTIES(a));
+DROP TABLE graph_key_pair;
+CREATE TABLE graph_generated(id BIGINT PRIMARY KEY, calc INT GENERATED ALWAYS AS (id + 1));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL item PROPERTIES(calc));
+CREATE TABLE graph_endpoint(id BIGINT PRIMARY KEY,src INT,dst BIGINT);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL item PROPERTIES(id))
+ EDGE TABLES(graph_endpoint KEY(id)
+ SOURCE KEY(src) REFERENCES graph_generated(id)
+ DESTINATION KEY(dst) REFERENCES graph_generated(id) LABEL link PROPERTIES(id));
+DROP TABLE graph_endpoint,graph_generated;
+CREATE TABLE graph_float_vertex(id FLOAT PRIMARY KEY);
+CREATE TABLE graph_float_edge(id BIGINT PRIMARY KEY,src FLOAT UNSIGNED,dst FLOAT UNSIGNED);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_float_vertex KEY(id) LABEL item PROPERTIES(id))
+ EDGE TABLES(graph_float_edge KEY(id)
+ SOURCE KEY(src) REFERENCES graph_float_vertex(id)
+ DESTINATION KEY(dst) REFERENCES graph_float_vertex(id) LABEL link PROPERTIES(id));
+DROP TABLE graph_float_edge,graph_float_vertex;
+CREATE TABLE graph_double_vertex(id DOUBLE PRIMARY KEY);
+CREATE TABLE graph_double_edge(id BIGINT PRIMARY KEY,src DOUBLE UNSIGNED,dst DOUBLE UNSIGNED);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_double_vertex KEY(id) LABEL item PROPERTIES(id))
+ EDGE TABLES(graph_double_edge KEY(id)
+ SOURCE KEY(src) REFERENCES graph_double_vertex(id)
+ DESTINATION KEY(dst) REFERENCES graph_double_vertex(id) LABEL link PROPERTIES(id));
+DROP TABLE graph_double_edge,graph_double_vertex;

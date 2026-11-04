@@ -29,10 +29,19 @@ namespace oceanbase
 {
 namespace sql
 {
+// Optional consumer policy applied before a recursive row enters the pump.
+// The operator owns the policy and resets it at query rescan, not child rescan.
+class IRecursiveRowAdmission
+{
+public:
+  virtual ~IRecursiveRowAdmission() = default;
+  virtual int admit(const common::ObIArray<ObExpr *> &row,
+                    ObEvalCtx &ctx, bool &accepted) = 0;
+};
+
 class ObRecursiveInnerDataOp {
   using ObTreeNode = ObSearchMethodOp::ObTreeNode;
-  friend class ObRecursiveUnionAllOp;
-  friend class ObRecursiveUnionAllSpec;
+  friend class RecursivePumpOp;
 public:
   struct RowComparer;
   enum RecursiveUnionState {
@@ -88,6 +97,7 @@ public:
   int init();
   void set_cte_column_exprs(common::ObIArray<ObExpr *> *exprs) { cte_columns_ = exprs; }
   void set_batch_size(const int64_t batch_size) { batch_size_ = batch_size; };
+  void set_row_admission(IRecursiveRowAdmission *admission) { row_admission_ = admission; }
 
 private:
   void destroy();
@@ -128,6 +138,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObRecursiveInnerDataOp);
 private:
   RecursiveUnionState state_;
+  IRecursiveRowAdmission *row_admission_{nullptr};
   common::ObArenaAllocator stored_row_buf_;
   ObFakeCTETableOp* pump_operator_;
   ObOperator* left_op_;

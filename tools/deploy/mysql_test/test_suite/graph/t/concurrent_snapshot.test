@@ -1,0 +1,149 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS gcs_graph;
+--disable_warnings
+DROP TABLE IF EXISTS gcs_edge,gcs_vertex;
+--enable_warnings
+CREATE TABLE gcs_vertex(id BIGINT PRIMARY KEY,version BIGINT);
+CREATE TABLE gcs_edge(edge_id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT,kind VARCHAR(20));
+CREATE PROPERTY GRAPH gcs_graph
+VERTEX TABLES(gcs_vertex KEY(id) LABEL node PROPERTIES(id,version))
+EDGE TABLES(gcs_edge KEY(edge_id) SOURCE KEY(src) REFERENCES gcs_vertex(id)
+DESTINATION KEY(dst) REFERENCES gcs_vertex(id) LABEL link PROPERTIES(edge_id,kind));
+--source mysql_test/include/create_plan_table.inc
+SET @gcs_saved_sampling=@@optimizer_dynamic_sampling;
+SET @gcs_saved_timeout=@@ob_query_timeout;
+SET optimizer_dynamic_sampling=0;
+SET ob_query_timeout=60000000;
+let $gcs_saved_sync=query_get_value(show parameters like 'debug_sync_timeout', value, 1);
+ALTER SYSTEM SET debug_sync_timeout='60s';
+sleep 3;
+connect (gcs_writer,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection gcs_writer;
+SET ob_query_timeout=60000000;
+connection default;
+let $access_pass=2;
+while ($access_pass)
+{
+  if ($access_pass == 1)
+  {
+    CREATE INDEX gcs_adjacency ON gcs_edge(src,kind,dst);
+  }
+  DELETE FROM gcs_edge;
+  DELETE FROM gcs_vertex;
+  INSERT INTO gcs_vertex VALUES(1,1),(2,1),(3,1);
+  INSERT INTO gcs_edge VALUES(11,1,2,'keep'),(12,2,3,'keep'),(13,1,2,'keep'),
+    (14,1,3,'reject');
+  DELETE FROM plan_table;
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='snapshot'
+  SELECT * FROM GRAPH_TABLE(gcs_graph MATCH
+  (a IS node WHERE a.id=1)-[e IS link WHERE e.kind='keep']->{0,2}(b IS node)
+  COLUMNS(b.id AS endpoint,b.version AS version,COUNT(e.edge_id) AS hops,
+  JSON_ARRAYAGG(e.edge_id) AS edges)) g;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*)=1 AS native_snapshot_loop FROM plan_table
+  WHERE statement_id='snapshot' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+  --disable_query_log
+  if ($access_pass == 2)
+  {
+    --enable_query_log
+    SELECT COUNT(*)=1 AS fullscan_snapshot_loop FROM plan_table
+    WHERE statement_id='snapshot' AND special_predicates LIKE '%access=full-scan%';
+    --disable_query_log
+  }
+  if ($access_pass == 1)
+  {
+    --enable_query_log
+    SELECT COUNT(*)=1 AS indexed_snapshot_loop FROM plan_table
+    WHERE statement_id='snapshot' AND special_predicates LIKE '%access=index%';
+    --disable_query_log
+  }
+  PREPARE gcs_read FROM 'SELECT GROUP_CONCAT(CONCAT(endpoint,":",version,":",hops,":",COALESCE(CAST(edges AS CHAR(100)),"[]")) ORDER BY hops,edges SEPARATOR "|") AS paths FROM GRAPH_TABLE(gcs_graph MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.kind="keep"]->{0,2}(b IS node) COLUMNS(b.id AS endpoint,b.version AS version,COUNT(e.edge_id) AS hops,JSON_ARRAYAGG(e.edge_id) AS edges)) g';
+  let $isolation_pass=2;
+  let $epoch=1;
+  while ($isolation_pass)
+  {
+    SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    if ($isolation_pass == 1)
+    {
+      SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+    }
+    let $rounds=3;
+    while ($rounds)
+    {
+      connection default;
+      SET @gcs_seed=1;
+      START TRANSACTION;
+      --echo snapshot_before_concurrent_replacement
+      EXECUTE gcs_read USING @gcs_seed;
+      connection gcs_writer;
+      SET ob_global_debug_sync='reset';
+      SET ob_global_debug_sync='DAS_GRAPH_EXPAND_AFTER_EDGE_ROW signal gcs_reached wait_for gcs_resume timeout 30000000 execute 1';
+      let $pause_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
+      connection default;
+      # The writer commits only after a checked live edge cursor is paused,
+      # before the graph query has completed endpoint existence/property lookups.
+      send EXECUTE gcs_read USING @gcs_seed;
+      connection gcs_writer;
+      let $wait_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
+      SET ob_global_debug_sync='NOW wait_for gcs_reached timeout 30000000';
+      let $timed_out=`select timestampdiff(microsecond,'$wait_start',current_timestamp(6)) >= 29000000`;
+      if ($timed_out)
+      {
+        die graph concurrent snapshot did not reach a live DAS cursor;
+      }
+      inc $epoch;
+      START TRANSACTION;
+      DELETE FROM gcs_edge;
+      DELETE FROM gcs_vertex WHERE id NOT IN(1,3);
+      eval SET @gcs_middle=IF(MOD($epoch,2)=0,4,2);
+      eval UPDATE gcs_vertex SET version=$epoch;
+      eval INSERT INTO gcs_vertex VALUES(@gcs_middle,$epoch);
+      INSERT INTO gcs_edge VALUES(11,1,@gcs_middle,'keep'),(12,@gcs_middle,3,'keep'),
+        (13,1,@gcs_middle,'keep'),(14,1,3,'reject');
+      COMMIT;
+      # DEBUG_SYNC may return success on timeout. Bound the entire interval
+      # from before dispatch through COMMIT, not merely the reached wait, so
+      # the cursor cannot have resumed on its own before the writer commits.
+      let $pause_expired=`select timestampdiff(microsecond,'$pause_start',current_timestamp(6)) >= 29000000`;
+      if ($pause_expired)
+      {
+        die graph writer did not commit within the live cursor pause;
+      }
+      SET ob_global_debug_sync='NOW signal gcs_resume';
+      connection default;
+      --echo in_flight_statement_keeps_old_vertices_edges_and_properties
+      reap;
+      connection gcs_writer;
+      SET ob_global_debug_sync='reset';
+      connection default;
+      --echo next_statement_follows_transaction_isolation
+      EXECUTE gcs_read USING @gcs_seed;
+      COMMIT;
+      --echo fresh_transaction_and_rebound_seed_see_committed_replacement
+      EXECUTE gcs_read USING @gcs_seed;
+      SET @gcs_seed=3;
+      EXECUTE gcs_read USING @gcs_seed;
+      SET @gcs_seed=1;
+      EXECUTE gcs_read USING @gcs_seed;
+      dec $rounds;
+    }
+    dec $isolation_pass;
+  }
+  DEALLOCATE PREPARE gcs_read;
+  dec $access_pass;
+}
+connection gcs_writer;
+SET ob_global_debug_sync='reset';
+disconnect gcs_writer;
+connection default;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SET optimizer_dynamic_sampling=@gcs_saved_sampling;
+SET ob_query_timeout=@gcs_saved_timeout;
+eval ALTER SYSTEM SET debug_sync_timeout='$gcs_saved_sync';
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH gcs_graph;
+DROP TABLE gcs_edge,gcs_vertex;
+--enable_query_log

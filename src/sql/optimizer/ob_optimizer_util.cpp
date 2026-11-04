@@ -7949,7 +7949,8 @@ int ObOptimizerUtil::check_can_batch_rescan(const ObLogicalOperator *op,
   } else if (1 == op->get_num_of_child()) {
     if (OB_FAIL(SMART_CALL(check_can_batch_rescan(op->get_child(0), rescan_params, for_nlj, can_batch_rescan)))) {
     }
-  } else if (log_op_def::LOG_SET == op->get_type()) {
+  } else if (log_op_def::LOG_SET == op->get_type()
+             || log_op_def::LOG_GRAPH_FEEDBACK_LOOP == op->get_type()) {
     can_batch_rescan = true;
     for (int64_t i = 0; OB_SUCC(ret) && can_batch_rescan && i < op->get_num_of_child(); ++i) {
       if (OB_FAIL(SMART_CALL(check_can_batch_rescan(op->get_child(i), rescan_params, for_nlj, can_batch_rescan)))) {

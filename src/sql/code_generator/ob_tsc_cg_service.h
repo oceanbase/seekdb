@@ -43,6 +43,14 @@ public:
   { }
 
   int generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc_ctdef);
+  // Graph reverse traversal uses a separate local adjacency index, without
+  // changing the relational edge scan selected for forward traversal.
+  int generate_graph_reverse_edge_ctdef(
+      const ObLogTableScan &op,
+      uint64_t reverse_index_id,
+      const common::ObIArray<ObRawExpr *> &base_rowkey_exprs,
+      const ObTableScanCtDef &forward_ctdef,
+      ObTableScanCtDef &reverse_ctdef);
   int generate_agent_vt_access_meta(const ObLogTableScan &op, ObTableScanSpec &spec);
   int generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpec &spec);
   int generate_pd_storage_flag(const ObLogPlan *log_plan,
@@ -141,6 +149,8 @@ private:
                             bool &has_rowscn);
   int generate_pushdown_aggr_ctdef(const ObLogTableScan &op, const DASScanCGCtx &cg_ctx, ObDASScanCtDef &scan_ctdef);
   int generate_das_scan_ctdef(const ObLogTableScan &op, const DASScanCGCtx &cg_ctx, ObDASScanCtDef &scan_ctdef, bool &has_rowscn);
+  int generate_graph_lookup_ctdef(const ObLogTableScan &op,
+                                  ObTableScanCtDef &tsc_ctdef);
   int generate_table_param(const ObLogTableScan &op, const DASScanCGCtx &cg_ctx, ObDASScanCtDef &scan_ctdef, common::ObIArray<uint64_t> &tsc_out_cols);
   int extract_das_output_column_ids(const ObLogTableScan &op,
                                     ObDASScanCtDef &scan_ctdef,

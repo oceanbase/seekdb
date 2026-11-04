@@ -1,0 +1,80 @@
+--echo graph_catalog_json_round_trip
+SET NAMES utf8mb4;
+CREATE TABLE catalog_vertex(tenant INT,id INT,`va"lue` VARCHAR(40),PRIMARY KEY(tenant,id));
+CREATE TABLE catalog_edge(id INT PRIMARY KEY,st INT,src INT,dt INT,dst INT);
+INSERT INTO catalog_vertex VALUES(7,1,'first'),(7,2,'second');
+INSERT INTO catalog_edge VALUES(10,7,1,7,2);
+CREATE PROPERTY GRAPH `catalog"图`
+ VERTEX TABLES(catalog_vertex KEY(tenant,id) LABEL `node"图` PROPERTIES(tenant,id,`va"lue`))
+ EDGE TABLES(catalog_edge KEY(id) SOURCE KEY(st,src) REFERENCES catalog_vertex(tenant,id)
+ DESTINATION KEY(dt,dst) REFERENCES catalog_vertex(tenant,id) LABEL link PROPERTIES(id));
+--disable_query_log
+SELECT graph_id,definition INTO @catalog_id,@catalog_definition
+ FROM oceanbase.__all_property_graph WHERE name='catalog"图';
+--enable_query_log
+SELECT JSON_VALID(CAST(definition AS CHAR)) AS valid_json,
+ JSON_EXTRACT(CAST(definition AS CHAR),'$.format_version') AS format_version,
+ JSON_UNQUOTE(JSON_EXTRACT(CAST(definition AS CHAR),'$.name')) AS graph_name,
+ JSON_LENGTH(CAST(definition AS CHAR),'$.elements') AS elements,
+ JSON_LENGTH(CAST(definition AS CHAR),'$.properties') AS properties
+ FROM oceanbase.__all_property_graph WHERE graph_id=@catalog_id;
+SELECT JSON_EXTRACT(CAST(definition AS CHAR),'$.graph_id')=graph_id AS graph_id_matches,
+ JSON_EXTRACT(CAST(definition AS CHAR),'$.database_id')=database_id AS database_id_matches,
+ JSON_EXTRACT(CAST(definition AS CHAR),'$.define_user_id')=define_user_id AS user_id_matches,
+ JSON_LENGTH(CAST(definition AS CHAR),'$.elements[0].key_columns') AS vertex_keys,
+ JSON_LENGTH(CAST(definition AS CHAR),'$.elements[1].source_columns') AS source_keys,
+ JSON_LENGTH(CAST(definition AS CHAR),'$.elements[1].destination_columns') AS destination_keys
+ FROM oceanbase.__all_property_graph WHERE graph_id=@catalog_id;
+SELECT * FROM GRAPH_TABLE(`catalog"图` MATCH
+ (a IS `node"图`)-[e IS link]->(b IS `node"图`)
+ COLUMNS(a.id AS src,e.id AS edge,b.`va"lue` AS value)) g;
+# These DDL checks load the definition from the current catalog, not the cache.
+CREATE TABLE catalog_probe(id INT);
+DROP TABLE catalog_probe;
+--error ER_NOT_SUPPORTED_YET
+DROP TABLE catalog_vertex;
+--echo graph_catalog_unknown_version_is_rejected
+UPDATE oceanbase.__all_property_graph
+ SET definition=JSON_SET(CAST(@catalog_definition AS CHAR),'$.format_version',999)
+ WHERE graph_id=@catalog_id;
+--error ER_NOT_SUPPORTED_YET
+CREATE TABLE catalog_probe(id INT);
+UPDATE oceanbase.__all_property_graph SET definition=@catalog_definition WHERE graph_id=@catalog_id;
+--echo graph_catalog_invalid_fields_are_rejected
+UPDATE oceanbase.__all_property_graph
+ SET definition=JSON_REMOVE(CAST(@catalog_definition AS CHAR),'$.elements')
+ WHERE graph_id=@catalog_id;
+--error 4034
+CREATE TABLE catalog_probe(id INT);
+UPDATE oceanbase.__all_property_graph
+ SET definition=JSON_SET(CAST(@catalog_definition AS CHAR),'$.elements[0].key_columns[0]','not_an_id')
+ WHERE graph_id=@catalog_id;
+--error 4034
+CREATE TABLE catalog_probe(id INT);
+UPDATE oceanbase.__all_property_graph
+ SET definition=JSON_SET(CAST(@catalog_definition AS CHAR),'$.elements[1].source_id',999999)
+ WHERE graph_id=@catalog_id;
+--error 4034
+CREATE TABLE catalog_probe(id INT);
+UPDATE oceanbase.__all_property_graph
+ SET definition=CONCAT('{"format_version":1,',SUBSTRING(CAST(@catalog_definition AS CHAR),2))
+ WHERE graph_id=@catalog_id;
+--error 5453
+CREATE TABLE catalog_probe(id INT);
+UPDATE oceanbase.__all_property_graph SET definition=@catalog_definition WHERE graph_id=@catalog_id;
+# Optional additions do not change the version-1 required fields.
+UPDATE oceanbase.__all_property_graph
+ SET definition=JSON_SET(CAST(@catalog_definition AS CHAR),'$.future_optional_field',true)
+ WHERE graph_id=@catalog_id;
+CREATE TABLE catalog_probe(id INT);
+DROP TABLE catalog_probe;
+UPDATE oceanbase.__all_property_graph SET definition=@catalog_definition WHERE graph_id=@catalog_id;
+--echo graph_catalog_history_is_json
+SELECT JSON_VALID(CAST(definition AS CHAR)) AS valid_json,
+ JSON_EXTRACT(CAST(definition AS CHAR),'$.schema_version')=schema_version AS version_matches
+ FROM oceanbase.__all_property_graph_history WHERE graph_id=@catalog_id AND is_deleted=0;
+DROP PROPERTY GRAPH `catalog"图`;
+SELECT COUNT(*) AS current_rows FROM oceanbase.__all_property_graph WHERE graph_id=@catalog_id;
+SELECT is_deleted,JSON_VALID(CAST(definition AS CHAR)) AS valid_json
+ FROM oceanbase.__all_property_graph_history WHERE graph_id=@catalog_id ORDER BY schema_version;
+DROP TABLE catalog_edge,catalog_vertex;

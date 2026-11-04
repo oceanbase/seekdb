@@ -1,0 +1,50 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (p IS person)
+  COLUMNS (p.id AS id,p.name AS name,p.age AS age)) g ORDER BY id;
+WITH graph_person AS (SELECT 999 AS id)
+SELECT id FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g ORDER BY id;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person)
+  COLUMNS (a.id AS source,e.id AS edge_id,b.id AS destination)) g ORDER BY edge_id;
+SELECT a.id AS source,e.id AS edge_id,b.id AS destination
+  FROM graph_person a JOIN graph_knows e ON a.id=e.src JOIN graph_person b ON e.dst=b.id ORDER BY edge_id;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (b IS person)<-[e IS knows]-(a IS person)
+  COLUMNS (a.id AS source,e.id AS edge_id,b.id AS destination)) g ORDER BY edge_id;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->(b IS person)-[f IS knows]->(c IS person)
+  COLUMNS (a.id AS source,e.id AS first_edge,f.id AS second_edge,c.id AS destination)) g ORDER BY first_edge,second_edge;
+SELECT a.id AS source,e.id AS first_edge,f.id AS second_edge,c.id AS destination
+  FROM graph_person a JOIN graph_knows e ON a.id=e.src JOIN graph_person b ON e.dst=b.id
+  JOIN graph_knows f ON b.id=f.src JOIN graph_person c ON f.dst=c.id WHERE a.id=1 ORDER BY first_edge,second_edge;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS works]->(b IS company)
+  COLUMNS (a.id AS person_id,a.name AS person_name,b.id AS company_id,b.name AS company_name)) g;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS company)-[e IS knows]->(b IS person)
+  COLUMNS (e.id AS id)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.name IS NULL)
+  COLUMNS (a.id AS id,COALESCE(a.name,'missing') AS name)) g;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows WHERE e.since>=2022]->(b IS person)
+  COLUMNS (e.id AS id)) g;
+SELECT g.id,COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person)
+  COLUMNS (a.id AS id)) g JOIN graph_person p ON p.id=g.id GROUP BY g.id ORDER BY g.id;
+SELECT DISTINCT destination FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person)
+  COLUMNS (b.id AS destination)) g ORDER BY destination LIMIT 2 OFFSET 1;
+--echo repeated_actual_elements_are_allowed
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=4)-[e IS knows]->(b IS person)-[f IS knows]->(c IS person)
+  COLUMNS (e.id AS first_edge,f.id AS second_edge)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(a IS person) COLUMNS (a.id AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS missing) COLUMNS (a.id AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS (e.src AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person) COLUMNS ((SELECT 1) AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+CREATE VIEW graph_saved AS SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person) COLUMNS (a.id AS id)) g;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

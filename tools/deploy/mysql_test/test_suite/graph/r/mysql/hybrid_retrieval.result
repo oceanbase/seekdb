@@ -1,0 +1,192 @@
+independent_dense_and_lexical_ranks
+WITH dense_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,l2_distance(c.embedding,@hr_query) AS distance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant ORDER BY distance,c.id LIMIT 2
+), lexical_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,MATCH(c.content) AGAINST ('audit') AS relevance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant AND MATCH(c.content) AGAINST ('audit')>0
+ORDER BY relevance DESC,c.id LIMIT 2
+), ranked_channels AS (
+SELECT tenant,chunk_id,entity_id,'dense' AS channel,
+ROW_NUMBER() OVER(ORDER BY distance,chunk_id) AS signal_rank FROM dense_candidates
+UNION ALL
+SELECT tenant,chunk_id,entity_id,'lexical',
+ROW_NUMBER() OVER(ORDER BY relevance DESC,chunk_id) FROM lexical_candidates
+), seeds AS (
+SELECT tenant,chunk_id,entity_id,SUM(CAST(1 AS DECIMAL(24,16))/(60+signal_rank)) AS seed_score
+FROM ranked_channels GROUP BY tenant,chunk_id,entity_id
+ORDER BY seed_score DESC,chunk_id LIMIT 3
+) SELECT channel,chunk_id,signal_rank FROM ranked_channels ORDER BY channel,signal_rank;
+channel	chunk_id	signal_rank
+dense	100	1
+dense	101	2
+lexical	105	1
+lexical	103	2
+explicit_seed_budget_and_rank_fusion
+WITH dense_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,l2_distance(c.embedding,@hr_query) AS distance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant ORDER BY distance,c.id LIMIT 2
+), lexical_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,MATCH(c.content) AGAINST ('audit') AS relevance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant AND MATCH(c.content) AGAINST ('audit')>0
+ORDER BY relevance DESC,c.id LIMIT 2
+), ranked_channels AS (
+SELECT tenant,chunk_id,entity_id,'dense' AS channel,
+ROW_NUMBER() OVER(ORDER BY distance,chunk_id) AS signal_rank FROM dense_candidates
+UNION ALL
+SELECT tenant,chunk_id,entity_id,'lexical',
+ROW_NUMBER() OVER(ORDER BY relevance DESC,chunk_id) FROM lexical_candidates
+), seeds AS (
+SELECT tenant,chunk_id,entity_id,SUM(CAST(1 AS DECIMAL(24,16))/(60+signal_rank)) AS seed_score
+FROM ranked_channels GROUP BY tenant,chunk_id,entity_id
+ORDER BY seed_score DESC,chunk_id LIMIT 3
+) SELECT chunk_id,entity_id,CAST(seed_score AS DECIMAL(18,12)) AS seed_score
+FROM seeds ORDER BY seed_score DESC,chunk_id;
+chunk_id	entity_id	seed_score
+100	1	0.016393442623
+105	6	0.016393442623
+101	2	0.016129032258
+SELECT COUNT(*) AS mismatched_evidence_bags FROM (
+SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+document_id,source_version,source_uri,document_score,SUM(n) AS difference FROM (
+SELECT a.*,1 AS n FROM hr_actual a UNION ALL SELECT e.*,-1 AS n FROM hr_expected e
+) bags GROUP BY tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+document_id,source_version,source_uri,document_score HAVING SUM(n)<>0
+) differences;
+mismatched_evidence_bags
+0
+SELECT * FROM hr_actual ORDER BY document_score DESC,document_id,seed_chunk,hops,edges;
+tenant	seed_chunk	seed_entity	seed_score	endpoint	hops	edges	chunk_id	document_id	source_version	source_uri	document_score
+1	100	1	0.016393442623	1	0	NULL	100	1000	7	doc://backup-policy	0.024457958752
+1	100	1	0.016393442623	1	2	[10, 16]	100	1000	7	doc://backup-policy	0.024457958752
+1	100	1	0.016393442623	1	2	[11, 16]	100	1000	7	doc://backup-policy	0.024457958752
+1	101	2	0.016129032258	1	1	[16]	100	1000	7	doc://backup-policy	0.024457958752
+1	100	1	0.016393442623	2	1	[10]	101	1001	3	doc://vault	0.024325753570
+1	100	1	0.016393442623	2	1	[11]	101	1001	3	doc://vault	0.024325753570
+1	101	2	0.016129032258	2	0	NULL	101	1001	3	doc://vault	0.024325753570
+1	101	2	0.016129032258	2	2	[16, 10]	101	1001	3	doc://vault	0.024325753570
+1	101	2	0.016129032258	2	2	[16, 11]	101	1001	3	doc://vault	0.024325753570
+1	105	6	0.016393442623	6	0	NULL	105	1005	4	doc://review	0.016393442623
+1	100	1	0.016393442623	3	2	[10, 12]	102	1002	9	doc://rotation	0.013528997003
+1	100	1	0.016393442623	3	2	[11, 12]	102	1002	9	doc://rotation	0.013528997003
+1	101	2	0.016129032258	3	1	[12]	102	1002	9	doc://rotation	0.013528997003
+SELECT COUNT(*) AS wrong_tenant_or_version FROM hr_actual
+WHERE tenant<>1 OR (document_id=1000 AND source_version<>7)
+OR source_uri LIKE '%deleted%' OR source_uri LIKE '%legacy%';
+wrong_tenant_or_version
+0
+DROP TABLE hr_actual,hr_expected;
+CREATE INDEX hr_adjacency ON hr_facts(tenant,src,kind,valid_from,dst);
+SELECT COUNT(*) AS mismatched_evidence_bags FROM (
+SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+document_id,source_version,source_uri,document_score,SUM(n) AS difference FROM (
+SELECT a.*,1 AS n FROM hr_actual a UNION ALL SELECT e.*,-1 AS n FROM hr_expected e
+) bags GROUP BY tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+document_id,source_version,source_uri,document_score HAVING SUM(n)<>0
+) differences;
+mismatched_evidence_bags
+0
+SELECT * FROM hr_actual ORDER BY document_score DESC,document_id,seed_chunk,hops,edges;
+tenant	seed_chunk	seed_entity	seed_score	endpoint	hops	edges	chunk_id	document_id	source_version	source_uri	document_score
+1	100	1	0.016393442623	1	0	NULL	100	1000	7	doc://backup-policy	0.024457958752
+1	100	1	0.016393442623	1	2	[10, 16]	100	1000	7	doc://backup-policy	0.024457958752
+1	100	1	0.016393442623	1	2	[11, 16]	100	1000	7	doc://backup-policy	0.024457958752
+1	101	2	0.016129032258	1	1	[16]	100	1000	7	doc://backup-policy	0.024457958752
+1	100	1	0.016393442623	2	1	[10]	101	1001	3	doc://vault	0.024325753570
+1	100	1	0.016393442623	2	1	[11]	101	1001	3	doc://vault	0.024325753570
+1	101	2	0.016129032258	2	0	NULL	101	1001	3	doc://vault	0.024325753570
+1	101	2	0.016129032258	2	2	[16, 10]	101	1001	3	doc://vault	0.024325753570
+1	101	2	0.016129032258	2	2	[16, 11]	101	1001	3	doc://vault	0.024325753570
+1	105	6	0.016393442623	6	0	NULL	105	1005	4	doc://review	0.016393442623
+1	100	1	0.016393442623	3	2	[10, 12]	102	1002	9	doc://rotation	0.013528997003
+1	100	1	0.016393442623	3	2	[11, 12]	102	1002	9	doc://rotation	0.013528997003
+1	101	2	0.016129032258	3	1	[12]	102	1002	9	doc://rotation	0.013528997003
+SELECT COUNT(*) AS wrong_tenant_or_version FROM hr_actual
+WHERE tenant<>1 OR (document_id=1000 AND source_version<>7)
+OR source_uri LIKE '%deleted%' OR source_uri LIKE '%legacy%';
+wrong_tenant_or_version
+0
+DROP TABLE hr_actual,hr_expected;
+overlapping_channels_accumulate_rank_scores
+WITH dense_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,l2_distance(c.embedding,@hr_query) AS distance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant ORDER BY distance,c.id LIMIT 2
+), lexical_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,MATCH(c.content) AGAINST ('production') AS relevance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant AND MATCH(c.content) AGAINST ('production')>0
+ORDER BY relevance DESC,c.id LIMIT 2
+), ranked_channels AS (
+SELECT tenant,chunk_id,entity_id,'dense' AS channel,
+ROW_NUMBER() OVER(ORDER BY distance,chunk_id) AS signal_rank FROM dense_candidates
+UNION ALL
+SELECT tenant,chunk_id,entity_id,'lexical',
+ROW_NUMBER() OVER(ORDER BY relevance DESC,chunk_id) FROM lexical_candidates
+), seeds AS (
+SELECT tenant,chunk_id,entity_id,SUM(CAST(1 AS DECIMAL(24,16))/(60+signal_rank)) AS seed_score
+FROM ranked_channels GROUP BY tenant,chunk_id,entity_id
+ORDER BY seed_score DESC,chunk_id LIMIT 3
+) SELECT channel,chunk_id,signal_rank FROM ranked_channels ORDER BY channel,signal_rank;
+channel	chunk_id	signal_rank
+dense	100	1
+dense	101	2
+lexical	100	1
+lexical	101	2
+WITH dense_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,l2_distance(c.embedding,@hr_query) AS distance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant ORDER BY distance,c.id LIMIT 2
+), lexical_candidates AS (
+SELECT c.tenant,c.id AS chunk_id,c.entity_id,MATCH(c.content) AGAINST ('production') AS relevance
+FROM hr_chunks c JOIN hr_documents d ON d.tenant=c.tenant AND d.id=c.document_id
+AND d.version=c.source_version AND d.deleted=0
+WHERE c.tenant=@hr_tenant AND MATCH(c.content) AGAINST ('production')>0
+ORDER BY relevance DESC,c.id LIMIT 2
+), ranked_channels AS (
+SELECT tenant,chunk_id,entity_id,'dense' AS channel,
+ROW_NUMBER() OVER(ORDER BY distance,chunk_id) AS signal_rank FROM dense_candidates
+UNION ALL
+SELECT tenant,chunk_id,entity_id,'lexical',
+ROW_NUMBER() OVER(ORDER BY relevance DESC,chunk_id) FROM lexical_candidates
+), seeds AS (
+SELECT tenant,chunk_id,entity_id,SUM(CAST(1 AS DECIMAL(24,16))/(60+signal_rank)) AS seed_score
+FROM ranked_channels GROUP BY tenant,chunk_id,entity_id
+ORDER BY seed_score DESC,chunk_id LIMIT 3
+) SELECT chunk_id,entity_id,CAST(seed_score AS DECIMAL(18,12)) AS seed_score
+FROM seeds ORDER BY seed_score DESC,chunk_id;
+chunk_id	entity_id	seed_score
+100	1	0.032786885246
+101	2	0.032258064516
+SELECT COUNT(*) AS overlapping_channel_bag_mismatches FROM (
+SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+document_id,source_version,source_uri,document_score,SUM(n) AS difference FROM (
+SELECT a.*,1 AS n FROM hr_actual a UNION ALL SELECT e.*,-1 AS n FROM hr_expected e
+) bags GROUP BY tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+document_id,source_version,source_uri,document_score HAVING SUM(n)<>0
+) differences;
+overlapping_channel_bag_mismatches
+0
+SELECT document_id,source_version,document_score,COUNT(*) AS evidence_paths FROM hr_actual
+GROUP BY document_id,source_version,document_score ORDER BY document_score DESC,document_id;
+document_id	source_version	document_score	evidence_paths
+1000	7	0.048915917504	4
+1001	3	0.048651507139	5
+DROP TABLE hr_actual,hr_expected;
+SELECT COUNT(*) AS empty_tenant_evidence FROM hr_actual;
+empty_tenant_evidence
+0
+DROP TABLE hr_actual;
+DROP PROPERTY GRAPH hr_graph;
+DROP TABLE hr_reference_seeds,hr_chunks,hr_documents,hr_facts,hr_entities;

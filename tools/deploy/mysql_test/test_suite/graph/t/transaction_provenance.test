@@ -1,0 +1,109 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/transaction_provenance_fixture.inc
+--enable_query_log
+connect (tp_writer,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection default;
+--let $passes=2
+while ($passes)
+{
+ if ($passes == 1)
+ {
+  CREATE INDEX tp_adjacency ON tp_edge(tenant,src,kind,valid_from,dst);
+ }
+ --disable_query_log
+ --source mysql_test/include/create_plan_table.inc
+ --disable_result_log
+ eval EXPLAIN INTO plan_table SET statement_id='tp_evidence'
+ WITH paths AS ($tp_graph) $tp_evidence;
+ eval EXPLAIN INTO plan_table SET statement_id='tp_fallback'
+ WITH paths AS ($tp_fallback) $tp_evidence;
+ --enable_result_log
+ --enable_query_log
+ SELECT COUNT(*) AS native_provenance_loops FROM plan_table
+ WHERE statement_id='tp_evidence' AND special_predicates LIKE '%runtime=native%';
+ SELECT COUNT(*) AS fallback_provenance_loops FROM plan_table
+ WHERE statement_id='tp_fallback' AND special_predicates LIKE '%runtime=fallback%';
+ DROP TABLE plan_table;
+ --echo baseline_versioned_evidence
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ --echo reverse_fullscan_identity_and_original_trail_scan
+ SELECT s.binding,g.endpoint,g.hops,g.edges FROM tp_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(tp_graph MATCH
+ (a IS entity WHERE a.tenant=s.tenant AND a.id=3)
+ <-[e IS fact WHERE e.kind='depends' AND e.valid_from<=2024
+ AND (e.valid_to IS NULL OR e.valid_to>2024)]-{0,2}(b IS entity)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+ ORDER BY s.binding,g.hops;
+ SELECT COUNT(*) AS trail_original_scan_paths FROM tp_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(tp_graph MATCH TRAIL
+ (a IS entity WHERE a.tenant=s.tenant AND a.id=s.entity_id)
+ -[e IS fact WHERE e.kind='depends' AND e.valid_from<=2024
+ AND (e.valid_to IS NULL OR e.valid_to>2024)]->{0,2}(b IS entity)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g;
+
+ --echo own_version_update_and_second_hop_expiry_then_rollback
+ START TRANSACTION;
+ INSERT INTO tp_document VALUES(1,1001,2,'doc://vault/v2',0);
+ UPDATE tp_chunk SET version=2 WHERE tenant=1 AND id=101;
+ UPDATE tp_edge SET valid_to=2024 WHERE tenant=1 AND id=11;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ ROLLBACK;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+
+ --echo deleting_middle_vertex_removes_descendant_paths_then_rollback
+ START TRANSACTION;
+ DELETE FROM tp_vertex WHERE tenant=1 AND id=2;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ ROLLBACK;
+
+ --echo document_tombstone_hides_evidence_but_does_not_stop_traversal
+ START TRANSACTION;
+ UPDATE tp_document SET deleted=1 WHERE tenant=1 AND id=1001 AND version=1;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ DELETE FROM tp_chunk WHERE tenant=1 AND id=102;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ ROLLBACK;
+
+ --echo reader_keeps_one_snapshot_across_atomic_provenance_replacement
+ SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+ START TRANSACTION;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ connection tp_writer;
+ START TRANSACTION;
+ INSERT INTO tp_document VALUES(1,1001,2,'doc://vault/v2',0);
+ UPDATE tp_chunk SET version=2 WHERE tenant=1 AND id=101;
+ DELETE FROM tp_document WHERE tenant=1 AND id=1001 AND version=1;
+ DELETE FROM tp_edge WHERE tenant=1 AND id=11;
+ INSERT INTO tp_edge VALUES(1,20,2,4,'depends',2020,NULL);
+ COMMIT;
+ connection default;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+ COMMIT;
+ --echo new_snapshot_sees_new_version_and_replacement_path_together
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+
+ --echo committed_source_deletion_does_not_reuse_previous_statement_results
+ connection tp_writer;
+ START TRANSACTION;
+ DELETE FROM tp_chunk WHERE tenant=1 AND id=101;
+ DELETE FROM tp_document WHERE tenant=1 AND id=1001 AND version=2;
+ DELETE FROM tp_edge WHERE tenant=1 AND id=10;
+ COMMIT;
+ connection default;
+ --source mysql_test/test_suite/graph/transaction_provenance_read.inc
+
+ # Restore the fixture atomically before switching access paths.
+ connection tp_writer;
+ START TRANSACTION;
+ INSERT INTO tp_document VALUES(1,1001,1,'doc://vault/v1',0);
+ INSERT INTO tp_chunk VALUES(1,101,2,1001,1);
+ DELETE FROM tp_edge WHERE tenant=1 AND id=20;
+ INSERT INTO tp_edge VALUES(1,10,1,2,'depends',2020,NULL),(1,11,2,3,'depends',2020,NULL);
+ COMMIT;
+ connection default;
+ --dec $passes
+}
+disconnect tp_writer;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+DROP PROPERTY GRAPH tp_graph;
+DROP TABLE tp_seed,tp_chunk,tp_document,tp_edge,tp_vertex;

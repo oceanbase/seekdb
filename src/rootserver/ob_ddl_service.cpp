@@ -23,6 +23,7 @@
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
+#include "share/schema/graph_sql_service.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
@@ -11391,6 +11392,9 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
       ObTableLockOwnerID owner_id;
       if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
       } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
+      } else if (OB_FAIL(GraphSqlService::check_table_ddl(trans, *orig_table_schema, nullptr))) {
+        // Offline redefinition replaces the table identity and can renumber
+        // columns. Reject graph dependencies before registering a DDL task.
       } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
       } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                      task_id))) {
