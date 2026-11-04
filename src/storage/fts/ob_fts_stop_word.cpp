@@ -135,23 +135,47 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 
 namespace
 {
-// set_or_update() callback: adds this occurrence's count to the existing map
-// entry in place. It never touches the stored key, so the key bytes that were
-// materialized into the parse allocator stay stable. ObHashMap::set_or_update
-// hands the callback the whole (key, value) pair (the hashtable's default
-// pre_proc is the identity on the pair), hence the pair parameter.
+// set_or_update() callback: folds this occurrence's count into the existing map
+// entry. When the stored key already carries this occurrence's bytes -- the
+// common case, a word repeated verbatim -- the count is updated in place and
+// the stored key is left alone (no copy, no re-point). When the bytes differ
+// even though the keys compare equal under the collation (e.g. two different
+// emoji under utf8mb4_general_ci) the pair has to be replaced afterwards so
+// that the key bytes follow the last occurrence, which is what the upstream
+// set_refactored(word, count, 1) overwrite did. The replacement cannot run
+// inside this callback because the callback holds the bucket write lock.
+// ObHashMap::set_or_update hands the callback the whole (key, value) pair (the
+// hashtable's default pre_proc is the identity on the pair), hence the pair
+// parameter and the direct access to pair.first.
 class WordCountUpdater
 {
 public:
-  explicit WordCountUpdater(const int64_t word_freq) : word_freq_(word_freq)
+  WordCountUpdater(const ObFTWord &word, const int64_t word_freq)
+    : word_(word),
+      word_freq_(word_freq),
+      need_replace_(false),
+      updated_count_(0)
   {}
   int operator()(common::hash::HashMapPair<ObFTWord, int64_t> &pair)
   {
-    pair.second += word_freq_;
+    const ObString stored = pair.first.get_word().get_string();
+    const ObString incoming = word_.get_word().get_string();
+    if (stored.compare_equal(incoming)) {
+      pair.second += word_freq_;
+    } else {
+      need_replace_ = true;
+      updated_count_ = pair.second + word_freq_;
+    }
     return OB_SUCCESS;
   }
+  bool need_replace() const { return need_replace_; }
+  int64_t get_updated_count() const { return updated_count_; }
 private:
+  // the key that would be stored if this occurrence has to replace the entry
+  const ObFTWord &word_;
   int64_t word_freq_;
+  bool need_replace_;
+  int64_t updated_count_;
 };
 }  // anonymous namespace
 
@@ -255,10 +279,10 @@ int ObAddWordT<MapType>::groupby_word(const ObFTWord &word, const int64_t word_f
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
   } else {
-    // Single map operation per token: set_or_update() hashes the key once and
-    // either inserts (key, 1) for a distinct word or runs the in-place update
-    // callback for a repeated one. The previous get-then-set flow hashed the
-    // same key twice on every token (insert: get + set, update: get + get).
+    // Single map operation per token on the common path: set_or_update()
+    // hashes the key once and either inserts (key, 1) for a distinct word or
+    // runs the in-place update callback for a repeated one. The original
+    // get-then-set flow hashed the same key twice on every token.
     //
     // The token bytes may live in a parser-owned buffer that is reused by the
     // next get_next_token() call (e.g. the beng normalizer buffer), so the key
@@ -267,29 +291,34 @@ int ObAddWordT<MapType>::groupby_word(const ObFTWord &word, const int64_t word_f
     // casedown_word() in this parse allocator (it can never alias the
     // transient token buffer), so it serves as the map key directly and the
     // per-word memcpy is skipped. Any other producer still goes through
-    // dup_word(); on the update path the copied bytes are simply left unused
-    // in the parse arena, which is reset wholesale at the end of the call.
-    // Deliberate semantic difference from the pre-Task-C code. The old code
-    // called set_refactored(word, count, 1/*overwrite*/) on every occurrence,
-    // so the stored key was re-pointed at the token handed in by the parser.
-    // In the beng path casedown is off and casedown_word() returns dst = src,
-    // i.e. a view of the normalizer's reuse buffer, so the key of an existing
-    // entry pointed at memory that get_next_token() overwrites for the next
-    // token: the key bytes changed after insertion. Both the retained token
-    // and the iteration order could therefore depend on what was left in that
-    // buffer. Measured on 5bce9e06d: '🔥"🚀"' -> ["🚀"], but
-    // '🔥"🚀"zzz' -> ["zzz", "🚀"] and '🔥"🚀"abc' -> ["🚀", "abc"] (the
-    // collision is two different emoji that compare equal under
-    // utf8mb4_general_ci). That is a read of recycled memory, not a contract.
+    // dup_word(); on the update path the copied bytes are only used when the
+    // key has to be replaced, and are otherwise left unused in the parse
+    // arena, which is reset wholesale at the end of the call.
     //
-    // This implementation materializes the first key in the parse arena and
-    // never re-points it on the update path, so the same input always produces
-    // the same token bytes and the same order. The observable difference is
-    // limited to collation-equal but byte-different keys (14 of the 476 emoji
-    // corpus cases); the frozen 52-row TOKENIZE snapshot, the official
-    // fts_index suite and the benchmark texts are unaffected. Do not restore
-    // the transient-key overwrite: that would re-introduce the
-    // use-after-recycle.
+    // Key bytes follow the last collation-equal occurrence, which is the
+    // upstream behavior. Upstream (5bce9e06d) copied every beng token into the
+    // parse arena inside ObBEngFTParser::get_next_token() and then called
+    // set_refactored(word, count, 1/*overwrite*/) on every occurrence; the
+    // overwrite replaces the whole (key, value) pair, so the surviving key is
+    // a stable copy of the bytes of the last occurrence. That is deterministic
+    // last-wins, not a read of recycled memory: each token had its own arena
+    // copy that lived until the call returned. a320797ef dropped the
+    // per-token copy and materialized the key only on the first insertion,
+    // which turned the semantics into first-wins; d3cff803c (set_or_update)
+    // kept first-wins. The difference was observable only for keys that compare
+    // equal under the collation but differ in bytes (e.g. two different emoji
+    // under utf8mb4_general_ci): 14 of the 476 special-character corpus cases,
+    // none of the 52 frozen TOKENIZE snapshot rows, the official fts_index
+    // cases or the benchmark texts.
+    //
+    // This implementation restores last-wins. A repeated word whose bytes match
+    // the stored key is counted in place, without copying or re-pointing the
+    // key; a repeated word whose bytes differ replaces the (key, value) pair
+    // with the materialized bytes of this occurrence through the same
+    // set_refactored(..., 1/*overwrite*/) pair replacement upstream used, so
+    // the bucket position, the chain order and therefore the iteration order
+    // stay the same. The replacement runs after set_or_update() returns
+    // because the callback holds the bucket lock.
     ObFTWord stable_word;
     if (flag_.casedown()) {
       stable_word = word;
@@ -297,8 +326,12 @@ int ObAddWordT<MapType>::groupby_word(const ObFTWord &word, const int64_t word_f
       // ret already carries the dup_word failure
     }
     if (OB_SUCC(ret)) {
-      WordCountUpdater updater(word_freq);
+      WordCountUpdater updater(stable_word, word_freq);
       if (OB_FAIL(word_map_.set_or_update(stable_word, 1/*initial word count*/, updater))) {
+      } else if (updater.need_replace()
+                 && OB_FAIL(word_map_.set_refactored(stable_word,
+                                                     updater.get_updated_count(),
+                                                     1/*overwrite*/))) {
       }
     }
   }

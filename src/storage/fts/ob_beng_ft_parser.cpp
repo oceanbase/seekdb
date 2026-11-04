@@ -51,9 +51,11 @@ int ObBEngFTParser::get_next_token(
     ret = OB_INVALID_ARGUMENT;
   } else {
     // The token points into the normalizer buffer, which is reused on the
-    // next get_next() call. Downstream the word is hashed immediately and the
-    // map key is materialized once per distinct word on first insertion
-    // (ObAddWord::groupby_word), so the per-token alloc+memcpy is unneeded.
+    // next get_next() call. Downstream the word is hashed immediately and
+    // ObAddWord::groupby_word materializes the map key into the parse
+    // allocator before storing it (and replaces the stored key with this
+    // occurrence's bytes when a collation-equal word repeats), so the key
+    // never aliases this buffer and the per-token alloc+memcpy is unneeded.
     word = token.ptr_;
     word_len = token.len_;
     char_len = token.len_;

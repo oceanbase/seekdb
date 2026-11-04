@@ -51,31 +51,31 @@ j	s	n	e1
 ========= F-2: beng emoji key retention is deterministic =========
 select tokenize('🔥"🚀"', 'beng') as r1;
 r1
-["🔥"]
+["🚀"]
 select tokenize('🚀"🔥"', 'beng') as r2;
 r2
-["🚀"]
+["🔥"]
 select tokenize('🔥"🚀"zzz', 'beng') as r3;
 r3
-["zzz", "🔥"]
+["zzz", "🚀"]
 select tokenize('🔥"🚀"abc', 'beng') as r4;
 r4
-["🔥", "abc"]
+["🚀", "abc"]
 select tokenize('🔥"🚀"🔥', 'beng') as r5;
 r5
 ["🔥"]
 select json_extract(tokenize('🔥"🚀"zzz', 'beng'), '$[1]') as emoji_after_zzz;
 emoji_after_zzz
-"🔥"
+"🚀"
 select json_extract(tokenize('🔥"🚀"abc', 'beng'), '$[0]') as emoji_after_abc;
 emoji_after_abc
-"🔥"
+"🚀"
 select tokenize('🔥"🚀"zzz', 'beng') as r3_again;
 r3_again
-["zzz", "🔥"]
+["zzz", "🚀"]
 select tokenize('🔥"🚀"abc', 'beng') as r4_again;
 r4_again
-["🔥", "abc"]
+["🚀", "abc"]
 ========= F-2: ik path (casedown, emoji dropped) =========
 select tokenize('🔥"🚀"', 'ik') as i1;
 i1

@@ -1,0 +1,101 @@
+========= block 1: beng, the last collation-equal occurrence wins =========
+select tokenize('🔥"🚀"', 'beng') as r1;
+r1
+["🚀"]
+select tokenize('🚀"🔥"', 'beng') as r2;
+r2
+["🔥"]
+select tokenize('🔥"🚀"zzz', 'beng') as r3;
+r3
+["zzz", "🚀"]
+select tokenize('🔥"🚀"abc', 'beng') as r4;
+r4
+["🚀", "abc"]
+select tokenize('🔥"🚀"🔥', 'beng') as r5;
+r5
+["🔥"]
+select json_extract(tokenize('🔥"🚀"zzz', 'beng'), '$[1]') as r3_emoji;
+r3_emoji
+"🚀"
+select json_extract(tokenize('🔥"🚀"abc', 'beng'), '$[0]') as r4_emoji;
+r4_emoji
+"🚀"
+========= block 2: ik, the same five inputs =========
+select tokenize('🔥"🚀"', 'ik') as i1;
+i1
+[]
+select tokenize('🚀"🔥"', 'ik') as i2;
+i2
+[]
+select tokenize('🔥"🚀"zzz', 'ik') as i3;
+i3
+["zzz"]
+select tokenize('🔥"🚀"abc', 'ik') as i4;
+i4
+["abc"]
+select tokenize('🔥"🚀"🔥', 'ik') as i5;
+i5
+[]
+========= block 3: verbatim repeats keep the aggregated counts =========
+select tokenize('alpha beta alpha gamma alpha', 'beng', '[{"output": "all"}]') as n1;
+n1
+{"tokens": [{"gamma": 1}, {"alpha": 3}, {"beta": 1}], "doc_len": 5}
+select tokenize('Alpha ALPHA alpha', 'beng', '[{"output": "all"}]') as n2;
+n2
+{"tokens": [{"alpha": 3}], "doc_len": 3}
+select tokenize('优化 优化 数据库 优化 全文索引 数据库 优化', 'ik', '[{"output": "all"}]') as n3;
+n3
+{"tokens": [{"优化": 4}, {"数据库": 2}, {"全文索引": 1}], "doc_len": 7}
+========= block 4: collation-equal but byte-different, non-emoji key =========
+select tokenize('café cafe', 'beng') as c1;
+c1
+["cafe"]
+select tokenize('cafe café', 'beng') as c2;
+c2
+["café"]
+select hex(cast(tokenize('cafe café', 'beng') as char)) as c2_bytes;
+c2_bytes
+5B22636166C3A9225D
+select tokenize('café cafe', 'beng', '[{"output": "all"}]') as c3;
+c3
+{"tokens": [{"cafe": 2}], "doc_len": 2}
+select tokenize('cafe café', 'beng', '[{"output": "all"}]') as c4;
+c4
+{"tokens": [{"café": 2}], "doc_len": 2}
+========= block 5: blocks 1, 2 and 4 again, byte identical =========
+select tokenize('🔥"🚀"', 'beng') as r1b;
+r1b
+["🚀"]
+select tokenize('🚀"🔥"', 'beng') as r2b;
+r2b
+["🔥"]
+select tokenize('🔥"🚀"zzz', 'beng') as r3b;
+r3b
+["zzz", "🚀"]
+select tokenize('🔥"🚀"abc', 'beng') as r4b;
+r4b
+["🚀", "abc"]
+select tokenize('🔥"🚀"🔥', 'beng') as r5b;
+r5b
+["🔥"]
+select tokenize('🔥"🚀"', 'ik') as i1b;
+i1b
+[]
+select tokenize('🚀"🔥"', 'ik') as i2b;
+i2b
+[]
+select tokenize('🔥"🚀"zzz', 'ik') as i3b;
+i3b
+["zzz"]
+select tokenize('🔥"🚀"abc', 'ik') as i4b;
+i4b
+["abc"]
+select tokenize('🔥"🚀"🔥', 'ik') as i5b;
+i5b
+[]
+select tokenize('café cafe', 'beng') as c1b;
+c1b
+["cafe"]
+select tokenize('cafe café', 'beng') as c2b;
+c2b
+["café"]

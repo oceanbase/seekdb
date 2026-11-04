@@ -5,10 +5,13 @@
 #   directly, but it must emit the same canonical binary document the tree
 #   path produced: the 8 byte JSON document header (so should_pack_diff() sees
 #   a normal root document and json_storage_size()/json_extract()/JSON columns
-#   see the same bytes as before). (F-2) Task C stores a materialized copy of
-#   the first token as the word map key instead of re-pointing the key at the
-#   parser's transient buffer, so the beng emoji collision output is
-#   deterministic: the retained emoji must not depend on the trailing token.
+#   see the same bytes as before). (F-2) The tokenize word map follows the
+#   upstream last-wins contract: each collation-equal occurrence re-points
+#   the stored key at its own bytes (the baseline materializes a stable
+#   arena copy per token and overwrites the pair with
+#   set_refactored(word, count, 1)), so the surviving emoji is the last one
+#   seen. Expectations recorded from baseline 5bce9e06d; an earlier version
+#   of this case pinned first-wins outputs and has been corrected.
 #   All outputs are deterministic text/counts; the case must be byte stable
 #   across runs.
 
@@ -46,7 +49,8 @@ select tokenize('🚀"🔥"', 'beng') as r2;
 select tokenize('🔥"🚀"zzz', 'beng') as r3;
 select tokenize('🔥"🚀"abc', 'beng') as r4;
 select tokenize('🔥"🚀"🔥', 'beng') as r5;
-# the retained emoji does not depend on the trailing word
+# the retained emoji is the last emoji occurrence in the text (last-wins),
+# not the first
 select json_extract(tokenize('🔥"🚀"zzz', 'beng'), '$[1]') as emoji_after_zzz;
 select json_extract(tokenize('🔥"🚀"abc', 'beng'), '$[0]') as emoji_after_abc;
 # and repeats are byte identical

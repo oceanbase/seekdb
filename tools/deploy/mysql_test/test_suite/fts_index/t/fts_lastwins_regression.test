@@ -1,0 +1,55 @@
+# owner: seekdb-taskG
+# owner group: storage
+# tags: fts
+# description: Task G regression: last-wins key bytes of the tokenize word map.
+#   Upstream (5bce9e06d) replaced the stored (key, value) pair on every
+#   collation-equal occurrence, so the surviving key carries the bytes of the
+#   last occurrence; a320797ef..3611c6070 materialized the first occurrence
+#   instead. Pinned here: the five emoji collisions under beng and ik, a
+#   verbatim-repeat ASCII text with its aggregated counts (in-place update
+#   path), and a non-emoji collation-equal pair (cafe / cafe with an accent,
+#   equal under utf8mb4_general_ci) whose key bytes and count must follow the
+#   last occurrence. All outputs are deterministic; blocks 1, 2 and 4 run
+#   twice so the case must also be byte stable.
+
+--echo ========= block 1: beng, the last collation-equal occurrence wins =========
+select tokenize('🔥"🚀"', 'beng') as r1;
+select tokenize('🚀"🔥"', 'beng') as r2;
+select tokenize('🔥"🚀"zzz', 'beng') as r3;
+select tokenize('🔥"🚀"abc', 'beng') as r4;
+select tokenize('🔥"🚀"🔥', 'beng') as r5;
+select json_extract(tokenize('🔥"🚀"zzz', 'beng'), '$[1]') as r3_emoji;
+select json_extract(tokenize('🔥"🚀"abc', 'beng'), '$[0]') as r4_emoji;
+
+--echo ========= block 2: ik, the same five inputs =========
+select tokenize('🔥"🚀"', 'ik') as i1;
+select tokenize('🚀"🔥"', 'ik') as i2;
+select tokenize('🔥"🚀"zzz', 'ik') as i3;
+select tokenize('🔥"🚀"abc', 'ik') as i4;
+select tokenize('🔥"🚀"🔥', 'ik') as i5;
+
+--echo ========= block 3: verbatim repeats keep the aggregated counts =========
+select tokenize('alpha beta alpha gamma alpha', 'beng', '[{"output": "all"}]') as n1;
+select tokenize('Alpha ALPHA alpha', 'beng', '[{"output": "all"}]') as n2;
+select tokenize('优化 优化 数据库 优化 全文索引 数据库 优化', 'ik', '[{"output": "all"}]') as n3;
+
+--echo ========= block 4: collation-equal but byte-different, non-emoji key =========
+select tokenize('café cafe', 'beng') as c1;
+select tokenize('cafe café', 'beng') as c2;
+select hex(cast(tokenize('cafe café', 'beng') as char)) as c2_bytes;
+select tokenize('café cafe', 'beng', '[{"output": "all"}]') as c3;
+select tokenize('cafe café', 'beng', '[{"output": "all"}]') as c4;
+
+--echo ========= block 5: blocks 1, 2 and 4 again, byte identical =========
+select tokenize('🔥"🚀"', 'beng') as r1b;
+select tokenize('🚀"🔥"', 'beng') as r2b;
+select tokenize('🔥"🚀"zzz', 'beng') as r3b;
+select tokenize('🔥"🚀"abc', 'beng') as r4b;
+select tokenize('🔥"🚀"🔥', 'beng') as r5b;
+select tokenize('🔥"🚀"', 'ik') as i1b;
+select tokenize('🚀"🔥"', 'ik') as i2b;
+select tokenize('🔥"🚀"zzz', 'ik') as i3b;
+select tokenize('🔥"🚀"abc', 'ik') as i4b;
+select tokenize('🔥"🚀"🔥', 'ik') as i5b;
+select tokenize('café cafe', 'beng') as c1b;
+select tokenize('cafe café', 'beng') as c2b;
