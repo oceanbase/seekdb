@@ -63,7 +63,8 @@ static char *easy_sprintf_num(char *buf, char *last, uint64_t ui64, char zero, i
         len = last - buf;
     }
 
-    return reinterpret_cast<char*>(std::memcpy(buf, p, len));
+    std::memcpy(buf, p, len);
+    return buf + len;
 }
 
 
