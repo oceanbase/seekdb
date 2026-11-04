@@ -1,0 +1,77 @@
+drop table if exists ann_simplify;
+create table ann_simplify (
+id bigint primary key,
+embedding vector(3) not null,
+category int not null,
+age int not null,
+key idx_category (category),
+key idx_age (age)
+) organization heap;
+insert into ann_simplify values
+(1, '[1,0,0]', 1, 10), (2, '[0,1,0]', 1, 20), (3, '[0,0,1]', 2, 30),
+(4, '[1,1,0]', 2, 40), (5, '[0.9,0.1,0]', 1, 50);
+create vector index ann_simplify_hnsw on ann_simplify(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+# duplicated OR operands are simplified away while the vector index is still used
+explain basic select id from ann_simplify
+where category = 1 or age > 1000 or age > 1000 or age > 1000 or age > 1000
+or age > 1000 or age > 1000 or age > 1000 or age > 1000
+order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+Query Plan
+=========================================================
+|ID|OPERATOR                               |NAME        |
+---------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_simplify|
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_simplify.id]), filter([ann_simplify.category = 1 OR ann_simplify.age > 1000]), rowset=16
+      access([ann_simplify.__pk_increment], [ann_simplify.category], [ann_simplify.age], [ann_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([ann_simplify.__pk_increment]), range(MIN ; MAX)always true
+# duplicated AND operands are simplified as well
+explain basic select id from ann_simplify
+where category = 1 and category = 1 and age < 100 and age < 100
+order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+Query Plan
+=======================================================================
+|ID|OPERATOR                               |NAME                      |
+-----------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_simplify(idx_category)|
+=======================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_simplify.id]), filter([ann_simplify.age < 100], [ann_simplify.category = 1]), rowset=16
+      access([ann_simplify.__pk_increment], [ann_simplify.category], [ann_simplify.age], [ann_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,true], 
+      range_key([ann_simplify.category], [ann_simplify.__pk_increment]), range(1,MIN ; 1,MAX)
+# the filter from #1489: category = 1 followed by 128 OR-ed copies of age > 1000
+Query Plan
+=========================================================
+|ID|OPERATOR                               |NAME        |
+---------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_simplify|
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_simplify.id]), filter([ann_simplify.category = 1 OR ann_simplify.age > 1000]), rowset=16
+      access([ann_simplify.__pk_increment], [ann_simplify.category], [ann_simplify.age], [ann_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([ann_simplify.__pk_increment]), range(MIN ; MAX)always true
+# results are unchanged by the simplification
+id
+1
+5
+2
+id
+1
+2
+5
+select id from ann_simplify
+where category = 1
+order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+id
+1
+5
+2
+drop table ann_simplify;
