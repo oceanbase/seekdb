@@ -41,6 +41,45 @@ fn absent() -> RegexMatch {
 }
 
 #[test]
+fn unmatched_closing_paren_is_paren_error() {
+    for pattern in ["abc)", "a)b", "abc)def", "é)", "(abc"] {
+        assert_eq!(
+            compile(pattern.to_owned(), 0, 0, 0).err().unwrap().kind,
+            PAREN,
+            "{pattern}"
+        );
+    }
+}
+
+#[test]
+fn malformed_interval_precedes_unclosed_class_error() {
+    for pattern in ["(1{1,[]})", "a{1,[]}", "a# {1,[abc"] {
+        assert_eq!(
+            compile(pattern.to_owned(), 0, 0, 0).err().unwrap().kind,
+            GENERIC,
+            "{pattern}"
+        );
+    }
+    for pattern in [
+        "[abc",
+        r"\{1,[abc",
+        r"(?# {1,[]})[abc",
+        r"[{1,[]",
+        "a{1,2}[abc",
+        "(?x)# {1,[\n[abc",
+        "[] {1,[abc",
+        "[^] {1,[abc",
+    ] {
+        assert_eq!(
+            compile(pattern.to_owned(), 0, 0, 0).err().unwrap().kind,
+            BRACKET,
+            "{pattern}"
+        );
+    }
+    assert!(compile("({1}a)".to_owned(), 0, 0, 0).is_ok());
+}
+
+#[test]
 fn unicode_capture_offsets_are_utf16_units() {
     let regex = engine(r"(?<=😀)(é)(x)?");
     assert_eq!(find(&regex, "a😀é中", 3, 1, 0).unwrap(), span(3, 4));
