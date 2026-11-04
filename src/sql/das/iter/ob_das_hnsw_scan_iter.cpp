@@ -2773,9 +2773,9 @@ int ObDASHNSWScanIter::call_pva_interface(const ObVidAdaLookupStatus& cur_state,
     }
     case ObVidAdaLookupStatus::QUERY_ROWKEY_VEC: {
       // skip_delta_buffer_ only skips the delta_buf TABLE scan (at STATES_INIT).
-      // complete_delta_buffer_table_data writes to the in-memory HNSW index, not to a table,
-      // so it must still run in async mode to update the HNSW with delta vectors from index_id_table.
-      if (OB_FAIL(adaptor.complete_delta_buffer_table_data(&ada_ctx))) {
+      // Missing vectors must still participate in async queries. The adaptor can
+      // either materialize them in HNSW or retain query-local exact candidates.
+      if (OB_FAIL(adaptor.complete_delta_buffer_table_data(&ada_ctx, &query_cond_, skip_delta_buffer_))) {
       }
       break;
     }
@@ -2854,7 +2854,7 @@ int ObDASHNSWScanIter::next_state(ObVidAdaLookupStatus& cur_state, ObVectorQuery
       if (ada_ctx.get_status() == PluginVectorQueryResStatus::PVQ_WAIT) {
       } else if (ada_ctx.get_status() == PluginVectorQueryResStatus::PVQ_COM_DATA) {
         // Even in async(skip_delta_buffer_) mode we still need QUERY_ROWKEY_VEC:
-        // complete_delta_buffer_table_data() materializes vec_data into in-memory HNSW.
+        // complete_delta_buffer_table_data() consumes vec_data for HNSW or exact delta search.
         // Skipping this state may return only the already-built incremental vectors
         // on first query after refresh/rebuild.
         cur_state = ObVidAdaLookupStatus::QUERY_ROWKEY_VEC;
