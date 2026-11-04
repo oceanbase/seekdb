@@ -1,9 +1,15 @@
+def _require_parser_dependency(path, command):
+    if not path.exists:
+        fail("Missing seekdb parser dependency: %s. Run `%s` before building." % (path, command))
+
 def _host_tools_repository_impl(ctx):
     windows = ctx.os.name.startswith("windows")
     suffix = ".exe" if windows else ""
     sdk = ctx.workspace_root.get_child("deps", "3rd")
     if windows:
         sdk = sdk.get_child("tools", "win_flex_bison")
+        for dependency in ["win_bison.exe", "win_flex.exe", "data"]:
+            _require_parser_dependency(sdk.get_child(dependency), "python build.py init")
         ctx.symlink(sdk.get_child("win_bison.exe"), "bison.exe")
         ctx.symlink(sdk.get_child("win_flex.exe"), "flex.exe")
         ctx.symlink(sdk.get_child("data"), "data")
@@ -12,6 +18,8 @@ def _host_tools_repository_impl(ctx):
                 ctx.symlink(path, path.basename)
     else:
         sdk = sdk.get_child("usr", "local", "oceanbase", "devtools")
+        for dependency in [sdk.get_child("bin", "bison"), sdk.get_child("bin", "flex"), sdk.get_child("share", "bison")]:
+            _require_parser_dependency(dependency, "./build.py init")
         ctx.symlink(sdk.get_child("bin", "bison"), "bison")
         ctx.symlink(sdk.get_child("bin", "flex"), "flex")
         ctx.symlink(sdk.get_child("share", "bison"), "data")
@@ -124,3 +132,4 @@ parser_type_names = rule(
         "_codegen": attr.label(default = "//bazel:parser_codegen.py", allow_single_file = True, cfg = "exec"),
     },
 )
+
