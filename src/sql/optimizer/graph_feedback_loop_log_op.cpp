@@ -38,6 +38,7 @@ namespace
 
 const double GRAPH_FEEDBACK_ESTIMATE_LIMIT = 1.0e15;
 const int64_t GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT = 1;
+const char *GRAPH_DEPTH_COLUMN_NAME = "__g_depth";
 const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
 const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
@@ -900,6 +901,25 @@ int GraphFeedbackLoopLogOp::get_native_edge_identity_filters(
     }
   }
   return ret;
+}
+
+bool GraphFeedbackLoopLogOp::is_implied_output_filter(const ObRawExpr &expr) const
+{
+  bool implied = false;
+  if (expr.get_expr_type() == T_OP_GE && expr.get_param_count() == 2) {
+    const ObRawExpr *column_expr = expr.get_param_expr(0);
+    const ObRawExpr *bound_expr = expr.get_param_expr(1);
+    if (column_expr != nullptr && column_expr->is_column_ref_expr()
+        && bound_expr != nullptr && bound_expr->is_const_raw_expr()) {
+      const ObColumnRefRawExpr *column =
+          static_cast<const ObColumnRefRawExpr *>(column_expr);
+      const ObObj &bound =
+          static_cast<const ObConstRawExpr *>(bound_expr)->get_value();
+      implied = column->get_column_name().case_compare(GRAPH_DEPTH_COLUMN_NAME) == 0
+          && bound.is_int() && bound.get_int() == path_desc_.lower_bound_;
+    }
+  }
+  return implied;
 }
 
 int GraphFeedbackLoopLogOp::get_expand_scan_op_ids(

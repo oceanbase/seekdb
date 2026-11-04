@@ -70,6 +70,10 @@ public:
   int get_seed_key_exprs(common::ObIArray<ObRawExpr *> &exprs) const;
   int get_native_runtime_exprs(common::ObIArray<ObRawExpr *> &exprs);
   int get_native_edge_identity_filters(common::ObIArray<ObRawExpr *> &exprs) const;
+  // The generated recursive subquery retains this predicate for fallback
+  // execution, although this operator's cardinality already excludes hops
+  // below the lower bound.
+  bool is_implied_output_filter(const ObRawExpr &expr) const;
   const common::ObIArray<ObRawExpr *> &get_path_payload_exprs() const
   { return path_payload_exprs_; }
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
