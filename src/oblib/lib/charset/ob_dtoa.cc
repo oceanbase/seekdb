@@ -17,7 +17,8 @@
 
 #include "lib/charset/ob_dtoa.h"
 
-#include <fast_float/fast_float.h>
+#include "rust/number_parser.h"
+#include <system_error>
 
 #define DTOA_OVERFLOW 9999
 #define MAX_DECPT_FOR_F_FORMAT DBL_DIG
@@ -367,15 +368,20 @@ static std::errc ob_fast_strtod(const char *str, char **end, double *result)
           break;
         }
       }
-      fast_float::from_chars_result ff_ret = fast_float::from_chars(str + i, str + j + 1, *result);
-      if (ff_ret.ec == std::errc()) {
-        *end = const_cast<char *>(ff_ret.ptr);
+      const char *input = str + i;
+      const size_t input_len = j + 1 - i;
+      size_t consumed = 0;
+      oceanbase::number_parser::Status parse_status = oceanbase::number_parser::parse_f64(
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(input), input_len), *result, consumed);
+      if (parse_status == oceanbase::number_parser::Status::Ok) {
+        *end = const_cast<char *>(input + consumed);
         if (__builtin_isnan(*result) || __builtin_isinf(*result) || __builtin_isinf(-*result)) {
           *end = (char *)str;
           *result = 0.0;
         }
       } else {
-        ret = ff_ret.ec;
+        ret = parse_status == oceanbase::number_parser::Status::OutOfRange
+            ? std::errc::result_out_of_range : std::errc::invalid_argument;
       }
     }
   }

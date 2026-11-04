@@ -23,7 +23,6 @@
 #include "lib/container/ob_se_array.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "storage/ob_col_map.h"
 #include "storage/ob_i_store.h"
 #include "ob_multiple_get_merge.h"
 #include "ob_multiple_merge.h"

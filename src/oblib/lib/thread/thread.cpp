@@ -29,7 +29,6 @@
 #include "lib/rc/context.h"
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/utility/ob_hang_fatal_error.h"
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/thread_local/ob_tsi_factory.h"
 
 using namespace oceanbase;

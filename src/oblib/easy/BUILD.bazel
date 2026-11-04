@@ -13,7 +13,6 @@ cc_library(
         "thread/*.h",
         "util/*.h",
     ]),
-    deps = ["//bazel/third_party:openssl_headers"],
     includes = [
         ".",
         "include",

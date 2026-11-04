@@ -83,7 +83,7 @@ def copy_headers(source, prefix, manifest):
     patches += manifest["boost_geometry_math"]["headers"]
     patched = {patch["path"]: patch for patch in patches}
     trees = [(name, name) for name in (
-        "fast_float", "rapidjson", "curl",
+        "rapidjson", "curl",
         "boost", "libxml2")]
     trees += [("libxml2/libxml", "libxml")]
     for source_tree, target_tree in trees:

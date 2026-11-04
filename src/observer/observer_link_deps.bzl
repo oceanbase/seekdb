@@ -56,8 +56,7 @@ def observer_third_party_link_files(platform):
     files += [lib64 + "/" + name for name in _ABSL_ARCHIVE_NAMES]
     labels += [repository + "//:" + file for file in files]
     labels += [":_roaring_core_link"]
-    files = ["lib/libunwind.a"] if platform == "linux_x86_64" else []
-    files += ["lib/" + name for name in [
+    files = ["lib/" + name for name in [
         "libz.a",
     ]]
     if not macos and not android:

@@ -2146,8 +2146,6 @@ ObObjType ObExprOperator::get_enumset_calc_type(const ObObjType expected_type,
   return calc_type;
 }
 
-OB_SERIALIZE_MEMBER(ObIterExprOperator, expr_id_, expr_type_);
-
 int ObRelationalExprOperator::calc_result_type2(ObExprResType &type,
                                                 ObExprResType &type1,
                                                 ObExprResType &type2,

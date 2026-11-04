@@ -270,38 +270,6 @@ inline int ob_socket_cloexec(int domain, int type, int protocol)
 // Section 5: Thread Name Operations
 // ============================================================================
 
-// Get current thread name (platform-independent)
-#ifdef __EMSCRIPTEN__
-inline char *wasm_thread_name()
-{
-  // musl declares pthread_[gs]etname_np, but Emscripten does not implement
-  // them. Keep the POSIX-sized name in TLS for seekdb's diagnostic callers.
-  static thread_local char name[16] = {};
-  return name;
-}
-#endif
-
-inline int ob_get_thread_name(char *name, size_t len)
-{
-  if (name == nullptr || len == 0) {
-    return -1;
-  }
-#ifdef _WIN32
-  // Windows doesn't have a direct equivalent, return empty string
-  name[0] = '\0';
-  return 0;
-#elif defined(__EMSCRIPTEN__)
-  const size_t size = strlen(wasm_thread_name()) + 1;
-  if (len < size) { return ERANGE; }
-  memcpy(name, wasm_thread_name(), size);
-  return 0;
-#elif defined(__APPLE__)
-  return pthread_getname_np(pthread_self(), name, len);
-#else
-  return prctl(PR_GET_NAME, name);
-#endif
-}
-
 // Set current thread name (platform-independent)
 inline int ob_set_thread_name(const char *name)
 {
@@ -317,7 +285,6 @@ inline int ob_set_thread_name(const char *name)
 #elif defined(__EMSCRIPTEN__)
   const size_t size = strlen(name) + 1;
   if (size > 16) { return ERANGE; }
-  memcpy(wasm_thread_name(), name, size);
   emscripten_set_thread_name(pthread_self(), name);
   return 0;
 #else
