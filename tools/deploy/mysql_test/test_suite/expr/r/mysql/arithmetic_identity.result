@@ -1,0 +1,54 @@
+drop table if exists arithmetic_identity_t;
+create table arithmetic_identity_t (
+  id int primary key,
+  age int,
+  key idx_age(age)
+);
+insert into arithmetic_identity_t values
+  (1, null), (2, 0), (3, 10), (4, 11), (5, 100);
+select id from arithmetic_identity_t where age > 10 order by id;
+id
+4
+5
+select id from arithmetic_identity_t where ((age + 0) + 0) > 10 order by id;
+id
+4
+5
+select id from arithmetic_identity_t where ((age + 5) + 0) > 10 order by id;
+id
+3
+4
+5
+select id from arithmetic_identity_t where ((age + 0) + 0) > 10 order by id;
+id
+4
+5
+explain select id from arithmetic_identity_t where age > 10;
+Query Plan
+==========================================================================
+|ID|OPERATOR        |NAME                          |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|arithmetic_identity_t(idx_age)|2       |3           |
+==========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_identity_t.id]), filter(nil), rowset=16
+      access([arithmetic_identity_t.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([arithmetic_identity_t.age], [arithmetic_identity_t.id]), range(10,MAX ; MAX,MAX),
+      range_cond([arithmetic_identity_t.age > 10])
+explain select id from arithmetic_identity_t where ((age + 0) + 0) > 10;
+Query Plan
+==========================================================================
+|ID|OPERATOR        |NAME                          |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|arithmetic_identity_t(idx_age)|2       |3           |
+==========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_identity_t.id]), filter(nil), rowset=16
+      access([arithmetic_identity_t.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([arithmetic_identity_t.age], [arithmetic_identity_t.id]), range(10,MAX ; MAX,MAX),
+      range_cond([arithmetic_identity_t.age > 10])
+drop table arithmetic_identity_t;
