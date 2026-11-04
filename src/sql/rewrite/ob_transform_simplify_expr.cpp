@@ -2796,6 +2796,75 @@ int ObTransformSimplifyExpr::recursive_pull_similar(ObDMLStmt *stmt, ObRawExpr* 
         trans_happened = true;
       }
     }
+    if (OB_SUCC(ret) && T_OP_OR == expr->get_expr_type()) {
+      bool convert_happened = false;
+      if (OB_FAIL(convert_integer_or_equalities_to_in(expr, convert_happened))) {
+      } else {
+        trans_happened |= convert_happened;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::convert_integer_or_equalities_to_in(ObRawExpr *&expr,
+                                                                 bool &trans_happened)
+{
+  static const int64_t MIN_OR_TERM_COUNT = 8;
+  static const int64_t MAX_OR_TERM_COUNT = 1024;
+  int ret = OB_SUCCESS;
+  bool is_valid = true;
+  ObRawExpr *column_expr = NULL;
+  ObSEArray<ObRawExpr *, 16> value_exprs;
+  trans_happened = false;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)
+      || OB_ISNULL(ctx_->session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_OP_OR != expr->get_expr_type()
+             || expr->get_param_count() < MIN_OR_TERM_COUNT
+             || expr->get_param_count() > MAX_OR_TERM_COUNT) {
+    is_valid = false;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < expr->get_param_count(); ++i) {
+    ObRawExpr *branch = expr->get_param_expr(i);
+    ObRawExpr *left = NULL;
+    ObRawExpr *right = NULL;
+    bool is_error_free = false;
+    if (OB_ISNULL(branch)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_OP_EQ != branch->get_expr_type() || 2 != branch->get_param_count()
+               || OB_ISNULL(left = branch->get_param_expr(0))
+               || OB_ISNULL(right = branch->get_param_expr(1))) {
+      is_valid = false;
+    } else if (!left->is_column_ref_expr() || !right->is_static_const_expr()) {
+      is_valid = false;
+    }
+    if (OB_FAIL(ret) || !is_valid) {
+    } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(branch, is_error_free))) {
+    } else if (!is_error_free
+               || !left->get_result_type().is_integer_type()
+               || !right->get_result_type().is_integer_type()
+               || (NULL != column_expr && !column_expr->same_as(*left))) {
+      is_valid = false;
+    } else if (OB_FAIL(value_exprs.push_back(right))) {
+    } else if (NULL == column_expr) {
+      column_expr = left;
+    }
+  }
+  if (OB_SUCC(ret) && is_valid) {
+    ObOpRawExpr *in_expr = NULL;
+    ObOpRawExpr *row_expr = NULL;
+    if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_IN, in_expr))
+        || OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
+    } else if (OB_ISNULL(in_expr) || OB_ISNULL(row_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(row_expr->set_param_exprs(value_exprs))) {
+    } else if (OB_FAIL(in_expr->set_param_exprs(column_expr, row_expr))) {
+    } else if (OB_FAIL(in_expr->formalize(ctx_->session_info_))) {
+    } else {
+      expr = in_expr;
+      trans_happened = true;
+    }
   }
   return ret;
 }
