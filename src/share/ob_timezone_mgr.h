@@ -21,6 +21,7 @@
 #include "share/ob_lease_struct.h"
 #include "share/rc/ob_context.h"
 #include "share/ob_time_zone_info_manager.h"
+#include "share/ob_internal_table_change_version.h"
 
 
 namespace oceanbase {
@@ -80,10 +81,10 @@ private:
   common::ObTimer timer_;
   common::ObTimeZoneInfoManager *tz_info_mgr_ = nullptr;
   bool usable_;
-  uint64_t sys_stat_change_seq_;
-  uint64_t timezone_name_change_seq_;
-  uint64_t timezone_transition_change_seq_;
-  uint64_t timezone_transition_type_change_seq_;
+  InternalTableChangeVersion sys_stat_change_version_;
+  InternalTableChangeVersion timezone_name_change_version_;
+  InternalTableChangeVersion timezone_transition_change_version_;
+  InternalTableChangeVersion timezone_transition_type_change_version_;
 public:
   const uint64_t SLEEP_USECONDS = 5000000;
 };

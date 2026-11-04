@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 #include "ob_mem_ctx_table_lock.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_server_struct.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
 
@@ -184,8 +185,10 @@ int ObLockMemCtx::commit_table_lock_(const SCN &commit_version, const SCN &commi
         if (IN_TRANS_DML_LOCK == curr->lock_op_.op_type_
             && curr->lock_op_.lock_id_.is_tablet_lock()
             && is_inner_table(curr->lock_op_.lock_id_.obj_id_)) {
-          ObInternalTableChangeNotifier::get_instance().notify_table_changed(
-              curr->lock_op_.lock_id_.obj_id_);
+          if (OB_NOT_NULL(GCTX.internal_table_change_notifier_)) {
+            GCTX.internal_table_change_notifier_->notify_table_changed(
+                curr->lock_op_.lock_id_.obj_id_, commit_version);
+          }
         }
         // remove the lock op.
         memtable->remove_lock_record(curr->lock_op_);

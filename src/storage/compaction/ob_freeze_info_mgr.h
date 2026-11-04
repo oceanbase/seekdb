@@ -26,6 +26,7 @@
 #include "share/ob_freeze_info_manager.h"
 #include "share/ob_freeze_info_proxy.h"
 #include "share/ob_snapshot_table_proxy.h"
+#include "share/ob_internal_table_change_version.h"
 #include "share/scn.h"
 #include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 
@@ -172,9 +173,9 @@ private:
     bool inited_;
     bool check_runtime_status_;
     ObFreezeInfoMgr &mgr_;
-    uint64_t core_table_change_seq_;
-    uint64_t freeze_info_change_seq_;
-    uint64_t acquired_snapshot_change_seq_;
+    share::InternalTableChangeVersion core_table_change_version_;
+    share::InternalTableChangeVersion freeze_info_change_version_;
+    share::InternalTableChangeVersion acquired_snapshot_change_version_;
   };
 
   class UpdateLSResvSnapshotTask : public common::ObTimerTask

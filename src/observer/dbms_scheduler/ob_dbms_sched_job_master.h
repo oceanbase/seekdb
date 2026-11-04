@@ -32,6 +32,7 @@
 #include "lib/atomic/ob_atomic.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
+#include "share/ob_internal_table_change_version.h"
 
 #include "rootserver/dbms_job/ob_dbms_job_utils.h"
 #include "rootserver/ob_ddl_service.h"
@@ -97,7 +98,7 @@ public:
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
       wait_vector_(0, NULL, ObModIds::VECTOR),
-      scheduler_job_table_change_seq_(0),
+      scheduler_job_table_change_version_(),
       has_loaded_primary_jobs_(false) {}
 
   virtual ~ObDBMSSchedJobMaster() { alive_jobs_.destroy(); };
@@ -153,7 +154,7 @@ private:
 
   // wait list; owned and mutated only by the scheduler thread.
   common::ObSortedVector<ObDBMSSchedJobKey *> wait_vector_;
-  uint64_t scheduler_job_table_change_seq_;
+  share::InternalTableChangeVersion scheduler_job_table_change_version_;
   bool has_loaded_primary_jobs_;
   void clear_wait_vector();
   inline static bool compare_job_key(

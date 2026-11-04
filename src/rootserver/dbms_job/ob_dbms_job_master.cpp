@@ -21,6 +21,7 @@
 #include "lib/atomic/ob_atomic.h"
 #include "share/ob_ex_rpc.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_server_struct.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -415,8 +416,9 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
     LOG_WARN("fail to init action record", K(ret));
   } else if (OB_FAIL(alive_jobs_.create(1024))) {
     LOG_WARN("failed to create job hash set", K(ret));
-  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
-                 OB_ALL_JOB_TID))) {
+  } else if (OB_ISNULL(GCTX.internal_table_change_notifier_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(GCTX.internal_table_change_notifier_->register_table(OB_ALL_JOB_TID))) {
     LOG_WARN("failed to register dbms job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
@@ -668,8 +670,7 @@ int ObDBMSJobMaster::alloc_job_key(
 }
 
 int ObDBMSJobMaster::load_and_register_new_jobs(
-    bool can_advance_seq,
-    uint64_t target_seq)
+    const share::InternalTableChangeVersion &target_version)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObDBMSJobInfo, 32> job_infos;
@@ -696,16 +697,14 @@ int ObDBMSJobMaster::load_and_register_new_jobs(
         alive_jobs_.clear();
       } else {
         schedule_generation_ = next_generation;
-        if (can_advance_seq) {
-          // target_seq was captured before the table read. A concurrent commit
-          // remains visible to the next dequeued key or control tick.
-          job_table_change_seq_ = target_seq;
-        }
+        // target_version was captured before the table read. A concurrent
+        // commit remains visible on the next dequeued key or control tick.
+        job_table_change_version_ = target_version;
       }
     }
   }
-  LOG_INFO("load and reconcile dbms jobs", K(ret), K(can_advance_seq),
-      K(target_seq), K(schedule_generation_), K(job_infos));
+  LOG_INFO("load and reconcile dbms jobs", K(ret), K(target_version),
+      K(schedule_generation_), K(job_infos));
   return ret;
 }
 
@@ -820,34 +819,68 @@ int ObDBMSJobMaster::check_table_change_(ObDBMSJobKey *job_key, bool &handled)
     allocator_.free(job_key);
     handled = true;
   } else {
-    uint64_t target_seq = 0;
-    const int seq_ret =
-        ObInternalTableChangeNotifier::get_instance().get_change_seq(
-            OB_ALL_JOB_TID, target_seq);
+    share::InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
+    const uint64_t table_ids[] = {OB_ALL_JOB_TID};
+    const share::InternalTableChangeVersion last_versions[] = {
+        job_table_change_version_};
+    share::InternalTableChangeVersion target_versions[1];
+    share::SCN max_commit_version;
+    bool changed = false;
+    const int status_ret = OB_ISNULL(notifier)
+        ? OB_NOT_INIT
+        : notifier->get_change_status(
+              table_ids, last_versions, 1, target_versions, max_commit_version, changed);
     const bool need_reconcile = OB_ISNULL(job_key)
         || ATOMIC_LOAD(&needs_reconcile_)
-        || OB_SUCCESS != seq_ret
-        || target_seq != job_table_change_seq_;
+        || OB_SUCCESS != status_ret
+        || changed;
     if (need_reconcile) {
-      if (OB_SUCCESS != seq_ret) {
-        LOG_WARN("fail to get dbms job table change sequence; reconcile fail-open",
-            K(seq_ret), K(job_table_change_seq_));
-      }
-      ret = load_and_register_new_jobs(OB_SUCCESS == seq_ret, target_seq);
-      // The dequeued key is never reused across a generation change. This
-      // keeps ownership unambiguous if rebuilding or scheduling the new
-      // control key fails part-way through.
-      if (OB_NOT_NULL(job_key)) {
-        allocator_.free(job_key);
-        job_key = NULL;
-      }
-      if (OB_FAIL(ret)) {
-        const int retry_ret = schedule_change_check_(NULL, schedule_generation_);
-        if (OB_SUCCESS != retry_ret) {
-          LOG_WARN("fail to schedule dbms job reconciliation retry", K(retry_ret));
+      bool defer_until_visible = OB_SUCCESS != status_ret;
+      if (OB_SUCCESS != status_ret) {
+        LOG_WARN("fail to get dbms job table change version; defer reconcile",
+            K(status_ret), K(job_table_change_version_));
+      } else {
+        bool is_visible = false;
+        const int visible_ret = notifier->is_change_visible(max_commit_version, is_visible);
+        if (OB_SUCCESS != visible_ret) {
+          defer_until_visible = true;
+          LOG_WARN("fail to check dbms job table commit visibility",
+              K(visible_ret), K(max_commit_version));
+        } else if (!is_visible) {
+          defer_until_visible = true;
+          LOG_DEBUG("defer dbms job reconciliation until GTS reaches commit version",
+              K(max_commit_version));
         }
       }
-      handled = true;
+      if (defer_until_visible) {
+        // Do not run a due job or read the table before the notified commit is
+        // visible. Schedule a lightweight retry instead.
+        if (OB_NOT_NULL(job_key)) {
+          allocator_.free(job_key);
+          job_key = NULL;
+        }
+        const int retry_ret = schedule_change_check_(NULL, schedule_generation_);
+        if (OB_SUCCESS != retry_ret) {
+          LOG_WARN("fail to schedule dbms job visibility retry", K(retry_ret));
+        }
+        handled = true;
+      } else {
+        ret = load_and_register_new_jobs(target_versions[0]);
+        // The dequeued key is never reused across a generation change. This
+        // keeps ownership unambiguous if rebuilding or scheduling the new
+        // control key fails part-way through.
+        if (OB_NOT_NULL(job_key)) {
+          allocator_.free(job_key);
+          job_key = NULL;
+        }
+        if (OB_FAIL(ret)) {
+          const int retry_ret = schedule_change_check_(NULL, schedule_generation_);
+          if (OB_SUCCESS != retry_ret) {
+            LOG_WARN("fail to schedule dbms job reconciliation retry", K(retry_ret));
+          }
+        }
+        handled = true;
+      }
     } else if (job_key->is_check_new()) {
       if (OB_FAIL(schedule_change_check_(job_key, schedule_generation_))) {
         LOG_WARN("fail to reschedule dbms job change check", K(ret));

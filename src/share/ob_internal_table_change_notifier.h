@@ -14,30 +14,27 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
-#define OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
+#pragma once
 
 #include "lib/container/ob_array.h"
-#include "lib/function/ob_function.h"
 #include "lib/lock/ob_spin_lock.h"
-#include "share/log/ob_log_base_type.h"
+#include "share/ob_internal_table_change_version.h"
+#include "share/scn.h"
 
 namespace oceanbase
 {
+namespace observer
+{
+class ObServer;
+}
 namespace share
 {
 
-class ObInternalTableChangeNotifier : public logservice::ObILocalLogHandler
+class InternalTableChangeNotifier
 {
 public:
-  enum class Module {
-    TIMEZONE = 0,
-    GIS,
-    MAX
-  };
-  using ModuleCallback = common::ObFunction<int()>;
-
-  static ObInternalTableChangeNotifier &get_instance();
+  using ChangeVersion = InternalTableChangeVersion;
+  using GtsProvider = int (*)(SCN &gts);
 
   int init();
   void destroy();
@@ -46,40 +43,40 @@ public:
   // sorts the registry so commit and timer threads can use lock-free lookup.
   int register_table(uint64_t table_id);
   int seal();
+  int set_gts_provider(GtsProvider provider);
 
-  // change_seq is a process-local change hint, not a persistent version or
-  // SCN. Consumers compare it for equality and advance their last-seen value
-  // only after a successful refresh.
-  void notify_table_changed(uint64_t table_id);
-  int get_change_seq(uint64_t table_id, uint64_t &change_seq) const;
+  // Publish the committed MVCC version after a table-lock transaction ends.
+  // Consumers wait for GTS to reach it before starting an inner-SQL refresh.
+  void notify_table_changed(uint64_t table_id, const SCN &commit_version);
+  int get_change_status(const uint64_t *table_ids,
+      const ChangeVersion *last_versions,
+      int64_t table_count,
+      ChangeVersion *target_versions,
+      SCN &max_commit_version,
+      bool &changed) const;
+  int is_change_visible(const SCN &commit_version, bool &is_visible) const;
+  static bool is_change_visible(const SCN &commit_version, const SCN &gts)
+  {
+    return commit_version.is_valid() && gts.is_valid() && gts >= commit_version;
+  }
   void mark_all_tables_changed();
 
-  // Kept for compatibility with existing module-level refresh users.
-  int register_module(Module module, ModuleCallback callback);
-  int notify(Module module);
-
-  // ObILocalLogHandler -- called when LS switches role.
-  void deactivate() override;
-  int activate() override;
-
 private:
-  ObInternalTableChangeNotifier();
-  ~ObInternalTableChangeNotifier();
-  DISALLOW_COPY_AND_ASSIGN(ObInternalTableChangeNotifier);
-
-  static constexpr int MAX_MODULE = static_cast<int>(Module::MAX);
-  struct ModuleEntry {
-    ModuleCallback callback_;
-    ModuleEntry() : callback_() {}
-  };
+  friend class ::oceanbase::observer::ObServer;
+  InternalTableChangeNotifier();
+  ~InternalTableChangeNotifier();
+  DISALLOW_COPY_AND_ASSIGN(InternalTableChangeNotifier);
 
   struct TableEntry {
     uint64_t table_id_;
     uint64_t change_seq_;
+    SCN commit_version_;
 
-    TableEntry() : table_id_(common::OB_INVALID_ID), change_seq_(1) {}
-    explicit TableEntry(const uint64_t table_id) : table_id_(table_id), change_seq_(1) {}
-    TO_STRING_KV(K_(table_id), K_(change_seq));
+    TableEntry()
+        : table_id_(common::OB_INVALID_ID), change_seq_(1), commit_version_(SCN::min_scn()) {}
+    explicit TableEntry(const uint64_t table_id)
+        : table_id_(table_id), change_seq_(1), commit_version_(SCN::min_scn()) {}
+    TO_STRING_KV(K_(table_id), K_(change_seq), K_(commit_version));
   };
 
   struct TableEntryCompare {
@@ -91,15 +88,14 @@ private:
 
   const TableEntry *find_table_entry_(uint64_t table_id) const;
   TableEntry *find_table_entry_(uint64_t table_id);
+  int get_change_version_(uint64_t table_id, ChangeVersion &version) const;
 
-  ModuleEntry entries_[MAX_MODULE];
   common::ObArray<TableEntry> table_entries_;
   common::ObSpinLock lock_;  // protects initialization-time registrations
   bool is_inited_;
   bool is_sealed_;
+  GtsProvider gts_provider_;
 };
 
 } // namespace share
 } // namespace oceanbase
-
-#endif

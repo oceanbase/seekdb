@@ -166,9 +166,12 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "internal_table_change_notifier": struct(
-        hdrs = ["ob_internal_table_change_notifier.h"],
+        hdrs = [
+            "ob_internal_table_change_notifier.h",
+            "ob_internal_table_change_version.h",
+        ],
         deps = [
-            ":log_protocol",
+            ":scn_interface",
             "//src/oblib:oblib_base",
         ],
     ),

@@ -25,50 +25,43 @@ namespace oceanbase
 namespace share
 {
 
-ObInternalTableChangeNotifier &ObInternalTableChangeNotifier::get_instance()
-{
-  static ObInternalTableChangeNotifier instance;
-  return instance;
-}
-
-ObInternalTableChangeNotifier::ObInternalTableChangeNotifier()
+InternalTableChangeNotifier::InternalTableChangeNotifier()
   : table_entries_(),
     lock_(common::ObLatchIds::DEFAULT_SPIN_LOCK),
     is_inited_(false),
-    is_sealed_(false)
+    is_sealed_(false),
+    gts_provider_(nullptr)
 {
 }
 
-ObInternalTableChangeNotifier::~ObInternalTableChangeNotifier()
+InternalTableChangeNotifier::~InternalTableChangeNotifier()
 {
   destroy();
 }
 
-int ObInternalTableChangeNotifier::init()
+int InternalTableChangeNotifier::init()
 {
   int ret = OB_SUCCESS;
   if (ATOMIC_LOAD(&is_inited_)) {
   } else {
     ATOMIC_STORE(&is_sealed_, false);
     ATOMIC_STORE(&is_inited_, true);
-    LOG_INFO("ObInternalTableChangeNotifier inited");
+    LOG_INFO("InternalTableChangeNotifier inited");
   }
   return ret;
 }
 
-void ObInternalTableChangeNotifier::destroy()
+void InternalTableChangeNotifier::destroy()
 {
   common::ObSpinLockGuard guard(lock_);
-  for (int i = 0; i < MAX_MODULE; i++) {
-    entries_[i].callback_.reset();
-  }
   ATOMIC_STORE(&is_inited_, false);
   ATOMIC_STORE(&is_sealed_, false);
+  gts_provider_ = nullptr;
   table_entries_.destroy();
-  LOG_INFO("ObInternalTableChangeNotifier destroyed");
+  LOG_INFO("InternalTableChangeNotifier destroyed");
 }
 
-int ObInternalTableChangeNotifier::register_table(const uint64_t table_id)
+int InternalTableChangeNotifier::register_table(const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
   bool found = false;
@@ -94,7 +87,7 @@ int ObInternalTableChangeNotifier::register_table(const uint64_t table_id)
   return ret;
 }
 
-int ObInternalTableChangeNotifier::seal()
+int InternalTableChangeNotifier::seal()
 {
   int ret = OB_SUCCESS;
   if (!ATOMIC_LOAD(&is_inited_)) {
@@ -116,8 +109,29 @@ int ObInternalTableChangeNotifier::seal()
   return ret;
 }
 
-const ObInternalTableChangeNotifier::TableEntry *
-ObInternalTableChangeNotifier::find_table_entry_(const uint64_t table_id) const
+int InternalTableChangeNotifier::set_gts_provider(const GtsProvider provider)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(provider)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("GTS provider must not be null", K(ret));
+  } else if (!ATOMIC_LOAD(&is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("internal table change notifier is not initialized", K(ret));
+  } else {
+    common::ObSpinLockGuard guard(lock_);
+    if (ATOMIC_LOAD(&is_sealed_)) {
+      ret = OB_STATE_NOT_MATCH;
+      LOG_WARN("cannot set GTS provider after notifier is sealed", K(ret));
+    } else {
+      gts_provider_ = provider;
+    }
+  }
+  return ret;
+}
+
+const InternalTableChangeNotifier::TableEntry *
+InternalTableChangeNotifier::find_table_entry_(const uint64_t table_id) const
 {
   const TableEntry *entry = nullptr;
   int64_t left = 0;
@@ -136,25 +150,35 @@ ObInternalTableChangeNotifier::find_table_entry_(const uint64_t table_id) const
   return entry;
 }
 
-ObInternalTableChangeNotifier::TableEntry *
-ObInternalTableChangeNotifier::find_table_entry_(const uint64_t table_id)
+InternalTableChangeNotifier::TableEntry *
+InternalTableChangeNotifier::find_table_entry_(const uint64_t table_id)
 {
   return const_cast<TableEntry *>(
-      static_cast<const ObInternalTableChangeNotifier *>(this)->find_table_entry_(table_id));
+      static_cast<const InternalTableChangeNotifier *>(this)->find_table_entry_(table_id));
 }
 
-void ObInternalTableChangeNotifier::notify_table_changed(const uint64_t table_id)
+void InternalTableChangeNotifier::notify_table_changed(
+    const uint64_t table_id,
+    const SCN &commit_version)
 {
   if (ATOMIC_LOAD(&is_inited_) && ATOMIC_LOAD(&is_sealed_)) {
     TableEntry *entry = find_table_entry_(table_id);
     if (nullptr != entry) {
+      if (OB_UNLIKELY(!commit_version.is_valid())) {
+        LOG_WARN("invalid commit version for internal table change", K(table_id), K(commit_version));
+      } else {
+        // Notifications may race and arrive out of commit order. Keep the
+        // largest version so an older notification cannot lower the watermark.
+        (void)entry->commit_version_.inc_update(commit_version);
+      }
       (void)ATOMIC_AAF(&entry->change_seq_, 1);
     }
   }
 }
 
-int ObInternalTableChangeNotifier::get_change_seq(
-    const uint64_t table_id, uint64_t &change_seq) const
+int InternalTableChangeNotifier::get_change_version_(
+    const uint64_t table_id,
+    ChangeVersion &version) const
 {
   int ret = OB_SUCCESS;
   const TableEntry *entry = nullptr;
@@ -165,63 +189,72 @@ int ObInternalTableChangeNotifier::get_change_seq(
   } else if (OB_ISNULL(entry = find_table_entry_(table_id))) {
     ret = OB_ENTRY_NOT_EXIST;
   } else {
-    change_seq = ATOMIC_LOAD(&entry->change_seq_);
+    // The writer stores the version before incrementing the sequence. Reading
+    // the sequence first makes its watermark visible; a racing later write is
+    // conservative and will be checked again on the next timer tick.
+    version.change_seq_ = ATOMIC_LOAD(&entry->change_seq_);
+    version.commit_version_ = entry->commit_version_.atomic_load();
   }
   return ret;
 }
 
-void ObInternalTableChangeNotifier::mark_all_tables_changed()
+int InternalTableChangeNotifier::get_change_status(
+    const uint64_t *table_ids,
+    const ChangeVersion *last_versions,
+    const int64_t table_count,
+    ChangeVersion *target_versions,
+    SCN &max_commit_version,
+    bool &changed) const
+{
+  int ret = OB_SUCCESS;
+  max_commit_version = SCN::min_scn();
+  changed = false;
+  if (OB_UNLIKELY(table_count < 0)
+      || OB_UNLIKELY(table_count > 0
+          && (OB_ISNULL(table_ids) || OB_ISNULL(last_versions) || OB_ISNULL(target_versions)))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments to check internal table change status", K(ret), K(table_count));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_count; ++i) {
+      if (OB_FAIL(get_change_version_(table_ids[i], target_versions[i]))) {
+        LOG_WARN("failed to get internal table change version", K(ret), "table_id", table_ids[i]);
+      } else {
+        changed = changed || target_versions[i] != last_versions[i];
+        max_commit_version = SCN::max(max_commit_version, target_versions[i].commit_version_);
+      }
+    }
+  }
+  return ret;
+}
+
+int InternalTableChangeNotifier::is_change_visible(
+    const SCN &commit_version,
+    bool &is_visible) const
+{
+  int ret = OB_SUCCESS;
+  is_visible = false;
+  SCN gts;
+  if (OB_UNLIKELY(!commit_version.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid commit version for visibility check", K(ret), K(commit_version));
+  } else if (OB_ISNULL(gts_provider_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("GTS provider is not initialized for internal table refresh", K(ret));
+  } else if (OB_FAIL(gts_provider_(gts))) {
+    LOG_WARN("failed to get GTS for internal table refresh", K(ret));
+  } else {
+    is_visible = is_change_visible(commit_version, gts);
+  }
+  return ret;
+}
+
+void InternalTableChangeNotifier::mark_all_tables_changed()
 {
   if (ATOMIC_LOAD(&is_inited_) && ATOMIC_LOAD(&is_sealed_)) {
     for (int64_t i = 0; i < table_entries_.count(); ++i) {
       (void)ATOMIC_AAF(&table_entries_.at(i).change_seq_, 1);
     }
   }
-}
-
-int ObInternalTableChangeNotifier::register_module(Module module, ModuleCallback callback)
-{
-  int ret = OB_SUCCESS;
-  const int idx = static_cast<int>(module);
-  if (idx < 0 || idx >= MAX_MODULE || !callback.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid notifier module registration", K(ret), K(idx));
-  } else {
-    common::ObSpinLockGuard guard(lock_);
-    entries_[idx].callback_ = callback;
-  }
-  return ret;
-}
-
-int ObInternalTableChangeNotifier::notify(Module module)
-{
-  int ret = OB_SUCCESS;
-  const int idx = static_cast<int>(module);
-  if (idx < 0 || idx >= MAX_MODULE) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (entries_[idx].callback_.is_valid()) {
-    ret = entries_[idx].callback_();
-  }
-  return ret;
-}
-
-void ObInternalTableChangeNotifier::deactivate()
-{
-}
-
-int ObInternalTableChangeNotifier::activate()
-{
-  int ret = OB_SUCCESS;
-  mark_all_tables_changed();
-  for (int mod = 0; mod < MAX_MODULE; ++mod) {
-    if (entries_[mod].callback_.is_valid()) {
-      const int tmp_ret = notify(static_cast<Module>(mod));
-      if (OB_SUCCESS != tmp_ret && OB_SUCCESS == ret) {
-        ret = tmp_ret;
-      }
-    }
-  }
-  return ret;
 }
 
 } // namespace share

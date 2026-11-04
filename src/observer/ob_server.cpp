@@ -714,6 +714,7 @@ ObServer::ObServer()
     disk_usage_report_task_(),
     log_block_mgr_(startup_result_)
 {
+  gctx_.internal_table_change_notifier_ = &internal_table_change_notifier_;
 }
 
 ObServer::~ObServer()
@@ -803,7 +804,7 @@ int ObServer::init(const ObServerOptions &opts)
       LOG_ERROR("init queue_thread dynamic mgr failed", KR(ret));
     } else if (OB_FAIL(ObTimerService::get_instance().start())) {
       LOG_ERROR("start timer service failed", KR(ret));
-    } else if (OB_FAIL(share::ObInternalTableChangeNotifier::get_instance().init())) {
+    } else if (OB_FAIL(internal_table_change_notifier_.init())) {
       LOG_ERROR("init internal table change notifier failed", KR(ret));
     }
   }
@@ -1146,7 +1147,7 @@ void ObServer::destroy()
     FLOG_INFO("server runtime destroyed");
 
     FLOG_INFO("begin to destroy internal table change notifier");
-    share::ObInternalTableChangeNotifier::get_instance().destroy();
+    internal_table_change_notifier_.destroy();
     FLOG_INFO("internal table change notifier destroyed");
 
     FLOG_INFO("begin to destroy query retry ctrl");

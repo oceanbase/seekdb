@@ -19,6 +19,7 @@
 
 #include "lib/task/ob_timer.h"
 #include "common/ob_role.h"
+#include "share/ob_internal_table_change_version.h"
 
 namespace oceanbase
 {
@@ -90,8 +91,8 @@ private:
   ObThreadIdling *major_scheduler_idling_;
   int64_t last_schedule_ts_;
   bool need_immediate_run_;
-  uint64_t core_table_change_seq_;
-  uint64_t freeze_info_change_seq_;
+  share::InternalTableChangeVersion core_table_change_version_;
+  share::InternalTableChangeVersion freeze_info_change_version_;
   common::ObTimer timer_;
 
 private:

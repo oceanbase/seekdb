@@ -29,6 +29,7 @@
 
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
+#include "share/ob_internal_table_change_version.h"
 
 #include "rootserver/ob_ddl_service.h"
 
@@ -183,7 +184,7 @@ public:
       lock_(common::ObLatchIds::DBMS_JOB_MASTER_LOCK),
       allocator_("DBMSJobMaster"),
       alive_jobs_(),
-      job_table_change_seq_(0),
+      job_table_change_version_(),
       schedule_generation_(0),
       needs_reconcile_(false) {}
 
@@ -207,7 +208,8 @@ public:
     bool check_job = false, bool check_new = false,
     uint64_t generation = 0);
 
-  int load_and_register_new_jobs(bool can_advance_seq, uint64_t target_seq);
+  int load_and_register_new_jobs(
+      const share::InternalTableChangeVersion &target_version);
   int register_jobs(
     common::ObIArray<ObDBMSJobInfo> &job_infos,
     uint64_t generation);
@@ -241,7 +243,7 @@ private:
   common::ObArenaAllocator allocator_;
 
   common::hash::ObHashSet<uint64_t> alive_jobs_;
-  uint64_t job_table_change_seq_;
+  share::InternalTableChangeVersion job_table_change_version_;
   uint64_t schedule_generation_;
   bool needs_reconcile_;
 

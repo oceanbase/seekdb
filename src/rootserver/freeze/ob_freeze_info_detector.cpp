@@ -44,7 +44,7 @@ ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
     major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
     major_scheduler_idling_(nullptr),
     last_schedule_ts_(0), need_immediate_run_(true),
-    core_table_change_seq_(0), freeze_info_change_seq_(0),
+    core_table_change_version_(), freeze_info_change_version_(),
     timer_()
 {}
 
@@ -71,10 +71,12 @@ int ObMajorMergeInfoDetector::init(
     snapshot_gc_scn_renewer_ = &snapshot_gc_scn_renewer;
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
-    } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+    } else if (OB_ISNULL(GCTX.internal_table_change_notifier_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(GCTX.internal_table_change_notifier_->register_table(
         OB_ALL_CORE_TABLE_TID))) {
       LOG_WARN("register core table change tracking failed", KR(ret));
-    } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+    } else if (OB_FAIL(GCTX.internal_table_change_notifier_->register_table(
         OB_ALL_FREEZE_INFO_TID))) {
       LOG_WARN("register freeze info change tracking failed", KR(ret));
     } else {
@@ -283,27 +285,39 @@ int ObMajorMergeInfoDetector::try_reload_freeze_info()
 {
   int ret = OB_SUCCESS;
   if (!is_primary_service() || ATOMIC_LOAD(&is_replay_mode_)) {
-    ObInternalTableChangeNotifier &notifier =
-        ObInternalTableChangeNotifier::get_instance();
-    uint64_t target_core_seq = 0;
-    uint64_t target_freeze_seq = 0;
-    int seq_ret = notifier.get_change_seq(OB_ALL_CORE_TABLE_TID, target_core_seq);
-    if (OB_SUCCESS == seq_ret) {
-      seq_ret = notifier.get_change_seq(OB_ALL_FREEZE_INFO_TID, target_freeze_seq);
+    share::InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
+    const uint64_t table_ids[] = {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID};
+    const share::InternalTableChangeVersion last_versions[] = {
+        core_table_change_version_, freeze_info_change_version_};
+    share::InternalTableChangeVersion target_versions[2];
+    share::SCN max_commit_version;
+    bool changed = false;
+    bool is_visible = false;
+    const int status_ret = OB_ISNULL(notifier)
+        ? OB_NOT_INIT
+        : notifier->get_change_status(
+              table_ids, last_versions, 2, target_versions, max_commit_version, changed);
+    if (OB_SUCCESS != status_ret) {
+      LOG_WARN("fail to get freeze table change version, defer reload", KR(status_ret));
     }
-    const bool changed = OB_SUCCESS != seq_ret
-        || target_core_seq != core_table_change_seq_
-        || target_freeze_seq != freeze_info_change_seq_;
+
     if (OB_ISNULL(major_merge_info_mgr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to try reload freeze info, freeze info manager is null", KR(ret),
                K_(is_primary_service));
+    } else if (OB_SUCCESS != status_ret) {
+      // Without a reliable commit watermark, defer the inner-SQL refresh.
     } else if (!changed) {
       // Standby metadata is unchanged; avoid issuing the periodic inner SQL.
+    } else if (OB_FAIL(notifier->is_change_visible(max_commit_version, is_visible))) {
+      LOG_WARN("fail to check freeze table commit visibility", KR(ret), K(max_commit_version));
+    } else if (!is_visible) {
+      LOG_DEBUG("defer freeze metadata reload until GTS reaches commit version",
+          K(max_commit_version));
     } else if (OB_FAIL(major_merge_info_mgr_->reload(true /*force_reload_global_info*/))) {
-    } else if (OB_SUCCESS == seq_ret) {
-      core_table_change_seq_ = target_core_seq;
-      freeze_info_change_seq_ = target_freeze_seq;
+    } else {
+      core_table_change_version_ = target_versions[0];
+      freeze_info_change_version_ = target_versions[1];
     }
   }
   return ret;

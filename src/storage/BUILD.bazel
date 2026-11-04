@@ -196,7 +196,6 @@ _STORAGE_RUNTIME_NATIVE_DEPS = [
     "//src/data_plane:write_flag_interface",
     "//src/logservice:logservice",
     "//src/share:log_protocol",
-    "//src/share:internal_table_change_notifier",
     "//src/query:sql_name_service",
     "//src/query:split_range_sampler_interface",
     "//src/query:query_api_interface",

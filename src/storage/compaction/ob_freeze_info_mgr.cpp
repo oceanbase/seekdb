@@ -22,6 +22,7 @@
 #include "share/ob_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_server_struct.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
@@ -118,20 +119,21 @@ int ObFreezeInfoMgr::server_module_init(ObFreezeInfoMgr* &freeze_info_mgr)
 int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
+  InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
   } else if (OB_FAIL(reload_task_.init())) {
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
-  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
-                 OB_ALL_CORE_TABLE_TID))) {
+  } else if (OB_ISNULL(notifier)) {
+    ret = OB_NOT_INIT;
+    STORAGE_LOG(WARN, "internal table change notifier is not initialized", K(ret));
+  } else if (OB_FAIL(notifier->register_table(OB_ALL_CORE_TABLE_TID))) {
     STORAGE_LOG(WARN, "fail to register core table change tracking", K(ret));
-  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
-                 OB_ALL_FREEZE_INFO_TID))) {
+  } else if (OB_FAIL(notifier->register_table(OB_ALL_FREEZE_INFO_TID))) {
     STORAGE_LOG(WARN, "fail to register freeze info change tracking", K(ret));
-  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
-                 OB_ALL_ACQUIRED_SNAPSHOT_TID))) {
+  } else if (OB_FAIL(notifier->register_table(OB_ALL_ACQUIRED_SNAPSHOT_TID))) {
     STORAGE_LOG(WARN, "fail to register acquired snapshot change tracking", K(ret));
   } else {
     inited_ = true;
@@ -439,9 +441,9 @@ ObFreezeInfoMgr::ReloadTask::ReloadTask(ObFreezeInfoMgr &mgr)
   : inited_(false),
     check_runtime_status_(),
     mgr_(mgr),
-    core_table_change_seq_(0),
-    freeze_info_change_seq_(0),
-    acquired_snapshot_change_seq_(0)
+    core_table_change_version_(),
+    freeze_info_change_version_(),
+    acquired_snapshot_change_version_()
 {
 }
 
@@ -551,32 +553,54 @@ void ObFreezeInfoMgr::ReloadTask::runTimerTask()
       LOG_WARN_RET(tmp_ret, "local storage recovery hasn't finished, this task can't start");
     }
   } else {
-    ObInternalTableChangeNotifier &notifier =
-        ObInternalTableChangeNotifier::get_instance();
-    uint64_t target_core_seq = 0;
-    uint64_t target_freeze_seq = 0;
-    uint64_t target_snapshot_seq = 0;
-    int seq_ret = notifier.get_change_seq(OB_ALL_CORE_TABLE_TID, target_core_seq);
-    if (OB_SUCCESS == seq_ret) {
-      seq_ret = notifier.get_change_seq(OB_ALL_FREEZE_INFO_TID, target_freeze_seq);
+    share::InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
+    const uint64_t table_ids[] = {
+        OB_ALL_CORE_TABLE_TID,
+        OB_ALL_FREEZE_INFO_TID,
+        OB_ALL_ACQUIRED_SNAPSHOT_TID};
+    const share::InternalTableChangeVersion last_versions[] = {
+        core_table_change_version_,
+        freeze_info_change_version_,
+        acquired_snapshot_change_version_};
+    share::InternalTableChangeVersion target_versions[3];
+    share::SCN max_commit_version;
+    bool changed = false;
+    bool is_visible = false;
+    const int status_ret = OB_ISNULL(notifier)
+        ? OB_NOT_INIT
+        : notifier->get_change_status(
+              table_ids, last_versions, 3, target_versions, max_commit_version, changed);
+    bool can_reload_inner_tables = false;
+    if (OB_SUCCESS != status_ret) {
+      LOG_WARN_RET(status_ret,
+          "fail to get freeze table change version, defer refresh", KR(status_ret));
+    } else if (changed) {
+      const int visible_ret = notifier->is_change_visible(max_commit_version, is_visible);
+      if (OB_SUCCESS != visible_ret) {
+        LOG_WARN_RET(visible_ret,
+            "fail to check freeze table commit visibility", KR(visible_ret), K(max_commit_version));
+      } else if (!is_visible) {
+        LOG_DEBUG("defer freeze info refresh until GTS reaches commit version",
+            K(max_commit_version));
+      } else {
+        can_reload_inner_tables = true;
+      }
     }
-    if (OB_SUCCESS == seq_ret) {
-      seq_ret = notifier.get_change_seq(OB_ALL_ACQUIRED_SNAPSHOT_TID, target_snapshot_seq);
-    }
-    const bool changed = OB_SUCCESS != seq_ret
-        || target_core_seq != core_table_change_seq_
-        || target_freeze_seq != freeze_info_change_seq_
-        || target_snapshot_seq != acquired_snapshot_change_seq_;
-    // Merge state is backed by SQLite and remains periodically refreshed.
+
+    // SQLite-backed merge state has no table change sequence and must keep its
+    // original periodic refresh independently of the inner-table gate below.
     if (OB_TMP_FAIL(refresh_merge_info())) {
       LOG_WARN_RET(tmp_ret, "fail to refresh merge info", KR(tmp_ret));
     }
-    if (changed && OB_TMP_FAIL(mgr_.try_update_info())) {
-      LOG_WARN_RET(tmp_ret, "fail to try update info", KR(tmp_ret));
-    } else if (changed && OB_SUCCESS == seq_ret) {
-      core_table_change_seq_ = target_core_seq;
-      freeze_info_change_seq_ = target_freeze_seq;
-      acquired_snapshot_change_seq_ = target_snapshot_seq;
+    if (changed && can_reload_inner_tables) {
+      const int info_ret = mgr_.try_update_info();
+      if (OB_SUCCESS != info_ret) {
+        LOG_WARN_RET(info_ret, "fail to try update info", KR(info_ret));
+      } else if (OB_SUCCESS == status_ret) {
+        core_table_change_version_ = target_versions[0];
+        freeze_info_change_version_ = target_versions[1];
+        acquired_snapshot_change_version_ = target_versions[2];
+      }
     }
   }
 }
