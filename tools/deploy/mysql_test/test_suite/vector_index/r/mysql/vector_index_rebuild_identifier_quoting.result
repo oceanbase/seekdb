@@ -1,0 +1,115 @@
+DROP DATABASE IF EXISTS vector_rebuild_identifier_quoting;
+CREATE DATABASE vector_rebuild_identifier_quoting;
+USE vector_rebuild_identifier_quoting;
+SET ob_query_timeout = 60000000;
+SET ob_trx_timeout = 60000000;
+# Nonpartitioned primary key containing a literal backtick
+CREATE TABLE c2_backtick (`key``id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX idx(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO c2_backtick VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c2_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c2_backtick' AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c2_old_index_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx'));
+CALL dbms_vector.rebuild_index('idx','c2_backtick','v');
+SELECT (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx')) <> @c2_old_index_id AS rebuilt;
+rebuilt
+1
+SELECT `key``id` AS id,v FROM c2_backtick ORDER BY `key``id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+EXPLAIN BASIC SELECT /*+ INDEX(c2_backtick idx) */ `key``id` AS id FROM c2_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+Query Plan
+=======================================
+|ID|OPERATOR         |NAME            |
+---------------------------------------
+|0 |VECTOR INDEX SCAN|c2_backtick(idx)|
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([c2_backtick.key`id]), filter(nil), rowset=16
+      access([c2_backtick.key`id]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([c2_backtick.__vid_0], [c2_backtick.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
+SELECT /*+ INDEX(c2_backtick idx) */ `key``id` AS id FROM c2_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+# Partitioned primary key containing a literal backtick
+CREATE TABLE c2_partition_backtick (`key``id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX idx(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`key``id`) (PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO c2_partition_backtick VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c2_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c2_partition_backtick' AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c2_old_index_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx'));
+CALL dbms_vector.rebuild_index('idx','c2_partition_backtick','v');
+SELECT (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx')) <> @c2_old_index_id AS rebuilt;
+rebuilt
+1
+SELECT `key``id` AS id,v FROM c2_partition_backtick ORDER BY `key``id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+EXPLAIN BASIC SELECT /*+ INDEX(c2_partition_backtick idx) */ `key``id` AS id FROM c2_partition_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+Query Plan
+=============================================================
+|ID|OPERATOR                     |NAME                      |
+-------------------------------------------------------------
+|0 |LIMIT                        |                          |
+|1 |└─PX COORDINATOR MERGE SORT  |                          |
+|2 |  └─EXCHANGE OUT DISTR       |:EX10000                  |
+|3 |    └─TOP-N SORT             |                          |
+|4 |      └─PX PARTITION ITERATOR|                          |
+|5 |        └─VECTOR INDEX SCAN  |c2_partition_backtick(idx)|
+=============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([c2_partition_backtick.key`id]), filter(nil), rowset=16
+      limit(1), offset(nil)
+  1 - output([c2_partition_backtick.key`id]), filter(nil), rowset=16
+      sort_keys([l2_distance(c2_partition_backtick.v, cast('[1,0,0]', ARRAY(18, -1))), ASC])
+  2 - output([c2_partition_backtick.key`id], [l2_distance(c2_partition_backtick.v, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      dop=1
+  3 - output([c2_partition_backtick.key`id], [l2_distance(c2_partition_backtick.v, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      sort_keys([l2_distance(c2_partition_backtick.v, cast('[1,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  4 - output([c2_partition_backtick.key`id], [l2_distance(c2_partition_backtick.v, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      force partition granule
+  5 - output([c2_partition_backtick.key`id], [l2_distance(c2_partition_backtick.v, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([c2_partition_backtick.key`id], [c2_partition_backtick.v]), partitions(p[0-1])
+      is_index_back=true, is_global_index=false,
+      range_key([c2_partition_backtick.__vid_0], [c2_partition_backtick.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
+SELECT /*+ INDEX(c2_partition_backtick idx) */ `key``id` AS id FROM c2_partition_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+# Shared DDL formatter: enum/set names containing literal backticks
+CREATE TABLE c2_types_quoted (id INT PRIMARY KEY, `enum``value` ENUM('a','b'), `set````value` SET('x','y'), n INT);
+INSERT INTO c2_types_quoted VALUES (1,'a','x',NULL),(2,'b','x,y',2),(3,'a','y',3);
+CREATE UNIQUE INDEX type_idx ON c2_types_quoted (`enum``value`,`set````value`,n);
+SET @c2_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c2_types_quoted' AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SELECT COUNT(*) AS usable_index FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_type_idx') AND index_status = 2;
+usable_index
+1
+SELECT id,CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,CAST(`set````value` AS UNSIGNED) AS set_bits,n FROM c2_types_quoted ORDER BY id;
+id	enum_ordinal	set_bits	n
+1	1	1	NULL
+2	2	3	2
+3	1	2	3
+EXPLAIN BASIC SELECT /*+ INDEX(c2_types_quoted type_idx) */ id FROM c2_types_quoted WHERE id = 2;
+Query Plan
+==============================================
+|ID|OPERATOR       |NAME                     |
+----------------------------------------------
+|0 |TABLE FULL SCAN|c2_types_quoted(type_idx)|
+==============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([c2_types_quoted.id]), filter([c2_types_quoted.id = 2]), rowset=16
+      access([c2_types_quoted.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([c2_types_quoted.enum`value], [c2_types_quoted.set``value], [c2_types_quoted.n], [c2_types_quoted.shadow_pk_0]), range(MIN,MIN,MIN,MIN ;
+      MAX,MAX,MAX,MAX)always true
+SELECT /*+ INDEX(c2_types_quoted type_idx) */ id FROM c2_types_quoted WHERE id = 2;
+id
+2
+USE test;
+DROP DATABASE vector_rebuild_identifier_quoting;
