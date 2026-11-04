@@ -27,9 +27,9 @@
 #include "lib/task/ob_timer.h"
 #include "lib/container/ob_iarray.h"
 
-#include "share/schema/ob_schema_service.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/ob_internal_table_change_version.h"
+#include "share/schema/ob_schema_service.h"
 
 #include "rootserver/ob_ddl_service.h"
 
@@ -173,20 +173,11 @@ class ObDBMSJobMaster
 {
 public:
   ObDBMSJobMaster()
-    : inited_(false),
-      stoped_(false),
-      running_(false),
-      trace_id_(NULL),
-      ready_queue_(),
-      scheduler_task_(),
-      scheduler_thread_(),
-      job_utils_(),
-      lock_(common::ObLatchIds::DBMS_JOB_MASTER_LOCK),
-      allocator_("DBMSJobMaster"),
-      alive_jobs_(),
-      job_table_change_version_(),
-      schedule_generation_(0),
-      needs_reconcile_(false) {}
+      : inited_(false), stoped_(false), running_(false), trace_id_(NULL),
+        ready_queue_(), scheduler_task_(), scheduler_thread_(), job_utils_(),
+        lock_(common::ObLatchIds::DBMS_JOB_MASTER_LOCK),
+        allocator_("DBMSJobMaster"), alive_jobs_(), job_table_change_watcher_(),
+        schedule_generation_(0), needs_reconcile_(false) {}
 
   virtual ~ObDBMSJobMaster() { alive_jobs_.destroy(); };
 
@@ -208,8 +199,7 @@ public:
     bool check_job = false, bool check_new = false,
     uint64_t generation = 0);
 
-  int load_and_register_new_jobs(
-      const share::InternalTableChangeVersion &target_version);
+  int load_and_register_new_jobs();
   int register_jobs(
     common::ObIArray<ObDBMSJobInfo> &job_infos,
     uint64_t generation);
@@ -243,7 +233,7 @@ private:
   common::ObArenaAllocator allocator_;
 
   common::hash::ObHashSet<uint64_t> alive_jobs_;
-  share::InternalTableChangeVersion job_table_change_version_;
+  share::InternalTableChangeWatcher job_table_change_watcher_;
   uint64_t schedule_generation_;
   bool needs_reconcile_;
 

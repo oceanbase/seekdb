@@ -18,11 +18,10 @@
 #define OCEANBASE_TIMEZONE_MGR_H_
 
 #include "lib/task/ob_timer.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/ob_lease_struct.h"
-#include "share/rc/ob_context.h"
 #include "share/ob_time_zone_info_manager.h"
-#include "share/ob_internal_table_change_version.h"
-
+#include "share/rc/ob_context.h"
 
 namespace oceanbase {
 namespace share
@@ -81,10 +80,8 @@ private:
   common::ObTimer timer_;
   common::ObTimeZoneInfoManager *tz_info_mgr_ = nullptr;
   bool usable_;
-  InternalTableChangeVersion sys_stat_change_version_;
-  InternalTableChangeVersion timezone_name_change_version_;
-  InternalTableChangeVersion timezone_transition_change_version_;
-  InternalTableChangeVersion timezone_transition_type_change_version_;
+  share::InternalTableChangeWatcher table_change_watcher_;
+
 public:
   const uint64_t SLEEP_USECONDS = 5000000;
 };

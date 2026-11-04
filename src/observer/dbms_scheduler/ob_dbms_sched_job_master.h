@@ -20,19 +20,19 @@
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_table_operator.h"
 
-#include "lib/ob_define.h"
-#include "lib/net/ob_addr.h"
-#include "lib/allocator/page_arena.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/atomic/ob_atomic.h"
+#include "lib/container/ob_iarray.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_thread_cond.h"
-#include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/net/ob_addr.h"
+#include "lib/ob_define.h"
 #include "lib/task/ob_timer.h"
-#include "lib/container/ob_iarray.h"
-#include "lib/atomic/ob_atomic.h"
-#include "share/schema/ob_schema_service.h"
+#include "lib/thread/ob_simple_thread_pool.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/ob_internal_table_change_version.h"
+#include "share/schema/ob_schema_service.h"
 
 #include "rootserver/dbms_job/ob_dbms_job_utils.h"
 #include "rootserver/ob_ddl_service.h"
@@ -90,16 +90,13 @@ class ObDBMSSchedJobMaster
 {
 public:
   ObDBMSSchedJobMaster()
-    : inited_(false),
-      stoped_(true),
-      is_active_(false),
-      wokeup_(false),
-      schema_service_(NULL),
-      allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
-      alive_jobs_(),
-      wait_vector_(0, NULL, ObModIds::VECTOR),
-      scheduler_job_table_change_version_(),
-      has_loaded_primary_jobs_(false) {}
+      : inited_(false), stoped_(true), is_active_(false), wokeup_(false),
+        schema_service_(NULL),
+        allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE,
+                   block_alloc_),
+        alive_jobs_(), wait_vector_(0, NULL, ObModIds::VECTOR),
+        scheduler_job_table_change_watcher_(), has_loaded_primary_jobs_(false) {
+  }
 
   virtual ~ObDBMSSchedJobMaster() { alive_jobs_.destroy(); };
 
@@ -154,7 +151,7 @@ private:
 
   // wait list; owned and mutated only by the scheduler thread.
   common::ObSortedVector<ObDBMSSchedJobKey *> wait_vector_;
-  share::InternalTableChangeVersion scheduler_job_table_change_version_;
+  share::InternalTableChangeWatcher scheduler_job_table_change_watcher_;
   bool has_loaded_primary_jobs_;
   void clear_wait_vector();
   inline static bool compare_job_key(

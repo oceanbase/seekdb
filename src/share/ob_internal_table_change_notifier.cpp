@@ -198,35 +198,6 @@ int InternalTableChangeNotifier::get_change_version_(
   return ret;
 }
 
-int InternalTableChangeNotifier::get_change_status(
-    const uint64_t *table_ids,
-    const ChangeVersion *last_versions,
-    const int64_t table_count,
-    ChangeVersion *target_versions,
-    SCN &max_commit_version,
-    bool &changed) const
-{
-  int ret = OB_SUCCESS;
-  max_commit_version = SCN::min_scn();
-  changed = false;
-  if (OB_UNLIKELY(table_count < 0)
-      || OB_UNLIKELY(table_count > 0
-          && (OB_ISNULL(table_ids) || OB_ISNULL(last_versions) || OB_ISNULL(target_versions)))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments to check internal table change status", K(ret), K(table_count));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_count; ++i) {
-      if (OB_FAIL(get_change_version_(table_ids[i], target_versions[i]))) {
-        LOG_WARN("failed to get internal table change version", K(ret), "table_id", table_ids[i]);
-      } else {
-        changed = changed || target_versions[i] != last_versions[i];
-        max_commit_version = SCN::max(max_commit_version, target_versions[i].commit_version_);
-      }
-    }
-  }
-  return ret;
-}
-
 int InternalTableChangeNotifier::is_change_visible(
     const SCN &commit_version,
     bool &is_visible) const
@@ -255,6 +226,174 @@ void InternalTableChangeNotifier::mark_all_tables_changed()
       (void)ATOMIC_AAF(&table_entries_.at(i).change_seq_, 1);
     }
   }
+}
+
+InternalTableChangeWatcher::InternalTableChangeWatcher()
+  : watched_tables_(),
+    notifier_(nullptr),
+    target_commit_version_(SCN::min_scn()),
+    target_captured_(false)
+{
+}
+
+int InternalTableChangeWatcher::register_tables(
+    InternalTableChangeNotifier *notifier, const uint64_t *table_ids,
+    const int64_t table_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(notifier)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("internal table change notifier is not initialized", K(ret));
+  } else if (OB_ISNULL(table_ids) || table_count <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments to register internal table watcher", K(ret),
+             KP(notifier), KP(table_ids), K(table_count));
+  } else if (OB_NOT_NULL(notifier_) && notifier_ != notifier) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("internal table watcher is already bound to another notifier",
+             K(ret));
+  } else if (OB_NOT_NULL(notifier_) && watched_tables_.count() != table_count) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("internal table watcher cannot change its table list", K(ret),
+             K(table_count), "registered_table_count", watched_tables_.count());
+  } else {
+    const bool already_registered = OB_NOT_NULL(notifier_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_count; ++i) {
+      if (already_registered &&
+          watched_tables_.at(i).table_id_ != table_ids[i]) {
+        ret = OB_STATE_NOT_MATCH;
+        LOG_WARN("internal table watcher cannot change its table list", K(ret),
+                 "index", i, "old_table_id", watched_tables_.at(i).table_id_,
+                 "new_table_id", table_ids[i]);
+      } else {
+        for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+          if (table_ids[j] == table_ids[i]) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("duplicate table id in internal table watcher", K(ret),
+                     K(i), "table_id", table_ids[i]);
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(notifier->register_table(table_ids[i]))) {
+          LOG_WARN("failed to register table with internal table watcher",
+                   K(ret), "table_id", table_ids[i]);
+        } else if (OB_SUCC(ret) && !already_registered) {
+          WatchedTable watched_table;
+          watched_table.table_id_ = table_ids[i];
+          if (OB_FAIL(watched_tables_.push_back(watched_table))) {
+            LOG_WARN("failed to save watched table", K(ret), "table_id",
+                     table_ids[i]);
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      notifier_ = notifier;
+    } else if (!already_registered) {
+      watched_tables_.reset();
+      target_captured_ = false;
+    }
+  }
+  return ret;
+}
+
+int InternalTableChangeWatcher::check_changed(CheckResult &result,
+                                              const CheckMode mode,
+                                              CheckErrorStage *error_stage)
+{
+  int ret = OB_SUCCESS;
+  bool changed = false;
+  bool is_visible = false;
+  result = NO_CHANGE;
+  if (OB_NOT_NULL(error_stage)) {
+    *error_stage = NO_CHECK_ERROR;
+  }
+  target_captured_ = false;
+  target_commit_version_ = SCN::min_scn();
+  if (OB_ISNULL(notifier_) || watched_tables_.count() <= 0) {
+    ret = OB_NOT_INIT;
+    if (OB_NOT_NULL(error_stage)) {
+      *error_stage = VERSION_CHECK_ERROR;
+    }
+    LOG_WARN("internal table watcher is not registered", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < watched_tables_.count(); ++i) {
+      WatchedTable &watched_table = watched_tables_.at(i);
+      if (OB_FAIL(notifier_->get_change_version_(
+              watched_table.table_id_, watched_table.target_version_))) {
+        if (OB_NOT_NULL(error_stage)) {
+          *error_stage = VERSION_CHECK_ERROR;
+        }
+        LOG_WARN("failed to get watched internal table version", K(ret),
+                 "table_id", watched_table.table_id_);
+      } else {
+        changed = changed || watched_table.target_version_ !=
+                                 watched_table.processed_version_;
+        target_commit_version_ =
+            SCN::max(target_commit_version_,
+                     watched_table.target_version_.commit_version_);
+      }
+    }
+    if (OB_SUCC(ret) && (!changed && REFRESH_IF_CHANGED == mode)) {
+      result = NO_CHANGE;
+    } else if (OB_SUCC(ret) && OB_FAIL(notifier_->is_change_visible(
+                                   target_commit_version_, is_visible))) {
+      if (OB_NOT_NULL(error_stage)) {
+        *error_stage = VISIBILITY_CHECK_ERROR;
+      }
+      LOG_WARN("failed to check watched internal table visibility", K(ret),
+               K(target_commit_version_));
+    } else if (OB_SUCC(ret) && !is_visible) {
+      result = CHANGE_NOT_VISIBLE;
+    } else if (OB_SUCC(ret)) {
+      result = REFRESH_ALLOWED;
+      target_captured_ = true;
+    }
+  }
+  return ret;
+}
+
+int InternalTableChangeWatcher::has_unprocessed_changes(bool &changed) const
+{
+  int ret = OB_SUCCESS;
+  changed = false;
+  if (OB_ISNULL(notifier_) || watched_tables_.count() <= 0) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("internal table watcher is not registered", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !changed && i < watched_tables_.count();
+         ++i) {
+      const WatchedTable &watched_table = watched_tables_.at(i);
+      InternalTableChangeVersion target_version;
+      if (OB_FAIL(notifier_->get_change_version_(watched_table.table_id_,
+                                                 target_version))) {
+        LOG_WARN("failed to get watched internal table version", K(ret),
+                 "table_id", watched_table.table_id_);
+      } else {
+        changed = target_version != watched_table.processed_version_;
+      }
+    }
+  }
+  return ret;
+}
+
+int InternalTableChangeWatcher::mark_refreshed()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(notifier_) || watched_tables_.count() <= 0) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("internal table watcher is not registered", K(ret));
+  } else if (!target_captured_) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("no refreshable target captured by internal table watcher",
+             K(ret));
+  } else {
+    for (int64_t i = 0; i < watched_tables_.count(); ++i) {
+      WatchedTable &watched_table = watched_tables_.at(i);
+      watched_table.processed_version_ = watched_table.target_version_;
+    }
+    target_captured_ = false;
+  }
+  return ret;
 }
 
 } // namespace share

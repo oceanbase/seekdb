@@ -25,8 +25,8 @@
 #include "lib/task/ob_timer.h"
 #include "share/ob_freeze_info_manager.h"
 #include "share/ob_freeze_info_proxy.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/ob_snapshot_table_proxy.h"
-#include "share/ob_internal_table_change_version.h"
 #include "share/scn.h"
 #include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 
@@ -165,7 +165,7 @@ private:
   public:
     ReloadTask(ObFreezeInfoMgr &mgr);
     virtual ~ReloadTask() {}
-    int init();
+    int init(share::InternalTableChangeNotifier *notifier);
     virtual void runTimerTask();
     int refresh_merge_info();
 
@@ -173,9 +173,7 @@ private:
     bool inited_;
     bool check_runtime_status_;
     ObFreezeInfoMgr &mgr_;
-    share::InternalTableChangeVersion core_table_change_version_;
-    share::InternalTableChangeVersion freeze_info_change_version_;
-    share::InternalTableChangeVersion acquired_snapshot_change_version_;
+    share::InternalTableChangeWatcher table_change_watcher_;
   };
 
   class UpdateLSResvSnapshotTask : public common::ObTimerTask

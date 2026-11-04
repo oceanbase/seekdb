@@ -400,6 +400,7 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
                           ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
+  const uint64_t table_ids[] = {OB_ALL_JOB_TID};
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(sql_client)
@@ -409,16 +410,12 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
   } else if (FALSE_IT(ready_queue_.set_limit(MAX_READY_JOBS_CAPACITY))) {
     // do-nothing
   } else if (OB_FAIL(scheduler_task_.init(&ready_queue_, &needs_reconcile_))) {
-    LOG_WARN("fail to init ready queue", K(ret));
   } else if (OB_FAIL(scheduler_thread_.init(1, 1))) {
-    LOG_WARN("fail to init scheduler pool", K(ret));
   } else if (OB_FAIL(job_utils_.init(sql_client))) {
-    LOG_WARN("fail to init action record", K(ret));
   } else if (OB_FAIL(alive_jobs_.create(1024))) {
-    LOG_WARN("failed to create job hash set", K(ret));
-  } else if (OB_ISNULL(GCTX.internal_table_change_notifier_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(GCTX.internal_table_change_notifier_->register_table(OB_ALL_JOB_TID))) {
+  } else if (OB_FAIL(job_table_change_watcher_.register_tables(
+                 GCTX.internal_table_change_notifier_, table_ids,
+                 ARRAYSIZEOF(table_ids)))) {
     LOG_WARN("failed to register dbms job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
@@ -669,9 +666,7 @@ int ObDBMSJobMaster::alloc_job_key(
   return ret;
 }
 
-int ObDBMSJobMaster::load_and_register_new_jobs(
-    const share::InternalTableChangeVersion &target_version)
-{
+int ObDBMSJobMaster::load_and_register_new_jobs() {
   int ret = OB_SUCCESS;
   ObSEArray<ObDBMSJobInfo, 32> job_infos;
   ObArenaAllocator allocator;
@@ -697,14 +692,12 @@ int ObDBMSJobMaster::load_and_register_new_jobs(
         alive_jobs_.clear();
       } else {
         schedule_generation_ = next_generation;
-        // target_version was captured before the table read. A concurrent
-        // commit remains visible on the next dequeued key or control tick.
-        job_table_change_version_ = target_version;
       }
     }
   }
-  LOG_INFO("load and reconcile dbms jobs", K(ret), K(target_version),
-      K(schedule_generation_), K(job_infos));
+  LOG_INFO("load and reconcile dbms jobs", K(ret), "target_commit_version",
+           job_table_change_watcher_.get_target_commit_version(),
+           K(schedule_generation_), K(job_infos));
   return ret;
 }
 
@@ -819,38 +812,29 @@ int ObDBMSJobMaster::check_table_change_(ObDBMSJobKey *job_key, bool &handled)
     allocator_.free(job_key);
     handled = true;
   } else {
-    share::InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
-    const uint64_t table_ids[] = {OB_ALL_JOB_TID};
-    const share::InternalTableChangeVersion last_versions[] = {
-        job_table_change_version_};
-    share::InternalTableChangeVersion target_versions[1];
-    share::SCN max_commit_version;
-    bool changed = false;
-    const int status_ret = OB_ISNULL(notifier)
-        ? OB_NOT_INIT
-        : notifier->get_change_status(
-              table_ids, last_versions, 1, target_versions, max_commit_version, changed);
-    const bool need_reconcile = OB_ISNULL(job_key)
-        || ATOMIC_LOAD(&needs_reconcile_)
-        || OB_SUCCESS != status_ret
-        || changed;
+    const bool force_refresh =
+        OB_ISNULL(job_key) || ATOMIC_LOAD(&needs_reconcile_);
+    share::InternalTableChangeWatcher::CheckResult check_result;
+    const int status_ret = job_table_change_watcher_.check_changed(
+        check_result,
+        force_refresh ? share::InternalTableChangeWatcher::FORCE_REFRESH
+                      : share::InternalTableChangeWatcher::REFRESH_IF_CHANGED);
+    const bool need_reconcile =
+        force_refresh || OB_SUCCESS != status_ret ||
+        share::InternalTableChangeWatcher::NO_CHANGE != check_result;
     if (need_reconcile) {
-      bool defer_until_visible = OB_SUCCESS != status_ret;
+      bool defer_until_visible =
+          OB_SUCCESS != status_ret ||
+          share::InternalTableChangeWatcher::REFRESH_ALLOWED != check_result;
       if (OB_SUCCESS != status_ret) {
         LOG_WARN("fail to get dbms job table change version; defer reconcile",
-            K(status_ret), K(job_table_change_version_));
-      } else {
-        bool is_visible = false;
-        const int visible_ret = notifier->is_change_visible(max_commit_version, is_visible);
-        if (OB_SUCCESS != visible_ret) {
-          defer_until_visible = true;
-          LOG_WARN("fail to check dbms job table commit visibility",
-              K(visible_ret), K(max_commit_version));
-        } else if (!is_visible) {
-          defer_until_visible = true;
-          LOG_DEBUG("defer dbms job reconciliation until GTS reaches commit version",
-              K(max_commit_version));
-        }
+                 K(status_ret));
+      } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
+                 check_result) {
+        LOG_DEBUG(
+            "defer dbms job reconciliation until GTS reaches commit version",
+            "commit_version",
+            job_table_change_watcher_.get_target_commit_version());
       }
       if (defer_until_visible) {
         // Do not run a due job or read the table before the notified commit is
@@ -865,7 +849,11 @@ int ObDBMSJobMaster::check_table_change_(ObDBMSJobKey *job_key, bool &handled)
         }
         handled = true;
       } else {
-        ret = load_and_register_new_jobs(target_versions[0]);
+        ret = load_and_register_new_jobs();
+        if (OB_SUCC(ret) &&
+            OB_FAIL(job_table_change_watcher_.mark_refreshed())) {
+          LOG_WARN("failed to acknowledge refreshed dbms job table", K(ret));
+        }
         // The dequeued key is never reused across a generation change. This
         // keeps ownership unambiguous if rebuilding or scheduling the new
         // control key fails part-way through.
