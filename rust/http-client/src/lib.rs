@@ -165,7 +165,7 @@ impl Batch {
     }
 
     pub fn result(&self, index: usize) -> Option<&Result<Response, HttpError>> {
-        self.replies.get(index).and_then(Option::as_ref)
+        self.replies.get(index)
     }
 
     pub fn result_count(&self) -> usize {

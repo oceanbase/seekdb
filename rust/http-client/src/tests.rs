@@ -192,20 +192,32 @@ fn malformed_url_and_timeout_keep_distinct_errors() {
     let client = Client::new("not a URL".to_owned(), options());
     assert_eq!(ErrorKind::UrlMalformed, client.post(b"").unwrap_err().kind);
 
-    let (url, server) = server(vec![Reply {
-        status: 200,
-        content_encoding: None,
-        body: b"late".to_vec(),
-        delay: Duration::from_millis(100),
-    }]);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let url = format!("http://{}/timeout", listener.local_addr().unwrap());
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stopped = stop.clone();
+    let server = thread::spawn(move || {
+        while !stopped.load(std::sync::atomic::Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((_socket, _)) => {
+                    thread::sleep(Duration::from_millis(100));
+                    return;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => panic!("timeout fixture accept failed: {error}"),
+            }
+        }
+    });
     let mut request_options = options();
     request_options.timeout = Duration::from_millis(10);
     let client = Client::new(url, request_options);
-    assert_eq!(
-        ErrorKind::Timeout,
-        client.post(b"timeout").unwrap_err().kind
-    );
+    let result = client.post(b"timeout");
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
     server.join().unwrap();
+    assert_eq!(ErrorKind::Timeout, result.unwrap_err().kind);
 }
 
 struct TlsServer {
@@ -253,6 +265,7 @@ impl TlsServer {
                     Err(error) => panic!("TLS fixture accept failed: {error}"),
                 };
                 accepted.fetch_add(1, Ordering::Relaxed);
+                socket.set_nonblocking(false).unwrap();
                 socket
                     .set_read_timeout(Some(Duration::from_millis(300)))
                     .unwrap();
