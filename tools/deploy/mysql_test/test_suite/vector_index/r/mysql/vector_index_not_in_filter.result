@@ -1,0 +1,291 @@
+DROP DATABASE IF EXISTS vector_index_not_in_filter;
+CREATE DATABASE vector_index_not_in_filter;
+USE vector_index_not_in_filter;
+CREATE TABLE t_ann (id INT PRIMARY KEY, age INT NOT NULL, v VECTOR(3), KEY idx_age(age),
+VECTOR INDEX idx_v(v) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate)) ORGANIZATION HEAP;
+INSERT INTO t_ann VALUES (1,1,'[1,0,0]'), (2,2,'[2,0,0]'), (3,3,'[3,0,0]'), (4,4,'[4,0,0]'),
+(5,5,'[5,0,0]'), (6,6,'[6,0,0]'), (7,7,'[7,0,0]'), (8,8,'[8,0,0]'), (9,9,'[9,0,0]'),
+(10,10,'[10,0,0]'), (11,11,'[11,0,0]'), (12,12,'[12,0,0]');
+# the complement of age IN (1, 2, 3) over the ages 1..12 selects the same rows
+EXPLAIN BASIC SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE age IN (1, 2, 3)
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+===========================================================
+|ID|OPERATOR                               |NAME          |
+-----------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_ann(idx_age)|
+===========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann.id]), filter([t_ann.age IN (1, 2, 3)]), rowset=16
+      access([t_ann.__pk_increment], [t_ann.age], [t_ann.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_ann.age], [t_ann.__pk_increment]), range(1,MIN ; 1,MAX), (2,MIN ; 2,MAX), (3,MIN ; 3,MAX)
+EXPLAIN BASIC SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+===========================================================
+|ID|OPERATOR                               |NAME          |
+-----------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_ann(idx_age)|
+===========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann.id]), filter([(T_OP_NOT, t_ann.age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))]), rowset=16
+      access([t_ann.__pk_increment], [t_ann.age], [t_ann.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_ann.age], [t_ann.__pk_increment]), range(NULL,MAX ; 4,MIN), (12,MAX ; MAX,MAX)
+EXPLAIN BASIC SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE age NOT IN (4, 5, 6, 7, 8, 9, 10, 11, 12)
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+===========================================================
+|ID|OPERATOR                               |NAME          |
+-----------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_ann(idx_age)|
+===========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann.id]), filter([(T_OP_NOT_IN, t_ann.age, (4, 5, 6, 7, 8, 9, 10, 11, 12))]), rowset=16
+      access([t_ann.__pk_increment], [t_ann.age], [t_ann.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_ann.age], [t_ann.__pk_increment]), range(NULL,MAX ; 4,MIN), (12,MAX ; MAX,MAX)
+SELECT id FROM t_ann WHERE age IN (1, 2, 3)
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+id
+3
+2
+1
+SELECT id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+id
+3
+2
+1
+SELECT id FROM t_ann WHERE age NOT IN (4, 5, 6, 7, 8, 9, 10, 11, 12)
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+id
+3
+2
+1
+SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+id
+3
+2
+1
+SELECT id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+ORDER BY l2_distance(v, '[2.9,0,0]') LIMIT 3;
+id
+3
+2
+1
+# NOT (c IN (...)) also gets ranges when the rewrite is disabled by hint
+EXPLAIN BASIC SELECT /*+ NO_REWRITE INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (2, 4, 5, 6)) ORDER BY id;
+Query Plan
+======================================
+|ID|OPERATOR          |NAME          |
+--------------------------------------
+|0 |SORT              |              |
+|1 |└─TABLE RANGE SCAN|t_ann(idx_age)|
+======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann.id]), filter(nil), rowset=16
+      sort_keys([t_ann.id, ASC])
+  1 - output([t_ann.id]), filter(nil), rowset=16
+      access([t_ann.__pk_increment], [t_ann.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      range_key([t_ann.age], [t_ann.__pk_increment]), range(NULL,MAX ; 2,MIN), (2,MAX ; 4,MIN), (6,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT, t_ann.age IN (2, 4, 5, 6))])
+SELECT /*+ NO_REWRITE INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (2, 4, 5, 6)) ORDER BY id;
+id
+1
+3
+7
+8
+9
+10
+11
+12
+# empty ranges between adjacent excluded integers are skipped, other ranges are kept
+CREATE TABLE t_int (id INT PRIMARY KEY, a INT, b BIGINT, u BIGINT UNSIGNED, d DECIMAL(10,1),
+KEY idx_a(a), KEY idx_b(b), KEY idx_u(u), KEY idx_d(d));
+INSERT INTO t_int VALUES
+(1, 1, -9223372036854775808, 0, 1.0),
+(2, 2, -9223372036854775807, 1, 1.5),
+(3, 3, -9223372036854775806, 2, 2.0),
+(4, 4, 0, 18446744073709551613, 2.5),
+(5, 5, 9223372036854775806, 18446744073709551614, 3.0),
+(6, NULL, 9223372036854775807, 18446744073709551615, NULL);
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 3, 4);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_int(idx_a)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_int.id]), filter(nil), rowset=16
+      access([t_int.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_int.a], [t_int.id]), range(NULL,MAX ; 2,MIN), (4,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT_IN, t_int.a, (2, 3, 4))])
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 3, 4) ORDER BY id;
+id
+1
+5
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 4);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_int(idx_a)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_int.id]), filter(nil), rowset=16
+      access([t_int.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_int.a], [t_int.id]), range(NULL,MAX ; 2,MIN), (2,MAX ; 4,MIN), (4,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT_IN, t_int.a, (2, 4))])
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 4) ORDER BY id;
+id
+1
+3
+5
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (4, 2, 3, 3);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_int(idx_a)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_int.id]), filter(nil), rowset=16
+      access([t_int.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_int.a], [t_int.id]), range(NULL,MAX ; 2,MIN), (4,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT_IN, t_int.a, (4, 2, 3, 3))])
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (4, 2, 3, 3) ORDER BY id;
+id
+1
+5
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 2.5, 3) ORDER BY id;
+id
+1
+4
+5
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 3, NULL) ORDER BY id;
+id
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (9223372036854775806, 9223372036854775807);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_int(idx_b)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_int.id]), filter(nil), rowset=16
+      access([t_int.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_int.b], [t_int.id]), range(NULL,MAX ; 9223372036854775806,MIN), (9223372036854775807,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT_IN, t_int.b, (9223372036854775806, 9223372036854775807))])
+SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (9223372036854775806, 9223372036854775807) ORDER BY id;
+id
+1
+2
+3
+4
+SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (-9223372036854775808, -9223372036854775807) ORDER BY id;
+id
+3
+4
+5
+6
+SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (-9223372036854775808, 9223372036854775807) ORDER BY id;
+id
+2
+3
+4
+5
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_u) */ id FROM t_int WHERE u NOT IN (18446744073709551614, 18446744073709551615);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_int(idx_u)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_int.id]), filter(nil), rowset=16
+      access([t_int.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_int.u], [t_int.id]), range(NULL,MAX ; 18446744073709551614,MIN), (18446744073709551615,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT_IN, t_int.u, (18446744073709551614, 18446744073709551615))])
+SELECT /*+ INDEX(t_int idx_u) */ id FROM t_int WHERE u NOT IN (18446744073709551614, 18446744073709551615) ORDER BY id;
+id
+1
+2
+3
+4
+SELECT /*+ INDEX(t_int idx_u) */ id FROM t_int WHERE u NOT IN (0, 1) ORDER BY id;
+id
+3
+4
+5
+6
+# a decimal column keeps the range between adjacent integers
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_d) */ id FROM t_int WHERE d NOT IN (1, 2);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_int(idx_d)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_int.id]), filter(nil), rowset=16
+      access([t_int.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_int.d], [t_int.id]), range(NULL,MAX ; 1.0,MIN), (1.0,MAX ; 2.0,MIN), (2.0,MAX ; MAX,MAX), 
+      range_cond([(T_OP_NOT_IN, t_int.d, (cast(1, DECIMAL_INT(10, 1)), cast(2, DECIMAL_INT(10, 1))))])
+SELECT /*+ INDEX(t_int idx_d) */ id FROM t_int WHERE d NOT IN (1, 2) ORDER BY id;
+id
+2
+4
+5
+# NOT IN on a later column of a composite index
+CREATE TABLE t_ab (id INT PRIMARY KEY, a INT, b INT, KEY idx_ab(a, b));
+INSERT INTO t_ab VALUES (1,1,1), (2,1,2), (3,1,3), (4,1,4), (5,2,1), (6,2,2), (7,2,3), (8,2,4);
+EXPLAIN BASIC SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a = 1 AND b NOT IN (2, 3);
+Query Plan
+==================================
+|ID|OPERATOR        |NAME        |
+----------------------------------
+|0 |TABLE RANGE SCAN|t_ab(idx_ab)|
+==================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ab.id]), filter(nil), rowset=16
+      access([t_ab.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_ab.a], [t_ab.b], [t_ab.id]), range(1,NULL,MAX ; 1,2,MIN), (1,3,MAX ; 1,MAX,MAX), 
+      range_cond([t_ab.a = 1], [(T_OP_NOT_IN, t_ab.b, (2, 3))])
+SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a = 1 AND b NOT IN (2, 3) ORDER BY id;
+id
+1
+4
+SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a IN (1, 2) AND b NOT IN (2, 3) ORDER BY id;
+id
+1
+4
+5
+8
+SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a > 1 AND b NOT IN (2, 3) ORDER BY id;
+id
+5
+8
+DROP DATABASE vector_index_not_in_filter;
