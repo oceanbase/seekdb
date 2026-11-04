@@ -51,6 +51,7 @@ class ObPhyOperatorMonnitorInfo;
 struct ObAuditRecordData;
 class ObOpSpec;
 class ObSqlSchemaGuard;
+class ExpressionProgramCatalog;
 
 //class ObPhysicalPlan: public common::ObDLinkBase<ObPhysicalPlan>
 typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>, common::ObIAllocator> PhyRowParamMap;
@@ -73,6 +74,7 @@ public:
 
   virtual void destroy();
   virtual void reset();
+  int prepare_expression_programs();
   void set_is_last_exec_succ(bool val) { stat_.is_last_exec_succ_ = val; }
   bool is_last_exec_succ() const { return stat_.is_last_exec_succ_; }
   const ObString &get_constructed_sql() const { return stat_.constructed_sql_; }
@@ -383,10 +385,12 @@ private:
   static const int64_t SAMPLE_TIMES = 10;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPhysicalPlan);
+  void destroy_expression_programs();
 private:
   ObPhyPlanHint phy_hint_; //hints for this plan
   // root operator spec for static typing engine.
   ObOpSpec *root_op_spec_;
+  ExpressionProgramCatalog *expression_programs_ = nullptr;
   int64_t param_count_;
   uint64_t signature_;
   // Runtime read-only data structure

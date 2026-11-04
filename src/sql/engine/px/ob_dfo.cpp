@@ -529,6 +529,7 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
         } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
         } else {
           des_phy_plan_->set_root_op_spec(op_spec_root_);
+          ret = des_phy_plan_->prepare_expression_programs();
           exec_ctx_->reference_my_plan(des_phy_plan_);
 #ifndef NDEBUG
           const ObIArray<ObExpr> &exprs = frame_info->rt_exprs_;
@@ -667,6 +668,7 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
       } else {
         inner_phy_plan_->set_root_op_spec(inner_op_spec_root_);
+        ret = inner_phy_plan_->prepare_expression_programs();
         exec_ctx_->reference_my_plan(inner_phy_plan_);
         des_phy_plan_ = inner_phy_plan_;
         op_spec_root_ = inner_op_spec_root_;

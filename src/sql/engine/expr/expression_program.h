@@ -31,6 +31,51 @@ namespace sql
 class ObOperator;
 struct ObExpr;
 
+class ObOpSpec;
+class ObPhysicalPlan;
+
+class CompiledExpressionProgram final : public expression::IExecutionHost
+{
+public:
+  static int create(const ObOpSpec &spec, common::ObIAllocator &allocator,
+                    CompiledExpressionProgram *&result);
+  ~CompiledExpressionProgram() override = default;
+  uint64_t *allocate(size_t words) override;
+  void release(uint64_t *data, size_t words) override;
+  int32_t check_cancel() override { return common::OB_SUCCESS; }
+
+private:
+  friend class ExpressionProgram;
+  explicit CompiledExpressionProgram(common::ObIAllocator &allocator);
+
+  common::ObIAllocator &allocator_;
+  std::optional<rust::Box<expression::Prepared>> prepared_;
+  common::ObSEArray<const ObExpr *, 16, common::ObWrapperAllocator> inputs_;
+  common::ObSEArray<uint8_t, 16, common::ObWrapperAllocator> materialized_inputs_;
+  common::ObSEArray<const ObExpr *, 16, common::ObWrapperAllocator> nodes_;
+  common::ObSEArray<uint32_t, 8, common::ObWrapperAllocator> roots_;
+  bool allocation_failed_ = false;
+};
+
+class ExpressionProgramCatalog final
+{
+public:
+  static int create(ObPhysicalPlan &plan, ExpressionProgramCatalog *&result);
+  ~ExpressionProgramCatalog();
+
+private:
+  ExpressionProgramCatalog(const ExpressionProgramCatalog &) = delete;
+  ExpressionProgramCatalog &operator=(const ExpressionProgramCatalog &) = delete;
+  struct Entry {
+    ObOpSpec *spec_;
+    CompiledExpressionProgram *program_;
+  };
+  explicit ExpressionProgramCatalog(common::ObIAllocator &allocator);
+  int prepare(ObOpSpec &root);
+  common::ObIAllocator &allocator_;
+  common::ObSEArray<Entry, 8, common::ObWrapperAllocator> entries_;
+};
+
 class ExpressionProgram final : public expression::IExecutionHost
 {
 public:
@@ -43,19 +88,14 @@ public:
   int32_t check_cancel() override;
 
 private:
-  explicit ExpressionProgram(ObOperator &owner);
+  ExpressionProgram(ObOperator &owner, const CompiledExpressionProgram &compiled);
   int import_inputs(int64_t rows, bool batch, const ObBitVector *skip);
   void export_root(const ObExpr &expr, size_t node, int64_t rows, bool batch);
   int report_error(const expression::RunStatus &status);
 
   ObOperator &owner_;
-  std::optional<rust::Box<expression::Prepared>> prepared_;
-  // Runner must be destroyed while its allocation host and prepared program exist.
+  const CompiledExpressionProgram &compiled_;
   std::optional<rust::Box<expression::Runner>> runner_;
-  common::ObSEArray<const ObExpr *, 16, common::ObWrapperAllocator> inputs_;
-  common::ObSEArray<uint8_t, 16, common::ObWrapperAllocator> materialized_inputs_;
-  common::ObSEArray<const ObExpr *, 16, common::ObWrapperAllocator> nodes_;
-  common::ObSEArray<uint32_t, 8, common::ObWrapperAllocator> roots_;
   common::ObSEArray<uint8_t, 16, common::ObWrapperAllocator> skip_;
   size_t capacity_;
   bool allocation_failed_ = false;

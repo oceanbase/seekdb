@@ -39,6 +39,7 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_exprs(log_plan, phy_plan))) {
   } else if (OB_FAIL(generate_operators(log_plan, phy_plan))) {
+  } else if (OB_FAIL(phy_plan.prepare_expression_programs())) {
   }
 
   return ret;

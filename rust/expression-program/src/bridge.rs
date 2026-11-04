@@ -71,13 +71,20 @@ pub struct Prepared {
     program: Program<HostBacking>,
 }
 
+// SAFETY: preparation finishes all writes before the plan publishes Prepared.
+// Shared access reads only immutable program words; it never calls the allocation
+// host. The plan owner keeps the region and host alive through all borrowed
+// executions and cached-plan references, then drops Prepared after they retire.
+// Send is intentionally absent because destruction calls the owning host.
+unsafe impl Sync for Prepared {}
+
 pub struct Runner {
     execution: Execution<HostBacking>,
     host: NonNull<ffi::IExecutionHost>,
 }
 
-// Prepared and Runner each own one query-accounted region. The adapter keeps
-// their host alive until both owners are destroyed. Datum frames receive copies.
+// Prepared and Runner each own one allocator-accounted region. Their respective
+// plan and query hosts outlive the owner. Datum frames receive result copies.
 struct HostBacking {
     data: NonNull<u64>,
     words: usize,

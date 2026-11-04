@@ -1,6 +1,6 @@
 # Numeric and boolean expression programs
 
-The goal is a reusable Rust execution responsibility for complete filter/project graphs. A query reaches Rust through one prepared program and one execution state, including shared intermediate values and demand-sensitive caches. Scalar execution uses the same interface with one row. C++ retains SQL resolution, type deduction, optimization, relational operators and datum frames.
+The goal is a reusable Rust execution responsibility for complete filter/project graphs. A query borrows a prepared program from its immutable physical plan and owns a separate execution state, including shared intermediate values and demand-sensitive caches. Scalar execution uses the same interface with one row. C++ retains SQL resolution, type deduction, optimization, relational operators and datum frames.
 
 ## Current execution flow
 
@@ -22,7 +22,7 @@ The selected first cohort uses a validated native DAG. It supports signed intege
 
 `Program::new(nodes, filters, projections, input_count)` is the native convenience constructor. `Program::from_instructions_in(spec, backing)` validates and compiles into caller-owned immutable storage. Both validate references, input indices, arities, node count and graph depth. Native callers can share a program reference without imposing a reference-counting allocator on adapters. No CXX type enters this interface.
 
-The compact program uses five u64 words per node plus argument and root words, at most 47,104 bytes. The CXX adapter allocates it through the query allocator. The two fixed-size CXX Box handles use checked Rust system allocations and return allocation errors. `required_words(&program, capacity)` determines the complete execution region. `Execution::new(&program, capacity, backing)` owns a backing object implementing `AsRef<[u64]> + AsMut<[u64]>`. A native caller can supply a Vec. The CXX adapter supplies an exclusive allocation from the query allocator. Rust owns its layout, input planes, intermediate values, per-row validity/evaluated state and selection. Mutable state is never shared between executions.
+The compact program uses five u64 words per node plus argument and root words, at most 47,104 bytes. The CXX plan host allocates it through the plan allocator before publication. The two fixed-size CXX Box handles use checked Rust system allocations and return allocation errors. `required_words(&program, capacity)` determines the complete execution region. `Execution::new(&program, capacity, backing)` owns a backing object implementing `AsRef<[u64]> + AsMut<[u64]>`. A native caller can supply a Vec. The CXX adapter supplies an exclusive allocation from the query allocator. Rust owns its layout, input planes, intermediate values, per-row validity/evaluated state and selection. Mutable state is never shared between executions.
 
 The caller fills input values and validity, calls `begin_batch(rows, skip)`, then `filter_project(&program, control)`. Filters run in order and only surviving rows reach projections. AND, OR and searched CASE request only needed rows and branches. Shared nodes reuse individual evaluated rows. Failed batches cannot be retried without rebinding. A new batch invalidates constants and intermediate caches, so parameter rebind and rescan cannot retain stale values.
 
@@ -54,12 +54,16 @@ assert_eq!(execution.node_values(2), &[42]);
 
 The existing CXX generator and single `seekdb-rust` archive expose `Prepared` and `Runner`. Flattened instructions are a private lowering representation. The bridge parses them into native operations. Runtime binding and execution use whole buffers, with no row/node callbacks. The only host capabilities allocate and release program/workspace regions and check cancellation.
 
-The operator owns the adapter. The adapter owns Prepared and Runner; both must be destroyed before their allocation host. All variable-sized adapter containers use the query allocator. Explicit operator destroy releases the adapter. C++ numeric roots are stable copies, so no Rust buffer pointer escapes to datum frames. The preparation is reused within one operator execution, not yet across cached plans. Short requests must therefore include preparation costs in throughput measurement.
+The physical plan owns a catalog of immutable Prepared programs and input/root mappings. Operator specs borrow their compiled record. Normal code generation and unshared PX deserialization build the catalog after final expressions and operator trees exist, before publication. Shared PX tasks borrow the existing catalog. Runtime selection does not mutate cached plans or use a global lookup map. Literal values come from plan constant frames; parameters remain execution inputs.
+
+Each operator execution owns an adapter, Runner and query-accounted workspace. It borrows the compiled record while the existing result-set plan guard keeps the physical plan alive. Explicit operator destroy drops Runner before its query host. Plan reset and destroy drop the catalog and Prepared before resetting frames or the plan arena; partial preparation failures use the same cleanup. Only Prepared permits concurrent immutable borrowing. Runners and masks are isolated per execution. No-evaluator roots need no flag writes, which avoids mutating shared literal-frame metadata.
+
+C++ numeric roots are stable copies, so no Rust result pointer escapes to datum frames. The two fixed-size CXX handles use checked Rust system allocations. Variable-size metadata and compiler scratch use the plan arena; scratch capacity remains accounted until plan eviction. Execution buffers and skip transport use the query allocator. Preparation is amortized by existing plan-cache reuse, and first-use or reprepare workloads must include it in their costs.
 
 ## Verification gates
 
 - Native behavior tests cover shared nodes requested by different masks, SQL NULL truth tables, branch errors, all-skip, filter-before-project, overflow, division policy, batch rebind, snapshots and cancellation.
-- CXX checks must cover real input transport, output consumption, allocation failure, release and cancellation.
+- CXX checks cover real input transport, output consumption, allocation failure, release, cancellation and concurrent isolated runners sharing one immutable program.
 - Production SQL checks must compare baseline and candidate, including scalar and batch execution, prepared parameters and unsupported warnings.
 - `information_schema.GLOBAL_STATUS` counters distinguish prepares, successful program calls, input rows, batch calls and rows reaching actual Rust filter programs. A plan alone is insufficient evidence of execution.
 - The remote sysbench comparison includes input conversion, root consumption and compilation/binding. Standard OLTP and custom expression workloads are reported separately, with identical work and errors checked.
@@ -94,4 +98,4 @@ WHERE VARIABLE_NAME LIKE 'Rust_expression%'
 ORDER BY VARIABLE_NAME;
 ```
 
-`Rust_expression_programs` counts successful executions, `rows` counts their active input rows, `batches` counts calls through the batch route and `filter_rows` counts active rows reaching programs with filter roots. `prepares` counts constructed programs. Query the status table before and after a workload; preparation and EXPLAIN alone do not prove execution. `SHOW GLOBAL STATUS` currently follows a different status implementation and does not expose these fields.
+`Rust_expression_programs` counts successful executions, `rows` counts their active input rows, `batches` counts calls through the batch route and `filter_rows` counts active rows reaching programs with filter roots. `prepares` counts programs compiled during physical-plan preparation. After warming a cached plan, repeated parameter rebinds should advance executions without preparing another program. Query the status table before and after a workload; preparation and EXPLAIN alone do not prove execution. `SHOW GLOBAL STATUS` currently follows a different status implementation and does not expose these fields.

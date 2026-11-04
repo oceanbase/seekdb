@@ -45,6 +45,7 @@ class ObOperator;
 class ObOpInput;
 class ObExecFeedbackNode;
 class ExpressionProgram;
+class CompiledExpressionProgram;
 
 struct ObPhyOpSeriCtx
 {
@@ -312,6 +313,8 @@ public:
   // Operator id, unique in DFO
   uint64_t id_;
   ObPhysicalPlan *plan_;
+  // Borrowed from the physical plan's immutable expression program catalog.
+  const CompiledExpressionProgram *compiled_expression_program_ = nullptr;
 
 
   // The %child_, %left_, %right_ should be set when set %children_,

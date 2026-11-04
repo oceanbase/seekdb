@@ -19,6 +19,7 @@
 #include "ob_physical_plan.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/engine/ob_operator_factory.h"
+#include "sql/engine/expr/expression_program.h"
 #include "share/ob_truncated_string.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/monitor/ob_sql_plan.h"
@@ -122,6 +123,7 @@ ObPhysicalPlan::~ObPhysicalPlan()
 
 void ObPhysicalPlan::reset()
 {
+  destroy_expression_programs();
   ObPlanCacheObject::reset();
   phy_hint_.reset();
   root_op_spec_ = NULL;
@@ -196,12 +198,28 @@ void ObPhysicalPlan::reset()
 }
 void ObPhysicalPlan::destroy()
 {
+  destroy_expression_programs();
 #ifndef NDEBUG
   bit_set_.reset();
 #endif
   sql_expression_factory_.destroy();
   expr_op_factory_.destroy();
   subschema_ctx_.destroy();
+}
+
+int ObPhysicalPlan::prepare_expression_programs()
+{
+  return expression_programs_ == nullptr
+      ? ExpressionProgramCatalog::create(*this, expression_programs_) : OB_INIT_TWICE;
+}
+
+void ObPhysicalPlan::destroy_expression_programs()
+{
+  if (expression_programs_ != nullptr) {
+    expression_programs_->~ExpressionProgramCatalog();
+    allocator_.free(expression_programs_);
+    expression_programs_ = nullptr;
+  }
 }
 
 

@@ -39,25 +39,23 @@ constexpr int64_t MAX_PROGRAM_DEPTH = 64;
 class ProgramBuilder
 {
 public:
-  explicit ProgramBuilder(ObOperator &owner)
-    : instructions_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      arguments_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      filters_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      projections_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      depths_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-      owner_(owner), operations_(0)
+  explicit ProgramBuilder(const ObOpSpec &spec, ObIAllocator &allocator)
+    : instructions_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      arguments_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      filters_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      projections_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      depths_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+      spec_(spec), allocator_(allocator), operations_(0)
   {}
 
   int build()
   {
     int ret = OB_SUCCESS;
-    const ObOpSpec &spec = owner_.get_spec();
-    if (spec.output_.empty() || spec.output_.count() > 256 || spec.filters_.count() > 256
-        || owner_.get_exec_ctx().get_my_session()->is_diagnosis_enabled()
-        || spec.get_phy_plan()->is_contains_assignment()) {
+    const ObOpSpec &spec = spec_;
+    if (spec.output_.empty() || spec.output_.count() > 256 || spec.filters_.count() > 256) {
       ret = OB_NOT_SUPPORTED;
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < spec.filters_.count(); ++i) {
@@ -95,11 +93,8 @@ private:
   bool is_boundary(const ObExpr *expr) const
   {
     bool boundary = false;
-    if (expr->eval_func_ != nullptr && !expr->get_eval_info(owner_.get_eval_ctx()).projected_) {
-      return false;
-    }
-    for (uint32_t i = 0; !boundary && i < owner_.get_child_cnt(); ++i) {
-      const ObOpSpec &child_spec = owner_.get_child(i)->get_spec();
+    for (uint32_t i = 0; !boundary && i < spec_.get_child_cnt(); ++i) {
+      const ObOpSpec &child_spec = *spec_.get_child(i);
       // Scalar plans can publish lazy outputs. Only eager production routes
       // guarantee that an output remains materialized on subsequent calls.
       const bool eager = child_spec.is_vectorized() || child_spec.get_phy_plan()->is_vectorized()
@@ -140,7 +135,11 @@ private:
         && expr->type_ != T_QUESTIONMARK && expr->eval_func_ == nullptr;
     const bool column = expr->type_ == T_REF_COLUMN && expr->eval_func_ == nullptr;
     if (literal) {
-      const ObDatum &datum = expr->locate_expr_datum(owner_.get_eval_ctx());
+      const auto &frames = spec_.get_phy_plan()->get_expr_frame_info().const_frame_ptrs_;
+      if (expr->frame_idx_ >= frames.count()) {
+        return OB_NOT_SUPPORTED;
+      }
+      const ObDatum &datum = *reinterpret_cast<const ObDatum *>(frames.at(expr->frame_idx_) + expr->datum_off_);
       instruction.opcode = 1;
       instruction.is_null = datum.is_null();
       if (!datum.is_null()) {
@@ -221,7 +220,7 @@ private:
       return OB_NOT_SUPPORTED;
     }
     ObSEArray<uint32_t, 8, ObWrapperAllocator> child_ids(
-        OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner_.get_exec_ctx().get_allocator()));
+        OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator_));
     for (uint32_t i = 0; OB_SUCC(ret) && i < argument_count; ++i) {
       uint32_t child = 0;
       if (OB_FAIL(lower(expr->args_[i], depth + 1, child))) {
@@ -257,37 +256,37 @@ private:
     return ret;
   }
 
-  ObOperator &owner_;
+  const ObOpSpec &spec_;
+  ObIAllocator &allocator_;
   int64_t operations_;
 };
 }
 
-ExpressionProgram::ExpressionProgram(ObOperator &owner)
-  : owner_(owner),
-    inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-    materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-    nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-    roots_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-    skip_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-    capacity_(std::max<int64_t>(1, owner.get_spec().max_batch_size_))
+CompiledExpressionProgram::CompiledExpressionProgram(ObIAllocator &allocator)
+  : allocator_(allocator),
+    inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+    materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+    nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+    roots_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator))
 {
 }
 
-int ExpressionProgram::create(ObOperator &owner, ExpressionProgram *&result)
+int CompiledExpressionProgram::create(const ObOpSpec &spec, ObIAllocator &allocator,
+                                      CompiledExpressionProgram *&result)
 {
   int ret = OB_SUCCESS;
   result = nullptr;
-  ProgramBuilder builder(owner);
+  ProgramBuilder builder(spec, allocator);
   if (OB_FAIL(builder.build())) {
     if (ret == OB_NOT_SUPPORTED) {
       ret = OB_SUCCESS;
     }
   } else {
-    void *memory = owner.get_exec_ctx().get_allocator().alloc(sizeof(ExpressionProgram));
+    void *memory = allocator.alloc(sizeof(CompiledExpressionProgram));
     if (memory == nullptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      auto *program = new (memory) ExpressionProgram(owner);
+      auto *program = new (memory) CompiledExpressionProgram(allocator);
       if (OB_FAIL(program->inputs_.assign(builder.inputs_))) {
       } else if (OB_FAIL(program->materialized_inputs_.assign(builder.materialized_inputs_))) {
       } else if (OB_FAIL(program->nodes_.assign(builder.nodes_))) {
@@ -305,7 +304,6 @@ int ExpressionProgram::create(ObOperator &owner, ExpressionProgram *&result)
               rust::Slice<const uint32_t>(builder.filters_.get_data(), builder.filters_.count()),
               rust::Slice<const uint32_t>(builder.projections_.get_data(), builder.projections_.count()),
               static_cast<uint32_t>(builder.inputs_.count()), program));
-          program->runner_.emplace(expression::make_runner(**program->prepared_, program, program->capacity_));
         } catch (const rust::Error &error) {
           ret = program->allocation_failed_ || std::strcmp(error.what(), "expression handle allocation failed") == 0
               ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
@@ -316,9 +314,129 @@ int ExpressionProgram::create(ObOperator &owner, ExpressionProgram *&result)
         EVENT_ADD(RUST_EXPRESSION_PREPARES, 1);
         result = program;
       } else {
-        program->~ExpressionProgram();
-        owner.get_exec_ctx().get_allocator().free(program);
+        program->~CompiledExpressionProgram();
+        allocator.free(program);
       }
+    }
+  }
+  return ret;
+}
+
+uint64_t *CompiledExpressionProgram::allocate(size_t words)
+{
+  if (words > static_cast<size_t>(INT64_MAX) / sizeof(uint64_t)) {
+    allocation_failed_ = true;
+    return nullptr;
+  }
+  auto *memory = static_cast<uint64_t *>(allocator_.alloc(words * sizeof(uint64_t)));
+  allocation_failed_ |= memory == nullptr;
+  return memory;
+}
+
+void CompiledExpressionProgram::release(uint64_t *data, size_t words)
+{
+  UNUSED(words);
+  allocator_.free(data);
+}
+
+ExpressionProgramCatalog::ExpressionProgramCatalog(ObIAllocator &allocator)
+  : allocator_(allocator), entries_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator))
+{
+}
+
+int ExpressionProgramCatalog::create(ObPhysicalPlan &plan, ExpressionProgramCatalog *&result)
+{
+  int ret = OB_SUCCESS;
+  result = nullptr;
+  void *memory = plan.get_allocator().alloc(sizeof(ExpressionProgramCatalog));
+  if (memory == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    auto *catalog = new (memory) ExpressionProgramCatalog(plan.get_allocator());
+    if (plan.get_root_op_spec() == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ret = catalog->prepare(*const_cast<ObOpSpec *>(plan.get_root_op_spec()));
+    }
+    if (OB_SUCC(ret)) {
+      result = catalog;
+    } else {
+      catalog->~ExpressionProgramCatalog();
+      plan.get_allocator().free(catalog);
+    }
+  }
+  return ret;
+}
+
+int ExpressionProgramCatalog::prepare(ObOpSpec &root)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObOpSpec *, 16, ObWrapperAllocator> pending(
+      OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator_));
+  ret = pending.push_back(&root);
+  while (OB_SUCC(ret) && !pending.empty()) {
+    ObOpSpec *spec = pending.at(pending.count() - 1);
+    pending.pop_back();
+    CompiledExpressionProgram *program = nullptr;
+    if (OB_FAIL(CompiledExpressionProgram::create(*spec, allocator_, program))) {
+    } else if (program != nullptr) {
+      if (OB_FAIL(entries_.push_back(Entry{spec, program}))) {
+        program->~CompiledExpressionProgram();
+        allocator_.free(program);
+      } else {
+        spec->compiled_expression_program_ = program;
+      }
+    }
+    for (uint32_t i = 0; OB_SUCC(ret) && i < spec->get_child_cnt(); ++i) {
+      ret = pending.push_back(spec->get_child(i));
+    }
+  }
+  return ret;
+}
+
+ExpressionProgramCatalog::~ExpressionProgramCatalog()
+{
+  for (int64_t i = 0; i < entries_.count(); ++i) {
+    Entry &entry = entries_.at(i);
+    entry.spec_->compiled_expression_program_ = nullptr;
+    entry.program_->~CompiledExpressionProgram();
+    allocator_.free(entry.program_);
+  }
+}
+
+ExpressionProgram::ExpressionProgram(ObOperator &owner, const CompiledExpressionProgram &compiled)
+  : owner_(owner), compiled_(compiled),
+    skip_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
+    capacity_(std::max<int64_t>(1, owner.get_spec().max_batch_size_))
+{
+}
+
+int ExpressionProgram::create(ObOperator &owner, ExpressionProgram *&result)
+{
+  int ret = OB_SUCCESS;
+  result = nullptr;
+  const auto *compiled = owner.get_spec().compiled_expression_program_;
+  if (compiled == nullptr || owner.get_exec_ctx().get_my_session()->is_diagnosis_enabled()
+      || owner.get_spec().get_phy_plan()->is_contains_assignment()) {
+    return ret;
+  }
+  void *memory = owner.get_exec_ctx().get_allocator().alloc(sizeof(ExpressionProgram));
+  if (memory == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    auto *program = new (memory) ExpressionProgram(owner, *compiled);
+    try {
+      program->runner_.emplace(expression::make_runner(**compiled->prepared_, program, program->capacity_));
+    } catch (const rust::Error &error) {
+      ret = program->allocation_failed_ || std::strcmp(error.what(), "expression handle allocation failed") == 0
+          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
+      SQL_ENG_LOG(WARN, "Rust expression execution creation failed", K(ret), "error", error.what());
+    }
+    if (OB_SUCC(ret)) {
+      result = program;
+    } else {
+      program->~ExpressionProgram();
+      owner.get_exec_ctx().get_allocator().free(program);
     }
   }
   return ret;
@@ -350,16 +468,16 @@ int ExpressionProgram::import_inputs(int64_t rows, bool batch, const ObBitVector
 {
   int ret = OB_SUCCESS;
   auto storage = expression::input_storage(**runner_);
-  const size_t plane_size = inputs_.count() * capacity_;
+  const size_t plane_size = compiled_.inputs_.count() * capacity_;
   if (storage.size() != plane_size * 2) {
     return OB_ALLOCATE_MEMORY_FAILED;
   }
   uint64_t *values = storage.data();
   uint64_t *validity = values + plane_size;
   ObEvalCtx &ctx = owner_.get_eval_ctx();
-  for (int64_t slot = 0; OB_SUCC(ret) && slot < inputs_.count(); ++slot) {
-    const ObExpr &expr = *inputs_.at(slot);
-    if (materialized_inputs_.at(slot) != 0 && !expr.get_eval_info(ctx).projected_) {
+  for (int64_t slot = 0; OB_SUCC(ret) && slot < compiled_.inputs_.count(); ++slot) {
+    const ObExpr &expr = *compiled_.inputs_.at(slot);
+    if (compiled_.materialized_inputs_.at(slot) != 0 && !expr.get_eval_info(ctx).projected_) {
       ret = OB_ERR_UNEXPECTED;
       break;
     }
@@ -400,39 +518,40 @@ int ExpressionProgram::import_inputs(int64_t rows, bool batch, const ObBitVector
 
 void ExpressionProgram::export_root(const ObExpr &expr, size_t node, int64_t rows, bool batch)
 {
+  if (expr.eval_func_ == nullptr) {
+    return;
+  }
   ObEvalCtx &ctx = owner_.get_eval_ctx();
   ObEvalInfo &info = expr.get_eval_info(ctx);
-  if (expr.eval_func_ != nullptr) {
-    const auto values = expression::node_values(**runner_, node);
-    const auto flags = expression::node_flags(**runner_, node);
-    const bool batch_result = batch && expr.is_batch_result();
-    if (batch_result) {
-      expr.get_evaluated_flags(ctx).reset(rows);
-    }
-    for (int64_t row = 0; row < rows; ++row) {
-      if ((flags[row] & 1) == 0) {
-        continue;
-      }
-      const int64_t index = batch_result ? row : (expr.is_batch_result() ? ctx.get_batch_idx() : 0);
-      expr.reset_ptr_in_datum(ctx, index);
-      ObDatum &datum = expr.locate_batch_datums(ctx)[index];
-      if ((flags[row] & 2) == 0) {
-        datum.set_null();
-      } else {
-        int64_t value = 0;
-        const uint64_t bits = values[row];
-        MEMCPY(&value, &bits, sizeof(value));
-        datum.set_int(value);
-      }
-      if (batch_result) {
-        expr.get_evaluated_flags(ctx).set(row);
-      }
-    }
-    info.evaluated_ = true;
-    info.notnull_ = false;
-    info.point_to_frame_ = true;
-    info.cnt_ = batch_result ? rows : 1;
+  const auto values = expression::node_values(**runner_, node);
+  const auto flags = expression::node_flags(**runner_, node);
+  const bool batch_result = batch && expr.is_batch_result();
+  if (batch_result) {
+    expr.get_evaluated_flags(ctx).reset(rows);
   }
+  for (int64_t row = 0; row < rows; ++row) {
+    if ((flags[row] & 1) == 0) {
+      continue;
+    }
+    const int64_t index = batch_result ? row : (expr.is_batch_result() ? ctx.get_batch_idx() : 0);
+    expr.reset_ptr_in_datum(ctx, index);
+    ObDatum &datum = expr.locate_batch_datums(ctx)[index];
+    if ((flags[row] & 2) == 0) {
+      datum.set_null();
+    } else {
+      int64_t value = 0;
+      const uint64_t bits = values[row];
+      MEMCPY(&value, &bits, sizeof(value));
+      datum.set_int(value);
+    }
+    if (batch_result) {
+      expr.get_evaluated_flags(ctx).set(row);
+    }
+  }
+  info.evaluated_ = true;
+  info.notnull_ = false;
+  info.point_to_frame_ = true;
+  info.cnt_ = batch_result ? rows : 1;
   info.projected_ = true;
 }
 
@@ -443,7 +562,7 @@ int ExpressionProgram::report_error(const expression::RunStatus &status)
     ret = status.code;
   } else if (status.code == 1) {
     ret = OB_OPERATE_OVERFLOW;
-    const ObExpr *expr = status.node < static_cast<size_t>(nodes_.count()) ? nodes_.at(status.node) : nullptr;
+    const ObExpr *expr = status.node < static_cast<size_t>(compiled_.nodes_.count()) ? compiled_.nodes_.at(status.node) : nullptr;
     const char *operation = expr == nullptr ? "?" : expr->type_ == T_OP_ADD ? "+"
         : expr->type_ == T_OP_MINUS ? "-" : expr->type_ == T_OP_MUL ? "*" : "div";
     char expression_text[128];
@@ -477,7 +596,7 @@ int ExpressionProgram::execute(ObBitVector *skip, int64_t rows, bool batch,
   if (OB_FAIL(ret)) {
   } else if (active > 0 && OB_FAIL(import_inputs(rows, batch, skip))) {
   } else {
-    const auto status = expression::execute(**runner_, **prepared_, rows,
+    const auto status = expression::execute(**runner_, **compiled_.prepared_, rows,
         rust::Slice<const uint8_t>(skip_.get_data(), skip_.count()));
     if (status.code != 0) {
       ret = report_error(status);
@@ -495,9 +614,9 @@ int ExpressionProgram::execute(ObBitVector *skip, int64_t rows, bool batch,
       }
       all_filtered = survivors == 0;
       all_active &= survivors == rows;
-      for (int64_t i = 0; i < roots_.count(); ++i) {
-        const uint32_t node = roots_.at(i);
-        export_root(*nodes_.at(node), node, rows, batch);
+      for (int64_t i = 0; i < compiled_.roots_.count(); ++i) {
+        const uint32_t node = compiled_.roots_.at(i);
+        export_root(*compiled_.nodes_.at(node), node, rows, batch);
       }
       EVENT_ADD(RUST_EXPRESSION_PROGRAMS, 1);
       EVENT_ADD(RUST_EXPRESSION_ROWS, active);

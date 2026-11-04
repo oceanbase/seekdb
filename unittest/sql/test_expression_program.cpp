@@ -13,7 +13,10 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include <array>
+#include <atomic>
 #include <cstdlib>
+#include <thread>
 #include <vector>
 #include "rust/expression_program.h"
 #include "rust/cxx.h"
@@ -120,6 +123,120 @@ TEST(ExpressionProgramBridge, AllocationFailureAndCancellation)
     EXPECT_EQ(1, host.polls_);
   }
   EXPECT_EQ(2, host.releases_);
+}
+
+TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
+{
+  TestHost plan_host;
+  constexpr size_t WORKERS = 4;
+  constexpr int REBINDS = 64;
+  struct WorkerResult {
+    bool outputs_match = true;
+    int completed = 0;
+    int allocations = 0;
+    int releases = 0;
+    int polls = 0;
+  };
+  std::array<WorkerResult, WORKERS> results;
+  {
+    std::vector<Instruction> nodes(7);
+    nodes[0].opcode = 0;
+    nodes[0].input = 0;
+    nodes[1].opcode = 0;
+    nodes[1].input = 1;
+    nodes[2].opcode = 2;
+    nodes[2].argument_count = 2;
+    nodes[3].opcode = 1;
+    nodes[3].value = 0;
+    nodes[4].opcode = 10;
+    nodes[4].argument_start = 2;
+    nodes[4].argument_count = 2;
+    nodes[5].opcode = 18;
+    nodes[5].argument_start = 4;
+    nodes[5].argument_count = 3;
+    nodes[6].opcode = 4;
+    nodes[6].argument_start = 7;
+    nodes[6].argument_count = 2;
+    auto prepared = prepare(view(nodes), view(std::vector<uint32_t>{0, 1, 2, 3, 4, 2, 3, 2, 2}),
+                            view(std::vector<uint32_t>{4}), view(std::vector<uint32_t>{5, 6}),
+                            2, &plan_host);
+    const Prepared &shared = *prepared;
+    std::atomic<size_t> ready{0};
+    std::atomic<bool> start{false};
+    std::array<std::thread, WORKERS> workers;
+    for (size_t worker = 0; worker < WORKERS; ++worker) {
+      workers[worker] = std::thread([&shared, &ready, &start, &results, worker]() {
+        TestHost host;
+        bool announced = false;
+        WorkerResult &result = results[worker];
+        try {
+          {
+            auto runner = make_runner(shared, &host, 3);
+            ready.fetch_add(1, std::memory_order_release);
+            announced = true;
+            while (!start.load(std::memory_order_acquire)) {
+              std::this_thread::yield();
+            }
+            for (int rebound = 0; rebound < REBINDS; ++rebound) {
+              auto input = input_storage(*runner);
+              input[0] = worker * 100 + rebound + 1;
+              input[1] = static_cast<uint64_t>(-1000);
+              input[2] = 0;
+              input[3] = input[4] = input[5] = rebound * 2;
+              input[6] = input[7] = 1;
+              input[8] = 0;
+              input[9] = input[10] = input[11] = 1;
+              const std::array<uint8_t, 3> skip{0, 0, 0};
+              const auto status = execute(*runner, shared, 3,
+                  rust::Slice<const uint8_t>(skip.data(), skip.size()));
+              if (status.code != 0) {
+                result.outputs_match = false;
+                break;
+              }
+              const auto selected = selection(*runner);
+              const auto first = node_values(*runner, 5);
+              const auto second = node_values(*runner, 6);
+              const auto first_flags = node_flags(*runner, 5);
+              const auto second_flags = node_flags(*runner, 6);
+              const uint64_t expected = worker * 100 + rebound * 3 + 1;
+              result.outputs_match &= selected[0] == 0 && selected[1] == 1 && selected[2] == 1
+                  && first[0] == expected && second[0] == expected * expected
+                  && first_flags[0] == 3 && first_flags[1] == 0 && first_flags[2] == 0
+                  && second_flags[0] == 3 && second_flags[1] == 0 && second_flags[2] == 0;
+              ++result.completed;
+            }
+          }
+        } catch (...) {
+          result.outputs_match = false;
+          if (!announced) {
+            ready.fetch_add(1, std::memory_order_release);
+          }
+        }
+        result.allocations = host.allocations_;
+        result.releases = host.releases_;
+        result.polls = host.polls_;
+      });
+    }
+    while (ready.load(std::memory_order_acquire) != WORKERS) {
+      std::this_thread::yield();
+    }
+    start.store(true, std::memory_order_release);
+    for (auto &worker : workers) {
+      worker.join();
+    }
+    EXPECT_EQ(1, plan_host.allocations_);
+    EXPECT_EQ(0, plan_host.releases_);
+    EXPECT_EQ(0, plan_host.polls_);
+    for (size_t worker = 0; worker < WORKERS; ++worker) {
+      SCOPED_TRACE(worker);
+      EXPECT_TRUE(results[worker].outputs_match);
+      EXPECT_EQ(REBINDS, results[worker].completed);
+      EXPECT_EQ(1, results[worker].allocations);
+      EXPECT_EQ(1, results[worker].releases);
+      EXPECT_EQ(REBINDS, results[worker].polls);
+    }
+  }
+  EXPECT_EQ(1, plan_host.releases_);
 }
 
 int main(int argc, char **argv)
