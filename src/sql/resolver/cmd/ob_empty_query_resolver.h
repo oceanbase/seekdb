@@ -30,7 +30,7 @@ public:
   virtual ~ObEmptyQueryResolver()
   {
   }
-  virtual int resolve(const ParseNode &parse_tree);
+  int resolve(const peg::Node &statement);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObEmptyQueryResolver);
 };

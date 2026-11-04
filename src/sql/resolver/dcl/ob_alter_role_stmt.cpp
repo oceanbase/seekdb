@@ -27,7 +27,6 @@ ObAlterRoleStmt::ObAlterRoleStmt(ObIAllocator *name_pool)
       role_name_(),
       password_(),
       need_enc_(false),
-      masked_sql_(),
       alter_role_arg_()
 {
 }
@@ -37,7 +36,6 @@ ObAlterRoleStmt::ObAlterRoleStmt()
       role_name_(),
       password_(),
       need_enc_(false),
-      masked_sql_(),
       alter_role_arg_()
 {
 }
@@ -52,8 +50,7 @@ int64_t ObAlterRoleStmt::to_string(char *buf, const int64_t buf_len) const
   if (NULL != buf) {
     J_OBJ_START();
     J_KV(N_STMT_TYPE, ((int)stmt_type_),
-         "role_to_alter", role_name_,
-         "password", password_);
+         "role_to_alter", role_name_);
     J_OBJ_END();
   }
   return pos;

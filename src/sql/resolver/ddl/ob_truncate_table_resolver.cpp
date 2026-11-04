@@ -35,15 +35,11 @@ ObTruncateTableResolver::~ObTruncateTableResolver()
 {
 }
 
-int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
+int ObTruncateTableResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
-  ParseNode *node = const_cast<ParseNode*>(&parser_tree);
   ObTruncateTableStmt *truncate_table_stmt = NULL;
-  bool is_mysql_tmp_table = false;
-  if (OB_ISNULL(session_info_) || OB_ISNULL(node) ||
-      T_TRUNCATE_TABLE != node->type_ ||
-      OB_ISNULL(node->children_)) {
+  if (OB_ISNULL(session_info_) || peg::NodeKind::TruncateTable != parser_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
   }
   //create alter table stmt
@@ -54,7 +50,7 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
     } else {
       stmt_ = truncate_table_stmt;
     }
-    ParseNode *relation_node = node->children_[TABLE_NODE];
+    const auto *relation_node = &peg::truncate_relation(parser_tree);
     if (OB_SUCC(ret)) {
       if (NULL != relation_node) {
       //resolve table
@@ -87,11 +83,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
                        helper.convert(truncate_table_stmt->get_database_name()),
                        helper.convert(truncate_table_stmt->get_table_name()));
       }
-    } else {
-      if (orig_table_schema->is_mysql_tmp_table()) {
-        is_mysql_tmp_table = true; 
-      }
-
     }
   }
 

@@ -19,6 +19,7 @@
 #include "ob_opt_est_utils.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/engine/expr/ob_expr_equal.h"
+#include "lib/charset/ob_charset.h"
 
 namespace oceanbase
 {
@@ -904,9 +905,12 @@ int ObOptEstObjToScalar::convert_string_to_scalar_for_number(
   int ret = OB_SUCCESS;
   scalar = 0;
   if (NULL != str.ptr()) {
-    if (1 != sscanf(str.ptr(), "%lf", &scalar)) {
-    	ret = OB_INVALID_DATA;
-    } else { /* do nothing*/ }
+    char *end = const_cast<char *>(str.ptr());
+    int error = 0;
+    scalar = ObCharset::strntodv2(str.ptr(), str.length(), &end, &error);
+    if (end == str.ptr()) {
+      ret = OB_INVALID_DATA;
+    }
   }
   return ret;
 }

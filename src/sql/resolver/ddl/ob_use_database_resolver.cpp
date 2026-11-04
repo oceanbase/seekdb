@@ -35,27 +35,23 @@ ObUseDatabaseResolver::~ObUseDatabaseResolver()
 {
 }
 
-int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
+int ObUseDatabaseResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  ParseNode *node = const_cast<ParseNode*>(&parse_tree);
   ObUseDatabaseStmt *use_database_stmt = NULL;
   ObString db_name;
-  if (OB_ISNULL(node)
-      || T_USE_DATABASE != node->type_
-      || 1 != node->num_child_
-      || OB_ISNULL(node->children_)
-      || OB_ISNULL(allocator_)) {
+  if (parse_tree.kind() != peg::NodeKind::UseDatabase || OB_ISNULL(allocator_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(use_database_stmt = create_stmt<ObUseDatabaseStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create use_database_stmt");
-  } else if (OB_ISNULL(node->children_[0]) || T_IDENT != node->children_[0]->type_) {
-    ret = OB_INVALID_ARGUMENT;
   } else {
-    db_name.assign_ptr(node->children_[0]->str_value_, node->children_[0]->str_len_);
+    const auto &name = peg::database_name(parse_tree);
+    const auto name_text = name.text();
+    OZ (ob_write_string(*allocator_, syntax_text(name_text), db_name));
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-    if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid session info", K(session_info_), K(schema_checker_));
     } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {

@@ -19,7 +19,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "share/ob_rpc_struct.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
 namespace oceanbase
 {

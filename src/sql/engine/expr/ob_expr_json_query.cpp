@@ -22,7 +22,6 @@
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 
-// from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
 #define VARCHAR2_DEFAULT_LEN 4000
 

@@ -30,7 +30,7 @@ class ObCreateTableLikeResolver : public ObDDLResolver
 public:
   explicit ObCreateTableLikeResolver(ObResolverParams &params);
   virtual ~ObCreateTableLikeResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
   ObCreateTableLikeStmt *get_create_table_like_stmt()
   {
     return static_cast<ObCreateTableLikeStmt*>(stmt_);

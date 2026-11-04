@@ -26,11 +26,11 @@ namespace sql
 /**
  * Purge table
  */
-int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
+int ObPurgeTableResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
   ObPurgeTableStmt *purge_table_stmt = NULL;
-  if (OB_ISNULL(session_info_) || T_PURGE_TABLE != parser_tree.type_) {
+  if (OB_ISNULL(session_info_) || peg::NodeKind::PurgeTable != parser_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
   }
   //create Purge table stmt
@@ -44,14 +44,12 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
   }
   if (OB_SUCC(ret)) {
     //Purge table
-    ParseNode *table_node = parser_tree.children_[TABLE_NODE];
+    const auto *table_node = &peg::purge_relation(parser_tree);
     
     uint64_t db_id = OB_INVALID_ID;
     ObString db_name;
     ObString table_name;
-    if (OB_ISNULL(table_node)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name))) {
+    if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name))) {
     } else if (session_info_->get_database_name() != db_name) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge tables in recyclebin dropped from other schema");
@@ -70,15 +68,15 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
 /**
  * Purge index
  */
-int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
+int ObPurgeIndexResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
   ObPurgeIndexStmt *purge_index_stmt = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (T_PURGE_INDEX != parser_tree.type_) {
+  } else if (peg::NodeKind::PurgeIndex != parser_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree",  K(parser_tree.type_));
+    LOG_WARN("invalid parse tree",  K(parser_tree.kind()));
   }
   //create Purge table stmt
   if (OB_SUCC(ret)) {
@@ -91,16 +89,14 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
   }
   if (OB_SUCC(ret)) {
     //Purge table
-    ParseNode *table_node = parser_tree.children_[TABLE_NODE];
+    const auto *table_node = &peg::purge_relation(parser_tree);
     
     uint64_t db_id = OB_INVALID_ID;
     ObString db_name;
     ObString table_name;
 
     const share::schema::ObTableSchema *table_schema = NULL;
-    if (OB_ISNULL(table_node)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(resolve_table_relation_node(table_node,
+    if (OB_FAIL(resolve_table_relation_node(table_node,
                                            table_name,
                                            db_name))){
     } else if (session_info_->get_database_name() != db_name){
@@ -128,11 +124,11 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
 /**
  * Purge database
  */
-int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
+int ObPurgeDatabaseResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
   ObPurgeDatabaseStmt *purge_database_stmt = NULL;
-  if (OB_ISNULL(session_info_) || T_PURGE_DATABASE != parser_tree.type_) {
+  if (OB_ISNULL(session_info_) || peg::NodeKind::PurgeDatabase != parser_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
   }
   //create Purge table stmt
@@ -147,17 +143,13 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
   if (OB_SUCC(ret)) {
     
     ObString db_name;
-    ParseNode *dbname_node = parser_tree.children_[DATABASE_NODE];
-    int32_t max_database_name_length = OB_MAX_DATABASE_NAME_LENGTH;
-    if (OB_ISNULL(dbname_node) || OB_UNLIKELY(T_IDENT != dbname_node->type_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(
-            static_cast<int32_t>(dbname_node->str_len_) > max_database_name_length)) {
+    const auto &name = peg::database_name(parser_tree);
+    const auto name_text = name.text();
+    if (name_text.size() > OB_MAX_DATABASE_NAME_LENGTH) {
       ret = OB_ERR_TOO_LONG_IDENT;
-      LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, (int)dbname_node->str_len_, dbname_node->str_value_);
+      LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, static_cast<int>(name_text.size()), syntax_text(name_text).ptr());
+    } else if (OB_FAIL(ob_write_string(*allocator_, syntax_text(name_text), db_name))) {
     } else {
-      db_name.assign_ptr(dbname_node->str_value_,
-                         static_cast<int32_t>(dbname_node->str_len_));
       if (db_name.empty()) {
         ret = OB_INVALID_ARGUMENT;
       } else {
@@ -171,11 +163,11 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
 /**
  * Purge Recyclebin
  */
-int ObPurgeRecycleBinResolver::resolve(const ParseNode &parser_tree)
+int ObPurgeRecycleBinResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
   ObPurgeRecycleBinStmt *purge_recyclebin_stmt = NULL;
-  if (OB_ISNULL(session_info_) || T_PURGE_RECYCLEBIN != parser_tree.type_) {
+  if (OB_ISNULL(session_info_) || peg::NodeKind::PurgeRecyclebin != parser_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
   }
   //create Purge table stmt

@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_PLAN_CACHE_OB_PLAN_CACHE_STRUCT_
 #define OCEANBASE_SQL_PLAN_CACHE_OB_PLAN_CACHE_STRUCT_
 
+#include <functional>
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
@@ -30,6 +31,8 @@
 #include "sql/plan_cache/ob_i_lib_cache_context.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include "sql/resolver/parameterization_result.h"
+#include "sql/syntax.h"
 
 namespace oceanbase
 {
@@ -248,12 +251,7 @@ public:
   }
   void reset_question_mark_ctx()
   {
-    question_mark_ctx_.name_ = NULL;
-    question_mark_ctx_.count_ = 0;
-    question_mark_ctx_.capacity_ = 0;
-    question_mark_ctx_.by_ordinal_ = false;
-    question_mark_ctx_.by_name_ = false;
-    question_mark_ctx_.by_defined_name_ = false;
+    question_mark_ctx_ = {};
   }
   int assign(const ObFastParserResult &other)
   {
@@ -295,13 +293,15 @@ struct SelectItemParamInfo
   char paramed_field_name_[PARAMED_FIELD_BUF_LEN];
   int64_t name_len_;
   bool esc_str_flag_;
+  bool null_literal_;
 
   SelectItemParamInfo()
     : questions_pos_(),
       params_idx_(),
       neg_params_idx_(),
       name_len_(0),
-      esc_str_flag_(false) {}
+      esc_str_flag_(false),
+      null_literal_(false) {}
 
   void reset()
   {
@@ -309,6 +309,7 @@ struct SelectItemParamInfo
     params_idx_.reset();
     neg_params_idx_.reset();
     esc_str_flag_ = false;
+    null_literal_ = false;
     name_len_ = 0;
   }
 
@@ -320,7 +321,18 @@ struct SelectItemParamInfo
                K(common::ObString(name_len_, paramed_field_name_)));
 };
 
-typedef common::ObFixedArray<SelectItemParamInfo, common::ObIAllocator> SelectItemParamInfoArray;
+struct SyntaxIdentityHash
+{
+  int operator()(const peg::Node *node, uint64_t &hash) const
+  {
+    hash = reinterpret_cast<uintptr_t>(node);
+    return common::OB_SUCCESS;
+  }
+};
+
+// Projection identities are borrowed only during this compilation, never stored in the plan cache.
+using SelectItemParamInfoMap = common::hash::ObHashMap<const peg::Node *, SelectItemParamInfo,
+    common::hash::NoPthreadDefendMode, SyntaxIdentityHash, std::equal_to<const peg::Node *>>;
 
 typedef common::ObFixedArray<ObPCParam *, common::ObIAllocator> ObRawParams;
 typedef common::ObFixedArray<ObRawParams *, common::ObIAllocator> ObRawParams2DArray;
@@ -364,7 +376,7 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
       not_param_var_(allocator),
       param_charset_type_(allocator),
       normal_parse_const_cnt_(0),
-      select_item_param_infos_(allocator),
+      select_item_param_infos_(),
       should_add_plan_(true),
       begin_commit_stmt_(false),
       must_be_positive_index_(),
@@ -469,7 +481,8 @@ void set_need_retry_add_plan(bool v) { need_retry_add_plan_ = v; }
   ObSqlTraits sql_traits_;
   int64_t normal_parse_const_cnt_;
   // select item parameterized information
-  SelectItemParamInfoArray select_item_param_infos_;
+  ParameterizationResult parameterization_;
+  SelectItemParamInfoMap select_item_param_infos_;
   // According to some information when get plan fails, determine whether the newly generated plan should be added to plan cache
   bool should_add_plan_;
   // Record whether it is a begin/commit statement, used to optimize some path calls

@@ -40,7 +40,6 @@ public:
   void set_priv_set(ObPrivSet priv_set);
   int set_database_name(const common::ObString &database_name);
   int set_table_name(const common::ObString &table_name);
-  void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   
   void set_need_create_user(bool need_create_user) { need_create_user_ = need_create_user; }
   void set_need_create_user_priv(bool need_create_user_priv)
@@ -53,7 +52,6 @@ public:
   const common::ObSArray<common::ObString>& get_role_names() const { return grant_arg_.roles_; };
   const common::ObString& get_database_name() const { return database_; }
   const common::ObString& get_table_name() const { return table_; }
-  const common::ObString &get_masked_sql() const { return masked_sql_; }
   share::schema::ObPrivLevel get_grant_level() const {return grant_level_;}
   share::schema::ObObjectType get_object_type() const { return object_type_;}
   const ObIArray<uint64_t>& get_sel_col_ids() const { return sel_col_ids_; }
@@ -99,7 +97,6 @@ private:
   common::ObString table_;
   common::ObStrings grantees_;
   common::ObStrings users_;//user1, host1, pwd1, nec1; user2, host2, pwd2, nec2;..
-  common::ObString masked_sql_;
   bool need_create_user_;
   bool need_create_user_priv_; // grant user identified by pwd
   obcall::ObGrantArg grant_arg_; // used to return exec_tid_

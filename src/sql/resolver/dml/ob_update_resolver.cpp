@@ -34,25 +34,20 @@ ObUpdateResolver::~ObUpdateResolver()
 {
 }
 
-int ObUpdateResolver::resolve(const ParseNode &parse_tree)
+int ObUpdateResolver::resolve(const peg::Node &query)
 {
   int ret = OB_SUCCESS;
   ObUpdateStmt *update_stmt = NULL;
   ObSEArray<ObTableAssignment, 2> tables_assign;
-  if (T_UPDATE != parse_tree.type_
-      || 3 > parse_tree.num_child_
-      || OB_ISNULL(parse_tree.children_)
-      || OB_ISNULL(session_info_)) {
+  if (query.kind() != peg::NodeKind::Update || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree for update", K(parse_tree.type_),
-             K(parse_tree.num_child_), K(parse_tree.children_), K((session_info_)));
   } else if (OB_ISNULL(update_stmt = create_stmt<ObUpdateStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create update stmt failed");
   } else {
     stmt_ = update_stmt;
     update_stmt->set_ignore(false);
-    if (NULL != parse_tree.children_[IGNORE]) {
+    if (peg::query_ignore(query)) {
       update_stmt->set_ignore(true);
       session_info_->set_ignore_stmt(true);
     }
@@ -66,27 +61,21 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
 
   // resolve with clause before resolve table items
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
+    if (OB_FAIL(resolve_with_clause(query))) {
     }
   }
 
   // 1. resolve table items
   if (OB_SUCC(ret)) {
-    ParseNode *table_node = parse_tree.children_[TABLE];
-    if (OB_FAIL(resolve_table_list(*table_node))) {
+    if (OB_FAIL(resolve_table_list(peg::query_sources(query)))) {
     }
   }
 
   if (OB_SUCC(ret)) {
     current_scope_ = T_UPDATE_SCOPE;
     // resolve assignments
-    ParseNode *assign_list = parse_tree.children_[UPDATE_LIST];
-    if (OB_ISNULL(assign_list) || OB_UNLIKELY(T_ASSIGN_LIST != assign_list->type_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid assign list node", K(assign_list));
-    } else if (OB_FAIL(resolve_assignments(*assign_list,
-                                           tables_assign,
-                                           current_scope_))) {
+    if (OB_FAIL(resolve_assignments(peg::query_assignments(query),
+                                   tables_assign, current_scope_))) {
     }
   }
 
@@ -132,11 +121,11 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(try_add_remove_const_expr_for_assignments())) {
     } else if (OB_FAIL(resolve_update_constraints())) {
-    } else if (OB_FAIL(resolve_hints(parse_tree.children_[HINT]))) {
-    } else if (OB_FAIL(resolve_where_clause(parse_tree.children_[WHERE]))) {
+    } else if (OB_FAIL(resolve_hints(peg::query_hints(query)))) {
+    } else if (OB_FAIL(resolve_where_clause(peg::query_has_filter(query) ? &peg::query_filter(query) : nullptr))) {
     } else if (params_.is_batch_stmt_ && OB_FAIL(generate_batched_stmt_info())) {
-    } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
-    } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
+    } else if (OB_FAIL(resolve_order_clause(peg::query_order(query)))) {
+    } else if (OB_FAIL(resolve_limit_clause(peg::query_has_limit(query) ? &peg::query_limit(query) : nullptr, true))) {
     } else if (!update_stmt->is_ignore() &&
                OB_FAIL(check_join_update_conflict())) {
     } else if (OB_FAIL(update_stmt->formalize_stmt(session_info_))) {
@@ -284,24 +273,21 @@ int ObUpdateResolver::check_join_update_conflict()
   return ret;
 }
 
-int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
+int ObUpdateResolver::resolve_table_list(rust::Slice<const peg::Node> sources)
 {
   int ret = OB_SUCCESS;
   ObUpdateStmt *update_stmt = get_update_stmt();
   TableItem *table_item = NULL;
   ObSelectStmt *ref_stmt = NULL;
-  if (OB_UNLIKELY(T_TABLE_REFERENCES != parse_tree.type_)
-      || OB_UNLIKELY(parse_tree.num_child_ < 1)) {
+  if (sources.empty()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid update stmt", K(update_stmt));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
-    const ParseNode *table_node = parse_tree.children_[i];
-    if (OB_ISNULL(table_node)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < sources.size(); ++i) {
+    const auto &table = sources[i];
+    if (OB_FAIL(ObDMLResolver::resolve_table(table, table_item))) {
     } else {/*do nothing*/}
     if (OB_SUCC(ret)) {
       if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {

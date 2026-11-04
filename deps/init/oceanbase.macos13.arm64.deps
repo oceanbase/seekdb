@@ -21,8 +21,6 @@ devdeps-xz-5.2.2-20260126.tar.gz
 devdeps-zlib-1.2.13-20260126.tar.gz
 
 [tools]
-obdevtools-bison-2.4.1-20260122.tar.gz
-obdevtools-flex-2.5.35-20260126.tar.gz
 obdevtools-llvm-17.0.6-20260122.tar.gz
 
 [tools-deps]

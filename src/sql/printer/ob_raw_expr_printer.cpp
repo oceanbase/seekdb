@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "ob_raw_expr_printer.h"
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
@@ -1283,15 +1284,17 @@ int ObRawExprPrinter::print_json_return_type(ObRawExpr *expr)
     ObConstRawExpr *con_expr = static_cast<ObConstRawExpr*>(expr);
     const ObLengthSemantics length_semantics = con_expr->get_accuracy().get_length_semantics();
     const ObScale scale = con_expr->get_accuracy().get_scale();
-    ParseNode parse_node;
-    if (OB_FAIL(con_expr->get_value().get_int(parse_node.value_))) {
-    } else if (parse_node.value_ == 0) {
+    CastTypeDescriptor type_descriptor;
+    int64_t encoded_type = 0;
+    if (OB_FAIL(con_expr->get_value().get_int(encoded_type))) {
+    } else if (encoded_type == 0) {
     } else {
-      int16_t cast_type = parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX];
+      type_descriptor = CastTypeDescriptor(encoded_type);
+      int16_t cast_type = type_descriptor.type();
 
       switch (static_cast<ObItemType>(cast_type)) {
         case T_LONGTEXT: {
-          int16_t collation = parse_node.int16_values_[OB_NODE_CAST_COLL_IDX];
+          int16_t collation = type_descriptor.collation();
           DATA_PRINTF(" RETURNING");
           if (BINARY_COLLATION == collation) {
             DATA_PRINTF(" BLOB");
@@ -1301,7 +1304,7 @@ int ObRawExprPrinter::print_json_return_type(ObRawExpr *expr)
           break;
         }
         case T_VARCHAR: {
-          int32_t len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+          int32_t len = type_descriptor.length();
           if ((length_semantics == LS_BYTE && len == -1) || len == DEFAULT_VARCHAR_LEN) { // special case :returning type is varchar2 without len (VARCHAR2)
             DATA_PRINTF(" RETURNING");
             DATA_PRINTF(" VARCHAR2");
@@ -3555,14 +3558,16 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
   } else {
     ObConstRawExpr *con_expr = static_cast<ObConstRawExpr*>(expr);
     const ObLengthSemantics length_semantics = con_expr->get_accuracy().get_length_semantics();
-    ParseNode parse_node;
-    if (OB_FAIL(con_expr->get_value().get_int(parse_node.value_))) {
+    CastTypeDescriptor type_descriptor;
+    int64_t encoded_type = 0;
+    if (OB_FAIL(con_expr->get_value().get_int(encoded_type))) {
     } else {
-      int16_t cast_type = parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX];
+      type_descriptor = CastTypeDescriptor(encoded_type);
+      int16_t cast_type = type_descriptor.type();
       switch (cast_type) {
       case T_CHAR: {
-        int16_t collation = parse_node.int16_values_[OB_NODE_CAST_COLL_IDX];
-        int32_t len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+        int16_t collation = type_descriptor.collation();
+        int32_t len = type_descriptor.length();
         if (len >= 0) {
           DATA_PRINTF("char(%d) charset %s", len, ObCharset::charset_name(
                       static_cast<ObCollationType>(collation)));
@@ -3573,8 +3578,8 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_VARCHAR: {
-        int16_t collation = parse_node.int16_values_[OB_NODE_CAST_COLL_IDX];
-        int32_t len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+        int16_t collation = type_descriptor.collation();
+        int32_t len = type_descriptor.length();
         if (BINARY_COLLATION == collation) {
           // BINARY
           if (len >= 0) {
@@ -3594,12 +3599,12 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_NCHAR: {
-        DATA_PRINTF("nchar(%d)", parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX]);
+        DATA_PRINTF("nchar(%d)", type_descriptor.length());
         break;
       }
       case T_DATETIME: {
         // The datetime cast keeps the optional fractional scale.
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t scale = type_descriptor.scale();
         if (scale >= 0) {
           DATA_PRINTF("datetime(%d)", scale);
         } else {
@@ -3612,7 +3617,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_YEAR: {
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t scale = type_descriptor.scale();
         if (scale >= 0) {
           DATA_PRINTF("year(%d)", scale);
         } else {
@@ -3621,7 +3626,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_TIME: {
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t scale = type_descriptor.scale();
         if (scale >= 0) {
           DATA_PRINTF("time(%d)", scale);
         } else {
@@ -3630,13 +3635,13 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_NUMBER: {
-        int16_t precision = parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX];
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t precision = type_descriptor.precision();
+        int16_t scale = type_descriptor.scale();
         DATA_PRINTF("number(%d,%d)", precision, scale);
         break;
       }
       case T_NUMBER_FLOAT: {
-        int16_t precision = parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX];
+        int16_t precision = type_descriptor.precision();
         DATA_PRINTF("float(%d)", precision);
         break;
       }
@@ -3657,7 +3662,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_TIMESTAMP_TZ: {
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t scale = type_descriptor.scale();
         if (scale >= 0) {
           DATA_PRINTF("timestamp(%d) with time zone", scale);
         } else {
@@ -3666,7 +3671,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_TIMESTAMP_LTZ: {
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t scale = type_descriptor.scale();
         if (scale >= 0) {
           DATA_PRINTF("timestamp(%d) with local time zone", scale);
         } else {
@@ -3675,7 +3680,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_TIMESTAMP_NANO: {
-        int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+        int16_t scale = type_descriptor.scale();
         if (scale >= 0) {
           DATA_PRINTF("timestamp(%d)", scale);
         } else {
@@ -3684,7 +3689,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_RAW: {
-        int32_t len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+        int32_t len = type_descriptor.length();
         DATA_PRINTF("raw(%d)", len);
         break;
       }
@@ -3703,7 +3708,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_LONGTEXT: {
-        int16_t collation = parse_node.int16_values_[OB_NODE_CAST_COLL_IDX];
+        int16_t collation = type_descriptor.collation();
         if (BINARY_COLLATION == collation) {
           DATA_PRINTF("blob");
         } else {
@@ -3712,7 +3717,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_GEOMETRY: {
-        ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
+        ObGeoType geo_type = static_cast<ObGeoType>(type_descriptor.geometry_type());
         switch (geo_type) {
           case ObGeoType::GEOMETRY: {
             DATA_PRINTF("geometry");

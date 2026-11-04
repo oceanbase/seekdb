@@ -23,7 +23,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/resolver/ob_stmt.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/dml/ob_sql_hint.h"
 #include "sql/ob_sql_utils.h"
@@ -68,7 +68,7 @@ typedef struct ObJtColBaseInfo
   int32_t on_error_;
   int32_t on_mismatch_;
   int32_t on_mismatch_type_;
-  int64_t res_type_;
+  common::ObGeoType geometry_type_;
   ObDataType data_type_;
   int32_t parent_id_;
   int32_t id_;
@@ -140,12 +140,12 @@ struct TableItem
     is_system_table_ = true;
     is_recursive_union_fake_table_ = false;
     cte_type_ = CTEType::NOT_CTE;
+    has_cte_column_aliases_ = false;
     type_ = BASE_TABLE;
     is_view_table_ = false;
     for_update_ = false;
     for_update_wait_us_ = -1;
     skip_locked_ = false;
-    node_ = NULL;
     view_base_item_ = NULL;
     snapshot_query_expr_ = nullptr;
     snapshot_query_type_ = SnapshotQueryType::NOT_USING;
@@ -172,7 +172,7 @@ struct TableItem
                "view_base_item",
                (NULL == view_base_item_ ? OB_INVALID_ID : view_base_item_->table_id_),
                K_(ddl_schema_version), K_(ddl_table_id),
-               K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type),
+               K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type), K_(has_cte_column_aliases),
                KPC_(function_table_expr),
                K_(snapshot_query_type), KPC_(snapshot_query_expr), K_(table_type),
                K_(exec_params), KPC_(sample_info));
@@ -282,12 +282,12 @@ struct TableItem
   bool is_recursive_union_fake_table_; //mark whether this table is a tmp fake table for resolve the recursive cte table
   share::schema::ObTableType table_type_;
   CTEType cte_type_;
+  bool has_cte_column_aliases_;
   common::ObString database_name_;
   /* FOR UPDATE clause */
   bool for_update_;
   int64_t for_update_wait_us_;//0 means nowait, -1 means infinite
   bool skip_locked_;
-  const ParseNode* node_;
   // base table item for updatable view, can not access after the resolve phase
   const TableItem *view_base_item_;
   ObRawExpr *snapshot_query_expr_;

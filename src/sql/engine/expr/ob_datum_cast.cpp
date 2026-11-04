@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include "sql/engine/expr/cast_type_descriptor.h"
 #ifdef _WIN32
 #include "lib/utility/alloc_assist.h"
 #define memmem ob_memmem
@@ -8894,14 +8895,13 @@ int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, dst_type_dat))) {
   } else {
     int64_t maxblen = ObCharset::CharConvertFactorNum;
-    ParseNode node;
-    node.value_ = dst_type_dat->get_int();
-    ObObjType obj_type = static_cast<ObObjType>(node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-    dst_type.set_collation_type(static_cast<ObCollationType>(node.int16_values_[OB_NODE_CAST_COLL_IDX]));
+    CastTypeDescriptor type_descriptor(dst_type_dat->get_int());
+    ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
+    dst_type.set_collation_type(static_cast<ObCollationType>(type_descriptor.collation()));
     dst_type.set_type(obj_type);
-    int64_t text_length = node.int32_values_[1];
+    int64_t text_length = type_descriptor.length();
     if (!dst_type.is_binary() && !dst_type.is_varbinary()) {
-      dst_type.set_full_length(node.int32_values_[OB_NODE_CAST_C_LEN_IDX], expr.datum_meta_.length_semantics_);
+      dst_type.set_full_length(type_descriptor.length(), expr.datum_meta_.length_semantics_);
       if (dst_type.get_length() > OB_MAX_CAST_CHAR_VARCHAR_LENGTH && dst_type.get_length() <= OB_MAX_CAST_CHAR_TEXT_LENGTH) {
         dst_type.set_type(ObTextType);
         dst_type.set_length(OB_MAX_CAST_CHAR_TEXT_LENGTH);
@@ -8919,21 +8919,21 @@ int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObStringTC == dest_tc) {
       // parser will abort all negative number
       // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
-      accuracy.set_full_length(node.int32_values_[1], expr.datum_meta_.length_semantics_);
+      accuracy.set_full_length(type_descriptor.length(), expr.datum_meta_.length_semantics_);
     } else if (ObRawTC == dest_tc) {
-      accuracy.set_length(node.int32_values_[1]);
+      accuracy.set_length(type_descriptor.length());
     } else if(ObTextTC == dest_tc || ObJsonTC == dest_tc) {
       accuracy.set_length(text_length < 0 ?
           ObAccuracy::DDL_DEFAULT_ACCURACY[dest_type].get_length() : text_length);
     } else {
       const ObAccuracy &def_acc =
         ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dest_type];
-      if (ObNumberType == dest_type && 0 == node.int16_values_[2]) {
+      if (ObNumberType == dest_type && 0 == type_descriptor.precision()) {
         accuracy.set_precision(def_acc.get_precision());
       } else {
-        accuracy.set_precision(node.int16_values_[2]);
+        accuracy.set_precision(type_descriptor.precision());
       }
-      accuracy.set_scale(node.int16_values_[3]);
+      accuracy.set_scale(type_descriptor.scale());
     }
   }
   return ret;

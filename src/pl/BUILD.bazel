@@ -1,7 +1,6 @@
-load("//bazel:parser.bzl", "parser")
+load("//bazel:compile_config.bzl", "RELEASE_LOCAL_DEFINES")
 load(
     "//bazel:defs.bzl",
-    "C_COPTS",
     "grouped_unity_cc_library",
     "cc_library",
 )
@@ -12,7 +11,6 @@ load(
 load(
     ":pl_source_inventory.bzl",
     "PL_STANDALONE_CXX_SOURCES",
-    "PL_STANDALONE_C_SOURCES",
     "PL_UNITY_GROUPS",
 )
 load(
@@ -22,32 +20,6 @@ load(
 
 package(default_visibility = ["//visibility:private"])
 
-
-parser(
-    name = "generate_pl_parser",
-    grammar = "parser/pl_parser_mysql_mode.y",
-    lexer_source = "parser/pl_parser_mysql_mode.l",
-    parser = "parser/bazel_generated/pl_parser_mysql_mode_tab.c",
-    parser_header = "parser/bazel_generated/pl_parser_mysql_mode_tab.h",
-    lexer = "parser/bazel_generated/pl_parser_mysql_mode_lex.c",
-    lexer_header = "parser/bazel_generated/pl_parser_mysql_mode_lex.h",
-    tags = ["manual"],
-)
-
-cc_library(
-    name = "_generated_pl_parser_headers",
-    hdrs = [
-        "parser/bazel_generated/pl_parser_mysql_mode_lex.h",
-        "parser/bazel_generated/pl_parser_mysql_mode_tab.h",
-    ],
-    include_prefix = "pl/parser",
-    includes = ["parser/bazel_generated"],
-    strip_include_prefix = "parser/bazel_generated",
-    visibility = [
-        "//src/observer:__pkg__",
-        "//src/pl:__subpackages__",
-    ],
-)
 
 # PL has one external interface. The files here are facade headers; the
 # canonical stored-program vocabulary remains SQL-owned so SQL never acquires
@@ -148,7 +120,6 @@ _PL_RUNTIME_SHARE_HEADER_DEPS = [
 ]
 
 _PL_RUNTIME_DEPS = [
-    ":_generated_pl_parser_headers",
     ":pl_interface",
     ":pl_internal_headers",
     "//src/oblib/easy:easy",
@@ -180,6 +151,7 @@ _PL_RUNTIME_UNITY_GROUPS = PL_UNITY_GROUPS + singleton_unity_groups(
 
 grouped_unity_cc_library(
     name = "pl_runtime",
+    local_defines = RELEASE_LOCAL_DEFINES,
     unity_groups = _PL_RUNTIME_UNITY_GROUPS,
     implementation_deps = _PL_RUNTIME_NON_OBLIB_DEPS + ["//rust:config_headers"] + [
         "//src/oblib:common_sql_mode",
@@ -200,32 +172,6 @@ grouped_unity_cc_library(
     tags = ["manual"],
 )
 
-grouped_unity_cc_library(
-    name = "pl_parser_c",
-    unity_groups = singleton_unity_groups(
-        PL_STANDALONE_C_SOURCES,
-        "pl_parser_c",
-        "c",
-    ),
-    language = "c",
-    source_replacements = {
-        "src/pl/parser/pl_parser_mysql_mode_lex.c": "parser/bazel_generated/pl_parser_mysql_mode_lex.c",
-        "src/pl/parser/pl_parser_mysql_mode_tab.c": "parser/bazel_generated/pl_parser_mysql_mode_tab.c",
-    },
-    implementation_deps = [
-        ":_generated_pl_parser_headers",
-        ":pl_internal_headers",
-        "//src/query:query_api_interface",
-        "//src/sql:sql_runtime_interface",
-        "//src/oblib:common_sql_mode",
-        "//src/oblib:oblib_base",
-        "//src/oblib:oblib_foundation",
-    ],
-    split_unity_groups = True,
-    copts = C_COPTS,
-    tags = ["manual"],
-)
-
 cc_library(
     name = "syspack_source",
     srcs = ["//src/share/inner_table/sys_package:bazel_generated/syspack/syspack_source.cpp"],
@@ -236,7 +182,6 @@ cc_library(
 cc_library(
     name = "pl_static",
     implementation_deps = [
-        ":pl_parser_c",
         ":pl_runtime",
     ],
     tags = ["manual"],

@@ -1363,13 +1363,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "specifies whether to punch whole when free blocks in block_file"
 
-- name: _ob_enable_fast_parser
-  type: BOOL
-  default: "True"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "control if enable fast parser"
-
 - name: _ob_obj_dep_maint_task_interval
   type: TIME
   default: "1ms"

@@ -59,8 +59,9 @@
 #define FETCH_EXPIRE_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
     "WHERE 0 = %lu %% 1 and time_to_usec(gmt_create) < %ld order by gmt_create"
 
+// For equal timestamps, purge tables and views before their containing database.
 #define FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE (0 = %lu %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
+    "WHERE (0 = %lu %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create, type"
 
 #define FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION COMMON_SCHEMA_SQL
 

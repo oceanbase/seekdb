@@ -355,7 +355,7 @@ private:
 
   // make final field name
   int make_final_field_name(char *src, int64_t len, common::ObString &field_name);
-  // Remove extra spaces from raw_text in ParseNode
+  // Remove extra spaces from the original expression text
   // Always called in the ObResultSet constructor
   void update_start_time() const
   {

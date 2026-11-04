@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_load_data_utils.h"
+#include "sql/resolver/ob_resolver_utils.h"
 
 namespace oceanbase {
 using namespace common;
@@ -119,8 +120,7 @@ int ObLoadDataUtils::build_insert_sql_string_head(ObLoadDupActionType insert_mod
     if (i != 0) {
       OZ (insertsql_keys.append(","));
     }
-    OZ (insertsql_keys.append_fmt("`%.*s`",
-                                  insert_keys.at(i).length(), insert_keys.at(i).ptr()));
+    OZ (ObResolverUtils::append_escaped_identifier(insertsql_keys, insert_keys.at(i)));
   }
   OZ (insertsql_keys.append(")"));
 

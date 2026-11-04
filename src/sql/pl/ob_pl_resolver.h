@@ -18,10 +18,10 @@
 #define OCEANBASE_SRC_PL_OB_PL_RESOLVER_H_
 
 #include "ob_pl_stmt.h"
-#include "parser/ob_pl_parser.h"
+#include "sql/syntax.h"
 #include "sql/ob_spi.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "query/parser/ob_item_type.h"
+#include "query/engine/expr/ob_item_type.h"
 
 #ifndef LOG_IN_CHECK_MODE
 #define LOG_IN_CHECK_MODE(fmt, args...) \
@@ -222,7 +222,6 @@ public:
     current_level_(OB_INVALID_INDEX),
     handler_analyzer_(),
     arg_cnt_(0),
-    question_mark_cnt_(0),
     next_user_defined_exception_id_(1),
     item_type_(T_MAX),
     fast_check_status_times_(0)
@@ -252,11 +251,14 @@ public:
   int init_default_expr(ObPLFunctionAST &func_ast,
                         const share::schema::ObIRoutineParam &param,
                         const ObPLDataType &expected_type);
-  int resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &func_ast);
-  int resolve_root(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &func_ast);
+  int resolve(const sql::ParsedSql &syntax, ObPLFunctionAST &func_ast);
+  int resolve(const peg::Node *parse_tree, ObPLFunctionAST &func_ast);
+  int resolve_root(const sql::ParsedSql &syntax, ObPLFunctionAST &func_ast);
+  int resolve_root(const peg::Node *parse_tree, ObPLFunctionAST &func_ast);
 
   int init(ObPLPackageAST &package_ast);
-  int resolve(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast);
+  int resolve(const sql::ParsedSql &syntax, ObPLPackageAST &package_ast);
+  int resolve(const peg::Node *parse_tree, ObPLPackageAST &package_ast);
 public:
   inline ObPLExternalNS &get_external_ns() { return external_ns_; }
   inline const ObPLResolveCtx &get_resolve_ctx() const { return resolve_ctx_; }
@@ -281,26 +283,21 @@ public:
    * @retval OB_SOME_ERROR special errno need to handle
    *
    */
-  static int resolve_raw_expr(const ParseNode &node,
+  static int resolve_raw_expr(const peg::Node &node,
+                              const ObString &source,
                               common::ObIAllocator &allocator,
                               ObRawExprFactory &expr_factory,
                               ObPLBlockNS &ns,
                               bool is_prepare_protocol,
                               ObRawExpr *&expr,
                               bool for_write = false);
-  static int resolve_raw_expr(const ParseNode &node,
+  static int resolve_raw_expr(const peg::Node &node,
+                              const ObString &source,
                               sql::ObResolverParams &params,
                               ObRawExpr *&expr,
                               bool for_write = false,
                               const ObPLDataType *expected_type = NULL,
                               ObPLDependencyTable *deps = NULL);
-  static int resolve_local_var(const ParseNode &node,
-                               ObPLBlockNS &ns,
-                               ObRawExprFactory &expr_factory,
-                               const ObSQLSessionInfo *session_info,
-                               ObSchemaGetterGuard *schema_guard,
-                               ObRawExpr *&expr,
-                               bool for_write = false);
   static int resolve_local_var(const ObString &var_name,
                                ObPLBlockNS &ns,
                                ObRawExprFactory &expr_factory,
@@ -309,10 +306,9 @@ public:
                                ObRawExpr *&expr,
                                bool for_write = false);
   static int resolve_sp_integer_constraint(ObPLDataType &pls_type);
-  static int resolve_sp_integer_type(const ParseNode *sp_data_type_node,
-                                     ObPLDataType &data_type);
+
   static int resolve_sp_scalar_type(common::ObIAllocator &allocator,
-                                    const ParseNode *sp_data_type_node,
+                                    const peg::Node *sp_data_type_node,
                                     const ObString &ident_name,
                                     sql::ObSQLSessionInfo &session_info,
                                     ObPLDataType &data_type,
@@ -324,7 +320,7 @@ public:
                   ObPLAstUnit &func,
                   sql::ObRawExpr *&expr,
                   bool for_write = false);
-  int resolve_inner_call(const ParseNode *parse_tree, ObPLStmt *&stmt, ObPLFunctionAST &func);
+
   int resolve_sqlcode_or_sqlerrm(sql::ObQualifiedName &q_name,
                                  ObPLAstUnit &unit_ast,
                                  sql::ObRawExpr *&expr);
@@ -355,7 +351,8 @@ public:
                              sql::ObRawExpr *&expr);
 
   static
-  int resolve_obj_access_node(ParseNode *node,
+  int resolve_obj_access_node(const peg::Node *node,
+                              const ObString &source,
                               common::ObIAllocator &allocator,
                               sql::ObRawExprFactory &expr_factory,
                               sql::ObSQLSessionInfo &session_info,
@@ -364,7 +361,8 @@ public:
                               pl::ObPLBlockNS *ns,
                               ObArray<pl::ObObjAccessIdx> &access_idxs);
   static
-  int resolve_obj_access_node(const ParseNode &node,
+  int resolve_obj_access_node(const peg::Node &node,
+                              const ObString &source,
                               ObSQLSessionInfo &session_info,
                               ObRawExprFactory &expr_factory,
                               share::schema::ObSchemaGetterGuard &schema_guard,
@@ -374,16 +372,12 @@ public:
                               ObPLPackageGuard *package_guard);
 
   static
-  int resolve_cparam_list_simple(const ParseNode &node,
-                                 ObRawExprFactory &expr_factory,
-                                 ObIArray<ObObjAccessIdent> &obj_access_idents);
-  static
-  int resolve_obj_access_idents(const ParseNode &node,
+  int resolve_obj_access_idents(const peg::Node &node,
                                 ObRawExprFactory &expr_factory,
                                 common::ObIArray<ObObjAccessIdent> &obj_access_idents,
                                 ObSQLSessionInfo &session_info);
   static
-  int record_error_line(const ObStmtNodeTree *parse_tree, ObSQLSessionInfo &session_info, const ObString &db_name, const ObString &package_name, const ObString &name);
+  int record_error_line(const peg::Node *parse_tree, const ObString &source, ObSQLSessionInfo &session_info, const ObString &db_name, const ObString &package_name, const ObString &name);
   static
   int record_error_line(ObSQLSessionInfo &session_info, const int32_t line, const int32_t col, const ObString &db_name, const ObString &package_name, const ObString &name);
   static
@@ -449,7 +443,7 @@ public:
   static int get_local_variable_constraint(
     const ObPLBlockNS &ns, int64_t var_idx, bool &not_null, ObPLIntegerRange &range);
 
-  static int resolve_sf_clause(const ObStmtNodeTree *node,
+  static int resolve_sf_clause(rust::Slice<const peg::Node> clauses,
                                share::schema::ObIRoutineInfo *routine_info,
                                ObProcType &routine_type,
                                const ObPLDataType &ret_type);
@@ -474,8 +468,7 @@ public:
                          const ObSQLSessionInfo *session_info,
                          ObSchemaGetterGuard *schema_guard,
                          bool for_write);
-  int get_caller_accessor_item(
-    const ObPLStmtBlock *caller, AccessorItem &caller_item);
+
   int check_package_accessible(
     const ObPLStmtBlock *caller,
     share::schema::ObSchemaGetterGuard &guard,
@@ -488,18 +481,10 @@ public:
     const ObPLStmtBlock *caller,
     share::schema::ObSchemaGetterGuard &guard,
     const share::schema::ObRoutineInfo &routine_info);
-  int check_package_accessible(
-    AccessorItem &caller, const ObString &package_body);
-  int check_routine_accessible(
-    AccessorItem &caller, const ObString &routine_body);
-  int check_common_accessible(
-    AccessorItem &caller, ObIArray<AccessorItem> &accessors);
-  int resolve_routine_accessible_by(
-    const ObString source, ObIArray<AccessorItem> &result);
-  int resolve_package_accessible_by(
-    const ObString source, ObIArray<AccessorItem> &result);
-  int resolve_accessible_by(
-    const ObStmtNodeTree *accessor_list, ObIArray<AccessorItem> &result);
+
+
+
+
 
   static
   int resolve_sp_subtype_precision(ObSQLSessionInfo &session_info,
@@ -522,13 +507,16 @@ public:
                                         uint64_t actual_param_type_id,
                                         uint64_t formal_param_type_id,
                                         bool &is_compatible);
-  static int64_t combine_line_and_col(const ObStmtLoc &loc);
-  int resolve_routine_decl_param_list(const ParseNode *param_list,
+  int64_t combine_line_and_col(const peg::Node &node) const;
+  ObString source(const peg::Node &node) const
+  {
+    const auto span = node.span();
+    return ObString(span.end - span.start, source_.ptr() + span.start);
+  }
+  int resolve_routine_decl_param_list(rust::Slice<const peg::Node> parameters,
       ObPLAstUnit &package_ast,
       ObPLRoutineInfo &routine_info);
-  int replace_source_string(const ObString &old_sql, ParseNode *new_node);
-  int replace_plsql_line(
-    common::ObIAllocator &allocator, const ObStmtNodeTree *node, ObString &sql, ObString &new_sql);
+
 
   static int adjust_routine_param_type(ObPLDataType &type);
 
@@ -550,9 +538,9 @@ public:
   }
 
 private:
-  int resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDeclareVarStmt *stmt, ObPLFunctionAST &func_ast);
-  int resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast);
-  int resolve_declare_var_comm(const ObStmtNodeTree *parse_tree, ObPLDeclareVarStmt *stmt,
+  int resolve_declare_var(const peg::Node *parse_tree, ObPLDeclareVarStmt *stmt, ObPLFunctionAST &func_ast);
+  int resolve_declare_var(const peg::Node *parse_tree, ObPLPackageAST &package_ast);
+  int resolve_declare_var_comm(const peg::Node *parse_tree, ObPLDeclareVarStmt *stmt,
                                ObPLAstUnit &unit_ast);
   int resolve_extern_type_info(share::schema::ObSchemaGetterGuard &schema_guard,
                                const ObSQLSessionInfo &session_info,
@@ -561,40 +549,38 @@ private:
   int resolve_extern_type_info(share::schema::ObSchemaGetterGuard &guard,
                                const ObIArray<ObObjAccessIdx> &access_idxs,
                                ObPLExternTypeInfo *extern_type_info);
-  int resolve_sp_row_type(const ParseNode *sp_data_type_node,
+  int resolve_sp_row_type(const peg::Node *sp_data_type_node,
                           ObPLAstUnit &func,
                           ObPLDataType &pl_type,
                           ObPLExternTypeInfo *extern_type_info = NULL,
                           bool with_rowid = false);
-  int resolve_sp_composite_type(const ParseNode *sp_data_type_node,
-                                ObPLAstUnit &func,
-                                ObPLDataType &data_type,
-                                ObPLExternTypeInfo *extern_type_info = NULL);
-  int resolve_sp_data_type(const ParseNode *sp_data_type_node,
+
+  int resolve_sp_data_type(const peg::Node *sp_data_type_node,
                            const common::ObString &ident_name,
                            ObPLAstUnit &func,
                            ObPLDataType &data_type,
                            ObPLExternTypeInfo *extern_type_info = NULL,
                            bool with_rowid = false);
-  int resolve_assign(const ObStmtNodeTree *parse_tree, ObPLAssignStmt *stmt, ObPLFunctionAST &func);
-  int resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt, ObPLFunctionAST &func);
-  int resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *stmt, ObPLFunctionAST &func);
-  int resolve_iterate(const ObStmtNodeTree *parse_tree, ObPLIterateStmt *stmt, ObPLFunctionAST &func);
-  int resolve_leave(const ObStmtNodeTree *parse_tree, ObPLLeaveStmt *stmt, ObPLFunctionAST &func);
-  int resolve_while(const ObStmtNodeTree *parse_tree, ObPLWhileStmt *stmt, ObPLFunctionAST &func);
-  int resolve_repeat(const ObStmtNodeTree *parse_tree, ObPLRepeatStmt *stmt, ObPLFunctionAST &func);
-  int resolve_loop(const ObStmtNodeTree *parse_tree, ObPLLoopStmt *stmt, ObPLFunctionAST &func);
-  int resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStmt *stmt, ObPLFunctionAST &func);
-  int resolve_sql(const ObStmtNodeTree *parse_tree, ObPLSqlStmt *stmt, ObPLFunctionAST &func);
-  int resolve_declare_cond(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast);
-  int resolve_declare_cond(const ObStmtNodeTree *parse_tree,
+  int resolve_assign(const peg::Node *parse_tree, ObPLAssignStmt *stmt, ObPLFunctionAST &func);
+  int resolve_if(const peg::Node *parse_tree, ObPLIfStmt *stmt, ObPLFunctionAST &func);
+  int resolve_case(const peg::Node *parse_tree, ObPLCaseStmt *stmt, ObPLFunctionAST &func);
+  int resolve_iterate(const peg::Node *parse_tree, ObPLIterateStmt *stmt, ObPLFunctionAST &func);
+  int resolve_leave(const peg::Node *parse_tree, ObPLLeaveStmt *stmt, ObPLFunctionAST &func);
+  int resolve_while(const peg::Node *parse_tree, ObPLWhileStmt *stmt, ObPLFunctionAST &func);
+  int resolve_repeat(const peg::Node *parse_tree, ObPLRepeatStmt *stmt, ObPLFunctionAST &func);
+  int resolve_loop(const peg::Node *parse_tree, ObPLLoopStmt *stmt, ObPLFunctionAST &func);
+  int resolve_return(const peg::Node *parse_tree, ObPLReturnStmt *stmt, ObPLFunctionAST &func);
+  int resolve_do(const peg::Node *parse_tree, ObPLDoStmt *stmt, ObPLFunctionAST &func);
+  int resolve_sql(const peg::Node *parse_tree, ObPLSqlStmt *stmt, ObPLFunctionAST &func);
+  int resolve_declare_cond(const peg::Node *parse_tree, ObPLPackageAST &package_ast);
+  int resolve_declare_cond(const peg::Node *parse_tree,
                            ObPLDeclareCondStmt *stmt,
                            ObPLAstUnit &func);
-  int resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPLDeclareHandlerStmt *stmt, ObPLFunctionAST &func);
-  int resolve_resignal(const ObStmtNodeTree *parse_tree, ObPLSignalStmt *stmt, ObPLFunctionAST &func);
-  int resolve_signal(const ObStmtNodeTree *parse_tree, ObPLSignalStmt *stmt, ObPLFunctionAST &func);
-  int resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *stmt, ObPLFunctionAST &func);
-  int resolve_call_param_list(const ObStmtNodeTree *parse_tree,
+  int resolve_declare_handler(const peg::Node *parse_tree, ObPLDeclareHandlerStmt *stmt, ObPLFunctionAST &func);
+  int resolve_resignal(const peg::Node *parse_tree, ObPLSignalStmt *stmt, ObPLFunctionAST &func);
+  int resolve_signal(const peg::Node *parse_tree, ObPLSignalStmt *stmt, ObPLFunctionAST &func);
+  int resolve_call(const peg::Node *parse_tree, ObPLCallStmt *stmt, ObPLFunctionAST &func);
+  int resolve_call_param_list(const peg::Node *parse_tree,
                               const common::ObIArray<ObPLRoutineParam *> &param_list,
                               ObPLCallStmt *stmt,
                               ObPLFunctionAST &func);
@@ -602,7 +588,7 @@ private:
                               const common::ObIArray<ObPLRoutineParam *> &param_list,
                               ObPLCallStmt *stmt,
                               ObPLFunctionAST &func);
-  int resolve_call_param_list(const ObStmtNodeTree *parse_tree,
+  int resolve_call_param_list(const peg::Node *parse_tree,
                               const common::ObIArray<share::schema::ObRoutineParam *> &param_list,
                               ObPLCallStmt *stmt,
                               ObPLFunctionAST &func);
@@ -610,35 +596,32 @@ private:
                               const common::ObIArray<share::schema::ObRoutineParam*> &param_list,
                               ObPLCallStmt *stmt,
                               ObPLFunctionAST &func);
-  int resolve_declare_cursor(const ObStmtNodeTree *parse_tree, ObPLPackageAST &func);
-  int resolve_declare_cursor(const ObStmtNodeTree *parse_tree,
+  int resolve_declare_cursor(const peg::Node *parse_tree, ObPLPackageAST &func);
+  int resolve_declare_cursor(const peg::Node *parse_tree,
                              ObPLDeclareCursorStmt *stmt,
                              ObPLAstUnit &func);
-  int resolve_cursor_actual_params(const ObStmtNodeTree *parse_tree, ObPLStmt *stmt, ObPLFunctionAST &func);
-  int resolve_open(const ObStmtNodeTree *parse_tree, ObPLOpenStmt *stmt, ObPLFunctionAST &func);
-  int resolve_fetch(const ObStmtNodeTree *parse_tree, ObPLFetchStmt *stmt, ObPLFunctionAST &func);
-  int resolve_close(const ObStmtNodeTree *parse_tree, ObPLCloseStmt *stmt, ObPLFunctionAST &func);
-  int resolve_null(const ObStmtNodeTree *parse_tree, ObPLNullStmt *stmt, ObPLFunctionAST &func);
-  int resolve_interface(const ObStmtNodeTree *parse_tree,
+
+  int resolve_open(const peg::Node *parse_tree, ObPLOpenStmt *stmt, ObPLFunctionAST &func);
+  int resolve_fetch(const peg::Node *parse_tree, ObPLFetchStmt *stmt, ObPLFunctionAST &func);
+  int resolve_close(const peg::Node *parse_tree, ObPLCloseStmt *stmt, ObPLFunctionAST &func);
+
+  int resolve_interface(const peg::Node *parse_tree,
                         ObPLInterfaceStmt *stmt,
                         ObPLFunctionAST &ast);
-  int resolve_routine_decl(const ObStmtNodeTree *parse_tree,
+  int resolve_routine_decl(const peg::Node *parse_tree,
                            ObPLAstUnit &package_ast,
                            ObPLRoutineInfo *&routine_info,
                            bool resolve_routine_def = false); // Whether currently in resolve routine define
-  int resolve_routine_block(const ObStmtNodeTree *parse_tree,
+  int resolve_routine_block(const peg::Node *parse_tree,
                             const ObPLRoutineInfo &routine_info,
                             ObPLFunctionAST &routine_ast);
-  int resolve_routine_def(const ObStmtNodeTree *parse_tree,
+  int resolve_routine_def(const peg::Node *parse_tree,
                           ObPLAstUnit &package_ast);
-  int resolve_init_routine(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast);
+  int resolve_init_routine(const peg::Node *parse_tree, ObPLPackageAST &package_ast);
 
-  int resolve_do(const ObStmtNodeTree *parse_tree,
-                ObPLDoStmt *stmt,
-                ObPLFunctionAST &func);
 private:
-  int resolve_ident(const ParseNode *node, common::ObString &ident);
-  int build_raw_expr(const ParseNode *node, ObPLAstUnit &unit_ast, ObRawExpr *&expr,
+  int resolve_ident(const peg::Node *node, common::ObString &ident);
+  int build_raw_expr(const peg::Node *node, ObPLAstUnit &unit_ast, ObRawExpr *&expr,
                      const ObPLDataType *expected_type = NULL);
   int get_actually_pl_type(const ObPLDataType *&type);
   static int set_cm_warn_on_fail(ObRawExpr *&expr);
@@ -647,7 +630,7 @@ private:
   int analyze_expr_type(ObRawExpr *&expr,
                         ObPLAstUnit &unit_ast);
   static int set_udf_expr_line_number(ObRawExpr *expr, uint64_t line_number);
-  int resolve_expr(const ParseNode *node, ObPLAstUnit &unit_ast,
+  int resolve_expr(const peg::Node *node, ObPLAstUnit &unit_ast,
                    sql::ObRawExpr *&expr, uint64_t line_number = 0, /* where this expr called */
                    bool need_add = true, const ObPLDataType *expected_type = NULL,
                    bool is_behind_limit = false, bool is_add_bool = false);
@@ -677,30 +660,30 @@ private:
                            ObRawExprFactory &expr_factory, const ObSQLSessionInfo *session_info,
                            ObIArray<ObObjAccessIdx> &access_idxs, ObPLAstUnit &func,
                            bool is_proc = false, bool is_resolve_rowtype = false);
-  int resolve_into(const ParseNode *into_node, ObPLInto &into, ObPLFunctionAST &func);
-  int resolve_stmt_list(const ObStmtNodeTree *parse_tree, ObPLStmtBlock *&stmt, ObPLFunctionAST &func,
+  int resolve_into(rust::Slice<const peg::Node> targets, ObPLInto &into, ObPLFunctionAST &func);
+  int resolve_stmt_list(const peg::Node *parse_tree, ObPLStmtBlock *&stmt, ObPLFunctionAST &func,
                         bool stop_search_label = false, bool in_handler_scope = false);
-  int resolve_when(const ObStmtNodeTree *parse_tree, ObRawExpr *case_expr_var, ObPLCaseStmt *stmt, ObPLFunctionAST &func);
-  int resolve_then(const ObStmtNodeTree *parse_tree,
+  int resolve_when(rust::Slice<const peg::Node> branches, ObRawExpr *case_expr_var, ObPLCaseStmt *stmt, ObPLFunctionAST &func);
+  int resolve_then(const peg::Node *parse_tree,
                    ObPLFunctionAST &func,
                    ObPLDataType *data_type,
                    ObRawExpr *&expr,
                    ObPLStmtBlock *&then_block,
                    bool is_add_bool_expr = false);
-  int resolve_loop_control(const ObStmtNodeTree *parse_tree, ObPLLoopControl *stmt, bool is_iterate_label, ObPLFunctionAST &func);
-  int resolve_handler_condition(const ObStmtNodeTree *parse_tree,
+  int resolve_loop_control(const peg::Node *parse_tree, ObPLLoopControl *stmt, bool is_iterate_label, ObPLFunctionAST &func);
+  int resolve_handler_condition(const peg::Node *parse_tree,
                                 ObPLConditionValue &condition,
                                 ObPLAstUnit &func);
-  int resolve_condition_value(const ObStmtNodeTree *parse_tree, ObPLConditionValue &value,
+  int resolve_condition_value(const peg::Node *parse_tree, ObPLConditionValue &value,
                               const bool is_sys_db);
-  int resolve_condition(const ObStmtNodeTree *parse_tree,
+  int resolve_condition(const peg::Node *parse_tree,
                         const ObPLBlockNS &ns,
                         const ObPLConditionValue **value,
                         ObPLAstUnit &func);
   int resolve_condition(const common::ObString &name,
                         const ObPLBlockNS &ns,
                         const ObPLConditionValue **value);
-  int resolve_cursor(const ObStmtNodeTree *parse_tree,
+  int resolve_cursor(const peg::Node *parse_tree,
                      const ObPLBlockNS &ns,
                      int64_t &index,
                      ObPLAstUnit &func);
@@ -714,34 +697,25 @@ private:
                            ObPLAstUnit &func,
                            bool check_mode = false,
                            bool for_external_cursor = false);
-  int resolve_obj_access_ref_for_cursor_node(const ObStmtNodeTree *node,
-                                             ObIArray<ObObjAccessIdent> &access_idents);
-  int resolve_obj_access_ref_for_cursor_param_node(const ObStmtNodeTree *node,
-                                                   const ObStmtNodeTree *&param_node);
+
+
   int resolve_label(const common::ObString &name,
                     const ObPLBlockNS &ns,
                     int64_t &label,
                     bool is_iterate_label);
-  int resolve_cond_loop(const ObStmtNodeTree *expr_node, const ObStmtNodeTree *body_node, ObPLCondLoop *stmt, ObPLFunctionAST &func);
-  int resolve_cursor_common(const ObStmtNodeTree *name_node,
-                                          const ObStmtNodeTree *type_node,
-                                          ObPLAstUnit &func,
-                                          ObString &name,
-                                          ObPLDataType &return_type);
-  int resolve_cursor_formal_param(const ObStmtNodeTree *param_list,
-                                            ObPLAstUnit &func,
-                                            ObIArray<int64_t> &params);
+  int resolve_cond_loop(const peg::Node *expr_node, const peg::Node *body_node, ObPLCondLoop *stmt, ObPLFunctionAST &func);
+
   int resolve_cursor_def(const ObString &cursor_name,
-                          const ObStmtNodeTree *sql_node,
+                          const peg::Node *sql_node,
                           ObPLBlockNS &sql_ns,
                           ObPLDataType &cursor_type,
                           const ObIArray<int64_t> &formal_params,
                           ObPLAstUnit &func,
                           int64_t &cursor_index);
-  int resolve_cparams_expr(const ParseNode *param_node,
+  int resolve_cparams_expr(rust::Slice<const peg::Node> arguments,
                            ObPLFunctionAST &func,
                            ObIArray<ObRawExpr*> &exprs);
-  int resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &static_sql, ObPLInto &static_into, bool is_cursor, ObPLFunctionAST &func);
+  int resolve_static_sql(const peg::Node *parse_tree, ObPLSql &static_sql, ObPLInto &static_into, bool is_cursor, ObPLFunctionAST &func);
 
   int resolve_cparams(ObIArray<ObRawExpr*> &exprs,
                       const common::ObIArray<share::schema::ObIRoutineParam*> &params_list,
@@ -759,7 +733,7 @@ private:
                       ObIArray<int64_t> &expr_idx);
   int check_in_param_type_legal(const share::schema::ObIRoutineParam *param_info, const ObRawExpr* param);
   int resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMode param_mode, int64_t &out_idx);
-  int resolve_interface_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
+  int resolve_interface_pragma(const peg::Node *parse_tree, ObPLPackageAST &ast);
   static int check_collection_expr_illegal(const ObRawExpr *expr, bool &is_obj_acc);
 
 private:
@@ -803,7 +777,7 @@ private:
   bool is_data_type_name(const ObString &ident_name);
   bool is_sqlstate_completion(const char *sql_state);
   bool is_sqlstate_valid(const char* sql_state, const int64_t &str_len);
-  int resolve_obj_access_idents(const ParseNode &node,
+  int resolve_obj_access_idents(const peg::Node &node,
                                 common::ObIArray<ObObjAccessIdent> &obj_access_idents,
                                 ObPLAstUnit &func);
   int build_collection_attribute_access(ObRawExprFactory &expr_factory,
@@ -822,7 +796,7 @@ private:
                                           ObIArray<ObObjAccessIdx> &access_idxs,
                                           ObPLAstUnit &func,
                                           int64_t start_level = 0);
-  int build_raw_expr(const ParseNode &node,
+  int build_raw_expr(const peg::Node &node,
                      ObRawExpr *&expr,
                      common::ObIArray<sql::ObQualifiedName> &columns,
                      common::ObIArray<sql::ObVarInfo> &sys_vars,
@@ -846,7 +820,7 @@ private:
                                          const ObPLRoutineInfo *parent_routine_info,
                                          const ObPLRoutineInfo *body_routine_info);
   static int check_expr_can_pre_calc(ObRawExpr *expr, bool &pre_calc);
-  int transform_subquery_expr(const ParseNode *node,
+  int transform_subquery_expr(const peg::Node *node,
                               ObRawExpr *&expr,
                               const ObPLDataType *expected_type,
                               ObPLAstUnit &func);
@@ -881,7 +855,7 @@ private:
   inline void reset_item_type() { item_type_ = T_MAX; }
   inline void set_item_type(ObItemType item_type) { item_type_ = item_type; }
 
-  int resolve_question_mark_node(const ObStmtNodeTree *into_node, ObRawExpr *&into_expr);
+  int resolve_question_mark_node(const peg::Node *into_node, ObRawExpr *&into_expr);
 
   int check_cursor_formal_params(const ObIArray<int64_t>& formal_params,
                                  ObPLCursor &cursor,
@@ -954,8 +928,6 @@ private:
                                const ObPLBlockNS &ns,
                                ObPLAstUnit &func);
 
-  int init_udf_info_of_accessident(ObObjAccessIdent &access_ident);
-  int init_udf_info_of_accessidents(ObIArray<ObObjAccessIdent> &access_ident);
 
   int resolve_sys_func_access(ObObjAccessIdent &access_ident,
                               ObIArray<ObObjAccessIdx> &access_idxs,
@@ -964,6 +936,7 @@ private:
   int fast_check_status(uint64_t n = 0xFF) const;
 private:
   friend class CallExprResolver;
+  ObString source_;
   ObPLResolveCtx resolve_ctx_;
   ObPLExternalNS external_ns_;
   sql::ObRawExprFactory expr_factory_;
@@ -972,7 +945,6 @@ private:
   int64_t current_level_; // The actual number of levels of the current block
   HandlerAnalyzer handler_analyzer_;
   uint64_t arg_cnt_; // For anonymous blocks, used to indicate the total number of question marks; for routines, used to indicate the number of input parameters
-  uint64_t question_mark_cnt_; // indicates the number of question_mark_cnt_ parsed up to the current statement (excluding the current statement)
   uint64_t next_user_defined_exception_id_; // User-defined ExceptionID, starting from 1 and incrementing
   ObArray<int64_t> current_subprogram_path_; // The addressing path of the subprogram currently being parsed
   ObArray<ObPLStmt *> goto_stmts_; // index of goto statements, used for secondary parsing.
@@ -986,7 +958,7 @@ class CallExprResolver
 {
 public:
   explicit CallExprResolver(sql::ObResolverParams &params);
-  int resolve(const ParseNode &node, ObRawExpr *&expr, ObPLDependencyTable *deps = NULL);
+  int resolve(const peg::Node &node, ObRawExpr *&expr, ObPLDependencyTable *deps = NULL);
 private:
   int init();
   sql::ObResolverParams &params_;

@@ -20,6 +20,7 @@
 #include <string>
 
 #include "ob_vector_index_util.h"
+#include "rust/sql_parser.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_sched_job_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -803,85 +804,75 @@ int ObVectorIndexParam::build_search_param(const ObVectorIndexParam &index_param
   return ret;
 }
 
-int ObVectorIndexUtil::resolve_query_param(
-    const ParseNode *param_list_node,
-    ObVectorIndexQueryParam &param)
+int ObVectorIndexUtil::resolve_query_param(const ObString &param_name,
+                                             const ObString &value_str,
+                                             ObVectorIndexQueryParam &param)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *param_node = nullptr;
-  for (int32_t i = 0; OB_SUCC(ret) && i < param_list_node->num_child_; i+=2) {
-    if (i + 1 >= param_list_node->num_child_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObString param_name;
-      const ParseNode *key_node = param_list_node->children_[i];
-      const ParseNode *value_node = param_list_node->children_[i + 1];
-      param_name.assign_ptr(key_node->str_value_, static_cast<int32_t>(key_node->str_len_));
-      if (param_name.case_compare("EF_SEARCH") == 0) {
-        if (param.is_set_ef_search_) {
-          ret = OB_ERR_PARAM_DUPLICATE;
-        } else if (value_node->type_ != T_INT && value_node->type_ != T_NUMBER) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (! (value_node->value_ >= 1 && value_node->value_ <= 160000)) {
-          ret = OB_INVALID_ARGUMENT;
-        } else {
-          param.ef_search_ = value_node->value_;
-          param.is_set_ef_search_ = 1;
-        }
-      } else if (param_name.case_compare("REFINE_K") == 0) {
-        int err = 0;
-        char *endptr = NULL;
-        ObString value_str(static_cast<int32_t>(value_node->str_len_), value_node->str_value_);
-        double out_val = 0;
-        if (param.is_set_refine_k_) {
-          ret = OB_ERR_PARAM_DUPLICATE;
-        } else if (OB_FALSE_IT(out_val = ObCharset::strntod(value_str.ptr(), value_str.length(), &endptr, &err))) {
-        } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
-          ret = OB_DATA_OUT_OF_RANGE;
-        } else if (out_val < 1.0 || out_val > 1000) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "vector index refine_k value");
-        } else {
-          param.refine_k_ = out_val;
-          param.is_set_refine_k_ = 1;
-        }
-      } else if (param_name.case_compare("DROP_RATIO_SEARCH") == 0) {
-        int err = 0;
-        char *endptr = NULL;
-        ObString value_str(static_cast<int32_t>(value_node->str_len_), value_node->str_value_);
-        double out_val = 0;
-        if (param.is_set_drop_ratio_search_) {
-          ret = OB_ERR_PARAM_DUPLICATE;
-        } else if (OB_FALSE_IT(out_val = ObCharset::strntod(value_str.ptr(), value_str.length(), &endptr, &err))) {
-        } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
-          ret = OB_DATA_OUT_OF_RANGE;
-        } else if (out_val < 0 || out_val > 0.9) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "vector index drop_ratio_search value");
-        } else {
-          param.ob_sparse_drop_ratio_search_ = out_val;
-          param.is_set_drop_ratio_search_ = 1;
-        }
-      } else if (param_name.case_compare("SIMILARITY") == 0) {
-        int err = 0;
-        char *endptr = NULL;
-        ObString value_str(static_cast<int32_t>(value_node->str_len_), value_node->str_value_);
-        double out_val = 0;
-        if (param.is_set_similarity_threshold_) {
-          ret = OB_ERR_PARAM_DUPLICATE;
-        } else if (OB_FALSE_IT(out_val = ObCharset::strntod(value_str.ptr(), value_str.length(), &endptr, &err))) {
-        } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
-          ret = OB_DATA_OUT_OF_RANGE;
-        } else if (out_val < 0.0 || out_val > 1.0) {
-          ret = OB_INVALID_ARGUMENT;
-        } else {
-          param.similarity_threshold_ = out_val;
-          param.is_set_similarity_threshold_ = 1;
-        }
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-      }
+  if (param_name.case_compare("EF_SEARCH") == 0) {
+    bool integer = !value_str.empty();
+    for (int64_t i = 0; integer && i < value_str.length(); ++i) {
+      integer = value_str.ptr()[i] >= '0' && value_str.ptr()[i] <= '9';
     }
+    int error = 0;
+    const uint64_t value = integer ? ObCharset::strntoull(value_str.ptr(), value_str.length(), 10, &error) : 0;
+    if (param.is_set_ef_search_) {
+      ret = OB_ERR_PARAM_DUPLICATE;
+    } else if (!integer || error != 0 || value < 1 || value > 160000) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      param.ef_search_ = value;
+      param.is_set_ef_search_ = 1;
+    }
+  } else if (param_name.case_compare("REFINE_K") == 0) {
+    int err = 0;
+    char *endptr = NULL;
+    double out_val = 0;
+    if (param.is_set_refine_k_) {
+      ret = OB_ERR_PARAM_DUPLICATE;
+    } else if (OB_FALSE_IT(out_val = ObCharset::strntod(value_str.ptr(), value_str.length(), &endptr, &err))) {
+    } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else if (out_val < 1.0 || out_val > 1000) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "vector index refine_k value");
+    } else {
+      param.refine_k_ = out_val;
+      param.is_set_refine_k_ = 1;
+    }
+  } else if (param_name.case_compare("DROP_RATIO_SEARCH") == 0) {
+    int err = 0;
+    char *endptr = NULL;
+    double out_val = 0;
+    if (param.is_set_drop_ratio_search_) {
+      ret = OB_ERR_PARAM_DUPLICATE;
+    } else if (OB_FALSE_IT(out_val = ObCharset::strntod(value_str.ptr(), value_str.length(), &endptr, &err))) {
+    } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else if (out_val < 0 || out_val > 0.9) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "vector index drop_ratio_search value");
+    } else {
+      param.ob_sparse_drop_ratio_search_ = out_val;
+      param.is_set_drop_ratio_search_ = 1;
+    }
+  } else if (param_name.case_compare("SIMILARITY") == 0) {
+    int err = 0;
+    char *endptr = NULL;
+    double out_val = 0;
+    if (param.is_set_similarity_threshold_) {
+      ret = OB_ERR_PARAM_DUPLICATE;
+    } else if (OB_FALSE_IT(out_val = ObCharset::strntod(value_str.ptr(), value_str.length(), &endptr, &err))) {
+    } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else if (out_val < 0.0 || out_val > 1.0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      param.similarity_threshold_ = out_val;
+      param.is_set_similarity_threshold_ = 1;
+    }
+  } else {
+    ret = OB_INVALID_ARGUMENT;
   }
   return ret;
 }
@@ -2516,7 +2507,7 @@ int ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(
   return ret;
 }
 
-int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
+int ObVectorIndexUtil::check_vec_index_param(const sql::peg::Node &option_node, const ObString &parameter_text,
     common::ObIAllocator &allocator, const ObTableSchema &tbl_schema,
     ObString &index_params, ObString &vec_column_name, ObIndexType &vec_index_type, sql::ObSQLSessionInfo *session_info)
 {
@@ -2525,14 +2516,12 @@ int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
   int32_t index_param_length = 0;
   const char *index_param_str = nullptr;
 
-  if (OB_ISNULL(option_node)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (FALSE_IT(index_param_length = option_node->str_len_)) {
-  } else if (FALSE_IT(index_param_str = option_node->str_value_)) {
-  } else if (OB_UNLIKELY(index_param_length > OB_MAX_INDEX_PARAMS_LENGTH)) {
+  index_param_length = parameter_text.length();
+  index_param_str = parameter_text.ptr();
+  if (OB_UNLIKELY(index_param_length > OB_MAX_INDEX_PARAMS_LENGTH)) {
     ret = common::OB_ERR_TOO_LONG_IDENT;
     LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, index_param_length, index_param_str);
-  } else if (0 == option_node->str_len_) {
+  } else if (parameter_text.empty()) {
     ret = OB_OP_NOT_ALLOW;
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "set index params empty is");
   } else {
@@ -2552,9 +2541,8 @@ int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
     } else if (!is_text_col && !is_sparse_vec_col && OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(col_schema->get_extended_type_info(), vector_dim))) {
     } else {
       tmp_str.assign_ptr(index_param_str, index_param_length);
-      if (OB_ISNULL(option_node->children_[0])) {
+      if (sql::peg::vector_parameters(option_node).empty()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("children can't be null", K(ret));
       } else if (OB_FAIL(ObVectorIndexUtil::insert_index_param_str(tmp_str, allocator, index_params))) {
       } else if (OB_FAIL(check_index_param(option_node, allocator, vector_dim, is_sparse_vec_col, is_text_col, index_params, vec_index_type, tbl_schema, session_info))) {
       } else if (is_text_col && !share::schema::is_hybrid_vec_index_log_type(vec_index_type)) {
@@ -2806,7 +2794,7 @@ int ObVectorIndexUtil::get_vector_index_param(
 }
 
 int ObVectorIndexUtil::check_index_param(
-    const ParseNode *option_node,
+    const sql::peg::Node &option_node,
     common::ObIAllocator &allocator,
     const int64_t vector_dim,
     const bool is_sparse_vec,
@@ -2817,16 +2805,15 @@ int ObVectorIndexUtil::check_index_param(
     sql::ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(option_node) || OB_ISNULL(session_info)) {
+  const auto parameters = sql::peg::vector_parameters(option_node);
+  if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (option_node->type_ != T_VEC_INDEX_PARAMS) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(option_node->children_[0])) {
+  } else if (parameters.empty()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!is_text_col && !is_sparse_vec && vector_dim <= 0) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    if (!is_sparse_vec && (option_node->num_child_ < 4 || option_node->num_child_ % 2 !=  0)) {  // at least distance and type should be set
+    if (!is_sparse_vec && parameters.size() < 2) {  // at least distance and type should be set
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index params not set distance and type is");
     }
@@ -2841,7 +2828,6 @@ int ObVectorIndexUtil::check_index_param(
     ObString endpoint_name;
     ObVectorIndexSyncIntervalType sync_interval_type;
     int64_t parser_value = 0;
-    int32_t str_len = 0;
     int64_t m_value = 0;
     int64_t ef_construction_value = 0;
     int64_t ef_search_value = 0;
@@ -2900,300 +2886,285 @@ int ObVectorIndexUtil::check_index_param(
     const int64_t default_nbits_value = 8;
     hash::ObHashSet<ObString> param_set;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(param_set.create(option_node->num_child_, lib::ObMemAttr("VecParamSet")))) {
+    } else if (OB_FAIL(param_set.create(parameters.size(), lib::ObMemAttr("VecParamSet")))) {
     }
 
-    for (int64_t i = 0; OB_SUCC(ret) && i < option_node->num_child_; ++i) {
-      int32_t child_node_index = i % 2;
-      if (child_node_index == 0) {
-        str_len = static_cast<int32_t>(option_node->children_[i]->str_len_);
-        key_parser_name.assign_ptr(option_node->children_[i]->str_value_, str_len);
-        new_variable_name = key_parser_name;
-        if (OB_FAIL(ob_simple_low_to_up(allocator, key_parser_name, new_variable_name))) {
-        } else if (new_variable_name != "DISTANCE" &&
-                   new_variable_name != "LIB" &&
-                   new_variable_name != "TYPE" &&
-                   new_variable_name != "M" &&
-                   new_variable_name != "EF_CONSTRUCTION" &&
-                   new_variable_name != "EF_SEARCH" &&
-                   new_variable_name != "NLIST" &&
-                   new_variable_name != "SAMPLE_PER_NLIST" &&
-                   new_variable_name != "EXTRA_INFO_MAX_SIZE" &&
-                   new_variable_name != "MODEL" &&
-                   new_variable_name != "SYNC_MODE" &&
-                   new_variable_name != "SYNC_INTERVAL" &&
-                   new_variable_name != "DIM" &&
-                   new_variable_name != "REFINE_TYPE" &&
-                   new_variable_name != "BQ_BITS_QUERY" &&
-                   new_variable_name != "REFINE_K" &&
-                   new_variable_name != "BQ_USE_FHT" &&
-                   new_variable_name != "NBITS" &&
-                   new_variable_name != "PRUNE" &&
-                   new_variable_name != "REFINE" &&
-                   new_variable_name != "DROP_RATIO_BUILD" &&
-                   new_variable_name != "DROP_RATIO_SEARCH") {
+    for (const auto &parameter : parameters) {
+      if (OB_FAIL(ret)) { break; }
+      const auto key = sql::peg::vector_parameter_name(parameter);
+      key_parser_name.assign_ptr(key.data(), static_cast<int64_t>(key.size()));
+      new_variable_name = key_parser_name;
+      if (OB_FAIL(ob_simple_low_to_up(allocator, key_parser_name, new_variable_name))) {
+      } else if (new_variable_name != "DISTANCE" &&
+                 new_variable_name != "LIB" &&
+                 new_variable_name != "TYPE" &&
+                 new_variable_name != "M" &&
+                 new_variable_name != "EF_CONSTRUCTION" &&
+                 new_variable_name != "EF_SEARCH" &&
+                 new_variable_name != "NLIST" &&
+                 new_variable_name != "SAMPLE_PER_NLIST" &&
+                 new_variable_name != "EXTRA_INFO_MAX_SIZE" &&
+                 new_variable_name != "MODEL" &&
+                 new_variable_name != "SYNC_MODE" &&
+                 new_variable_name != "SYNC_INTERVAL" &&
+                 new_variable_name != "DIM" &&
+                 new_variable_name != "REFINE_TYPE" &&
+                 new_variable_name != "BQ_BITS_QUERY" &&
+                 new_variable_name != "REFINE_K" &&
+                 new_variable_name != "BQ_USE_FHT" &&
+                 new_variable_name != "NBITS" &&
+                 new_variable_name != "PRUNE" &&
+                 new_variable_name != "REFINE" &&
+                 new_variable_name != "DROP_RATIO_BUILD" &&
+                 new_variable_name != "DROP_RATIO_SEARCH") {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "unexpected vector index params items is");
+      } else if (OB_FAIL(param_set.set_refactored(new_variable_name, 0/*flag*/))) {
+        if (ret == OB_HASH_EXIST) {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "unexpected vector index params items is");
-        } else if (OB_FAIL(param_set.set_refactored(new_variable_name, 0/*flag*/))) {
-          if (ret == OB_HASH_EXIST) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicate param is");
-          } else {
-          }
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicate param is");
         } else {
-          last_variable = new_variable_name;
         }
       } else {
-        if (option_node->children_[i]->type_ == T_NUMBER) {
-          parser_value = option_node->children_[i]->value_;
-          // for float data
-          str_len = static_cast<int32_t>(option_node->children_[i]->str_len_);
-          data_parser_name.assign_ptr(option_node->children_[i]->str_value_, str_len);
-          new_parser_name = data_parser_name;
-        } else if (option_node->children_[i]->type_ == T_BOOL) {
-          parser_value = option_node->children_[i]->value_;
-          str_len = static_cast<int32_t>(option_node->children_[i]->str_len_);
-          data_parser_name.assign_ptr(option_node->children_[i]->str_value_, str_len);
-          new_parser_name = data_parser_name;
-          if (OB_FAIL(ob_simple_low_to_up(allocator, data_parser_name, new_parser_name))) {
+        last_variable = new_variable_name;
+      }
+      const auto &value = sql::peg::vector_parameter_value(parameter);
+      parser_value = sql::peg::is_literal(value) ? sql::peg::expression_literal(value).integer : 0;
+      const auto value_text = value.text();
+      data_parser_name = syntax_text(value_text);
+      new_parser_name = data_parser_name;
+      if (OB_SUCC(ret) && value.kind() != sql::peg::NodeKind::Number) {
+        OZ (ob_simple_low_to_up(allocator, data_parser_name, new_parser_name));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (last_variable == "DISTANCE") {
+        if (new_parser_name == "INNER_PRODUCT" ||
+            new_parser_name == "L2" ||
+            new_parser_name == "COSINE") {
+          if (is_sparse_vec && new_parser_name != "INNER_PRODUCT") {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of sparse vector index distance algorithm is");
+          } else {
+            distance_is_set = true;
+            distance_name = new_parser_name;
           }
         } else {
-          str_len = static_cast<int32_t>(option_node->children_[i]->str_len_);
-          data_parser_name.assign_ptr(option_node->children_[i]->str_value_, str_len);
-          new_parser_name = data_parser_name;
-          if (OB_FAIL(ob_simple_low_to_up(allocator, data_parser_name, new_parser_name))) {
-          }
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index distance algorithm is");
         }
-        if (OB_FAIL(ret)) {
-        } else if (last_variable == "DISTANCE") {
-          if (new_parser_name == "INNER_PRODUCT" ||
-              new_parser_name == "L2" ||
-              new_parser_name == "COSINE") {
-            if (is_sparse_vec && new_parser_name != "INNER_PRODUCT") {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of sparse vector index distance algorithm is");
-            } else {
-              distance_is_set = true;
-              distance_name = new_parser_name;
-            }
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index distance algorithm is");
-          }
-        } else if (last_variable == "LIB") {
-          if (new_parser_name == "VSAG" ||
-              new_parser_name == "OB") {
-            lib_is_set = true;
-            lib_name = new_parser_name;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index lib is");
-          }
-        } else if (last_variable == "TYPE") {
-          if (new_parser_name == "HNSW") {
-            type_hnsw_is_set = true;
-            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW;
-          } else if (new_parser_name == "HNSW_SQ") {
-            type_hnsw_is_set = true;
-            type_hnsw_sq_is_set = true;
-            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW_SQ;
-          } else if (new_parser_name == "IVF_FLAT") {
-            type_ivf_flat_is_set = true;
-          } else if (new_parser_name == "IVF_SQ8") {
-            type_ivf_sq8_is_set = true;
-          } else if (new_parser_name == "IVF_PQ") {
-            type_ivf_pq_is_set = true;
-          } else if (new_parser_name == "HNSW_BQ") {
-            type_hnsw_is_set = true;
-            type_hnsw_bq_is_set = true;
-            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW_BQ;
-          } else if (new_parser_name == "SINDI") {
-            type_sindi_is_set = true;
-            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_IPIVF;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index type is");
-          }
-        } else if (last_variable == "M") {  // check "m" later
-          m_is_set = true;
-          m_value = parser_value;
-        } else if (last_variable == "EF_CONSTRUCTION") {
-          if (parser_value >= 5 && parser_value <= 1000 ) {
-            ef_construction_is_set = true;
-            ef_construction_value = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_construction is");
-          }
-        } else if (last_variable == "EF_SEARCH") {
-          if (parser_value >= 1 && parser_value <= 160000 ) {
-            ef_search_is_set = true;
-            ef_search_value = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_search is");
-          }
-        } else if (last_variable == "NLIST") {
-          if (parser_value >= 1 && parser_value <= 65536 ) {
-            nlist_is_set = true;
-            nlist_value = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index nlist is");
-          }
-        } else if (last_variable == "SAMPLE_PER_NLIST") {
-          if (parser_value >= 1 && parser_value <= INT64_MAX ) {
-            sample_per_nlist_is_set = true;
-            sample_per_nlist_value = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index sample_per_nlist is");
-          }
-        } else if (last_variable == "EXTRA_INFO_MAX_SIZE") {
-          if (parser_value >= 0 && parser_value <= ObVecExtraInfo::EXTRA_INFO_PARAM_MAX_VALUE) {
-            extra_info_max_size_is_set = true;
-            extra_info_max_size = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index extra_info_max_size is");
-          }
-        } else if (last_variable == "REFINE_TYPE") {
-          if (! (new_parser_name == "FP32" || new_parser_name == "SQ8")) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index refine_type is");
-          } else {
-            refine_type_is_set = true;
-            refine_type_value = (new_parser_name == "SQ8") ? obvsag::SQ8 : obvsag::FP32;
-          }
-        } else if (last_variable == "BQ_BITS_QUERY") {
-          if (parser_value != 4 && parser_value != 32) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_bits_query is");
-          } else {
-            bq_bits_query_set = true;
-            bq_bits_query_value = static_cast<int16_t>(parser_value);
-          }
-        } else if (last_variable == "REFINE_K") {
-          int err = 0;
-          char *endptr = NULL;
-          double out_val = ObCharset::strntod(new_parser_name.ptr(), new_parser_name.length(), &endptr, &err);
-          if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else if (out_val < 1.0 || out_val > 1000) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index refine_k is");
-          } else {
-            refine_k_is_set = true;
-          }
-        } else if (last_variable == "BQ_USE_FHT") {
-          if (! (0 == parser_value || 1 == parser_value)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_use_fht is");
-          } else {
-            bq_use_fht_is_set = true;
-            bq_use_fht_value = (1 == parser_value);
-          }
-        } else if (last_variable == "NBITS") {
-          if (parser_value >= 1 && parser_value <= 24) {
-            nbits_is_set = true;
-            nbits_value = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index nbits is");
-          }
-        } else if (last_variable == "MODEL") {
-          if (!new_parser_name.empty()) {
-            ObAIFuncExprInfo *ai_func_info;
-            if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, new_parser_name, ai_func_info))) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");
-            }
-            endpoint_is_set = true;
-            endpoint_name = new_parser_name;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");
-          }
-        } else if (last_variable == "SYNC_INTERVAL") {
-          int64_t seconds = 0;
-          if (OB_FAIL(parse_time_string_to_seconds(new_parser_name, seconds))) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (seconds < 0) {
-            ret = OB_INVALID_ARGUMENT;
-          } else {
-            sync_interval_is_set = true;
-            sync_interval_value = seconds;
-          }
-        } else if (last_variable == "SYNC_MODE") {
-          if (new_parser_name == "IMMEDIATE") {
-            sync_mode_is_set = true;
-            sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_IMMEDIATE;
-            sync_interval_value = 0;
-          } else if (new_parser_name == "MANUAL") {
-            sync_mode_is_set = true;
-            sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_MANUAL;
-            sync_interval_value = 0;
-          } else if (new_parser_name == "ASYNC") {
-            sync_mode_is_set = true;
-            async_is_set = true;
-            sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_NUMERIC;
-          } else {
-            ret = OB_INVALID_ARGUMENT;
-          }
-        } else if (last_variable == "DIM") {
-          if (parser_value > 0 && parser_value <= 4096) {
-            dim_is_set = true;
-            dim_value = parser_value;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index dim is");
-          }
-        } else if (last_variable == "PRUNE") {
-          if (! (0 == parser_value || 1 == parser_value)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of sparse vector index prune is");
-          } else {
-            prune_is_set = true;
-            prune_value = parser_value;
-          }
-        } else if (last_variable == "REFINE") {
-          if (! (0 == parser_value || 1 == parser_value)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of sparse vector index refine is");
-          } else {
-            refine_is_set = true;
-            refine_value = parser_value;
-          }
-        } else if (last_variable == "DROP_RATIO_BUILD") {
-          int err = 0;
-          char *endptr = NULL;
-          double out_val = ObCharset::strntod(new_parser_name.ptr(), new_parser_name.length(), &endptr, &err);
-          if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else if (out_val < 0 || out_val > 0.9 ) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_build is");
-          } else {
-            drop_ratio_build_is_set = true;
-            drop_ratio_build = out_val;
-          }
-        } else if (last_variable == "DROP_RATIO_SEARCH") {
-          int err = 0;
-          char *endptr = NULL;
-          double out_val = ObCharset::strntod(new_parser_name.ptr(), new_parser_name.length(), &endptr, &err);
-          if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else if (out_val < 0 || out_val > 0.9 ) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_search is");
-          } else {
-            drop_ratio_search_is_set = true;
-            drop_ratio_search = out_val;
-          }
+      } else if (last_variable == "LIB") {
+        if (new_parser_name == "VSAG" ||
+            new_parser_name == "OB") {
+          lib_is_set = true;
+          lib_name = new_parser_name;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index lib is");
+        }
+      } else if (last_variable == "TYPE") {
+        if (new_parser_name == "HNSW") {
+          type_hnsw_is_set = true;
+          vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW;
+        } else if (new_parser_name == "HNSW_SQ") {
+          type_hnsw_is_set = true;
+          type_hnsw_sq_is_set = true;
+          vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW_SQ;
+        } else if (new_parser_name == "IVF_FLAT") {
+          type_ivf_flat_is_set = true;
+        } else if (new_parser_name == "IVF_SQ8") {
+          type_ivf_sq8_is_set = true;
+        } else if (new_parser_name == "IVF_PQ") {
+          type_ivf_pq_is_set = true;
+        } else if (new_parser_name == "HNSW_BQ") {
+          type_hnsw_is_set = true;
+          type_hnsw_bq_is_set = true;
+          vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW_BQ;
+        } else if (new_parser_name == "SINDI") {
+          type_sindi_is_set = true;
+          vsag_index_type = ObVectorIndexAlgorithmType::VIAT_IPIVF;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index type is");
+        }
+      } else if (last_variable == "M") {  // check "m" later
+        m_is_set = true;
+        m_value = parser_value;
+      } else if (last_variable == "EF_CONSTRUCTION") {
+        if (parser_value >= 5 && parser_value <= 1000 ) {
+          ef_construction_is_set = true;
+          ef_construction_value = parser_value;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_construction is");
+        }
+      } else if (last_variable == "EF_SEARCH") {
+        if (parser_value >= 1 && parser_value <= 160000 ) {
+          ef_search_is_set = true;
+          ef_search_value = parser_value;
         } else {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_search is");
         }
+      } else if (last_variable == "NLIST") {
+        if (parser_value >= 1 && parser_value <= 65536 ) {
+          nlist_is_set = true;
+          nlist_value = parser_value;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index nlist is");
+        }
+      } else if (last_variable == "SAMPLE_PER_NLIST") {
+        if (parser_value >= 1 && parser_value <= INT64_MAX ) {
+          sample_per_nlist_is_set = true;
+          sample_per_nlist_value = parser_value;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index sample_per_nlist is");
+        }
+      } else if (last_variable == "EXTRA_INFO_MAX_SIZE") {
+        if (parser_value >= 0 && parser_value <= ObVecExtraInfo::EXTRA_INFO_PARAM_MAX_VALUE) {
+          extra_info_max_size_is_set = true;
+          extra_info_max_size = parser_value;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index extra_info_max_size is");
+        }
+      } else if (last_variable == "REFINE_TYPE") {
+        if (! (new_parser_name == "FP32" || new_parser_name == "SQ8")) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index refine_type is");
+        } else {
+          refine_type_is_set = true;
+          refine_type_value = (new_parser_name == "SQ8") ? obvsag::SQ8 : obvsag::FP32;
+        }
+      } else if (last_variable == "BQ_BITS_QUERY") {
+        if (parser_value != 4 && parser_value != 32) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_bits_query is");
+        } else {
+          bq_bits_query_set = true;
+          bq_bits_query_value = static_cast<int16_t>(parser_value);
+        }
+      } else if (last_variable == "REFINE_K") {
+        int err = 0;
+        char *endptr = NULL;
+        double out_val = ObCharset::strntod(new_parser_name.ptr(), new_parser_name.length(), &endptr, &err);
+        if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
+          ret = OB_DATA_OUT_OF_RANGE;
+        } else if (out_val < 1.0 || out_val > 1000) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index refine_k is");
+        } else {
+          refine_k_is_set = true;
+        }
+      } else if (last_variable == "BQ_USE_FHT") {
+        if (! (0 == parser_value || 1 == parser_value)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_use_fht is");
+        } else {
+          bq_use_fht_is_set = true;
+          bq_use_fht_value = (1 == parser_value);
+        }
+      } else if (last_variable == "NBITS") {
+        if (parser_value >= 1 && parser_value <= 24) {
+          nbits_is_set = true;
+          nbits_value = parser_value;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index nbits is");
+        }
+      } else if (last_variable == "MODEL") {
+        if (!new_parser_name.empty()) {
+          ObAIFuncExprInfo *ai_func_info;
+          if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, new_parser_name, ai_func_info))) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");
+          }
+          endpoint_is_set = true;
+          endpoint_name = new_parser_name;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");
+        }
+      } else if (last_variable == "SYNC_INTERVAL") {
+        int64_t seconds = 0;
+        if (OB_FAIL(parse_time_string_to_seconds(new_parser_name, seconds))) {
+          ret = OB_INVALID_ARGUMENT;
+        } else if (seconds < 0) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          sync_interval_is_set = true;
+          sync_interval_value = seconds;
+        }
+      } else if (last_variable == "SYNC_MODE") {
+        if (new_parser_name == "IMMEDIATE") {
+          sync_mode_is_set = true;
+          sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_IMMEDIATE;
+          sync_interval_value = 0;
+        } else if (new_parser_name == "MANUAL") {
+          sync_mode_is_set = true;
+          sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_MANUAL;
+          sync_interval_value = 0;
+        } else if (new_parser_name == "ASYNC") {
+          sync_mode_is_set = true;
+          async_is_set = true;
+          sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_NUMERIC;
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+        }
+      } else if (last_variable == "DIM") {
+        if (parser_value > 0 && parser_value <= 4096) {
+          dim_is_set = true;
+          dim_value = parser_value;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index dim is");
+        }
+      } else if (last_variable == "PRUNE") {
+        if (! (0 == parser_value || 1 == parser_value)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of sparse vector index prune is");
+        } else {
+          prune_is_set = true;
+          prune_value = parser_value;
+        }
+      } else if (last_variable == "REFINE") {
+        if (! (0 == parser_value || 1 == parser_value)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of sparse vector index refine is");
+        } else {
+          refine_is_set = true;
+          refine_value = parser_value;
+        }
+      } else if (last_variable == "DROP_RATIO_BUILD") {
+        int err = 0;
+        char *endptr = NULL;
+        double out_val = ObCharset::strntod(new_parser_name.ptr(), new_parser_name.length(), &endptr, &err);
+        if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
+          ret = OB_DATA_OUT_OF_RANGE;
+        } else if (out_val < 0 || out_val > 0.9 ) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_build is");
+        } else {
+          drop_ratio_build_is_set = true;
+          drop_ratio_build = out_val;
+        }
+      } else if (last_variable == "DROP_RATIO_SEARCH") {
+        int err = 0;
+        char *endptr = NULL;
+        double out_val = ObCharset::strntod(new_parser_name.ptr(), new_parser_name.length(), &endptr, &err);
+        if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
+          ret = OB_DATA_OUT_OF_RANGE;
+        } else if (out_val < 0 || out_val > 0.9 ) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_search is");
+        } else {
+          drop_ratio_search_is_set = true;
+          drop_ratio_search = out_val;
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_search is");
       }
     }
 

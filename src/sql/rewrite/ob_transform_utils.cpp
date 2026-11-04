@@ -10899,7 +10899,6 @@ int ObTransformUtils::check_is_json_constraint(ObTransformerCtx *ctx,
 {
   INIT_SUCC(ret);
   TableItem *table = NULL;
-  const ParseNode *node = NULL;
   const share::schema::ObTableSchema *table_schema = NULL;
   is_json = false;
 
@@ -10937,25 +10936,7 @@ int ObTransformUtils::check_is_json_constraint(ObTransformerCtx *ctx,
     ret = OB_TABLE_NOT_EXIST;
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (ObTableSchema::const_constraint_iterator iter = table_schema->constraint_begin(); 
-          OB_SUCC(ret) && iter != table_schema->constraint_end() && !is_json; iter ++) {
-      const ObConstraint* ptr_constrain = *iter;
-      if (OB_ISNULL(ptr_constrain)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(ptr_constrain->get_check_expr_str().ptr())) {
-      } else if (OB_FAIL(ObRawExprUtils::parse_bool_expr_node_from_str(
-          ptr_constrain->get_check_expr_str(), *(ctx->allocator_), node))) {
-      } else if (OB_ISNULL(node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (node->type_ == T_FUN_SYS_IS_JSON
-                  && ptr_constrain->get_column_cnt() > 0
-                  && col_item.column_id_ == *(ptr_constrain->cst_col_begin())) {
-        is_json = true;
-      }
-    }
   }
-          
   return ret;
 }
 

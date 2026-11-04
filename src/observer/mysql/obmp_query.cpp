@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "rust/config.h"
+#include "rust/sql_parser.h"
 #include "observer/ob_server_runtime_access.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_query.h"
@@ -115,7 +116,7 @@ int ObMPQuery::process()
         bool force_sync_resp = false;
         need_response_error = false;
         ObParser parser(THIS_WORKER.get_sql_arena_allocator(),
-                        session.get_sql_mode(), session.get_charsets4parser());
+                        session.get_sql_mode());
         //For performance optimization, reduce the array length to lower the construction and destruction overhead of unused elements
         ObSEArray<ObString, 1> queries;
         ObMPParseStat parse_stat;
@@ -132,10 +133,8 @@ int ObMPQuery::process()
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (OB_FAIL(parser.split_multiple_stmt(sql_, queries, parse_stat))) {
-          // Enter this branch, indicating that push_back failed due to OOM, delegate the outer code to return an error code
-          // and after entering this branch, the connection should be terminated
           need_response_error = true;
-          if (OB_ERR_PARSE_SQL == ret) {
+          if (OB_ERR_PARSE_SQL == ret || OB_SIZE_OVERFLOW == ret) {
             need_disconnect = false;
           }
         } else if (OB_UNLIKELY(queries.count() <= 0)) {
@@ -527,25 +526,11 @@ void ObMPQuery::check_is_trans_ctrl_cmd(const ObString &sql,
                                         bool &is_trans_ctrl_cmd,
                                         stmt::StmtType &stmt_type)
 {
-  is_trans_ctrl_cmd = false;
-  const uint32_t cmd_len = sql.length();
-  if (5 <= cmd_len && cmd_len <=8) {
-    if (cmd_len == 5) {
-      if (0 == sql.case_compare("begin")) {
-        is_trans_ctrl_cmd = true;
-        stmt_type = stmt::T_START_TRANS;
-      }
-    } else if (cmd_len == 6) {
-      if (0 == sql.case_compare("commit")) {
-        is_trans_ctrl_cmd = true;
-        stmt_type = stmt::T_END_TRANS;
-      }
-    } else if (cmd_len == 8) {
-      if (0 == sql.case_compare("rollback")) {
-        is_trans_ctrl_cmd = true;
-        stmt_type = stmt::T_END_TRANS;
-      }
-    }
+  const auto command = peg::transaction_command(rust::Slice<const uint8_t>(
+      reinterpret_cast<const uint8_t *>(sql.ptr()), sql.length()));
+  is_trans_ctrl_cmd = command != peg::TransactionCommand::None;
+  if (is_trans_ctrl_cmd) {
+    stmt_type = command == peg::TransactionCommand::Begin ? stmt::T_START_TRANS : stmt::T_END_TRANS;
   }
 }
 
@@ -564,13 +549,10 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
   bool need_response_error = true;
   const ObString &sql = ctx_.multi_stmt_item_.get_sql();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
-  bool is_rollback = false;
-  bool is_commit = false;
-  if (0 == sql.case_compare("commit")) {
-    is_commit = true;
-  } else if (0 == sql.case_compare("rollback")) {
-    is_rollback = true;
-  }
+  const auto command = peg::transaction_command(rust::Slice<const uint8_t>(
+      reinterpret_cast<const uint8_t *>(sql.ptr()), sql.length()));
+  const bool is_rollback = command == peg::TransactionCommand::Rollback;
+  const bool is_commit = command == peg::TransactionCommand::Commit;
   single_process_timestamp_ = ObTimeUtility::current_time();
   /* !!!
    * Note that req_timeinfo_guard must be placed before result

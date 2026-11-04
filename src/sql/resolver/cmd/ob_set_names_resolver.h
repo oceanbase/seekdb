@@ -29,7 +29,7 @@ public:
   explicit ObSetNamesResolver(ObResolverParams &params);
   virtual ~ObSetNamesResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSetNamesResolver);
 };

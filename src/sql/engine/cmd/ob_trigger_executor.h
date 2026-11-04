@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_TRIGGER_EXECUTOR_H_
 
 #include "lib/container/ob_vector.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "share/statement/ob_stmt_type.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/ob_rpc_struct.h"

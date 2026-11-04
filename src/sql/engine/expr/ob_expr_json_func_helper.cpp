@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "rust/config.h"
 #include "ob_expr_json_func_helper.h"
 #include "share/ob_json_access_utils.h"
@@ -1393,17 +1394,16 @@ int ObJsonExprHelper::get_sql_scalar_type(
   ObLengthSemantics& length_semantics)
 {
   int ret = OB_SUCCESS;
-  ParseNode parse_node;
-  parse_node.value_ = origin;
+  CastTypeDescriptor type_descriptor(origin);
 
-  scalar_type = static_cast<ObObjType>(parse_node.int16_values_[0]);
-  scalar_len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+  scalar_type = static_cast<ObObjType>(type_descriptor.type());
+  scalar_len = type_descriptor.length();
 
   if (ob_is_string_tc(scalar_type) && OB_FAIL(ObJsonUtil::get_accuracy_internal(
     accuracy, ctx, scalar_type, origin, length_semantics))) {
   } else if (ob_is_number_or_decimal_int_tc(scalar_type)) {
-    precision = parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX];
-    scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+    precision = type_descriptor.precision();
+    scale = type_descriptor.scale();
     
     if (ObNumberType == scalar_type && is_decimal_int_accuracy_valid(precision, scale)) {
       bool enable_decimalint = false;
@@ -1430,21 +1430,20 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
     const ObObj &param = param_type2.get_param();
-    ParseNode parse_node;
-    parse_node.value_ = param.get_int();
-    ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-    dst_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
+    CastTypeDescriptor type_descriptor(param.get_int());
+    ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
+    dst_type.set_collation_type(static_cast<ObCollationType>(type_descriptor.collation()));
     dst_type.set_type(obj_type);
     if (ob_is_string_type(obj_type)) {
       // cast(x as char(10)) or cast(x as binary(10))
-      dst_type.set_full_length(parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX],
+      dst_type.set_full_length(type_descriptor.length(),
                                param_type2.get_accuracy().get_length_semantics());
     } else if (ObFloatType == dst_type.get_type()) {
       // Compatible with mysql. If the precision p is not specified, produces a result of type FLOAT. 
       // If p is provided and 0 <= < p <= 24, the result is of type FLOAT. If 25 <= p <= 53, 
       // the result is of type DOUBLE. If p < 0 or p > 53, an error is returned
       // however, ob use -1 as default precision, so it is a valid value
-      ObPrecision float_precision = parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX];
+      ObPrecision float_precision = type_descriptor.precision();
       if (float_precision < -1 || float_precision > OB_MAX_DOUBLE_FLOAT_PRECISION) {
         ret = OB_ERR_TOO_BIG_PRECISION;
         LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, float_precision, "CAST", OB_MAX_DOUBLE_FLOAT_PRECISION);
@@ -1454,12 +1453,12 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
         dst_type.set_type(ObDoubleType);
       }
       dst_type.set_precision(-1);
-      dst_type.set_scale(parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX]);
+      dst_type.set_scale(type_descriptor.scale());
     } else if (ObJsonType == dst_type.get_type()) {
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
-      dst_type.set_precision(parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX]);
-      dst_type.set_scale(parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX]);
+      dst_type.set_precision(type_descriptor.precision());
+      dst_type.set_scale(type_descriptor.scale());
       if (ObNumberType == dst_type.get_type()
           && is_decimal_int_accuracy_valid(dst_type.get_precision(), dst_type.get_scale())) {
         bool enable_decimalint = false;
@@ -1743,10 +1742,9 @@ int ObJsonExprHelper::parse_res_type(ObExprResType& type1,
 int ObJsonExprHelper::eval_and_check_res_type(int64_t value, ObObjType& type, int32_t& dst_len)
 {
   INIT_SUCC(ret);
-  ParseNode node;
-  node.value_ = value;
-  ObObjType dst_type = static_cast<ObObjType>(node.int16_values_[0]);
-  dst_len = node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+  CastTypeDescriptor type_descriptor(value);
+  ObObjType dst_type = static_cast<ObObjType>(type_descriptor.type());
+  dst_len = type_descriptor.length();
   if (dst_type != ObVarcharType 
       && dst_type != ObLongTextType 
       && dst_type != ObJsonType) {
