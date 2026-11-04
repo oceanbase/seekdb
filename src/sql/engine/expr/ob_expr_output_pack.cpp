@@ -361,6 +361,10 @@ int ObExprOutputPack::build_row_values(
           }
         }
       }
+      if (OB_SUCC(ret) && obj.is_ext()
+          && OB_FAIL(ObSqlUdtUtils::convert_pl_composite_for_client(obj, alloc, ctx.exec_ctx_))) {
+        // PL composite cells are sent to the client as one JSON text cell
+      }
       if (OB_SUCC(ret)) {
         if (ob_is_string_tc(obj.get_type()) && CS_TYPE_INVALID != obj.get_collation_type()) {
           OZ(convert_string_value_charset(obj, alloc, *session));
