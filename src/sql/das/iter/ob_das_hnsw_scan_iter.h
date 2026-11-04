@@ -350,6 +350,8 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 
 private:
+  friend class TestHnswPrefilterRowCount;
+
   int reuse_pre_filter_by_type();
   int build_rowkey_vid_range();
   int init_rel_map(ObPluginVectorIndexAdaptor* adaptor);

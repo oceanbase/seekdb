@@ -1512,29 +1512,31 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
               if (OB_UNLIKELY(OB_ITER_END != ret)) {
               }
               index_end = true;
-            } else if (go_brute_force_ && add_brute && brute_cnt < MAX_HNSW_BRUTE_FORCE_SIZE) {
-              vids[brute_cnt] = vid;
-              ++brute_cnt;
-            } else if (ada_ctx->is_range_prefilter()) {
-              is_pre_filter_end = true;
-              go_brute_force_ = false;
             } else {
-              // brute_cnt + batch_row_count already > MAX_HNSW_BRUTE_FORCE_SIZE
-              // do not choose brue force, just add vids to bitmap
-              if (go_brute_force_) {
+              ++adaptive_ctx_.pre_scan_row_cnt_;
+              if (go_brute_force_ && add_brute && brute_cnt < MAX_HNSW_BRUTE_FORCE_SIZE) {
+                vids[brute_cnt] = vid;
+                ++brute_cnt;
+              } else if (ada_ctx->is_range_prefilter()) {
+                is_pre_filter_end = true;
                 go_brute_force_ = false;
-                lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
-                for (int j = 0; OB_SUCC(ret) && j < brute_cnt; ++j) {
-                  if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vids[j]))) {
+              } else {
+                // brute_cnt + batch_row_count already > MAX_HNSW_BRUTE_FORCE_SIZE
+                // do not choose brue force, just add vids to bitmap
+                if (go_brute_force_) {
+                  go_brute_force_ = false;
+                  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
+                  for (int j = 0; OB_SUCC(ret) && j < brute_cnt; ++j) {
+                    if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vids[j]))) {
+                    }
                   }
                 }
-              }
-              if (OB_FAIL(ret)) {
-              } else if (OB_FAIL(adaptor->add_extra_valid_vid(ada_ctx, vid))) {
+                if (OB_FAIL(ret)) {
+                } else if (OB_FAIL(adaptor->add_extra_valid_vid(ada_ctx, vid))) {
+                }
               }
             }
           }
-          adaptive_ctx_.pre_scan_row_cnt_ += batch_row_count;
         } else {
           rowkey_vid_iter_->clear_evaluated_flag();
           int64_t scan_row_cnt = 0;
@@ -1816,12 +1818,14 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
         if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
           ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
           index_end = true;
-        } else if (OB_FAIL(get_rowkey(*ada_ctx->get_tmp_allocator(), rowkey))) {
-        } else if (OB_FAIL(ObDasVecScanUtils::set_lookup_key(*rowkey, rowkey_vid_scan_param_, rowkey_vid_ctdef->ref_table_id_))) {
-        } else if (if_add_relevance && OB_FAIL(get_relevance(vec_op_alloc_, relevance_record))) {
+        } else {
+          ++adaptive_ctx_.pre_scan_row_cnt_;
+          if (OB_FAIL(get_rowkey(*ada_ctx->get_tmp_allocator(), rowkey))) {
+          } else if (OB_FAIL(ObDasVecScanUtils::set_lookup_key(*rowkey, rowkey_vid_scan_param_, rowkey_vid_ctdef->ref_table_id_))) {
+          } else if (if_add_relevance && OB_FAIL(get_relevance(vec_op_alloc_, relevance_record))) {
+          }
         }
       }
-      adaptive_ctx_.pre_scan_row_cnt_ += batch_row_count;
     } else {
       int64_t scan_row_cnt = 0;
       if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(scan_row_cnt, batch_row_count))) {

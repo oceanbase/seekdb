@@ -182,6 +182,14 @@ cc_library(
     visibility = ["//src/observer:__pkg__"],
 )
 
+cc_library(
+    name = "hnsw_prefilter_test_headers",
+    testonly = True,
+    hdrs = ["das/iter/ob_das_hnsw_scan_iter.h"],
+    deps = [":sql_runtime_internal_headers"],
+    visibility = ["//unittest/sql:__pkg__"],
+)
+
 # Private means private to the SQL module, not private to one Unity action.
 # Submodule header owners are visible only through this SQL-internal seam.
 cc_library(
