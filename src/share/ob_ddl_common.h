@@ -626,6 +626,27 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+  /**
+   * @brief Escape the backticks of an identifier so it can be embedded in a
+   *        backtick-quoted SQL fragment.
+   *
+   * DDL statements quote identifiers with backticks.  An identifier that itself
+   * contains a backtick would terminate the quoted name early and produce
+   * malformed SQL, so every backtick of the identifier is doubled.
+   *
+   * This helper lives in Share on purpose: shared DDL code needs it, and Share
+   * must not depend on the upper SQL module.  See the module layering rules in
+   * tools/module_check/module_layers.conf.
+   *
+   * @param allocator allocator used for the escaped copy
+   * @param src       the raw identifier
+   * @param dst       receives the escaped identifier; aliases @p src when no escaping is needed
+   * @return OB_SUCCESS on success
+   */
+  static int escape_identifier_backticks(
+      common::ObIAllocator &allocator,
+      const ObString &src,
+      ObString &dst);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
