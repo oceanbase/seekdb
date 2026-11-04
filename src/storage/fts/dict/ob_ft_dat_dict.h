@@ -174,17 +174,6 @@ public:
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const;
 
-  // Map one character to its dictionary code.  Splitting the mapping out of
-  // match_with_hit lets the caller reuse a single lookup for every live prefix
-  // that consumes the same character.
-  int find_code(const ObString &single_word, ObFTWordCode &code, bool &found) const;
-
-  // Advance one step of the trie with an already resolved character code.
-  int step_with_code(const ObFTWordCode code,
-                     const int64_t char_len,
-                     const ObDATrieHit &last_hit,
-                     ObDATrieHit &hit) const;
-
 private:
   ObFTDAT *dat_;
 
