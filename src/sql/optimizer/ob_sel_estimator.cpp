@@ -400,7 +400,9 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
         ret = OB_SUCCESS;
       }
       if (OB_SUCC(ret)) {
-        if (helper.is_valid() && get_value) {
+        if (get_value && expr_value.is_null()) {
+          contain_null = true;
+        } else if (helper.is_valid() && get_value) {
           helper.set_compare_value(expr_value);
           if (OB_HASH_EXIST == obj_set.exist_refactored(expr_value)) {
             // duplicate value, do nothing
@@ -472,6 +474,118 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
         }
       } else { }//do nothing
     }
+  }
+  return ret;
+}
+
+int NotEqualSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
+                                          const OptSelectivityCtx &ctx,
+                                          const ObRawExpr &expr,
+                                          ObSelEstimator *&estimator)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  estimator = NULL;
+  const ObRawExpr *predicate = &expr;
+  const ObRawExpr *column = NULL;
+  const ObRawExpr *values = NULL;
+  bool is_negated = false;
+  bool is_valid = false;
+  bool is_in = false;
+  if (T_OP_NOT == predicate->get_expr_type() && 1 == predicate->get_param_count()) {
+    predicate = predicate->get_param_expr(0);
+    is_negated = true;
+  }
+  if (OB_ISNULL(predicate)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (2 == predicate->get_param_count()) {
+    ObItemType type = predicate->get_expr_type();
+    is_in = (!is_negated && T_OP_NOT_IN == type) || (is_negated && T_OP_IN == type);
+    bool is_ne = (!is_negated && T_OP_NE == type) || (is_negated && T_OP_EQ == type);
+    if (is_in || is_ne) {
+      column = predicate->get_param_expr(0);
+      values = predicate->get_param_expr(1);
+      if (OB_ISNULL(column) || OB_ISNULL(values)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        if (is_ne && values->is_column_ref_expr()) {
+          std::swap(column, values);
+        }
+        // Do not combine expressions, row comparisons or per-row values. In
+        // particular, NOT(a <=> b) has different NULL semantics from NOT IN.
+        is_valid = column->is_column_ref_expr();
+        if (is_in) {
+          is_valid &= T_OP_ROW == values->get_expr_type() && values->get_param_count() > 0;
+          for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < values->get_param_count(); ++i) {
+            if (OB_ISNULL(values->get_param_expr(i))) {
+              ret = OB_ERR_UNEXPECTED;
+            } else {
+              is_valid = values->get_param_expr(i)->is_static_scalar_const_expr();
+            }
+          }
+        } else {
+          is_valid &= values->is_static_scalar_const_expr();
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && is_valid) {
+    NotEqualSelEstimator *not_equal_estimator = NULL;
+    if (OB_FAIL(factory.create_estimator_inner(not_equal_estimator))) {
+    } else {
+      not_equal_estimator->column_expr_ = column;
+      not_equal_estimator->eigen_expr_ = column;
+      if (is_in) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < values->get_param_count(); ++i) {
+          if (OB_FAIL(not_equal_estimator->excluded_values_.push_back(
+                  const_cast<ObRawExpr *>(values->get_param_expr(i))))) {
+          }
+        }
+      } else if (OB_FAIL(not_equal_estimator->excluded_values_.push_back(const_cast<ObRawExpr *>(values)))) {
+      }
+      if (OB_SUCC(ret)) {
+        estimator = not_equal_estimator;
+      }
+    }
+  }
+  return ret;
+}
+
+int NotEqualSelEstimator::merge(const ObSelEstimator &other, bool &is_success)
+{
+  int ret = OB_SUCCESS;
+  is_success = false;
+  if (get_type() == other.get_type()) {
+    const NotEqualSelEstimator &not_equal = static_cast<const NotEqualSelEstimator &>(other);
+    if (column_expr_ == not_equal.column_expr_) {
+      if (OB_FAIL(append(excluded_values_, not_equal.excluded_values_))) {
+      } else {
+        is_success = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int NotEqualSelEstimator::get_sel(const OptTableMetas &table_metas,
+                                 const OptSelectivityCtx &ctx,
+                                 double &selectivity,
+                                 ObIArray<ObExprSelPair> &all_predicate_sel)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(all_predicate_sel);
+  ObOpRawExpr row(ctx.get_allocator());
+  ObOpRawExpr not_in(ctx.get_allocator());
+  row.set_expr_type(T_OP_ROW);
+  not_in.set_expr_type(T_OP_NOT_IN);
+  if (OB_ISNULL(column_expr_) || OB_UNLIKELY(excluded_values_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(row.set_param_exprs(excluded_values_))) {
+  } else if (OB_FAIL(not_in.set_param_exprs(const_cast<ObRawExpr *>(column_expr_), &row))) {
+  } else {
+    // This temporary expression is only used for statistics, never execution.
+    // Reuse NOT IN's histogram, duplicate-value and NULL handling.
+    ret = ObInSelEstimator::get_in_sel(table_metas, ctx, not_in, selectivity);
   }
   return ret;
 }
@@ -2656,6 +2770,7 @@ int ObSelEstimatorFactory::create_estimator(const OptSelectivityCtx &ctx,
     ObAggSelEstimator::create_estimator,
     ObConstSelEstimator::create_estimator,
     ObColumnSelEstimator::create_estimator,
+    NotEqualSelEstimator::create_estimator,
     ObEqualSelEstimator::create_estimator,
     ObLikeSelEstimator::create_estimator,
     ObBoolOpSelEstimator::create_estimator,
