@@ -19,6 +19,7 @@
 #include "ob_mysql_result_set.h"
 #include "query/protocol/ob_mysql_protocol_util.h"
 #include "observer/ob_server.h"
+#include "sql/engine/expr/pl_composite_client_output.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::observer;
@@ -27,6 +28,7 @@ using namespace oceanbase::obmysql;
 int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
 {
   int ret = OB_SUCCESS;
+  const bool composite_text = sql::PlCompositeClientOutput::needs_conversion(field.type_.get_meta());
   mfield.dname_ = field.dname_;
   mfield.tname_ = field.tname_;
   mfield.org_tname_ = field.org_tname_;
@@ -45,7 +47,14 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
     ObScale decimals = mfield.accuracy_.get_scale();
     ObPrecision pre = mfield.accuracy_.get_precision();
     // TIMESTAMP, UNSIGNED are directly mapped through map
-    ret = ObSMUtils::get_mysql_type(field.type_.get_type(), mfield.type_, mfield.flags_, decimals);
+    ret = ObSMUtils::get_mysql_type(composite_text ? ObVarcharType : field.type_.get_type(),
+                                   mfield.type_, mfield.flags_, decimals);
+    if (composite_text) {
+      const ObCollationType collation = static_cast<ObCollationType>(field.charsetnr_);
+      mfield.charsetnr_ = ObCharset::is_valid_collation(collation) && CS_TYPE_BINARY != collation
+          ? collation : CS_TYPE_UTF8MB4_BIN;
+      mfield.length_ = OB_MAX_LONGTEXT_LENGTH;
+    }
 
     mfield.type_owner_ = field.type_owner_;
     mfield.type_name_ = field.type_name_;
@@ -56,7 +65,7 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
     mfield.accuracy_.set_scale(decimals);
     mfield.inout_mode_ = field.inout_mode_;
     if (OB_SUCC(ret)
-        && ObExtendType == field.type_.get_type() && mfield.type_name_.empty()) {
+        && !composite_text && ObExtendType == field.type_.get_type() && mfield.type_name_.empty()) {
       // anonymous collection
       uint16_t flags;
       ObScale num_decimals;
