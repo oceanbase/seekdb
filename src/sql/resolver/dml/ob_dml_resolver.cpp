@@ -5319,7 +5319,8 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           // find real table id
           for (int64_t i = 0; OB_SUCC(ret) && table_id == OB_INVALID_ID && i < stmt->get_column_size(); ++i) {
             ColumnItem &column_item = stmt->get_column_items().at(i);
-            if (column_item.column_id_ == column_id) {
+            if (column_item.table_id_ == ref_col_expr.get_table_id()
+                && column_item.column_id_ == column_id) {
               table_id = column_item.base_tid_;
             }
           }
@@ -5344,7 +5345,9 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid
+          && (tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT
+              || is_descending_direction(stmt->get_order_item(0).order_type_))) {
         stmt->set_has_vec_approx(true);
       }
       if (OB_SUCC(ret) && !has_const) {

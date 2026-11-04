@@ -516,6 +516,10 @@ int ObDASHNSWScanIter::save_distance_expr_result(ObNewRow *row)
       dis_value = row->get_cell(0).get_float();
     }
     if (OB_SUCC(ret)) {
+      // The IP index stores negative dot product as distance, but INNER_PRODUCT returns dot product.
+      if (distance_calc_->type_ == T_FUN_SYS_INNER_PRODUCT && !(is_hybrid_ && is_hnsw_bq())) {
+        dis_value = -dis_value;
+      }
       distance.set_double(dis_value);
       eval_info.evaluated_ = true;
       eval_info.projected_ = true;
@@ -664,6 +668,9 @@ int ObDASHNSWScanIter::save_distance_expr_result(ObNewRow *row, int64_t size)
       }
 
       if (OB_SUCC(ret)) {
+        if (distance_calc_->type_ == T_FUN_SYS_INNER_PRODUCT && !(is_hybrid_ && is_hnsw_bq())) {
+          dis_value = -dis_value;
+        }
         ObDatum& wr_datum = distance_calc_->locate_datum_for_write(*sort_rtdef_->eval_ctx_);
         wr_datum.set_double(dis_value);
 
