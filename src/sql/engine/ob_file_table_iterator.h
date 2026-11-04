@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_OB_FILE_TABLE_ITERATOR_H_
 #define OCEANBASE_SQL_ENGINE_OB_FILE_TABLE_ITERATOR_H_
 
-#include "sql/engine/ob_i_row_store_iterator.h"
+#include "common/row/ob_row_iterator.h"
 #include "sql/engine/expr/ob_expr_file_sql/ob_csv_parser.h"
 #include "sql/engine/expr/ob_expr_file_sql/ob_file_reader.h"
 #include "lib/container/ob_se_array.h"
@@ -28,7 +28,7 @@ namespace oceanbase
 namespace sql
 {
 
-class ObFileTableIterator : public ObIRowStoreIterator
+class ObFileTableIterator : public common::ObNewRowIterator
 {
 public:
   ObFileTableIterator(common::ObIAllocator& alloc);
@@ -40,7 +40,7 @@ public:
            common::ObIAllocator& allocator);
 
   // Iterator interface
-  virtual int get_next_row(const common::ObNewRow*& row);
+  virtual int get_next_row(common::ObNewRow*& row) override;
   virtual void reset();
   virtual void reuse();
   virtual void close();

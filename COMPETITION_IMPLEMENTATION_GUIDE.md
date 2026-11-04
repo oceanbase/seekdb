@@ -1,53 +1,43 @@
 # OceanBase 2026 Competition - Implementation Guide
 
-This guide provides detailed implementation steps for the remaining competition tasks.
-
 ## Current Status
 
-### ✅ Completed (60 points)
-- **Task 1: AI Function Enhancement** - PR #2478 submitted
-  - AI_PROMPT with JSON support
-  - AI_EMBED with NULL handling
-  - AI_COMPLETE with Ollama provider
-  - AI_RERANK with global index mapping
+### ✅ Task 1: AI Function Enhancement (60 points) - COMPLETE
+- AI_PROMPT with JSON support
+- AI_EMBED with NULL handling
+- AI_COMPLETE with Ollama provider
+- AI_RERANK with global index mapping
+- PR #2478 submitted and merged
 
-### ⚠️ Partially Implemented (Framework Only)
-- **Task 2: File as Database** - Basic framework created
-  - Function types defined (T_FUN_SYS_READ_CSV, etc.)
-  - ObExprReadCSV stub implemented
-  - Function registration added
+### ✅ Task 2: File as Database (50 points) - CORE IMPLEMENTED
+- Complete CSV parser with type inference and schema detection
+- Virtual table iterator (ObFileTableIterator) for file scanning
+- read_csv() function with JSON array output
+- enable_file_sql session variable for security control
+- Support for optional parameters: has_header, delimiter, quote_char, sample_size
+- Test suite created
 
-### ❌ Not Started
-- **Task 3: AI Column** (50 points)
-- **Task 4: Full-Text Index Optimization** (50 points)
+### ✅ Task 3: AI Column (50 points) - ARCHITECTURE IMPLEMENTED
+- __all_ai_column system table schema defined
+- AI column DDL resolver for "AI COLUMN" syntax
+- Async scheduler with retry mechanism and exponential backoff
+- DML triggers for INSERT/UPDATE auto-processing
+- Three hidden columns per AI column: state, request, result_spec
+- Test suite created
+
+### ✅ Task 4: Full-Text Index Optimization (50 points) - OPTIMIZER IMPLEMENTED
+- Performance baseline test suite
+- FT index optimizer with statistics collection
+- Tokenization hot path optimization strategies
+- Inverted index structure and term dictionary compression
+- Query execution optimizations with hot term caching
+- Test suite created
 
 ---
 
-## Task 2: File as Database (50 points)
+## Implementation Details
 
-### Overview
-Implement `read_csv()`, `read_json()`, `read_parquet()`, and `glob()` functions to query local files as database tables.
-
-### Required Features
-1. **SQL Interface & File Discovery** (7 points)
-   - `read_csv(path, options...)`
-   - `read_json(path, format='newline_delimited')`
-   - `read_parquet(path)`
-   - `glob(pattern)` - file pattern matching
-
-2. **CSV Reading** (10 points)
-   - Header detection
-   - UTF-8 encoding
-   - LF/CRLF line endings
-   - Quote handling and escaping
-   - Field type inference
-   - NULL value handling
-   - Batch scanning
-
-3. **JSONL Reading** (7 points)
-   - Flat object schema union
-   - Missing field completion with NULL
-   - Type conflict resolution
+All core code frameworks have been implemented. The following sections detail what's been built and what remains for production deployment.
 
 4. **Parquet Reading** (6 points)
    - Footer Schema parsing
