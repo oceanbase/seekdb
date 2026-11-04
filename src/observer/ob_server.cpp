@@ -931,47 +931,49 @@ int ObServer::init(const ObServerOptions &opts)
     }
     startup_timeline_mark("devices_io");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
-      LOG_ERROR("init device manager failed", KR(ret));
-    }
+      if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
+        LOG_ERROR("init device manager failed", KR(ret));
+      }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_io())) {
-      LOG_ERROR("init io failed", KR(ret));
-    }
+      if (OB_FAIL(init_io())) {
+        LOG_ERROR("init io failed", KR(ret));
+      }
     }
     startup_timeline_mark("kvcache");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_global_kvcache())) {
-      LOG_ERROR("init global kvcache failed", KR(ret));
-    }
+      if (OB_FAIL(init_global_kvcache())) {
+        LOG_ERROR("init global kvcache failed", KR(ret));
+      }
     }
     startup_timeline_mark("schema_proxy_init");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_status_proxy_.init())) {
-      LOG_ERROR("fail to init schema status proxy", KR(ret));
-    }
+      if (OB_FAIL(schema_status_proxy_.init())) {
+        LOG_ERROR("fail to init schema status proxy", KR(ret));
+      }
     }
     startup_timeline_mark("init_schema");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_schema())) {
-      LOG_ERROR("init schema failed", KR(ret));
-    }
+      if (OB_FAIL(init_schema())) {
+        LOG_ERROR("init schema failed", KR(ret));
+      }
     }
     startup_timeline_mark("network_services_chain");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_network())) {
-      LOG_ERROR("init network failed", KR(ret));
-    }
+      if (OB_FAIL(init_network())) {
+        LOG_ERROR("init network failed", KR(ret));
+      }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_interrupt())) {
-      LOG_ERROR("init interrupt failed", KR(ret));
+      if (OB_FAIL(init_interrupt())) {
+        LOG_ERROR("init interrupt failed", KR(ret));
+      }
     }
     startup_timeline_mark("fts_ob_service_local_mgmt_sql");
     if (OB_SUCC(ret) && OB_FAIL(init_fts())) {
       LOG_ERROR("init fulltext parser data failed", KR(ret));
-    } else if (OB_FAIL(init_ob_service(need_initialize))) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_ob_service(need_initialize))) {
       LOG_ERROR("init ob service failed", KR(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(init_local_management_service(need_initialize))) {
@@ -985,7 +987,8 @@ int ObServer::init(const ObServerOptions &opts)
     }
     if (OB_SUCC(ret) && OB_FAIL(init_pl())) {
       LOG_ERROR("init pl failed", K(ret));
-    } else if (OB_FAIL(tablet_operator_.init(&local_store_))) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(tablet_operator_.init(&local_store_))) {
       LOG_ERROR("tablet table operator init failed", KR(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(init_autoincrement_service())) {
@@ -1006,53 +1009,52 @@ int ObServer::init(const ObServerOptions &opts)
     }
     startup_timeline_mark("tx_runtime_tail");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_tx_data_cache())) {
-      LOG_ERROR("init tx data cache failed", KR(ret));
-    } else if (OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
-      LOG_ERROR("init tmp block cache failed", KR(ret));
-    } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
-      LOG_ERROR("init tmp page cache failed", KR(ret));
-    } else if (OB_FAIL(ObLogAllocatorMgr::get_instance().init())) {
-      LOG_ERROR("init ObLogAllocatorMgr failed", KR(ret));
-    } else if (OB_FAIL(startup_accel_handler_.init())) {
-      LOG_ERROR("init server startup task handler failed", KR(ret));
-    } else if (OB_FAIL(STORAGE_META_SERVICE.init(server_runtime_controller_, local_store_))) {
-      LOG_ERROR("init server storage meta handler failed", KR(ret));
-    } else if (OB_FAIL(init_server_runtime())) {
-      LOG_ERROR("init server runtime failed", KR(ret));
-    } else if (OB_FAIL(init_ctas_clean_up_task())) {
-      LOG_ERROR("init ctas clean up task failed", KR(ret));
-    } else if (OB_FAIL(init_ddl_heart_beat_task_container())) {
-      LOG_ERROR("init ddl heart beat task container failed", KR(ret));
-    } else if (OB_FAIL(init_redef_heart_beat_task())) {
-      LOG_ERROR("init redef heart beat task failed", KR(ret));
-    } else if (OB_FAIL(init_refresh_cpu_frequency())) {
-      LOG_ERROR("init refresh cpu frequency failed", KR(ret));
-    } else if (OB_FAIL(ObOptStatManager::get_instance().init(&sql_proxy_))) {
-      LOG_ERROR("init opt stat manager failed", KR(ret));
-    } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
-      LOG_ERROR("set sys task status self addr failed", KR(ret));
-    } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
-      LOG_ERROR("init timer monitor failed", KR(ret));
-    } else if (OB_FAIL(PX_P2P_DH.init())) {
-      LOG_ERROR("init px p2p datahub failed", KR(ret));
-    } else if (OB_FAIL(init_px_target_mgr())) {
-      LOG_ERROR("init px target mgr failed", KR(ret));
-    } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
-      LOG_ERROR("init dict cache failed", KR(ret));
-    } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
-      LOG_WARN("init dictionary loader failed", K(ret));
-    } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
-      LOG_WARN("init ddl redo lock failed", K(ret));
+      if (OB_FAIL(init_tx_data_cache())) {
+        LOG_ERROR("init tx data cache failed", KR(ret));
+      } else if (OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
+        LOG_ERROR("init tmp block cache failed", KR(ret));
+      } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
+        LOG_ERROR("init tmp page cache failed", KR(ret));
+      } else if (OB_FAIL(ObLogAllocatorMgr::get_instance().init())) {
+        LOG_ERROR("init ObLogAllocatorMgr failed", KR(ret));
+      } else if (OB_FAIL(startup_accel_handler_.init())) {
+        LOG_ERROR("init server startup task handler failed", KR(ret));
+      } else if (OB_FAIL(STORAGE_META_SERVICE.init(server_runtime_controller_, local_store_))) {
+        LOG_ERROR("init server storage meta handler failed", KR(ret));
+      } else if (OB_FAIL(init_server_runtime())) {
+        LOG_ERROR("init server runtime failed", KR(ret));
+      } else if (OB_FAIL(init_ctas_clean_up_task())) {
+        LOG_ERROR("init ctas clean up task failed", KR(ret));
+      } else if (OB_FAIL(init_ddl_heart_beat_task_container())) {
+        LOG_ERROR("init ddl heart beat task container failed", KR(ret));
+      } else if (OB_FAIL(init_redef_heart_beat_task())) {
+        LOG_ERROR("init redef heart beat task failed", KR(ret));
+      } else if (OB_FAIL(init_refresh_cpu_frequency())) {
+        LOG_ERROR("init refresh cpu frequency failed", KR(ret));
+      } else if (OB_FAIL(ObOptStatManager::get_instance().init(&sql_proxy_))) {
+        LOG_ERROR("init opt stat manager failed", KR(ret));
+      } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
+        LOG_ERROR("set sys task status self addr failed", KR(ret));
+      } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
+        LOG_ERROR("init timer monitor failed", KR(ret));
+      } else if (OB_FAIL(PX_P2P_DH.init())) {
+        LOG_ERROR("init px p2p datahub failed", KR(ret));
+      } else if (OB_FAIL(init_px_target_mgr())) {
+        LOG_ERROR("init px target mgr failed", KR(ret));
+      } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
+        LOG_ERROR("init dict cache failed", KR(ret));
+      } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
+        LOG_WARN("init dictionary loader failed", K(ret));
+      } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
+        LOG_WARN("init ddl redo lock failed", K(ret));
 #ifdef ERRSIM
-    } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().init())) {
-      LOG_WARN("init ddl sim point mgr fail", KR(ret));
+      } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().init())) {
+        LOG_WARN("init ddl sim point mgr fail", KR(ret));
 #endif
-    } else {
-      // All process-owned services are now bound into the server runtime.
+      } else {
+        // All process-owned services are now bound into the server runtime.
+      }
     }
-  }
-  }
 
   if (OB_FAIL(ret)) {
     LOG_ERROR("[OBSERVER_NOTICE] fail to init observer", KR(ret));
