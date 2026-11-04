@@ -50,8 +50,126 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
   }
   return ret;
 }
+// ==========【粘贴这里！新增merge_range_predicates完整代码】==========
+static int merge_range_predicates(ObSEArray<ObRawExpr *, 4> &in_conds,
+                                  ObSEArray<ObRawExpr *, 4> &out_conds,
+                                  ObQueryCtx &query_ctx)
+{
+  int ret = OB_SUCCESS;
+  out_conds.reset();
+  ObExprFactory *factory = query_ctx.ctx->expr_factory_;
+  if (OB_ISNULL(factory)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr factory is null", K(ret));
+    return ret;
+  }
 
+  struct BestCond
+  {
+    ObRawExpr * col_;
+    ObExprOpType op_;
+    ObRawExpr * expr_;
+  };
+  ObSEArray<BestCond, 4> best_list;
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < in_conds.count(); ++i) {
+    ObRawExpr *e = in_conds.at(i);
+    if (OB_ISNULL(e)) {
+      continue;
+    }
+    // 跳过 ? 参数占位符
+    if (e->get_expr_type() == T_QUESTIONMARK) {
+      if (OB_FAIL(out_conds.push_back(e))) {
+        LOG_WARN("push questionmark expr fail", K(ret));
+      }
+      continue;
+    }
+    // 只处理 LT LE GT GE
+    if (e->get_expr_type() != T_OP_LT && e->get_expr_type() != T_OP_LE
+        && e->get_expr_type() != T_OP_GT && e->get_expr_type() != T_OP_GE) {
+      if (OB_FAIL(out_conds.push_back(e))) {
+        LOG_WARN("push non‑range expr fail", K(ret));
+      }
+      continue;
+    }
+
+    ObOpRawExpr *cmp_expr = static_cast<ObOpRawExpr*>(e);
+    if (cmp_expr->get_param_count() != 2) {
+      if (OB_FAIL(out_conds.push_back(e))) {
+        LOG_WARN("push expr fail", K(ret));
+      }
+      continue;
+    }
+    ObRawExpr *left = cmp_expr->get_param_expr(0);
+    ObRawExpr *right = cmp_expr->get_param_expr(1);
+    // 左是列，右必须是常量
+    if (!left->is_column_expr()) {
+      if (OB_FAIL(out_conds.push_back(e))) {
+        LOG_WARN("push expr fail", K(ret));
+      }
+      continue;
+    }
+    // 增加常量校验保护，防止裸强转崩溃
+    if (!right->is_const_raw_expr()) {
+      if (OB_FAIL(out_conds.push_back(e))) {
+        LOG_WARN("push non‑const expr fail", K(ret));
+      }
+      continue;
+    }
+    ObConstRawExpr * const_expr = static_cast<ObConstRawExpr*>(right);
+    const ObObj &val = const_expr->get_value();
+
+    bool found = false;
+    for (int64_t j = 0; j < best_list.count(); ++j) {
+      BestCond &bc = best_list.at(j);
+      if (bc.col_ == left && bc.op_ == static_cast<ObExprOpType>(e->get_expr_type())) {
+        found = true;
+        ObOpRawExpr * old_cmp = static_cast<ObOpRawExpr*>(bc.expr_);
+        ObConstRawExpr * old_const = static_cast<ObConstRawExpr*>(old_cmp->get_param_expr(1));
+        const ObObj &old_val = old_const->get_value();
+        bool replace = false;
+        if (e->get_expr_type() == T_OP_LT || e->get_expr_type() == T_OP_LE) {
+          if (val < old_val) {
+            replace = true;
+          }
+        } else {
+          if (val > old_val) {
+            replace = true;
+          }
+        }
+        if (replace) {
+          bc.expr_ = e;
+        }
+        break;
+      }
+    }
+    if (!found) {
+      BestCond new_bc;
+      new_bc.col_ = left;
+      new_bc.op_ = static_cast<ObExprOpType>(e->get_expr_type());
+      new_bc.expr_ = e;
+      if (OB_FAIL(best_list.push_back(new_bc))) {
+        LOG_WARN("push best cond to list fail", K(ret));
+        break;
+      }
+    }
+  }
+
+  for (int64_t j = 0; OB_SUCC(ret) && j < best_list.count(); ++j) {
+    if (OB_FAIL(out_conds.push_back(best_list.at(j).expr_))) {
+      LOG_WARN("push final best cond fail", K(ret));
+    }
+  }
+
+  // 兜底：输出为空就原样返回输入，防止把条件全部删光
+  if (OB_SUCC(ret) && out_conds.empty()) {
+    if (OB_FAIL(out_conds.assign(in_conds))) {
+      LOG_WARN("assign back origin conds fail", K(ret));
+    }
+  }
+  return ret;
 }
+// ========== 新增函数到此结束 ===========
 
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                 ObDMLStmt *&stmt,
@@ -2789,6 +2907,24 @@ int ObTransformSimplifyExpr::recursive_pull_similar(ObDMLStmt *stmt, ObRawExpr* 
         (T_OP_AND == expr->get_expr_type() || T_OP_OR == expr->get_expr_type())) {
       bool pull_similar_happend = false;
       ObOpRawExpr *op_expr = static_cast<ObOpRawExpr*>(expr);
+      // ============【新增代码，只对AND做范围合并】============
+      if (T_OP_AND == expr->get_expr_type()) {
+        ObSEArray<ObRawExpr*,4> in_conds;
+        ObSEArray<ObRawExpr*,4> out_conds;
+        if (OB_FAIL(in_conds.assign(op_expr->get_param_exprs()))) {
+          LOG_WARN("assign and params failed", K(ret));
+        } else if (OB_FAIL(merge_range_predicates(in_conds, out_conds, *stmt->get_query_ctx()))) {
+          LOG_WARN("merge range predicates failed", K(ret));
+        } else if (out_conds.count() != op_expr->get_param_exprs().count()) {
+          // 条件数量发生变化，回写回AND表达式
+          trans_happened = true;
+          op_expr->get_param_exprs().reset();
+          if (OB_FAIL(append(op_expr->get_param_exprs(), out_conds))) {
+            LOG_WARN("append merged conds to and expr fail", K(ret));
+          }
+        }
+      }
+      // ==============新增代码结束=========================
       if (OB_FAIL(do_pull_similar(stmt, expr, op_expr->get_param_exprs(),
                                   expr->get_expr_type(),
                                   pull_similar_happend))) {
