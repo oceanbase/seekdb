@@ -70,3 +70,9 @@ Run the affected mysqltest cases when a change alters SQL or server behavior. Se
 6. Address review feedback and ensure the required compile and Farm checks pass.
 
 Small, focused pull requests are easier to review and merge. If an unrelated CI job fails, report the failure details to the reviewer rather than hiding or bypassing the check.
+
+## Competition Contribution
+
+This contribution is part of the OceanBase 2026 Database Competition.
+
+Team Verification: OB-P:4tJe3vGrKtiUDrxhw37Z-w
