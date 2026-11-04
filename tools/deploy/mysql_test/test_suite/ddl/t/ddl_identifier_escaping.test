@@ -1,0 +1,23 @@
+--disable_query_log
+--disable_warnings
+drop table if exists ddl_identifier_escaping;
+--enable_warnings
+create table ddl_identifier_escaping (
+  id int primary key,
+  ordinary int,
+  `tick``col` varchar(30),
+  `enum``col` enum('one','two'),
+  `set``col` set('x','y')
+);
+insert into ddl_identifier_escaping values (1,10,'alpha','one','x'),(2,20,'beta','two','x,y');
+create unique index idx_quoted on ddl_identifier_escaping(`tick``col`);
+create index idx_enum on ddl_identifier_escaping(`enum``col`);
+create index idx_set on ddl_identifier_escaping(`set``col`);
+create index idx_ordinary on ddl_identifier_escaping(ordinary);
+--enable_query_log
+select id, ordinary, `tick``col`, `enum``col`, `set``col` from ddl_identifier_escaping order by id;
+--error 1062
+insert into ddl_identifier_escaping values (3,30,'alpha','one','y');
+--disable_query_log
+drop table ddl_identifier_escaping;
+--enable_query_log

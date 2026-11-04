@@ -1,0 +1,6 @@
+select id, ordinary, `tick``col`, `enum``col`, `set``col` from ddl_identifier_escaping order by id;
+id	ordinary	tick`col	enum`col	set`col
+1	10	alpha	one	x
+2	20	beta	two	x,y
+insert into ddl_identifier_escaping values (3,30,'alpha','one','y');
+ERROR 23000: Duplicate entry 'alpha' for key 'idx_quoted'
