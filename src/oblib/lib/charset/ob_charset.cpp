@@ -571,9 +571,31 @@ int ObCharset::strcmpsp(ObCollationType collation_type,
                         bool cmp_endspace)
 {
   int result = 0;
-  if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
-    const ObCharsetInfo *cs = get_charset(collation_type);
+  // Hot path: the ObCharsetInfo of a collation is a process wide immutable
+  // struct once published in charset_arr_inited[], and the only checks that
+  // depend on the compared values are the null/length sanity checks. Reading
+  // the published pointer directly skips the get_charset() and
+  // is_argument_valid() -> get_charset_uninit() calls that used to run on
+  // every single comparison. Any collation that is not published yet (first
+  // use, unsupported or out of range) and any invalid argument still goes
+  // through the original path below, which initializes the struct and logs
+  // exactly as before.
+  const ObCharsetInfo *cs =
+      (collation_type > CS_TYPE_INVALID && collation_type < CS_TYPE_MAX)
+          ? charset_arr_inited[collation_type] : NULL;
+  if (OB_LIKELY(NULL != cs)
+      && OB_LIKELY(str1_len >= 0 && str2_len >= 0)
+      && OB_LIKELY(NULL != str1 || 0 == str1_len)
+      && OB_LIKELY(NULL != str2 || 0 == str2_len)) {
     result = cs->coll->strnncollsp(cs,
+                                reinterpret_cast<const unsigned char *>(str1),
+                                str1_len,
+                                reinterpret_cast<const unsigned char *>(str2),
+                                str2_len,
+                                cmp_endspace);
+  } else if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
+    const ObCharsetInfo *cs_info = get_charset(collation_type);
+    result = cs_info->coll->strnncollsp(cs_info,
                                 reinterpret_cast<const unsigned char *>(str1),
                                 str1_len,
                                 reinterpret_cast<const unsigned char *>(str2),

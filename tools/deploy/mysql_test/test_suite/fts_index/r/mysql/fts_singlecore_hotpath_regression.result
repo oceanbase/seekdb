@@ -1,0 +1,180 @@
+DROP TABLE IF EXISTS fts_sc_hotpath;
+DROP TABLE IF EXISTS fts_sc_hotpath_cmp;
+========= C1: tokenize json escaping (quote, backslash, slash, control) =========
+select tokenize('a"b\\c/d', 'beng');
+tokenize('a"b\\c/d', 'beng')
+[]
+select tokenize('真正的换行\n第二行', 'ik');
+tokenize('真正的换行\n第二行', 'ik')
+["第二行", "真正", "的", "换行"]
+select tokenize('真正的制表\t第二列', 'ik');
+tokenize('真正的制表\t第二列', 'ik')
+["第二列", "制表", "真正", "的"]
+select tokenize('中文"引号"\\反斜杠/斜杠🔥emoji', 'beng');
+tokenize('中文"引号"\\反斜杠/斜杠🔥emoji', 'beng')
+["斜杠🔥emoji", "引号", "反斜杠", "中文"]
+select tokenize('{"a": "b"}', 'beng');
+tokenize('{"a": "b"}', 'beng')
+[]
+select tokenize('C:\\path\\to\\file.txt', 'beng');
+tokenize('C:\\path\\to\\file.txt', 'beng')
+["txt", "file", "path"]
+select tokenize('http://example.com/a/b?c=1&d=2', 'beng');
+tokenize('http://example.com/a/b?c=1&d=2', 'beng')
+["example", "http"]
+select tokenize('"\\"/"', 'beng');
+tokenize('"\\"/"', 'beng')
+[]
+select tokenize('🔥数据库🚀优化😀😀😀 全文🔥索引 test', 'ik');
+tokenize('🔥数据库🚀优化😀😀😀 全文🔥索引 test', 'ik')
+["索引", "优化", "全文", "数据库", "test"]
+select tokenize('', 'ik');
+tokenize('', 'ik')
+[]
+select tokenize('   ', 'ik');
+tokenize('   ', 'ik')
+[]
+select tokenize('!!!???', 'ik');
+tokenize('!!!???', 'ik')
+[]
+========= C1: repeated tokens, mixed language, long text =========
+select tokenize('数据库数据库全文索引全文索引全文索引数据库', 'ik');
+tokenize('数据库数据库全文索引全文索引全文索引数据库', 'ik')
+["数据库", "全文索引"]
+select tokenize('the quick brown fox jumps over the lazy dog the end', 'beng');
+tokenize('the quick brown fox jumps over the lazy dog the end', 'beng')
+["lazy", "over", "end", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('优化 优化 数据库 优化 全文索引 数据库 优化', 'ik');
+tokenize('优化 优化 数据库 优化 全文索引 数据库 优化', 'ik')
+["优化", "数据库", "全文索引"]
+select tokenize('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，', 'ik');
+tokenize('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等�
+["环节", "能", "涉及", "据", "化", "优化", "性", "缩", "性能", "全文索引", "存", "全", "倒排", "引", "排", "压", "数据库", "分", "索", "文", "缓存", "优", "涉", "库", "分词", "及", "缓", "与", "节", "数", "环", "压缩", "等", "倒", "词"]
+select tokenize(concat('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，', 'Oracle database performance tuning 全文索引 分词器'), 'ik');
+tokenize(concat('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓�
+["performance", "倒排", "环节", "等", "分词", "涉及", "oracle", "缓存", "全文索引", "分词器", "压缩", "数据库", "tuning", "优化", "与", "性能", "database"]
+select tokenize('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，', 'ik');
+tokenize('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等�
+["环节", "能", "涉及", "据", "化", "优化", "性", "缩", "性能", "全文索引", "存", "全", "倒排", "引", "排", "压", "数据库", "分", "索", "文", "缓存", "优", "涉", "库", "分词", "及", "缓", "与", "节", "数", "环", "压缩", "等", "倒", "词"]
+========= C2: comparison semantics (collation, trailing space, null) =========
+select 'A' = 'a' collate utf8mb4_general_ci, 'A' = 'a' collate utf8mb4_bin, 'A' = 'a' collate utf8mb4_unicode_ci;
+'A' = 'a' collate utf8mb4_general_ci	'A' = 'a' collate utf8mb4_bin	'A' = 'a' collate utf8mb4_unicode_ci
+1	0	1
+select 'A' < 'a' collate utf8mb4_bin, 'a' < 'A' collate utf8mb4_bin;
+'A' < 'a' collate utf8mb4_bin	'a' < 'A' collate utf8mb4_bin
+1	0
+select 'a ' = 'a' collate utf8mb4_general_ci, 'a ' = 'a' collate utf8mb4_bin;
+'a ' = 'a' collate utf8mb4_general_ci	'a ' = 'a' collate utf8mb4_bin
+1	1
+select null <=> null, 'a' <=> null, null <=> 'a', 'a' <=> 'a';
+null <=> null	'a' <=> null	null <=> 'a'	'a' <=> 'a'
+1	0	0	1
+select strcmp('A' collate utf8mb4_general_ci, 'a' collate utf8mb4_general_ci), strcmp('a' collate utf8mb4_bin, 'A' collate utf8mb4_bin);
+strcmp('A' collate utf8mb4_general_ci, 'a' collate utf8mb4_general_ci)	strcmp('a' collate utf8mb4_bin, 'A' collate utf8mb4_bin)
+0	1
+select x'C328' = x'C3A9', x'C328' < x'C3A9', strcmp(x'C328', x'C3A9'), x'C328' = x'C328';
+x'C328' = x'C3A9'	x'C328' < x'C3A9'	strcmp(x'C328', x'C3A9')	x'C328' = x'C328'
+0	1	-1	1
+========= C2: comparator through table scans and aggregation =========
+create table fts_sc_hotpath_cmp(
+v varchar(32) collate utf8mb4_general_ci not null
+);
+insert into fts_sc_hotpath_cmp values ('alpha'),('Alpha'),('ALPHA'),('beta'),('Beta'),('gamma'),('gamma ');
+select count(*) from fts_sc_hotpath_cmp where v = 'alpha';
+count(*)
+3
+select count(*) from fts_sc_hotpath_cmp where v = 'alpha' collate utf8mb4_bin;
+count(*)
+1
+select count(*) from fts_sc_hotpath_cmp where v > 'beta';
+count(*)
+2
+select count(distinct v) from fts_sc_hotpath_cmp;
+count(distinct v)
+3
+select min(v), max(v) from fts_sc_hotpath_cmp;
+min(v)	max(v)
+alpha	gamma
+select n, count(*) from (select v as n from fts_sc_hotpath_cmp order by v, binary v) t group by n order by n;
+n	count(*)
+alpha	3
+beta	2
+gamma	2
+========= MATCH + LIMIT without order by: hit set and row order =========
+create table fts_sc_hotpath(
+id bigint auto_increment primary key,
+title varchar(128) not null,
+content text not null,
+fulltext key fts_sc_hp_cn(title, content) with parser ik PARSER_PROPERTIES=(ik_mode='smart')
+);
+insert into fts_sc_hotpath(title, content) values
+('数据库全文索引入门', '全文索引是数据库的核心能力，倒排索引支撑快速检索。'),
+('分词器概述', '分词器 tokenizer 把文本切分成词项，倒排索引由词项指向文档。'),
+('OceanBase 全文检索', 'OceanBase 数据库内置全文索引与分词器，检索稳定高效。'),
+('倒排索引原理', '倒排索引记录词项到文档列表的映射关系。'),
+('检索性能优化', '数据库检索性能取决于索引结构与分词器实现。'),
+('分词器与检索', '分词器质量直接影响全文检索的召回与排序。'),
+('稳定的核心', '分布式数据库需要稳定的全文索引实现。'),
+('性能审计报告', '性能审计发现检索延迟主要来自倒排索引扫描。'),
+('搜索引擎架构', '现代搜索引擎以倒排索引与分词器为基石。'),
+('数据库与大数据', '数据库与大数据平台共享检索与聚合技术。'),
+('全文索引进阶', '全文索引支持布尔模式、相关性排序与分词器扩展。'),
+('倒排索引压缩', '倒排索引的压缩编码显著降低存储成本。');
+select id from fts_sc_hotpath where match(title, content) against('倒排索引 tokenizer') limit 5;
+id
+2
+12
+4
+9
+8
+select id from fts_sc_hotpath where match(title, content) against('倒排索引 tokenizer') limit 20;
+id
+2
+12
+4
+9
+8
+1
+5
+select id from fts_sc_hotpath where match(title, content) against('倒排索引 tokenizer') limit 3 offset 2;
+id
+4
+9
+8
+select count(*) from fts_sc_hotpath where match(title, content) against('倒排索引 tokenizer');
+count(*)
+7
+select id from fts_sc_hotpath where match(title, content) against('全文索引') limit 4;
+id
+11
+1
+7
+3
+select id from fts_sc_hotpath where match(title, content) against('全文索引') order by id desc limit 3;
+id
+11
+7
+3
+select id from fts_sc_hotpath where match(title, content) against('不存在的词条') limit 5;
+id
+7
+12
+6
+1
+4
+========= rerun the hot blocks for run-to-run byte stability =========
+select tokenize('a"b\\c/d', 'beng');
+tokenize('a"b\\c/d', 'beng')
+[]
+select tokenize('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，', 'ik');
+tokenize('数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，数据库全文索引性能优化涉及分词、倒排、压缩与缓存等�
+["环节", "能", "涉及", "据", "化", "优化", "性", "缩", "性能", "全文索引", "存", "全", "倒排", "引", "排", "压", "数据库", "分", "索", "文", "缓存", "优", "涉", "库", "分词", "及", "缓", "与", "节", "数", "环", "压缩", "等", "倒", "词"]
+select id from fts_sc_hotpath where match(title, content) against('倒排索引 tokenizer') limit 5;
+id
+2
+12
+4
+9
+8
+DROP TABLE IF EXISTS fts_sc_hotpath;
+DROP TABLE IF EXISTS fts_sc_hotpath_cmp;
