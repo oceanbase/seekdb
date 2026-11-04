@@ -208,6 +208,18 @@ ERROR 0A000: space config not supported
 
 select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ik', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 6}, {"max_token_size": 10}]}]');
 ERROR 0A000: ik config not supported
+select tokenize('hello world', 'beng');
++---------------------------------+
+| tokenize('hello world', 'beng') |
++---------------------------------+
+| ["world", "hello"]              |
++---------------------------------+
+select tokenize('hello world', 'beng');
++---------------------------------+
+| tokenize('hello world', 'beng') |
++---------------------------------+
+| ["world", "hello"]              |
++---------------------------------+
 
 drop table if exists memo;
 drop database fts;

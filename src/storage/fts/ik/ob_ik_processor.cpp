@@ -31,17 +31,15 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                           const char *ch,
+                           const uint8_t char_len,
+                           const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
 
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  // the caller already fetched the current char, do not read it from ctx again
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
   }
   return ret;
 }
