@@ -5871,7 +5871,13 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    if (is_primary_idx
+        && vc_info.row_count_ > ObVecIdxExtraInfo::MAX_HNSW_PRE_FILTER_FULL_SCAN_ROWS
+        && vc_info.selectivity_ > ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_LARGE_TABLE) {
+      // Scanning a large primary table to build the pre-filter set is more expensive
+      // than probing the HNSW graph when the predicate retains many rows.
+      vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
+    } else if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
