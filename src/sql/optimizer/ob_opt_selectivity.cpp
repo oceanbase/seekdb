@@ -4022,6 +4022,19 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
       min_value = result;
       max_value = result;
     }
+  } else if (T_OP_ADD == expr->get_expr_type() ||
+             T_OP_MINUS == expr->get_expr_type() ||
+             T_OP_MUL == expr->get_expr_type() ||
+             T_OP_DIV == expr->get_expr_type() ||
+             T_OP_NEG == expr->get_expr_type() ||
+             T_OP_POS == expr->get_expr_type()) {
+    // The expression is a linear arithmetic function of a single column, such
+    // as `(c1 + 2)` or `((c1 + 0) * 1)`. Map the column range into the range of
+    // the expression instead of leaving it un-estimated.
+    bool is_valid = false;
+    if (OB_FAIL(SMART_CALL(calc_linear_expr_min_max(table_metas, ctx, expr,
+                                                   min_value, max_value, is_valid)))) {
+    }
   } else if (expr->get_param_count() < 1) {
     // do nothing
   } else if (T_FUN_SYS_CAST == expr->get_expr_type()) {
@@ -4137,6 +4150,163 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
                min_value.is_null() || max_value.is_null()) {
       min_value.set_min_value();
       max_value.set_max_value();
+    }
+  }
+  return ret;
+}
+
+int ObOptSelectivity::extract_linear_form(const OptSelectivityCtx &ctx,
+                                          const ObRawExpr *expr,
+                                          double &factor,
+                                          double &offset,
+                                          ObIArray<const ObColumnRefRawExpr *> &columns,
+                                          bool &is_valid)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!is_valid) {
+    // do nothing
+  } else if (expr->is_column_ref_expr()) {
+    factor = 1.0;
+    offset = 0.0;
+    if (OB_FAIL(columns.push_back(static_cast<const ObColumnRefRawExpr *>(expr)))) {
+    } else if (columns.count() > 1) {
+      // the expression is not a function of a single column
+      is_valid = false;
+    }
+  } else if (expr->is_static_scalar_const_expr()) {
+    bool succ = false;
+    factor = 0.0;
+    if (OB_FAIL(calc_const_numeric_value(ctx, expr, offset, succ))) {
+    } else if (!succ) {
+      is_valid = false;
+    }
+  } else if (T_OP_NEG == expr->get_expr_type() || T_OP_POS == expr->get_expr_type()) {
+    if (OB_UNLIKELY(expr->get_param_count() != 1)) {
+      is_valid = false;
+    } else if (OB_FAIL(SMART_CALL(extract_linear_form(ctx,
+                                                      expr->get_param_expr(0),
+                                                      factor,
+                                                      offset,
+                                                      columns,
+                                                      is_valid)))) {
+    } else if (!is_valid) {
+      // do nothing
+    } else if (T_OP_NEG == expr->get_expr_type()) {
+      factor = -factor;
+      offset = -offset;
+    }
+  } else if (T_OP_ADD == expr->get_expr_type() ||
+             T_OP_MINUS == expr->get_expr_type() ||
+             T_OP_MUL == expr->get_expr_type() ||
+             T_OP_DIV == expr->get_expr_type()) {
+    double left_factor = 0.0;
+    double left_offset = 0.0;
+    double right_factor = 0.0;
+    double right_offset = 0.0;
+    if (OB_UNLIKELY(expr->get_param_count() != 2)) {
+      is_valid = false;
+    } else if (OB_FAIL(SMART_CALL(extract_linear_form(ctx,
+                                                      expr->get_param_expr(0),
+                                                      left_factor,
+                                                      left_offset,
+                                                      columns,
+                                                      is_valid)))) {
+    } else if (!is_valid) {
+      // do nothing
+    } else if (OB_FAIL(SMART_CALL(extract_linear_form(ctx,
+                                                      expr->get_param_expr(1),
+                                                      right_factor,
+                                                      right_offset,
+                                                      columns,
+                                                      is_valid)))) {
+    } else if (!is_valid) {
+      // do nothing
+    } else if (T_OP_ADD == expr->get_expr_type()) {
+      factor = left_factor + right_factor;
+      offset = left_offset + right_offset;
+    } else if (T_OP_MINUS == expr->get_expr_type()) {
+      factor = left_factor - right_factor;
+      offset = left_offset - right_offset;
+    } else if (T_OP_MUL == expr->get_expr_type()) {
+      if (0.0 == right_factor) {
+        factor = left_factor * right_offset;
+        offset = left_offset * right_offset;
+      } else if (0.0 == left_factor) {
+        factor = right_factor * left_offset;
+        offset = right_offset * left_offset;
+      } else {
+        // the product of two column expressions is not a linear form
+        is_valid = false;
+      }
+    } else if (0.0 != right_factor) {
+      // the divisor references the column
+      is_valid = false;
+    } else if (right_offset > -OB_DOUBLE_EPSINON && right_offset < OB_DOUBLE_EPSINON) {
+      // division by zero is not a linear form
+      is_valid = false;
+    } else {
+      factor = left_factor / right_offset;
+      offset = left_offset / right_offset;
+    }
+  } else {
+    is_valid = false;
+  }
+  return ret;
+}
+
+int ObOptSelectivity::calc_linear_expr_min_max(const OptTableMetas &table_metas,
+                                               const OptSelectivityCtx &ctx,
+                                               const ObRawExpr *expr,
+                                               ObObj &min_value,
+                                               ObObj &max_value,
+                                               bool &is_valid)
+{
+  int ret = OB_SUCCESS;
+  is_valid = false;
+  ObSEArray<const ObColumnRefRawExpr *, 2> columns;
+  double factor = 0.0;
+  double offset = 0.0;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FALSE_IT(is_valid = true)) {
+  } else if (OB_FAIL(extract_linear_form(ctx, expr, factor, offset, columns, is_valid))) {
+  } else if (!is_valid || 1 != columns.count() || OB_ISNULL(columns.at(0))) {
+    is_valid = false;
+  } else {
+    const ObColumnRefRawExpr *column = columns.at(0);
+    ObObj column_min;
+    ObObj column_max;
+    double column_min_value = 0.0;
+    double column_max_value = 0.0;
+    if (OB_FAIL(get_column_min_max(table_metas, ctx, *column, column_min, column_max))) {
+    } else if (column_min.is_min_value() || column_min.is_max_value() || column_min.is_null() ||
+               column_max.is_min_value() || column_max.is_max_value() || column_max.is_null()) {
+      // no usable column statistics, keep the expression range unknown
+      is_valid = false;
+    } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&column_min, column_min_value))) {
+      is_valid = false;
+    } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&column_max, column_max_value))) {
+      is_valid = false;
+    } else {
+      const double lower = factor * column_min_value + offset;
+      const double upper = factor * column_max_value + offset;
+      ObObj lower_value;
+      ObObj upper_value;
+      lower_value.set_double(std::min(lower, upper));
+      upper_value.set_double(std::max(lower, upper));
+      // keep the same type as the expression so that the bounds can be
+      // compared with the constant of the predicate
+      if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, lower_value))) {
+        ret = OB_SUCCESS;
+      } else if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, upper_value))) {
+        ret = OB_SUCCESS;
+      } else {
+        min_value = lower_value;
+        max_value = upper_value;
+        is_valid = true;
+      }
     }
   }
   return ret;
