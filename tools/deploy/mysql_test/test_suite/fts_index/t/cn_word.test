@@ -99,6 +99,7 @@ select title from cn_word_table WHERE MATCH(text) AGAINST ('hello-world');
 select tokenize('OceanBase是一款非常稳定数据库，在110个星球上都非常著名，这简直难以置信', 'ik');
 
 select tokenize('人际关系', 'ik');
+select tokenize('人际关系', 'ik');
 
 
 select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');

@@ -17,6 +17,8 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
+#include "lib/alloc/alloc_struct.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -93,31 +95,49 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+class ObIFTDict;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), dict_alloc_(lib::ObMemAttr("FTDictHub")) {}
   ~ObFTDictHub() {}
 
   int init();
 
   int destroy();
 
-  int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
-
-  int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+  /**
+   * Get the dictionary view of desc.type_.
+   *
+   * The view is built on the first call and shared afterwards, so that the
+   * dictionary is not rebuilt for every parser instance. The returned view is
+   * read-only and stays valid until the hub is destroyed.
+   */
+  int get_dict(const ObFTDictDesc &desc, const ObIFTDict *&dict);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
   int put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &info);
 
-
 private:
+  static constexpr int64_t MAX_DICT_TYPE_CNT = 4;
+
+  struct ObFTSharedDict final
+  {
+    ObFTSharedDict() : container_(nullptr), dict_(nullptr) {}
+    ~ObFTSharedDict() {}
+    ObFTCacheRangeContainer *container_;
+    ObIFTDict *dict_;
+  };
+
   bool is_inited_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  // owns the shared dictionary views and the kv cache handles that pin them
+  common::ObArenaAllocator dict_alloc_;
+  ObFTSharedDict shared_dicts_[MAX_DICT_TYPE_CNT];
 };
 
 } //  namespace storage

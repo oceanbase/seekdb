@@ -79,6 +79,8 @@ public:
       topk_limit_expr_(nullptr),
       topk_offset_expr_(nullptr),
       token_col_(nullptr),
+      limit_expr_(nullptr),
+      offset_expr_(nullptr),
       block_max_spec_(alloc),
       avg_doc_len_est_spec_(alloc),
       mode_flag_(NATURAL_LANGUAGE_MODE),
@@ -162,6 +164,8 @@ public:
                        K_(estimated_total_doc_cnt),
                        KPC_(topk_limit_expr),
                        KPC_(topk_offset_expr),
+                       KPC_(limit_expr),
+                       KPC_(offset_expr),
                        K_(token_col),
                        K_(block_max_spec),
                        K_(mode_flag),
@@ -178,6 +182,9 @@ public:
   ObExpr *topk_limit_expr_;
   ObExpr *topk_offset_expr_;
   ObExpr *token_col_;
+  // the row limit/offset pushed into the text retrieval scan
+  ObExpr *limit_expr_;
+  ObExpr *offset_expr_;
   ObTextBlockMaxSpec block_max_spec_;
   ObTextAvgDocLenEstSpec avg_doc_len_est_spec_;
   ObMatchAgainstMode mode_flag_; // for MySQL search mode flag
