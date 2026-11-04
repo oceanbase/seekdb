@@ -1055,6 +1055,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
   if (provider.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, provider is empty");
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    complete_provider = OB_NEWx(ObOllamaUtils::ObOllamaComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI) 
       || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN) 
       || ob_provider_check(provider, ObAIFuncProviderUtils::DEEPSEEK)
@@ -1079,6 +1081,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
   if (provider.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, provider is empty");
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    embed_provider = OB_NEWx(ObOllamaUtils::ObOllamaEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI) 
       || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
       || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
