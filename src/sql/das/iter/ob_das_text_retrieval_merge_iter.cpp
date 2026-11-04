@@ -119,6 +119,34 @@ ObDASTextRetrievalMergeIter::ObDASTextRetrievalMergeIter()
 {
 }
 
+// the row limit pushed into the scan is not part of the inverted index scan,
+// evaluate it here so that the retrieval can stop as soon as it is reached
+int ObDASTextRetrievalMergeIter::eval_limit_param()
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ir_ctdef_->limit_expr_)) {
+    ObDatum *limit_datum = nullptr;
+    if (OB_FAIL(ir_ctdef_->limit_expr_->eval(*ir_rtdef_->eval_ctx_, limit_datum))) {
+    } else if (limit_datum->is_null()) {
+      limit_param_.limit_ = -1;
+    } else if (limit_datum->get_int() < 0) {
+      limit_param_.limit_ = 0;
+    } else {
+      limit_param_.limit_ = limit_datum->get_int();
+    }
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(ir_ctdef_->offset_expr_)) {
+    ObDatum *offset_datum = nullptr;
+    if (OB_FAIL(ir_ctdef_->offset_expr_->eval(*ir_rtdef_->eval_ctx_, offset_datum))) {
+    } else if (offset_datum->is_null() || offset_datum->get_int() < 0) {
+      limit_param_.offset_ = 0;
+    } else {
+      limit_param_.offset_ = offset_datum->get_int();
+    }
+  }
+  return ret;
+}
+
 int ObDASTextRetrievalMergeIter::do_table_scan()
 {
   int ret = OB_SUCCESS;
@@ -136,6 +164,8 @@ int ObDASTextRetrievalMergeIter::rescan()
   } else {
     next_written_idx_ = 0;
     limit_param_ = ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+    if (OB_FAIL(eval_limit_param())) {
+    }
   }
   return ret;
 }
@@ -346,6 +376,8 @@ int ObDASTextRetrievalMergeIter::inner_init(ObDASIterParam &param)
       } else if (OB_FAIL(cache_doc_ids_.prepare_allocate(size))) {
       } else {
         limit_param_ = ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+        if (OB_FAIL(eval_limit_param())) {
+        }
       }
       if (OB_FAIL(ret)) {
       } else if (force_return_docid_) {
@@ -1750,6 +1782,11 @@ int ObDASTRDaatIter::inner_get_next_row()
     ObDatum *filter_res = nullptr;
     const bool is_batch = false;
     while (OB_SUCC(ret) && !got_valid_document) {
+      if (limit_param_.limit_ > 0 && output_row_cnt_ >= limit_param_.limit_) {
+        // the limit pushed into the scan is reached, stop the retrieval
+        ret = OB_ITER_END;
+        break;
+      }
       clear_evaluated_infos();
       filter_valid = false;
       doc_valid = true;

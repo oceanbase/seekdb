@@ -1894,7 +1894,15 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
 
   if (OB_SUCC(ret)) {
     root_ctdef = ir_scan_ctdef;
+    // the limit is applied by the scan that owns it: a multi index merge or a
+    // functional lookup applies the limit above the per index retrieval
+    const bool is_single_retrieval = !cg_ctx.is_func_lookup_ && !cg_ctx.is_es_match_ &&
+                                    !cg_ctx.is_merge_fts_index_ && !cg_ctx.is_vec_iter_func_lookup_;
     if (OB_FAIL(generate_text_ir_spec_exprs(tr_info, *ir_scan_ctdef))) {
+    } else if (is_single_retrieval && OB_NOT_NULL(op.get_limit_expr()) &&
+               OB_FAIL(cg_.generate_rt_expr(*op.get_limit_expr(), ir_scan_ctdef->limit_expr_))) {
+    } else if (is_single_retrieval && OB_NOT_NULL(op.get_offset_expr()) &&
+               OB_FAIL(cg_.generate_rt_expr(*op.get_offset_expr(), ir_scan_ctdef->offset_expr_))) {
     } else {
       const ObCostTableScanInfo *est_cost_info = op.get_est_cost_info();
       int partition_row_cnt = 0;

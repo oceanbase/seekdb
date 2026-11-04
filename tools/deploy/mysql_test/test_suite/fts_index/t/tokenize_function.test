@@ -132,6 +132,8 @@ select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'space', '[{"output": 
 # invalid json
 --error ER_NOT_SUPPORTED_YET
 select tokenize('hello world abcdefghijklmnopqrstuvwxyz', 'ik', '[{"output": "all"}, {"additional_args": [{"ngram_token_size": 6}, {"max_token_size": 10}]}]');
+select tokenize('hello world', 'beng');
+select tokenize('hello world', 'beng');
 
 
 --disable_warnings

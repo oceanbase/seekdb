@@ -135,6 +135,7 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 protected:
   virtual int check_and_prepare();
+  int eval_limit_param();
   int project_result(const ObDocIdExt &docid, const double relevance);
   int project_relevance(const ObDocIdExt &docid, const double relevance);
   int project_docid();

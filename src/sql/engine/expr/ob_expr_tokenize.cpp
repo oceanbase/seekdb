@@ -39,6 +39,24 @@ namespace oceanbase
 {
 namespace sql
 {
+
+namespace
+{
+// The canonical property json only depends on the parser name and the given
+// properties, cache it to avoid rebuilding a json tree on every tokenize.
+constexpr int64_t TOKENIZE_PROPS_CACHE_SIZE = 4;
+struct TokenizePropsCacheEntry
+{
+  TokenizePropsCacheEntry() : valid_(false) {}
+  common::ObArenaAllocator allocator_;
+  common::ObString parser_name_;
+  common::ObString raw_properties_;
+  common::ObString reformed_properties_;
+  bool valid_;
+};
+thread_local TokenizePropsCacheEntry g_tokenize_props_cache[TOKENIZE_PROPS_CACHE_SIZE];
+thread_local int64_t g_tokenize_props_cache_idx = 0;
+} // namespace
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -376,6 +394,17 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
+  // properties may alias properties_, which is overwritten below, keep the input
+  const ObString raw_properties = properties;
+
+  for (int64_t i = 0; i < TOKENIZE_PROPS_CACHE_SIZE; ++i) {
+    TokenizePropsCacheEntry &entry = g_tokenize_props_cache[i];
+    if (entry.valid_ && entry.parser_name_ == parser_name_ && entry.raw_properties_ == raw_properties) {
+      if (OB_FAIL(ob_write_string(allocator_, entry.reformed_properties_, properties_))) {
+      }
+      return ret;
+    }
+  }
 
   if (OB_FAIL(parser_properties.init())) {
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
@@ -384,6 +413,17 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+  } else {
+    // remember the canonical json for the next call
+    TokenizePropsCacheEntry &entry = g_tokenize_props_cache[g_tokenize_props_cache_idx];
+    g_tokenize_props_cache_idx = (g_tokenize_props_cache_idx + 1) % TOKENIZE_PROPS_CACHE_SIZE;
+    entry.allocator_.reset();
+    entry.valid_ = false;
+    if (OB_SUCC(ob_write_string(entry.allocator_, parser_name_, entry.parser_name_))
+        && OB_SUCC(ob_write_string(entry.allocator_, raw_properties, entry.raw_properties_))
+        && OB_SUCC(ob_write_string(entry.allocator_, properties_, entry.reformed_properties_))) {
+      entry.valid_ = true;
+    }
   }
 
   return ret;
