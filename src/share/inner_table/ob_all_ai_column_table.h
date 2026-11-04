@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_INNER_TABLE_OB_ALL_AI_COLUMN_TABLE_H_
 #define OCEANBASE_SHARE_INNER_TABLE_OB_ALL_AI_COLUMN_TABLE_H_
 
-#include "share/inner_table/ob_inner_table_schema.h"
+#include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
 {
@@ -40,14 +40,14 @@ namespace share
 // - status: current processing status
 // - last_error: last error message if failed
 
-class ObAllAiColumnTableSchema : public ObInnerTableSchema
+class ObAllAiColumnTableSchema
 {
 public:
   ObAllAiColumnTableSchema();
   virtual ~ObAllAiColumnTableSchema();
 
-  virtual int get_table_schema(ObIAllocator& allocator,
-                               ObTableSchema& table_schema) const override;
+  int get_table_schema(ObIAllocator& allocator,
+                       ObTableSchema& table_schema) const;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllAiColumnTableSchema);
