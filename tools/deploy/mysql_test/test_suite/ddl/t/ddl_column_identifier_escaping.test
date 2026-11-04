@@ -1,0 +1,9 @@
+# Regression for shared DDL identifier escaping (issue #1469).
+--disable_warnings
+DROP TABLE IF EXISTS ddl_quoted_enum;
+--enable_warnings
+CREATE TABLE ddl_quoted_enum (id INT PRIMARY KEY, `e``n` ENUM('red', 'blue') NOT NULL);
+INSERT INTO ddl_quoted_enum VALUES (1, 'red'), (2, 'blue');
+CREATE UNIQUE INDEX ddl_quoted_enum_idx ON ddl_quoted_enum (`e``n`);
+SELECT id, `e``n` FROM ddl_quoted_enum ORDER BY id;
+DROP TABLE ddl_quoted_enum;
