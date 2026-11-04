@@ -975,7 +975,8 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
       if (is_non_shared_vec_index_aux_table(type)) {
         if (OB_FAIL(get_non_shared_index_aux_table_rowkey_colum_count(type, col_cnt))) {
         } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * col_cnt * 2))) {
-          ret = OB_ERR_UNEXPECTED;
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory for aux table rowkey objs", K(ret), K(col_cnt));
         } else {
           ObObj *row_objs = reinterpret_cast<ObObj*>(buf);
           for (int i = 0; i < col_cnt; i++) {
@@ -1007,7 +1008,8 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
         // vid_rowkey table or data table, get rowkey while complete
         if (OB_FAIL(get_shared_table_rowkey_colum_count(type, table_id, col_cnt))) {
         } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * col_cnt * 2))) {
-          ret = OB_ERR_UNEXPECTED;
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate memory for shared table rowkey objs", K(ret), K(col_cnt));
         } else {
           ObObj *row_objs = reinterpret_cast<ObObj*>(buf);
           for (int i = 0; i < col_cnt; i++) {
@@ -1080,7 +1082,8 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(get_special_index_aux_table_column_count(type,
                                                                 table_id, col_cnt, scan_param))) {
-      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get special index aux table column count",
+               K(ret), K(type), K(table_id), K(col_cnt));
     }
   }
 
