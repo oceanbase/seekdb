@@ -5344,8 +5344,29 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        if (tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
+          stmt->set_has_vec_approx(true);
+        } else if (has_const && is_descending_direction(stmt->get_order_item(0).order_type_)) {
+          ObSysFunRawExpr *neg_ip_expr = NULL;
+          if (OB_ISNULL(params_.expr_factory_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(
+                         T_FUN_SYS_NEGATIVE_INNER_PRODUCT, neg_ip_expr))) {
+          } else if (OB_ISNULL(neg_ip_expr)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            neg_ip_expr->set_func_name(ObString::make_string(N_VECTOR_NEGATIVE_INNER_PRODUCT));
+            if (OB_FAIL(neg_ip_expr->set_param_exprs(tmp_expr->get_param_expr(0),
+                                                     tmp_expr->get_param_expr(1)))) {
+            } else if (OB_FAIL(neg_ip_expr->formalize(session_info_))) {
+            } else {
+              stmt->get_order_item(0).expr_ = neg_ip_expr;
+              stmt->get_order_item(0).order_type_ = default_asc_direction();
+              stmt->set_has_vec_approx(true);
+            }
+          }
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
