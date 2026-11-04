@@ -105,6 +105,7 @@ public:
                        K_(vec_vid_idx),
                        K_(index_merge_idx),
                        K_(is_index_merge),
+                       K_(vec_pre_filter_covers_all),
                        K_(pre_range_graph));
   common::ObTableID ref_table_id_;
   UIntFixedArray access_column_ids_;
@@ -132,7 +133,9 @@ public:
     uint64_t flags_;
     struct {
       uint64_t is_index_merge_               : 1; // whether used for index merge
-      uint64_t reserved_                     : 63;
+      // The scalar pre-filter range enforces every adaptive lookup predicate.
+      uint64_t vec_pre_filter_covers_all_     : 1;
+      uint64_t reserved_                     : 62;
     };
   };
   ObFixedArray<share::DomainIdxs, common::ObIAllocator> domain_id_idxs_;

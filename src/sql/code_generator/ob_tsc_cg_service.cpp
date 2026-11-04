@@ -492,6 +492,32 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(prune_scan_pushdown_filters_by_table_columns(*scan_table_schema,
                                                                   scan_pushdown_filters))) {
+  } else if (scan_table_schema->is_ordered() &&
+             !is_virtual_table(scan_ctdef.ref_table_id_) &&
+             scan_ctdef.ref_table_id_ == op.get_real_index_table_id() &&
+             op.get_pre_graph() != nullptr) {
+    // Adaptive scans retain their range predicates for the iterative-filter
+    // fallback. The index scan has already enforced precise range predicates;
+    // remove only its copy and keep the lookup filters for the fallback.
+    const ObIArray<ObRawExpr *> &range_exprs = op.get_pre_graph()->get_range_exprs();
+    ObSEArray<ObRawExpr *, 8> residual_filters;
+    for (int64_t i = 0; OB_SUCC(ret) && i < scan_pushdown_filters.count(); ++i) {
+      ObRawExpr *filter = scan_pushdown_filters.at(i);
+      if (!has_exist_in_array(range_exprs, filter) &&
+          OB_FAIL(residual_filters.push_back(filter))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(scan_pushdown_filters.assign(residual_filters))) {
+    }
+    // A pre-filter lookup is unnecessary when every lookup predicate is already
+    // enforced by this range. This proof does not depend on parameter values.
+    bool range_covers_lookup = !lookup_pushdown_filters.empty();
+    for (int64_t i = 0; range_covers_lookup && i < lookup_pushdown_filters.count(); ++i) {
+      range_covers_lookup = has_exist_in_array(range_exprs, lookup_pushdown_filters.at(i));
+    }
+    if (OB_SUCC(ret)) {
+      scan_ctdef.vec_pre_filter_covers_all_ = range_covers_lookup;
+    }
   }
   if (OB_SUCC(ret) && !scan_pushdown_filters.empty()) {
     bool pd_filter = scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_filter_pushdown();
