@@ -52,8 +52,14 @@ fn unmatched_closing_paren_is_paren_error() {
 }
 
 #[test]
-fn malformed_interval_precedes_unclosed_class_error() {
-    for pattern in ["(1{1,[]})", "a{1,[]}", "a# {1,[abc"] {
+fn malformed_numeric_repeat_reports_generic_error() {
+    for pattern in [
+        "(1{1,[]})",
+        "a{1,[]}",
+        "a# {1,[abc",
+        r"\d{3",
+        "(?x)a{ 1,[]}",
+    ] {
         assert_eq!(
             compile(pattern.to_owned(), 0, 0, 0).err().unwrap().kind,
             GENERIC,
@@ -77,6 +83,24 @@ fn malformed_interval_precedes_unclosed_class_error() {
         );
     }
     assert!(compile("({1}a)".to_owned(), 0, 0, 0).is_ok());
+    assert!(compile("a{,3}".to_owned(), 0, 0, 0).is_ok());
+    assert!(compile("a{1,3}".to_owned(), 0, 0, 0).is_ok());
+}
+
+#[test]
+fn posix_word_boundary_classes_are_syntax_errors() {
+    for pattern in ["[[:<:]]вася[[:>:]]", "[[:<:]]胁邪褋褟[[:>:]]", "[^[:<:]]"] {
+        assert_eq!(
+            compile(pattern.to_owned(), 0, 0, 0).err().unwrap().kind,
+            GENERIC,
+            "{pattern}"
+        );
+    }
+    for pattern in ["[[:alpha:]]", "[^[:lower:]]", r"\[\:<:\]"] {
+        assert!(compile(pattern.to_owned(), 0, 0, 0).is_ok(), "{pattern}");
+    }
+    assert!(RegexBuilder::new("[[:<:]]").build().is_ok());
+    assert!(RegexBuilder::new(r"\d{3").build().is_ok());
 }
 
 #[test]

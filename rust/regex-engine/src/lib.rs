@@ -94,81 +94,13 @@ fn regex_error(error: Error) -> BridgeError {
     err(kind, error.to_string())
 }
 
-fn has_malformed_numeric_interval(pattern: &str) -> bool {
-    let bytes = pattern.as_bytes();
-    let mut i = 0;
-    let mut classes = Vec::new();
-    let mut extended = false;
-    while i < bytes.len() {
-        if bytes[i] == b'\\' {
-            i += 2;
-        } else if let Some(&start) = classes.last() {
-            match bytes[i] {
-                b'[' => classes.push(i),
-                b']' if i != start + 1 && !(i == start + 2 && bytes[start + 1] == b'^') => {
-                    classes.pop();
-                }
-                _ => {}
-            }
-            i += 1;
-        } else if bytes[i..].starts_with(b"(?#") {
-            i += 3;
-            while i < bytes.len() && bytes[i] != b')' {
-                i += if bytes[i] == b'\\' { 2 } else { 1 };
-            }
-            i += 1;
-        } else if bytes[i..].starts_with(b"(?x)") {
-            extended = true;
-            i += 4;
-        } else if bytes[i..].starts_with(b"(?-x)") {
-            extended = false;
-            i += 5;
-        } else if extended && bytes[i] == b'#' {
-            while i < bytes.len() && bytes[i] != b'\n' {
-                i += 1;
-            }
-        } else if bytes[i] == b'[' {
-            classes.push(i);
-            i += 1;
-        } else if bytes[i] == b'{' {
-            let mut end = i + 1;
-            while end < bytes.len() && bytes[end].is_ascii_digit() {
-                end += 1;
-            }
-            if end > i + 1 {
-                if bytes.get(end) == Some(&b',') {
-                    end += 1;
-                    while end < bytes.len() && bytes[end].is_ascii_digit() {
-                        end += 1;
-                    }
-                }
-                if bytes.get(end) != Some(&b'}') {
-                    return true;
-                }
-                i = end + 1;
-            } else {
-                i += 1;
-            }
-        } else {
-            i += 1;
-        }
-    }
-    false
-}
-
 fn compile_error(pattern: &str, error: Error) -> BridgeError {
-    // ICU reports malformed intervals before a later unclosed class. Inspect
-    // the pattern only after compilation fails, so matching pays no scan cost.
     let kind = match &error {
-        Error::ParseError(pos, ParseError::GeneralParseError(_))
-            if pattern.as_bytes().get(*pos) == Some(&b')') =>
+        Error::ParseError(pos, ParseError::GeneralParseError(message))
+            if message == "end of string not reached"
+                && pattern.as_bytes().get(*pos) == Some(&b')') =>
         {
             Some(PAREN)
-        }
-        Error::ParseError(_, ParseError::InvalidClass)
-            if has_malformed_numeric_interval(pattern) =>
-        {
-            Some(GENERIC)
         }
         _ => None,
     };
@@ -340,6 +272,8 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
     let (compiled_bytes, backtracks) = limits(stack_limit, time_limit)?;
     let mut builder = RegexBuilder::new(&pattern);
     builder
+        .strict_numeric_repeat(true)
+        .reject_posix_word_boundary(true)
         .case_insensitive(flags & CASE_INSENSITIVE != 0)
         .multi_line(flags & MULTILINE != 0)
         .dot_matches_new_line(flags & DOTALL != 0)
