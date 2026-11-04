@@ -5344,8 +5344,36 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        if (T_FUN_SYS_INNER_PRODUCT == tmp_expr->get_expr_type()) {
+          OrderItem &order_item = stmt->get_order_item(0);
+          if (has_const && order_item.is_descending()) {
+            ObSysFunRawExpr *neg_ip_expr = NULL;
+            if (OB_UNLIKELY(2 != tmp_expr->get_param_count())) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected inner product param count", K(ret),
+                       K(tmp_expr->get_param_count()));
+            } else if (OB_ISNULL(params_.expr_factory_)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(
+                         T_FUN_SYS_NEGATIVE_INNER_PRODUCT, neg_ip_expr))) {
+            } else if (OB_ISNULL(neg_ip_expr)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else {
+              neg_ip_expr->set_func_name(ObString::make_string(N_VECTOR_NEGATIVE_INNER_PRODUCT));
+              if (OB_FAIL(neg_ip_expr->set_param_exprs(tmp_expr->get_param_expr(0),
+                                                       tmp_expr->get_param_expr(1)))) {
+              } else if (OB_FAIL(neg_ip_expr->formalize(session_info_))) {
+              } else {
+                order_item.expr_ = neg_ip_expr;
+                order_item.order_type_ = order_item.is_null_first() ? NULLS_FIRST_ASC : NULLS_LAST_ASC;
+                stmt->set_has_vec_approx(true);
+              }
+            }
+          }
+        } else {
+          stmt->set_has_vec_approx(true);
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index

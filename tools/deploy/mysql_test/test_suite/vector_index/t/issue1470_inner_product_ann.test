@@ -1,0 +1,23 @@
+# Test that ORDER BY inner_product(...) DESC APPROXIMATE uses the
+# inner-product vector index (issue #1470).
+
+drop table if exists t_ip_ann;
+create table t_ip_ann(c1 int primary key, c2 int, c3 vector(3),
+  vector index idx_ip(c3) with (distance=inner_product, type=hnsw));
+insert into t_ip_ann values(1, 1, [0,1,2]);
+insert into t_ip_ann values(2, 2, [1,1,2]);
+
+# Baseline: the existing supported ANN form.
+select * from t_ip_ann order by negative_inner_product(c3, [1,0,0]) approx limit 5;
+
+# Equivalent form: positive inner product ordered descending.
+select * from t_ip_ann order by inner_product(c3, [1,0,0]) desc approx limit 5;
+
+--replace_regex /__vid_[0-9]+(_[0-9]+)?/__vid_0/g /__type_[0-9]+_[0-9]+/__type_0_0/g /is_index_back=true, is_global_index=false, *$/is_index_back=true, is_global_index=false,/
+explain select * from t_ip_ann order by inner_product(c3, [1,0,0]) desc approx limit 5;
+
+# Ascending inner product is not an ANN request; it must keep the exact path.
+--replace_regex /is_index_back=true, is_global_index=false, *$/is_index_back=true, is_global_index=false,/
+explain select * from t_ip_ann order by inner_product(c3, [1,0,0]) asc approx limit 5;
+
+drop table t_ip_ann;
