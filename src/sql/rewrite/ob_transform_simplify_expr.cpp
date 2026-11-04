@@ -70,6 +70,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     }
   }
   if (OB_SUCC(ret)) {
+    if (OB_FAIL(dedup_in_expr_list(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("dedup in expr list:", is_happened);
+    }
+  }
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(replace_is_null_condition(stmt, is_happened))) {
     } else {
       trans_happened |= is_happened;
@@ -206,6 +213,175 @@ int ObTransformSimplifyExpr::flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, 
     }
     if (OB_SUCC(ret)) {
       trans_happened = temp_exprs.count() != exprs.count();
+    }
+  }
+  return ret;
+}
+
+// A membership list that repeats a value is semantically identical to the same
+// list with the repeated values removed, but the redundant candidates still
+// reach the optimizer: they change the estimated row count of the filter and
+// therefore the query plan (and the latency) even though the selected rows do
+// not change. Remove the duplicates before the plan is costed so that
+// equivalent IN lists share one plan.
+int ObTransformSimplifyExpr::dedup_in_expr_list(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  ObIArray<JoinedTable*> *joined_tables = NULL;
+  trans_happened = false;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt is null", K(ret));
+  } else if (OB_FAIL(inner_dedup_in_expr_list(stmt->get_condition_exprs(), is_happened))) {
+    LOG_WARN("failed to dedup in expr list of where condition", K(ret));
+  } else {
+    trans_happened |= is_happened;
+    is_happened = false;
+    if (stmt->is_select_stmt()) {
+      if (OB_FAIL(inner_dedup_in_expr_list(static_cast<ObSelectStmt *>(stmt)->get_having_exprs(),
+                                           is_happened))) {
+        LOG_WARN("failed to dedup in expr list of having condition", K(ret));
+      } else {
+        trans_happened |= is_happened;
+        is_happened = false;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      joined_tables = &stmt->get_joined_tables();
+      for (int64_t i = 0; OB_SUCC(ret) && i < joined_tables->count(); ++i) {
+        if (OB_FAIL(SMART_CALL(dedup_join_condition_in_expr_list(joined_tables->at(i),
+                                                                 is_happened)))) {
+          LOG_WARN("failed to dedup in expr list of join condition", K(ret), K(i));
+        } else {
+          trans_happened |= is_happened;
+          is_happened = false;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::dedup_join_condition_in_expr_list(TableItem *table,
+                                                                bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  JoinedTable *join_table = NULL;
+  trans_happened = false;
+  if (OB_ISNULL(table)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table item is null", K(ret));
+  } else if (!table->is_joined_table()) {
+    // a base table has no join condition
+  } else if (OB_ISNULL(join_table = static_cast<JoinedTable *>(table))
+             || OB_ISNULL(join_table->left_table_)
+             || OB_ISNULL(join_table->right_table_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected joined table", K(ret), K(join_table));
+  } else if (OB_FAIL(inner_dedup_in_expr_list(join_table->join_conditions_, is_happened))) {
+    LOG_WARN("failed to dedup in expr list of join condition", K(ret));
+  } else {
+    trans_happened |= is_happened;
+    is_happened = false;
+    if (OB_FAIL(SMART_CALL(dedup_join_condition_in_expr_list(join_table->left_table_,
+                                                              is_happened)))) {
+      LOG_WARN("failed to dedup in expr list of left table", K(ret));
+    } else {
+      trans_happened |= is_happened;
+      is_happened = false;
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(SMART_CALL(dedup_join_condition_in_expr_list(join_table->right_table_,
+                                                               is_happened)))) {
+        LOG_WARN("failed to dedup in expr list of right table", K(ret));
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::inner_dedup_in_expr_list(common::ObIArray<ObRawExpr*> &exprs,
+                                                       bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  trans_happened = false;
+  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+    if (OB_ISNULL(exprs.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("expr is null", K(ret), K(i));
+    } else if (OB_FAIL(SMART_CALL(do_dedup_in_expr_list(exprs.at(i), is_happened)))) {
+      LOG_WARN("failed to dedup in expr list", K(ret), K(i));
+    } else {
+      trans_happened |= is_happened;
+      is_happened = false;
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::do_dedup_in_expr_list(ObRawExpr *&expr, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  ObOpRawExpr *op_expr = NULL;
+  trans_happened = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr is null", K(ret));
+  }
+  // Handle nested IN lists first so that an inner rewrite is not lost when the
+  // outer list is deduplicated afterwards.
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+    if (OB_FAIL(SMART_CALL(do_dedup_in_expr_list(expr->get_param_expr(i), is_happened)))) {
+      LOG_WARN("failed to dedup nested in expr list", K(ret), K(i));
+    } else {
+      trans_happened |= is_happened;
+      is_happened = false;
+    }
+  }
+  if (OB_FAIL(ret)) {
+    // do nothing
+  } else if ((T_OP_IN != expr->get_expr_type() && T_OP_NOT_IN != expr->get_expr_type())
+             || expr->get_param_count() <= 2) {
+    // a single candidate cannot contain a duplicate
+  } else if (OB_ISNULL(op_expr = static_cast<ObOpRawExpr *>(expr))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("in expr is not an op raw expr", K(ret));
+  } else {
+    // Only constant candidates may be deduplicated. A candidate that depends on
+    // the current row, or that produces a fresh value on every evaluation,
+    // would change the semantics when a duplicate is dropped.
+    bool all_const = true;
+    for (int64_t i = 1; all_const && i < expr->get_param_count(); ++i) {
+      const ObRawExpr *param = expr->get_param_expr(i);
+      all_const = NULL != param
+                  && param->is_const_expr()
+                  && !param->has_flag(IS_RAND_FUNC);
+    }
+    if (all_const) {
+      const int64_t old_count = expr->get_param_count();
+      // Walk backwards so that removing a duplicate never shifts the position of
+      // a candidate that has not been checked yet.
+      for (int64_t i = old_count - 1; OB_SUCC(ret) && i >= 2; --i) {
+        bool duplicated = false;
+        for (int64_t j = 1; !duplicated && j < i; ++j) {
+          duplicated = ObOptimizerUtil::is_expr_equivalent(expr->get_param_expr(i),
+                                                           expr->get_param_expr(j));
+        }
+        if (duplicated && OB_FAIL(op_expr->remove_param_expr(i))) {
+          LOG_WARN("failed to remove duplicated in list candidate", K(ret), K(i));
+        }
+      }
+      if (OB_SUCC(ret) && expr->get_param_count() != old_count) {
+        trans_happened = true;
+        LOG_TRACE("deduplicated in list candidates", K(old_count),
+                  "new_count", expr->get_param_count());
+      }
     }
   }
   return ret;
