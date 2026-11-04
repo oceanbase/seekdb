@@ -21,130 +21,46 @@ function Write-LibseekdbWindowsBuildFacts {
   Write-Host "[fact] RepoRoot: $(Resolve-Path $RepoRoot)"
   Write-Host "[fact] BUILD_TYPE env: $($env:BUILD_TYPE)"
   Write-Host "[fact] Resolved build dir name: $bdn"
-  Write-Host "[fact] build tree path: $buildRoot"
-  Write-Host "[fact] build tree exists: $(Test-Path -LiteralPath $buildRoot)"
+  Write-Host "[fact] Bazel output base: $buildRoot"
+  Write-Host "[fact] output base exists: $(Test-Path -LiteralPath $buildRoot)"
   if (-not (Test-Path -LiteralPath $buildRoot)) {
+    Write-Host "[fact] run: python ./build.py build -o build_$bdn //src/observer:libseekdb"
     Write-Host $bar
     return
   }
 
-  $bn = Join-Path $buildRoot "build.ninja"
-  Write-Host "[fact] Test-Path build.ninja: $(Test-Path -LiteralPath $bn)"
-  if (Test-Path -LiteralPath $bn) { Write-Host "[fact] build.ninja full path: $(Resolve-Path $bn)" }
-
-  $ninjaAtRoot = @()
-  Write-Host "[fact] Top-level *.ninja files (non-recursive):"
-  try {
-    $ninjaAtRoot = @([System.IO.Directory]::GetFiles($buildRoot, "*.ninja", [System.IO.SearchOption]::TopDirectoryOnly))
-    if ($ninjaAtRoot.Length -eq 0) { Write-Host "  (none)" }
-    else { foreach ($f in $ninjaAtRoot) { Write-Host "  $f" } }
-  } catch {
-    Write-Host "  (error: $($_.Exception.Message))"
+  # build.py sets --symlink_prefix=<output_base>/, so the convenience links are
+  # build_<type>\bin and build_<type>\bazel-bin; both point at the same tree.
+  foreach ($rel in @("bin", "bazel-bin")) {
+    $p = Join-Path $buildRoot $rel
+    Write-Host "[fact] Test-Path ${rel}: $(Test-Path -LiteralPath $p)"
+    if (Test-Path -LiteralPath $p) {
+      try { Write-Host "    target: $((Get-Item -LiteralPath $p).Target)" } catch { }
+    }
   }
 
-  $cache = Join-Path $buildRoot "CMakeCache.txt"
-  $generatorLine = $null
-  if (Test-Path -LiteralPath $cache) {
-    Write-Host "[fact] CMakeCache excerpts (generator / make program):"
-    $generatorLine = Select-String -Path $cache -Pattern '^CMAKE_GENERATOR:' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($generatorLine) { Write-Host "  $($generatorLine.Line.Trim())" }
-    Select-String -Path $cache -Pattern '^CMAKE_MAKE_PROGRAM:' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
-    Select-String -Path $cache -Pattern '^CMAKE_COMMAND:' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+  $libDir = Join-Path $buildRoot "bin\src\observer"
+  Write-Host "[fact] package output dir: $libDir"
+  Write-Host "[fact] package output exists: $(Test-Path -LiteralPath $libDir)"
+  if (Test-Path -LiteralPath $libDir) {
+    Get-ChildItem -LiteralPath $libDir -File -ErrorAction SilentlyContinue |
+      Sort-Object Name |
+      Select-Object -First 40 Name, Length |
+      Format-Table -AutoSize | Out-String | Write-Host
+    $dlls = @(Get-ChildItem -LiteralPath $libDir -Filter "*.dll" -File -ErrorAction SilentlyContinue)
+    $runtime = @($dlls | Where-Object { $_.Name -ine "seekdb.dll" -and $_.Name -ine "libseekdb.dll" })
+    Write-Host "[fact] runtime DLLs beside seekdb.dll: $($runtime.Count)"
+    Write-Host "[fact] import library present: $(Test-Path -LiteralPath (Join-Path $libDir 'seekdb.lib'))"
+  }
+
+  Write-Host "[fact] RepoRoot seekdb.h: $(Test-Path -LiteralPath (Join-Path $RepoRoot 'src\include\seekdb.h'))"
+
+  $resolved = Find-SeekDbWindowsDll -RepoRoot $RepoRoot -BuildDirName $bdn
+  if ($resolved) {
+    Write-Host "[fact] resolved DLL: $($resolved.DllPath)"
+    Write-Host "[fact] resolved lib dir: $($resolved.LibDir)"
   } else {
-    Write-Host "[fact] CMakeCache.txt: missing"
-  }
-
-  if ($generatorLine -and $generatorLine.Line -match 'Ninja' -and -not (Test-Path -LiteralPath $bn) -and $ninjaAtRoot.Length -eq 0) {
-    Write-Host "[fact] STATE: CMAKE_GENERATOR is Ninja but build root has no build.ninja and no *.ninja — CMake did not finish generating the Ninja backend (or files were deleted after configure)."
-  }
-
-  foreach ($pat in @("seekdb.dll", "libseekdb.dll", "seekdb.lib", "libseekdb.lib")) {
-    try {
-      $hits = [System.IO.Directory]::GetFiles($buildRoot, $pat, [System.IO.SearchOption]::AllDirectories)
-      Write-Host "[fact] Count $pat : $($hits.Length)"
-      $max = [Math]::Min(8, $hits.Length)
-      for ($i = 0; $i -lt $max; $i++) { Write-Host "    $($hits[$i])" }
-    } catch {
-      Write-Host "[fact] Count $pat : enumeration error — $($_.Exception.Message)"
-    }
-  }
-
-  try {
-    $allDll = [System.IO.Directory]::GetFiles($buildRoot, "*.dll", [System.IO.SearchOption]::AllDirectories)
-    Write-Host "[fact] Total *.dll under build tree: $($allDll.Length)"
-  } catch {
-    Write-Host "[fact] Total *.dll : $($_.Exception.Message)"
-  }
-
-  $ninjaCmd = Get-Command ninja -ErrorAction SilentlyContinue
-  if ($ninjaCmd) {
-    Write-Host "[fact] ninja on PATH: $($ninjaCmd.Source)"
-    try {
-      $nv = & ninja --version 2>&1
-      Write-Host "[fact] ninja --version: $nv"
-    } catch { Write-Host "[fact] ninja --version failed: $($_.Exception.Message)" }
-  } else {
-    Write-Host "[fact] ninja: not on PATH"
-  }
-
-  if (-not (Test-Path -LiteralPath $bn)) {
-    Write-Host "[fact] ninja invoked from build root without build.ninja (capture stderr as fact):"
-    Push-Location $buildRoot
-    try {
-      $failOut = & ninja -t targets 2>&1
-      Write-Host "  exit: $LASTEXITCODE"
-      $failOut | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
-    } finally {
-      Pop-Location
-    }
-    Write-Host "[fact] skip ninja -t query / ninja -n dry-run: no build.ninja"
-    Write-Host $bar
-    return
-  }
-
-  Write-Host "[fact] ninja -t targets (lines matching seekdb / libseekdb):"
-  Push-Location $buildRoot
-  try {
-    $allTargets = & ninja -t targets 2>&1
-    $tc = $LASTEXITCODE
-    Write-Host "  ninja -t targets exit code: $tc"
-    if ($tc -ne 0) {
-      $allTargets | Select-Object -First 40 | ForEach-Object { Write-Host "  $_" }
-    } else {
-      $m = @($allTargets | Where-Object { $_ -match 'seekdb' })
-      if ($m.Count -eq 0) {
-        Write-Host "  (no target line contains seekdb)"
-        Write-Host "  (first 50 target lines for sanity):"
-        $allTargets | Select-Object -First 50 | ForEach-Object { Write-Host "  $_" }
-      } else {
-        $m | Select-Object -First 100 | ForEach-Object { Write-Host "  $_" }
-      }
-    }
-  } catch {
-    Write-Host "  error: $($_.Exception.Message)"
-  }
-
-  Write-Host "[fact] ninja -t query libseekdb (if supported by ninja build):"
-  try {
-    $q = & ninja -t query libseekdb 2>&1
-    Write-Host "  exit: $LASTEXITCODE"
-    $q | Select-Object -First 60 | ForEach-Object { Write-Host "  $_" }
-  } catch {
-    Write-Host "  (ninja -t query not run or failed: $($_.Exception.Message))"
-  } finally {
-    Pop-Location
-  }
-
-  Write-Host "[fact] ninja -n libseekdb (dry run, first 80 lines + stderr):"
-  Push-Location $buildRoot
-  try {
-    $dry = & ninja -n libseekdb 2>&1
-    $dry | Select-Object -First 80 | ForEach-Object { Write-Host "  $_" }
-    Write-Host "[fact] ninja -n libseekdb exit code: $LASTEXITCODE"
-  } catch {
-    Write-Host "  error: $($_.Exception.Message)"
-  } finally {
-    Pop-Location
+    Write-Host "[fact] resolved DLL: none"
   }
 
   Write-Host $bar

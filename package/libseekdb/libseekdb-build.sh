@@ -2,9 +2,11 @@
 # Build libseekdb, on macOS bundle deps to libs/, then pack lib + libs/ + seekdb.h into a .zip
 # Zip is written to this script's directory (package/libseekdb/).
 #
-# Invokes build.sh with -DBUILD_EMBED_MODE=ON and --make libseekdb (same as CI), not a full make.
-# Windows (seekdb.dll): build with .\build.ps1 release --ninja --target libseekdb -DBUILD_EMBED_MODE=ON,
-# then run libseekdb-build.ps1 in this directory (see README.md).
+# Builds with Bazel: build.py init (first run / deps missing) + build
+# //src/observer:libseekdb. The linked library is copied into
+# <output-base>/src/include, which is the layout the binding tests and the
+# pack steps use. Windows (seekdb.dll) packs with libseekdb-build.ps1
+# (see README.md).
 #
 # Usage:
 #   cd package/libseekdb && ./libseekdb-build.sh
@@ -41,34 +43,38 @@ UNAME_M="$(uname -m)"
 # --- Helpers ---
 die() { echo "error: $*" >&2; exit 1; }
 
-# CMake flags aligned with .github/workflows/build-libseekdb.yml (embed + libseekdb only).
-build_libseekdb_embed_args() {
-  BUILD_EMBED_ARGS=(-DBUILD_EMBED_MODE=ON)
-  if command -v python3 &>/dev/null; then
-    PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
-    [[ -n "$PYVER" ]] && BUILD_EMBED_ARGS+=(-DPYTHON_VERSION="$PYVER")
-  fi
-  if [[ "$UNAME_S" == "Darwin" ]]; then
-    BUILD_EMBED_ARGS+=(-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0)
-    if [[ -n "${ARCH:-}" ]]; then
-      case "$ARCH" in
-        arm64|aarch64) BUILD_EMBED_ARGS+=(-DCMAKE_OSX_ARCHITECTURES=arm64) ;;
-        x86_64|amd64)  BUILD_EMBED_ARGS+=(-DCMAKE_OSX_ARCHITECTURES=x86_64) ;;
-      esac
-    fi
-  fi
-}
-
-# Build only libseekdb (not the full tree / unittest).
+# Build only libseekdb (not the full tree / unittest) and stage the shared
+# library where the binding tests and the pack steps expect it.
 run_build_libseekdb() {
   local need_init="$1"
-  build_libseekdb_embed_args
-  local -a args=("$BUILD_TYPE")
-  [[ "$need_init" == true ]] && args+=(--init)
-  [[ "$ANDROID_PACK" == true ]] && args+=(--android)
-  args+=("${BUILD_EMBED_ARGS[@]}" --make libseekdb)
-  echo "[BUILD] ./build.sh ${args[*]}"
-  (cd "$TOP_DIR" && ./build.sh "${args[@]}") || return 1
+  local build_dir
+  local -a init_args=(init)
+  local -a build_args=(build)
+  PYTHON="${PYTHON:-python3}"
+  if [[ "$ANDROID_PACK" == true ]]; then
+    build_dir="$TOP_DIR/build_android_${BUILD_TYPE}"
+    init_args+=(--android)
+    build_args+=(--config=android)
+  else
+    build_dir="$TOP_DIR/build_${BUILD_TYPE}"
+  fi
+  [[ "$BUILD_TYPE" == "debug" ]] && build_args+=(-c dbg)
+  build_args+=(-o "$build_dir" //src/observer:libseekdb)
+
+  if [[ "$need_init" == true ]]; then
+    echo "[BUILD] $PYTHON ./build.py ${init_args[*]}"
+    (cd "$TOP_DIR" && "$PYTHON" ./build.py "${init_args[@]}") || return 1
+  fi
+  echo "[BUILD] $PYTHON ./build.py ${build_args[*]}"
+  (cd "$TOP_DIR" && "$PYTHON" ./build.py "${build_args[@]}") || return 1
+
+  local staged="$build_dir/bin/src/observer"
+  local lib
+  for lib in libseekdb.dylib libseekdb.so; do
+    [[ -f "$staged/$lib" ]] || continue
+    mkdir -p "$build_dir/src/include"
+    cp -f "$staged/$lib" "$build_dir/src/include/"
+  done
 }
 
 # List dependency paths from a dylib (one per line, trimmed). Skips first line (the dylib itself).

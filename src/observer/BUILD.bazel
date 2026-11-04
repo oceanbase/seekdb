@@ -572,3 +572,97 @@ cc_import(
     testonly = True,
     visibility = ["//unittest:__subpackages__"],
 )
+
+# C API behind the standalone libseekdb shared library used by the embedded
+# bindings (Python/Node/Rust/Go/Java). The FFI translation unit contributes the
+# only direct objects; the engine arrives whole-archived below so archive
+# members that the API never references are still linked into the library.
+cc_library(
+    name = "seekdb_c_api",
+    srcs = ["//src/include:seekdb.cpp"],
+    hdrs = ["//src/include:seekdb.h"],
+    tags = ["manual"],
+    deps = [
+        ":observer_internal_interface",
+        "//bazel/third_party:curl_headers",
+        "//deps/external:jemalloc_headers",
+        "//rust:in_process_headers",
+        "//rust:logger_headers",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_io_primitives",
+        "//src/oblib:oblib_rpc",
+    ],
+)
+
+# Only the public C API is exported: a version script on ELF platforms, an
+# allow list on macOS, and a module definition on Windows.
+_LIBSEEKDB_EXPORT_INPUTS = select({
+    "@platforms//os:macos": ["//src/include:seekdb_macos_exports"],
+    "@platforms//os:windows": ["//src/include:seekdb_windows_def"],
+    "//conditions:default": ["//src/include:seekdb.version"],
+})
+
+_LIBSEEKDB_LINKOPTS = select({
+    "@platforms//os:macos": [
+        "-Wl,-framework,Security",
+        "-Wl,-framework,CoreFoundation",
+        "-Wl,-framework,SystemConfiguration",
+        "-liconv",
+        "-Wl,-exported_symbols_list,$(location //src/include:seekdb_macos_exports)",
+    ],
+    "@platforms//os:windows": [
+        "/DEF:$(location //src/include:seekdb_windows_def)",
+        "/FORCE:MULTIPLE",
+    ],
+    "//conditions:default": [
+        "-Wl,-z,notext",
+        "-Wl,-z,noexecstack",
+        "-Wl,--no-rosegment",
+        "-Wl,--build-id=sha1",
+        "-Wl,-z,relro",
+        "-Wl,-z,now",
+        "-Wl,--allow-multiple-definition",
+        "-Wl,--version-script=$(location //src/include:seekdb.version)",
+    ],
+})
+
+final_link(
+    name = "_libseekdb_link",
+    direct_object_deps = [":seekdb_c_api"],
+    whole_group_deps = (
+        _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS +
+        _CORE_LINK_DEPS +
+        select({
+            "@platforms//os:macos": [
+                "//src/sql/parser:sql_server_parser",
+            ],
+            "//conditions:default": [
+                "//src/oblib:malloc_hook_objects",
+                "//src/sql/parser:sql_server_parser",
+            ],
+        })
+    ),
+    ordered_link_files = _ORDERED_LINK_FILES,
+    extra_inputs = _EXTRA_LINK_INPUTS + _LIBSEEKDB_EXPORT_INPUTS,
+    linkopts = _SYSTEM_LINKOPTS + _LIBSEEKDB_LINKOPTS + sanity_linkopts(),
+    out = select({
+        "@platforms//os:macos": "libseekdb.dylib",
+        "@platforms//os:windows": "seekdb.dll",
+        "//conditions:default": "libseekdb.so",
+    }),
+    # Packaged for Windows consumers (Node N-API binding and the packed-zip smoke
+    # test link against it). Ignored on other platforms.
+    import_library = "seekdb.lib",
+    shared = True,
+    runtime_dlls = True,
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "libseekdb",
+    actual = ":_libseekdb_link",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)

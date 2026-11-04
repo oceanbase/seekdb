@@ -3,6 +3,7 @@ load(":cargo_build_script_env.bzl", "cargo_build_script_environment")
 
 exports_files([
     "build_metadata.py",
+    "exported_symbols.py",
     "parser.bzl",
     "parser_codegen.py",
     "platforms.bzl",

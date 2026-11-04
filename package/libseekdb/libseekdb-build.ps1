@@ -3,14 +3,15 @@
 .SYNOPSIS
   Pack libseekdb for Windows into libseekdb-windows-x64.zip (seekdb.h, seekdb.dll, seekdb.lib, libs/*.dll).
 
-  Runtime DLLs are collected with cmake/BundleRuntimeDllsWindows.cmake (same as POST_BUILD on
-  libseekdb and the binding-test PATH layout). macOS packs deps under libs/ via dylibbundler;
-  Windows zip must match that layout for standalone embed consumers.
+  The Bazel target //src/observer:libseekdb declares the seekdb.lib import library and symlinks the runtime
+  DLLs (OpenSSL, vcpkg, ...) next to seekdb.dll, so the pack only stages what the build already produced.
+  macOS packs deps under libs/ via dylibbundler; the Windows zip must match that layout for standalone
+  embed consumers.
 
 .EXAMPLE
   cd package\libseekdb
   .\libseekdb-build.ps1
-  .\libseekdb-build.ps1 -IncludeDir C:\path\to\build_release\src\include
+  .\libseekdb-build.ps1 -IncludeDir C:\path\to\build_release\bin\src\observer
 #>
 param(
   [string]$IncludeDir = ""
@@ -20,85 +21,6 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TopDir = (Resolve-Path (Join-Path $ScriptDir "..\..")).Path
 . (Join-Path $TopDir "unittest\include\seekdb-windows-dll-resolve.ps1")
-
-function Get-CMakeExecutable {
-  param([Parameter(Mandatory = $true)][string]$RepoRoot)
-  $bundled = Join-Path $RepoRoot "deps\3rd\tools\cmake\bin\cmake.exe"
-  if (Test-Path -LiteralPath $bundled) { return $bundled }
-  $cmd = Get-Command cmake -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
-  throw "cmake not found (expected deps\3rd\tools\cmake\bin\cmake.exe after build init)"
-}
-
-function Get-SeekDbWindowsRuntimeSearchDirs {
-  param(
-    [Parameter(Mandatory = $true)][string]$RepoRoot,
-    [Parameter(Mandatory = $true)][string]$DllDir
-  )
-  $dirs = [System.Collections.Generic.List[string]]::new()
-  $seen = @{}
-
-  function Add-Dir([string]$path) {
-    if (-not $path -or -not (Test-Path -LiteralPath $path)) { return }
-    $key = (Resolve-Path -LiteralPath $path).Path.ToLowerInvariant()
-    if ($seen.ContainsKey($key)) { return }
-    $seen[$key] = $true
-    $null = $dirs.Add($key)
-  }
-
-  # POST_BUILD may already have copied DLLs next to seekdb.dll.
-  Add-Dir $DllDir
-
-  $depsDone = Test-Path (Join-Path $RepoRoot "deps\3rd\DONE")
-  $vcpkgRoot = if ($env:OB_VCPKG_DIR -and $env:OB_VCPKG_DIR.Trim().Length -gt 0) {
-    $env:OB_VCPKG_DIR.TrimEnd('\', '/')
-  } elseif ($depsDone) {
-    Join-Path $RepoRoot "deps\3rd\vcpkg\x64-windows"
-  } else {
-    "C:/VcpkgInstalled/x64-windows"
-  }
-  Add-Dir (Join-Path $vcpkgRoot "bin")
-
-  $opensslRoot = if ($env:OB_OPENSSL_DIR -and $env:OB_OPENSSL_DIR.Trim().Length -gt 0) {
-    $env:OB_OPENSSL_DIR.TrimEnd('\', '/')
-  } elseif ($depsDone) {
-    Join-Path $RepoRoot "deps\3rd\openssl"
-  } else {
-    "C:/Program Files/OpenSSL-Win64"
-  }
-  Add-Dir (Join-Path $opensslRoot "bin")
-
-  $vsagRoot = if ($env:OB_VSAG_DIR -and $env:OB_VSAG_DIR.Trim().Length -gt 0) {
-    $env:OB_VSAG_DIR.TrimEnd('\', '/')
-  } elseif ($depsDone) {
-    Join-Path $RepoRoot "deps\3rd\vsag"
-  } else {
-    ""
-  }
-  if ($vsagRoot) { Add-Dir (Join-Path $vsagRoot "bin") }
-
-  return @($dirs)
-}
-
-function Invoke-BundleRuntimeDllsForPack {
-  param(
-    [Parameter(Mandatory = $true)][string]$CmakeExe,
-    [Parameter(Mandatory = $true)][string]$BundleScript,
-    [Parameter(Mandatory = $true)][string]$DllPath,
-    [Parameter(Mandatory = $true)][string]$OutLibsDir,
-    [Parameter(Mandatory = $true)][string[]]$SearchDirs
-  )
-  New-Item -ItemType Directory -Path $OutLibsDir -Force | Out-Null
-  $searchJoined = ($SearchDirs -join ';')
-  & $CmakeExe `
-    "-DEXE=$DllPath" `
-    "-DOUT_DIR=$OutLibsDir" `
-    "-DSEARCH_DIRS=$searchJoined" `
-    -P $BundleScript
-  if ($LASTEXITCODE -ne 0) {
-    throw "BundleRuntimeDllsWindows.cmake failed with exit code $LASTEXITCODE"
-  }
-}
 
 function Copy-ColocatedRuntimeDlls {
   param(
@@ -120,10 +42,9 @@ $BuildDirName = Get-SeekDbWindowsBuildDirNameFromEnv
 $WorkDir = if ($IncludeDir) {
   (Resolve-Path $IncludeDir).Path
 } else {
-  Join-Path $TopDir "build_$BuildDirName\src\include"
+  Join-Path $TopDir "build_$BuildDirName\bin\src\observer"
 }
 
-$BuildRoot = Join-Path $TopDir "build_$BuildDirName"
 $Dll = $null
 if ($IncludeDir) {
   foreach ($name in @("seekdb.dll", "libseekdb.dll")) {
@@ -139,8 +60,7 @@ if (-not $Dll -or -not (Test-Path -LiteralPath $Dll)) {
   if (-not $IncludeDir) {
     Write-SeekDbWindowsDllDiagnostics -RepoRoot $TopDir -BuildDirName $BuildDirName
   }
-  $hint = if ($IncludeDir) { $WorkDir } else { $BuildRoot }
-  Write-Error "seekdb.dll not found under $hint (build libseekdb first: .\build.ps1 release --ninja --target libseekdb -DBUILD_EMBED_MODE=ON)"
+  Write-Error "seekdb.dll not found under $WorkDir (build it first: python ./build.py build -o build_$BuildDirName //src/observer:libseekdb)"
 }
 
 $DllDir = Split-Path -Parent $Dll
@@ -162,27 +82,12 @@ $LibsStaging = Join-Path $Staging "libs"
 New-Item -ItemType Directory -Path $Staging -Force | Out-Null
 
 try {
-  $cmakeExe = Get-CMakeExecutable -RepoRoot $TopDir
-  $bundleScript = Join-Path $TopDir "cmake\BundleRuntimeDllsWindows.cmake"
-  if (-not (Test-Path -LiteralPath $bundleScript)) {
-    Write-Error "Missing $bundleScript"
-  }
-
-  $searchDirs = Get-SeekDbWindowsRuntimeSearchDirs -RepoRoot $TopDir -DllDir $DllDir
-  Write-Host "[libseekdb-build.ps1] Bundling runtime DLLs into libs/ (search: $($searchDirs.Count) dirs)"
-  Invoke-BundleRuntimeDllsForPack `
-    -CmakeExe $cmakeExe `
-    -BundleScript $bundleScript `
-    -DllPath $Dll `
-    -OutLibsDir $LibsStaging `
-    -SearchDirs $searchDirs
-
-  # Include DLLs already colocated by libseekdb POST_BUILD (may overlap).
+  Write-Host "[libseekdb-build.ps1] Collecting runtime DLLs from $DllDir"
   Copy-ColocatedRuntimeDlls -DllDir $DllDir -OutLibsDir $LibsStaging
 
   $libCount = @(Get-ChildItem -LiteralPath $LibsStaging -Filter "*.dll" -File -ErrorAction SilentlyContinue).Count
   if ($libCount -lt 1) {
-    throw "No runtime DLLs under $LibsStaging — cannot produce a standalone Windows zip. Check vcpkg/OpenSSL paths and BundleRuntimeDllsWindows.cmake output."
+    throw "No runtime DLLs under $DllDir — cannot produce a standalone Windows zip. The Bazel link step symlinks them next to seekdb.dll (final_link runtime_dlls)."
   }
   Write-Host "[libseekdb-build.ps1] libs/ contains $libCount runtime DLL(s)"
 
@@ -191,7 +96,7 @@ try {
   if ($Lib -and (Test-Path -LiteralPath $Lib)) {
     Copy-Item $Lib (Join-Path $Staging "seekdb.lib")
   } else {
-    Write-Host "[libseekdb-build.ps1][WARN] seekdb.lib not found; zip will contain DLL + header only." -ForegroundColor Yellow
+    throw "seekdb.lib not found next to $Dll — the Bazel target must declare the import library (final_link import_library)."
   }
 
   if (Test-Path $OutZip) { Remove-Item -Force $OutZip }

@@ -20,7 +20,7 @@ echo ""
 # Check if seekdb library exists
 if [ ! -f "${SEEKDB_LIB_PATH}" ]; then
     echo "Error: libseekdb${SEEKDB_LIB_EXT} not found at ${SEEKDB_LIB_PATH}"
-    echo "Please build the project first: cd ../../../build_release && make libseekdb"
+    echo "Please build the project first: python3 build.py build -o build_release //src/observer:libseekdb"
     exit 1
 fi
 

@@ -1,13 +1,18 @@
 # Build, pack and upload libseekdb for multiple platforms (linux x64/arm64, macos arm64, windows x64, android arm64-v8a) to S3
 #
-# Reference build environments (use these systems/env as the standard):
-#   linux-x64:   runner ubuntu-22.04, container quay.io/pypa/manylinux2014_x86_64 (glibc 2.17, CentOS 7+), zip libseekdb-linux-x64.zip
-#   linux-arm64: runner ubuntu-22.04-arm, container quay.io/pypa/manylinux2014_aarch64 (glibc 2.17), zip libseekdb-linux-arm64.zip
-#   darwin-arm64: runner macos-15, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
-#   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip (seekdb.dll + libs/*.dll)
-#   android-arm64-v8a: runner macos-15, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
+# All platforms build the Bazel target //src/observer:libseekdb through ./build.py (deps/3rd + Bazel 9.3),
+# then package with package/libseekdb/libseekdb-build.sh (libseekdb-build.ps1 on Windows).
 #
-# macOS builds use runner macos-15 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
+# Reference build environments (use these systems/env as the standard):
+#   linux-x64:   runner ubuntu-22.04, container quay.io/pypa/manylinux_2_28_x86_64 (glibc 2.28+), zip libseekdb-linux-x64.zip
+#   linux-arm64: runner ubuntu-22.04-arm, container quay.io/pypa/manylinux_2_28_aarch64 (glibc 2.28+), zip libseekdb-linux-arm64.zip
+#   darwin-arm64: runner macos-15, native (min macOS 13.0), zip libseekdb-darwin-arm64.zip
+#   windows-x64: runner windows-2022, python build.py + libseekdb-build.ps1, zip libseekdb-windows-x64.zip (seekdb.dll + libs/*.dll)
+#   android-arm64-v8a: runner macos-15, NDK r27d + build.py --config=android, zip libseekdb-android-arm64-v8a.zip
+#
+# The Linux containers run Bazel because Bazel 9.3 does not support EL7 (glibc 2.17); manylinux_2_28 keeps the
+# shipped libseekdb.so baseline at glibc 2.28 instead of the runner's glibc.
+# macOS builds set macos_minimum_os=13.0 in .bazelrc, so the dylib runs on macOS 13 (Ventura) and later.
 # On macOS, dylibs are signed in libseekdb-build.sh: ad-hoc when no cert; when repo is oceanbase/seekdb and secrets are set,
 # use Developer ID (secrets: OSX_CODESIGN_BUILD_CERTIFICATE_BASE64, OSX_CODESIGN_P12_PASSWORD, OSX_CODESIGN_KEYCHAIN_PASSWORD, OSX_CODESIGN_IDENTITY).
 # Optional: add notarization step and APPLE_ID/PASSWORD/TEAM_ID secrets to notarize the zip.
@@ -19,8 +24,9 @@
 # → save caches (always).
 # Verify packed artifact: linux/macos run test-packed-artifact-smoke.sh (hard gate); windows runs the equivalent
 # test-packed-artifact-smoke.ps1 (hard gate); android runs unzip -t.
-# Platform differences (build invocation, toolchain install, ccache provisioning) are confined to step bodies/scripts.
-# macOS ccache keys include COMMIT_SHA so object files from other commits are not reused (see package/libseekdb/README.md).
+# Platform differences (build invocation, toolchain install, Bazel/Rust caching) are confined to step bodies/scripts.
+# Caches: deps/3rd (dependency SDK), .ci/bazel-{launcher,cache} (pinned Bazel + disk cache keyed on MODULE.bazel.lock),
+# .ci/{cargo,rustup} (Rust SDK on the containerised Linux jobs; elsewhere the setup-rust action caches Cargo).
 # Android: compile → setup toolchains → host-skip FFI notice → pack → verify zip → upload → save caches → summary (see job comment).
 name: Build libseekdb
 run-name: Build libseekdb for ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
@@ -78,13 +84,13 @@ jobs:
           - platform: linux-x64
             runner: ubuntu-22.04
             artifact_name: libseekdb-linux-x64
-            container_image: quay.io/pypa/manylinux2014_x86_64
-            deps_file: oceanbase.el7.x86_64.deps
+            container_image: quay.io/pypa/manylinux_2_28_x86_64
+            deps_file: oceanbase.el8.x86_64.deps
           - platform: linux-arm64
             runner: ubuntu-22.04-arm
             artifact_name: libseekdb-linux-arm64
-            container_image: quay.io/pypa/manylinux2014_aarch64
-            deps_file: oceanbase.el7.aarch64.deps
+            container_image: quay.io/pypa/manylinux_2_28_aarch64
+            deps_file: oceanbase.el8.aarch64.deps
 
     steps:
       - name: Checkout
@@ -97,60 +103,54 @@ jobs:
         uses: actions/cache@v4
         with:
           path: deps/3rd
-          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el7-${{ hashFiles(format('deps/init/{0}', matrix.deps_file)) }}
+          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el8-${{ hashFiles(format('deps/init/{0}', matrix.deps_file)) }}
           restore-keys: |
-            ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el7-
+            ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el8-
 
-      - name: Cache ccache
+      - name: Cache Bazel
         uses: actions/cache@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-${{ matrix.platform }}-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
+            ${{ runner.os }}-libseekdb-bazel-${{ matrix.platform }}-
 
-      # Run build inside manylinux2014 so Node/actions run on host (glibc 2.28+), build runs in CentOS 7 (glibc 2.17) for compatibility
+      - name: Cache Rust SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            .ci/cargo
+            .ci/rustup
+          key: ${{ runner.os }}-libseekdb-rust-${{ matrix.platform }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-libseekdb-rust-${{ matrix.platform }}-
+
+      # Bazel 9.3 does not run on EL7, so the build runs in manylinux_2_28 (glibc 2.28) instead; the zip keeps a
+      # glibc 2.28 baseline rather than the ubuntu-22.04 runner's glibc. Node/actions still run on the host.
       - name: Build libseekdb
-        env:
-          BUILD_TYPE: release
         run: |
           docker run --rm -u root \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
-            -e BUILD_TYPE -e GITHUB_WORKSPACE \
+            -e GITHUB_WORKSPACE \
+            -e CARGO_HOME="$GITHUB_WORKSPACE/.ci/cargo" \
+            -e RUSTUP_HOME="$GITHUB_WORKSPACE/.ci/rustup" \
             ${{ matrix.container_image }} \
             bash -c '
-              set -e
-              # Install deps in two steps: base first (wget required for dep_create.sh), then ccache if available
+              set -euo pipefail
               yum install -y git wget rpm cpio make glibc-devel glibc-headers binutils m4 python3 python3-devel libtool libaio ncurses-devel which zlib-devel
-              yum install -y epel-release 2>/dev/null || true
-              yum install -y ccache 2>/dev/null || true
               git config --global --add safe.directory "$GITHUB_WORKSPACE"
-              # CMake includes cmake/Rust.cmake at configure time; cargo must exist before build.sh.
-              # shellcheck source=/dev/null
-              source .github/script/install-rust.sh
-              export PATH="$CARGO_HOME/bin:$PATH"
-              CARGO_CMAKE="-DCARGO=$(command -v cargo)"
-              export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
-              export CCACHE_COMPILERCHECK=content
-              export CCACHE_NOHASHDIR=1
-              mkdir -p deps/3rd/usr/local/oceanbase/devtools/bin
-              CCACHE_SRC=$(command -v ccache 2>/dev/null || true)
-              if [ -n "$CCACHE_SRC" ] && [ -x "$CCACHE_SRC" ]; then
-                ln -sf "$CCACHE_SRC" deps/3rd/usr/local/oceanbase/devtools/bin/ccache
-                USE_CCACHE="-DOB_USE_CCACHE=ON"
-              else
-                USE_CCACHE="-DOB_USE_CCACHE=OFF"
-              fi
-              export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
-              bash build.sh init
-              if [ -x /opt/python/cp39-cp39/bin/python3.9 ]; then
-                export PATH="/opt/python/cp39-cp39/bin:$PATH"
-                PYVER=3.9
-              else
-                PYVER=$(python3 -c "import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")")
-              fi
-              bash build.sh release --init $USE_CCACHE -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER $CARGO_CMAKE --make libseekdb
-              [ -n "$USE_CCACHE" ] && ccache -s || true
+              cd "$GITHUB_WORKSPACE"
+              python3 ./build.py init
+              python3 ./build.py build \
+                --launcher_cache_dir "$GITHUB_WORKSPACE/.ci/bazel-launcher" \
+                --disk_cache="$GITHUB_WORKSPACE/.ci/bazel-cache" \
+                --lockfile_mode=error \
+                -o build_release //src/observer:libseekdb
+              # Binding tests and the pack step read <output_base>/src/include.
+              mkdir -p build_release/src/include
+              cp -f build_release/bin/src/observer/libseekdb.so build_release/src/include/
             '
       - name: Fix ownership (container writes as root)
         run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
@@ -242,13 +242,23 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: deps/3rd
-          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el7-${{ hashFiles(format('deps/init/{0}', matrix.deps_file)) }}
-      - name: Save Cache ccache
+          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el8-${{ hashFiles(format('deps/init/{0}', matrix.deps_file)) }}
+      - name: Save Cache Bazel
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-${{ matrix.platform }}-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
+      - name: Save Cache Rust SDK
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .ci/cargo
+            .ci/rustup
+          key: ${{ runner.os }}-libseekdb-rust-${{ matrix.platform }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
 
       - name: Binding tests outcome
         if: always()
@@ -281,7 +291,6 @@ jobs:
             runner: macos-15
             artifact_name: libseekdb-darwin-arm64
             arch: arm64
-            cmake_arch: arm64
 
     steps:
       - name: Checkout
@@ -289,49 +298,45 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
 
-      - name: Install macOS dependencies (pinned Homebrew)
-        run: |
-          chmod +x package/libseekdb/install-macos-brew-deps.sh
-          package/libseekdb/install-macos-brew-deps.sh
+      # The Bazel build takes its libraries from deps/3rd; only the packer's dylib bundler comes from Homebrew.
+      - name: Install macOS packaging tools
+        run: brew install dylibbundler
 
       - name: Cache deps
         uses: actions/cache@v4
         with:
           path: deps/3rd
-          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-${{ hashFiles('deps/init/oceanbase.macos.arm64.deps') }}
+          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-${{ hashFiles('deps/init/oceanbase.macos15.arm64.deps') }}
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-
 
-      - name: Cache ccache
+      - name: Cache Bazel
         uses: actions/cache@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-${{ matrix.platform }}-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
+            ${{ runner.os }}-libseekdb-bazel-${{ matrix.platform }}-
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Build init (macOS)
-        run: bash build.sh init
-
       - name: Build libseekdb
         env:
-          BUILD_TYPE: release
           ARCH: ${{ matrix.arch }}
-          CMAKE_OSX_ARCHITECTURES: ${{ matrix.cmake_arch }}
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_COMPILERCHECK: content
-          CCACHE_NOHASHDIR: 1
         run: |
-          # Env.cmake looks for ccache in deps/3rd/.../devtools/bin; put it there so no Env.cmake change is needed
-          mkdir -p deps/3rd/usr/local/oceanbase/devtools/bin
-          ln -sf "$(which ccache)" deps/3rd/usr/local/oceanbase/devtools/bin/ccache
-          # Use runner's Python (macOS has 3.x, not 3.8 by default) so embed CMake finds it
-          PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          bash build.sh release --init -DOB_USE_CCACHE=ON -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 --make libseekdb
-          ccache -s
+          set -euo pipefail
+          python3 ./build.py init
+          python3 ./build.py build \
+            --launcher_cache_dir "$GITHUB_WORKSPACE/.ci/bazel-launcher" \
+            --disk_cache="$GITHUB_WORKSPACE/.ci/bazel-cache" \
+            --lockfile_mode=error \
+            -o build_release //src/observer:libseekdb
+          # Binding tests and the pack step read <output_base>/src/include.
+          mkdir -p build_release/src/include
+          cp -f build_release/bin/src/observer/libseekdb.dylib build_release/src/include/
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -428,19 +433,21 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: package/libseekdb/libseekdb-*.zip
 
-      # Save caches even on failure so next run can resume (deps/ccache)
+      # Save caches even on failure so next run can resume
       - name: Save Cache deps
         if: always()
         uses: actions/cache/save@v4
         with:
           path: deps/3rd
-          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-${{ hashFiles('deps/init/oceanbase.macos.arm64.deps') }}
-      - name: Save Cache ccache
+          key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-${{ hashFiles('deps/init/oceanbase.macos15.arm64.deps') }}
+      - name: Save Cache Bazel
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-${{ matrix.platform }}-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
 
       - name: Binding tests outcome
         if: always()
@@ -478,10 +485,6 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
 
-      - name: Install macOS packages
-        run: |
-          brew install cmake ccache wget || true
-
       - name: Install Android NDK
         uses: nttld/setup-ndk@v1
         with:
@@ -491,35 +494,41 @@ jobs:
       - name: Cache deps
         uses: actions/cache@v4
         with:
-          path: deps/3rd
-          key: ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-${{ hashFiles('deps/init/oceanbase.android.arm64.deps') }}
+          path: |
+            deps/3rd
+            deps/android
+          key: ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-${{ hashFiles('deps/init/oceanbase.android.arm64.deps', 'deps/init/oceanbase.macos15.arm64.deps') }}
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-
 
-      - name: Cache ccache
+      - name: Cache Bazel
         uses: actions/cache@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-android-arm64-v8a-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a-
+            ${{ runner.os }}-libseekdb-bazel-android-arm64-v8a-
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
       - name: Build libseekdb
-        env:
-          BUILD_TYPE: release
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_COMPILERCHECK: content
-          CCACHE_NOHASHDIR: 1
         run: |
-          set -e
-          # Do not symlink ccache into deps/3rd before --init: dep_create.sh rm -rf deps/3rd.
-          # CMake finds ccache on PATH when devtools has none (Android deps omit obdevtools-ccache).
-          # ANDROID_NDK_HOME is set by the NDK install step; build.sh fixes ANDROID_ABI=arm64-v8a.
-          bash build.sh release --android -DOB_USE_CCACHE=ON -DBUILD_EMBED_MODE=ON --init --make libseekdb
-          ccache -s
+          set -euo pipefail
+          # ANDROID_NDK_HOME is set by the NDK install step; the Bazel toolchain
+          # repository reads it and pins ABI arm64-v8a / API 28.
+          python3 ./build.py init --android
+          python3 ./build.py build \
+            --config=android \
+            --launcher_cache_dir "$GITHUB_WORKSPACE/.ci/bazel-launcher" \
+            --disk_cache="$GITHUB_WORKSPACE/.ci/bazel-cache" \
+            --lockfile_mode=error \
+            -o build_android_release //src/observer:libseekdb
+          # The pack script reads <output_base>/src/include.
+          mkdir -p build_android_release/src/include
+          cp -f build_android_release/bin/src/observer/libseekdb.so build_android_release/src/include/
 
       # Same toolchain install order as other jobs (no host FFI below).
       - name: Setup Node.js
@@ -562,15 +571,19 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: deps/3rd
-          key: ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-${{ hashFiles('deps/init/oceanbase.android.arm64.deps') }}
+          path: |
+            deps/3rd
+            deps/android
+          key: ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-${{ hashFiles('deps/init/oceanbase.android.arm64.deps', 'deps/init/oceanbase.macos15.arm64.deps') }}
 
-      - name: Save Cache ccache
+      - name: Save Cache Bazel
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-android-arm64-v8a-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
 
       - name: Pack / zip verification outcome
         if: always()
@@ -605,91 +618,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-windows-x64-
 
-      - name: Cache ccache
+      - name: Cache Bazel
         uses: actions/cache@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-windows-x64
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-windows-x64-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-windows-x64-
-
-      - name: Install ccache (Windows)
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          function Refresh-Path {
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          }
-          Refresh-Path
-          if (Get-Command ccache -ErrorAction SilentlyContinue) {
-            Write-Host "ccache already on PATH"
-            Get-Command ccache | Out-Host
-            exit 0
-          }
-          choco install ccache -y --no-progress 2>&1 | Out-Host
-          Refresh-Path
-          if ($LASTEXITCODE -ne 0 -or -not (Get-Command ccache -ErrorAction SilentlyContinue)) {
-            Write-Host "::notice::choco install ccache failed or ccache not on PATH; installing from ccache GitHub releases."
-            $ver = "4.13.2"
-            $zipName = "ccache-$ver-windows-x86_64.zip"
-            $url = "https://github.com/ccache/ccache/releases/download/v$ver/$zipName"
-            $tools = Join-Path $env:GITHUB_WORKSPACE ".tools"
-            $dest = Join-Path $tools "ccache-$ver-win64"
-            New-Item -ItemType Directory -Force -Path $dest | Out-Null
-            $zipPath = Join-Path $dest $zipName
-            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
-            Expand-Archive -Path $zipPath -DestinationPath $dest -Force
-            $exe = Get-ChildItem -Path $dest -Filter ccache.exe -Recurse | Select-Object -First 1
-            if (-not $exe) { throw "ccache.exe not found after extracting $zipName under $dest" }
-            $binDir = $exe.Directory.FullName
-            Add-Content -Path $env:GITHUB_PATH -Value $binDir -Encoding utf8
-            $env:PATH = "$binDir;$env:PATH"
-          }
-          Get-Command ccache | Out-Host
+            ${{ runner.os }}-libseekdb-bazel-windows-x64-
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
       - name: Build libseekdb
         shell: pwsh
-        env:
-          BUILD_TYPE: release
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_COMPILERCHECK: content
-          CCACHE_NOHASHDIR: 1
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          # Pick up Chocolatey / GITHUB_PATH / fallback-installed ccache
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          $py = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-          if (-not (Test-Path "deps/3rd/DONE")) {
-            .\build.ps1 init
-          }
-          # Prepend deps LLVM to PATH; pass lld-link so CMake does not pick GNU ld (MinGW) for clang-cl.
           $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
-          # CMake -G Ninja requires ninja on PATH at configure time (otherwise CMake may fall back or leave a stale non-Ninja cache).
-          foreach ($rel in @("deps/3rd/tools/ninja", "deps/3rd/tools/cmake/bin")) {
-            $tp = Join-Path $ws $rel
-            if (Test-Path -LiteralPath $tp) { $env:PATH = "$tp;$env:PATH" }
-          }
-          $llvmRoot = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR } else { Join-Path $ws "deps/3rd/tools/llvm18" }
-          $llvmBin = Join-Path $llvmRoot "bin"
-          $lldLink = Join-Path $llvmBin "lld-link.exe"
-          if (-not (Test-Path $lldLink)) { throw "lld-link.exe not found: $lldLink" }
-          $lldFwd = $lldLink.Replace("\", "/")
-          $env:PATH = "$llvmBin;$env:PATH"
-          $ccacheOpt = "-DOB_USE_CCACHE=OFF"
-          if (Get-Command ccache -ErrorAction SilentlyContinue) {
-            $ccacheOpt = "-DOB_USE_CCACHE=ON"
-          } else {
-            Write-Host "::warning::ccache not found; building without compiler cache."
-          }
-          # Map RelWithDebInfo/Debug/MinSizeRel -> Release for IMPORTED targets (e.g. Python3::Module .lib/.dll on Windows).
-          # Ensures cache has these on first cmake run; complements cmake/Env.cmake for CI runners where Python stubs omit RelWithDebInfo.
-          .\build.ps1 release --ninja --target libseekdb "-DBUILD_EMBED_MODE=ON" "-DPYTHON_VERSION=$py" "-DCMAKE_LINKER=$lldFwd" "-DCMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO=Release" "-DCMAKE_MAP_IMPORTED_CONFIG_DEBUG=Release" "-DCMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL=Release" $ccacheOpt
-          if (Get-Command ccache -ErrorAction SilentlyContinue) { ccache -s }
+          python ./build.py init
+          if ($LASTEXITCODE -ne 0) { throw "build.py init failed with exit code $LASTEXITCODE" }
+          python ./build.py build `
+            --launcher_cache_dir "$ws/.ci/bazel-launcher" `
+            --disk_cache="$ws/.ci/bazel-cache" `
+            --lockfile_mode=error `
+            -o build_release //src/observer:libseekdb
+          if ($LASTEXITCODE -ne 0) { throw "build.py build failed with exit code $LASTEXITCODE" }
 
       - name: Debug facts (Windows)
         shell: pwsh
@@ -697,11 +652,6 @@ jobs:
           BUILD_TYPE: release
         run: |
           $ErrorActionPreference = "Continue"
-          $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
-          foreach ($rel in @("deps/3rd/tools/ninja", "deps/3rd/tools/cmake/bin")) {
-            $tp = Join-Path $ws $rel
-            if (Test-Path -LiteralPath $tp) { $env:PATH = "$tp;$env:PATH" }
-          }
           . ./unittest/include/seekdb-windows-dll-resolve.ps1
           . ./unittest/include/debug-libseekdb-windows.ps1
           Write-LibseekdbWindowsBuildFacts -RepoRoot "$PWD"
@@ -846,12 +796,14 @@ jobs:
           path: deps/3rd
           key: ${{ runner.os }}-libseekdb-deps-windows-x64-${{ hashFiles('deps/init/oceanbase.windows.x86_64.deps') }}
 
-      - name: Save Cache ccache
+      - name: Save Cache Bazel
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-windows-x64
+          path: |
+            .ci/bazel-launcher
+            .ci/bazel-cache
+          key: ${{ runner.os }}-libseekdb-bazel-windows-x64-${{ hashFiles('MODULE.bazel.lock', 'rust-toolchain.toml') }}
 
       - name: Binding tests outcome
         if: always()

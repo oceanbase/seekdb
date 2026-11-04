@@ -224,6 +224,12 @@ def _final_link_impl(ctx):
     ])
 
     output = ctx.actions.declare_file(ctx.attr.out)
+    # Windows consumers link against an import library, so ask lld-link to
+    # write it to a declared output next to the DLL.
+    interface_library = None
+    if platform.os == "windows" and ctx.attr.shared and ctx.attr.import_library:
+        interface_library = ctx.actions.declare_file(ctx.attr.import_library)
+        ordered_link_args.append("/IMPLIB:" + interface_library.path)
     action_name = (
         CPP_LINK_DYNAMIC_LIBRARY_ACTION_NAME
         if ctx.attr.shared
@@ -269,7 +275,7 @@ def _final_link_impl(ctx):
             direct = link_inputs + extra_inputs,
             transitive = [cc_toolchain.all_files],
         ),
-        outputs = [output] + ctx.outputs.side_outputs,
+        outputs = [output] + ctx.outputs.side_outputs + ([interface_library] if interface_library else []),
         mnemonic = "SeekdbFinalLink",
         progress_message = (
             "Linking seekdb shared library %{output}"
@@ -279,8 +285,8 @@ def _final_link_impl(ctx):
         use_default_shell_env = True,
     )
 
-    outputs = [output] + ctx.outputs.side_outputs
-    if platform.os == "windows" and not ctx.attr.shared:
+    outputs = [output] + ctx.outputs.side_outputs + ([interface_library] if interface_library else [])
+    if platform.os == "windows" and (not ctx.attr.shared or ctx.attr.runtime_dlls):
         outputs += _windows_runtime(ctx, dependencies, output)
     return [
         OutputGroupInfo(link_inputs = depset(link_inputs)),
@@ -303,6 +309,8 @@ final_link = rule(
         "extra_inputs": attr.label_list(allow_files = True),
         "linkopts": attr.string_list(),
         "out": attr.string(mandatory = True),
+        "import_library": attr.string(default = ""),
+        "runtime_dlls": attr.bool(default = False),
         "side_outputs": attr.output_list(),
         "shared": attr.bool(default = False),
     } | CC_TOOLCHAIN_ATTRS | PLATFORM_ATTRS,
