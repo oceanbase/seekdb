@@ -97,13 +97,13 @@ int ObStoreCtx::init_for_read(ObLS *tenant_ls,
   return ret;
 }
 
-void ObStoreCtx::force_print_trace_log()
+void ObStoreCtx::dump_trans_diagnose_info()
 {
   if (NULL != mvcc_acc_ctx_.tx_desc_) {
     mvcc_acc_ctx_.tx_desc_->print_trace();
   }
   if (NULL != mvcc_acc_ctx_.tx_ctx_) {
-    mvcc_acc_ctx_.tx_ctx_->print_trace_log();
+    mvcc_acc_ctx_.tx_ctx_->dump_trans_diagnose_info();
   }
 }
 
