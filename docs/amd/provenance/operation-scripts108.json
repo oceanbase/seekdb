@@ -1,0 +1,50 @@
+{
+  "scope": "Original operator scripts copied verbatim; local review executes no database or cloud operation",
+  "scripts": [
+    {
+      "path": "tools/benchmark/amd_hnsw/replay_existing.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\replay_existing.py",
+      "size": 9340,
+      "sha256": "8904e8acc2f465276edfd40f29246c3ff355008847bccc1939c45cf6ceb70464",
+      "copied_verbatim": true
+    },
+    {
+      "path": "tools/benchmark/amd_hnsw/restart_persisted.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\restart_persisted.py",
+      "size": 7722,
+      "sha256": "14c5f9c45351378fe6dbc5f4a24b6151fc77bc1587ee6193041125922620700a",
+      "copied_verbatim": true
+    },
+    {
+      "path": "tools/benchmark/amd_hnsw/export_evidence.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\export_evidence.py",
+      "size": 15680,
+      "sha256": "7a5e7ec6fc4fb7de8dc734f4ebfcc95c2f32133e31f2b665d281e62121870e6e",
+      "copied_verbatim": true
+    },
+    {
+      "path": "tools/benchmark/amd_hnsw/generate_contract.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\generate_contract.py",
+      "size": 10755,
+      "sha256": "50a04d790db578318e801cd596485ff5ac2a2875e70373b09a59546e7ea0bc04",
+      "copied_verbatim": true
+    },
+    {
+      "path": "tools/benchmark/amd_hnsw/recover_persisted.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\cloud-persisted108\\recover_persisted.py",
+      "size": 8693,
+      "sha256": "62f9d235b2a6196e1a8d21bc50851064eae6c1c71f1c2b8dfaa2ece9d135ff17",
+      "copied_verbatim": true
+    }
+  ],
+  "restart_persisted_scope": "Pinned /workspace/amd107 instance and artifacts; no general CLI or --help support",
+  "local_validation": {
+    "python_syntax": "5 scripts PASS (AST only for restart/recover)",
+    "safe_cli_help": "generate_contract, replay_existing, export_evidence PASS in Linux/NumPy environment",
+    "restart_script_executed": false,
+    "export_replay_layout_selftest": "10 selected original files retained in full archive and compact; all SHA checks PASS",
+    "recovery_script_executed": false
+  },
+  "recover_persisted_scope": "Pinned existing deployment; no signals, no general CLI/--help; saved settings over current shell env",
+  "actual_cloud_operation_evidence": "evidence/persistence/OPERATION_HISTORY.md and actual recovery/replay originals"
+}

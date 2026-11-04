@@ -1,0 +1,73 @@
+{
+  "image_adapter_verified": true,
+  "integration_source": "candidate108; launch_sha256=e836a89b3fcb86374bf8543121a98fa285cc8e384d54dc32c117da32f90e51e8; bridge_source_sha256=864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220; bridge_library_sha256=65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+  "build_kind": "hnsw",
+  "completion_command": [
+    "/opt/venv/bin/python3",
+    "/workspace/amd107/completion_proof.py",
+    "--schema",
+    "{schema}",
+    "--table",
+    "{table}",
+    "--index",
+    "{index}",
+    "--backend",
+    "{backend}",
+    "--round",
+    "{round}",
+    "--base-count",
+    "{base_count}",
+    "--output",
+    "{output}",
+    "--ddl-start-utc",
+    "{ddl_start_utc}",
+    "--bridge-source",
+    "/workspace/amd107/hnsw_bridge/seekdb_cuvs_bridge.c",
+    "--bridge-library",
+    "/workspace/amd107/hnsw_bridge/libseekdb_cuvs_bridge.so",
+    "--gpu-environment-file",
+    "/workspace/amd107/environment.json",
+    "--observer-pid",
+    "14001"
+  ],
+  "created_utc": "2026-10-28T09:25:35.236895+00:00",
+  "observer_pid": 14001,
+  "generator_sha256": "50a04d790db578318e801cd596485ff5ac2a2875e70373b09a59546e7ea0bc04",
+  "activation_note": "Unverified by default. Activation requires explicit completed real smoke report and threshold; this tool executes no SQL/services.",
+  "smoke_verification": {
+    "report_path": "/workspace/amd107/quality64-smoke100k/report.json",
+    "report_sha256": "9bfb8b566070747aed38dbd72b0914f24ee846663c9cbd5889d9c55ec974f6b6",
+    "base_count": 100000,
+    "dimension": 128,
+    "query_count": 100,
+    "k": 10,
+    "parameters": {
+      "m": 64,
+      "ef_construction": 400,
+      "ef_search": 1000
+    },
+    "reviewed_smoke_recall": [
+      {
+        "backend": "cpu",
+        "recall": 1.0,
+        "hits": 1000,
+        "targets": 1000
+      },
+      {
+        "backend": "gpu",
+        "recall": 1.0,
+        "hits": 1000,
+        "targets": 1000
+      }
+    ],
+    "required_recall_threshold": 0.96,
+    "bridge_source_sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220",
+    "loaded_bridge_library_sha256": "65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+    "observer_pid": 14001,
+    "observer_maps_sha256": "9c9dc8909ce6e4cebfe9a95b9ae78c564b8ed9dcf4ffc496141bacd74f018b8f",
+    "smoke_gpu_log_offsets_verified": true,
+    "manually_reviewed_gpu_log": null,
+    "formal_completion_still_requires_same_round_offsets": true,
+    "scope": "Saved real SQL smoke, full bitwise readback, complete recall, real API logs and actual loaded library; not a speedup measurement."
+  }
+}

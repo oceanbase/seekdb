@@ -1,0 +1,17 @@
+usage: smoke_ctypes.py [-h] [--output OUTPUT] [--n N] [--dim DIM] [--nq NQ]
+                       [--topk TOPK] [--minimum-recall MINIMUM_RECALL]
+                       library
+
+Real six-symbol C ABI smoke. Stdlib only; never substitutes an index backend.
+
+positional arguments:
+  library
+
+options:
+  -h, --help            show this help message and exit
+  --output OUTPUT
+  --n N
+  --dim DIM
+  --nq NQ
+  --topk TOPK
+  --minimum-recall MINIMUM_RECALL

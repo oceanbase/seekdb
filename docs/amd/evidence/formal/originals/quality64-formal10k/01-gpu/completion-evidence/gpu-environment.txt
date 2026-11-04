@@ -1,0 +1,47 @@
+{
+  "observed_utc": "2026-10-28T07:47:23.693085+00:00",
+  "commands": {
+    "time": {
+      "exit": 0,
+      "stdout_bytes": 26,
+      "stderr_bytes": 0,
+      "summary": "2026-10-28T07:47:23+00:00\n"
+    },
+    "gpu": {
+      "exit": 0,
+      "stdout_bytes": 15095,
+      "stderr_bytes": 0,
+      "summary": "  Name:                    AMD EPYC 9334 32-Core Processor    \n  Marketing Name:          AMD EPYC 9334 32-Core Processor    \n  Vendor Name:             CPU                                \n  Device Type:             CPU                                \n  Name:                    AMD EPYC 9334 32-Core Processor    \n  Marketing Name:          AMD EPYC 9334 32-Core Processor    \n  Vendor Name:             CPU                                \n  Device Type:             CPU                                \n  Name:                    gfx1100                            \n  Marketing Name:          AMD Radeon Graphics                \n  Vendor Name:             AMD                                \n  Device Type:             GPU                                \n      Name:                    amdgcn-amd-amdhsa--gfx1100         \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   "
+    },
+    "hipcc": {
+      "exit": 0,
+      "stdout_bytes": 328,
+      "stderr_bytes": 0,
+      "summary": "HIP version: 7.2.53211-97f5574fe2\nAMD clang version 22.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-7.2.4 26084 f58b06dce1f9c15707c5f808fd002e18c2accf7e)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm-7.2.4/lib/llvm/bin\nConfiguration file: /opt/rocm-7.2.4/lib/llvm/bin/clang++.cfg\n"
+    },
+    "smi": {
+      "exit": 0,
+      "stdout_bytes": 5535,
+      "stderr_bytes": 0,
+      "summary": "GPU: 0\n    ASIC:\n        MARKET_NAME: AMD Radeon Graphics\n        VENDOR_ID: 0x1002\n        VENDOR_NAME: Advanced Micro Devices Inc. [AMD/ATI]\n        SUBVENDOR_ID: 0x1002\n        DEVICE_ID: 0x744b\n        SUBSYSTEM_ID: 0x0e0c\n        REV_ID: 0x00\n        ASIC_SERIAL: 0xDECAF75E51A5C22A\n        OAM_ID: N/A\n        NUM_COMPUTE_UNITS: 96\n        TARGET_GRAPHICS_VERSION: gfx1100\n    BUS:\n        BDF: 0000:03:00.0\n        MAX_PCIE_WIDTH: 16\n        MAX_PCIE_SPEED: 16 GT/s\n        PCIE_LEVELS:\n            0: (2.5 GT/s, 1)\n            1: (5.0 GT/s, 4)\n            2: (16.0 GT/s, 16)\n        PCIE_INTERFACE_VERSION: Gen 4\n        SLOT_TYPE: CEM\n    IFWI:\n        NAME: D70709 Navi31 XTW-C A0 GDDR6 48GB 2Slot\n        BUILD_DATE: 2025/09/02 04:45\n        PART_NUMBER: 113-D7070910-100\n        VERSION: 00162356\n    LIMIT:\n        PPT0:\n            MAX_POWER_LIMIT: 241 W\n            MIN_POWER_LIMIT: 144 W\n            SOCKET_POWER_LIMIT: 241 W\n        PPT1:\n            MAX_POWER_LIMIT: N/A\n            MIN_POWER_LIMIT: N/A\n            SOCKET_POWER_LIMIT: N/A\n        SLOWDOWN_EDGE_TEMPERATURE: 100 \u00b0C\n        SLOWDOWN_HOTSPOT_TEMPERATURE: 110 \u00b0C\n        SLOWDOWN_VRAM_TEMPERATURE: 105 \u00b0C\n        SHUTDOWN_EDGE_TEMPERATURE: 105 \u00b0C\n        SHUTDOWN_HOTSPOT_TEMPERATURE: 115 \u00b0C\n        SHUTDOWN_VRAM_TEMPERATURE: 110 \u00b0C\n        PTL_STATE: N/A\n        PTL_FORMAT: N/A\n    DRIVER:\n        NAME: amdgpu\n        VERSION: 6.16.13\n    BOARD:\n        MODEL_NUMBER: N/A\n        PRODUCT_SERIAL: N/A\n        FRU_ID: N/A\n        PRODUCT_NAME: N/A\n        MANUFACTURER_NAME: Advanced Micro Devices, Inc. [AMD/ATI]\n  "
+    },
+    "workspace": {
+      "exit": 0,
+      "stdout_bytes": 288,
+      "stderr_bytes": 0,
+      "summary": "total 24\ndrwxr-xr-x 1 root root 4096 Aug 18 10:01 .\ndrwxr-xr-x 1 root root 4096 Oct 28 07:43 ..\ndrwxr-xr-x 1 root root 4096 Sep 15 02:45 bin\ndrwxr-xr-x 1 root root 4096 Sep 15 02:45 bridge\ndrwxr-xr-x 2 root root 4096 Aug 18 09:41 datasets\ndrwxr-xr-x 1 root root 4096 Sep 15 02:45 scripts\n"
+    },
+    "bridge": {
+      "exit": 0,
+      "stdout_bytes": 50,
+      "stderr_bytes": 0,
+      "summary": "/seekdb_workspace/bridge/libseekdb_cuvs_bridge.so\n"
+    },
+    "scripts": {
+      "exit": 0,
+      "stdout_bytes": 131,
+      "stderr_bytes": 0,
+      "summary": "/seekdb_workspace/scripts/entrypoint.sh\n/seekdb_workspace/scripts/start_observer.sh\n/seekdb_workspace/scripts/entrypoint-latest.sh\n"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "pass": true,
+  "production_functions_extracted_verbatim": true,
+  "gpu_execution": false,
+  "tests": [
+    {
+      "version": "previous",
+      "case": "extra-info-gate",
+      "exit": 11,
+      "stdout": "",
+      "source_sha256": "cd8716156bc2e49195b8ee5d9f806965048faddff00a6751ca9f3a771ef4ad92"
+    },
+    {
+      "version": "previous",
+      "case": "iterative-continuation",
+      "exit": 21,
+      "stdout": "",
+      "source_sha256": "cd8716156bc2e49195b8ee5d9f806965048faddff00a6751ca9f3a771ef4ad92"
+    },
+    {
+      "version": "fixed",
+      "case": "extra-info-gate",
+      "exit": 0,
+      "stdout": "extra-info-gate passed\n",
+      "source_sha256": "29f2cd3ed1fa3447d53925dc264664804fb92bdb2e8da106c93921826a020097"
+    },
+    {
+      "version": "fixed",
+      "case": "iterative-continuation",
+      "exit": 0,
+      "stdout": "iterative-continuation passed\n",
+      "source_sha256": "29f2cd3ed1fa3447d53925dc264664804fb92bdb2e8da106c93921826a020097"
+    }
+  ],
+  "finished": 1793177319.7793422
+}

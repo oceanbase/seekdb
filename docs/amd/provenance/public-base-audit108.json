@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "public_base": "76f871eb5a84b664d487b03b3412ce50194135b5",
+  "verified_upstream_master": "d69f2dc3e2077ddffa465d5c10f645a52e02bbe3",
+  "public_origin": "https://github.com/BSK865/seekdb.git",
+  "public_upstream": "https://github.com/oceanbase/seekdb.git",
+  "private_validation_commit_absent_from_public_object_database": true,
+  "public_history_source": "bundle containing only public ancestor ref and its reachable public history",
+  "product_files": [
+    {
+      "path": "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+      "sha256": "85dbc1bd6e23837af1d7d0fe9e90c8408fc5f8a7c518e1a4fe539632ce0575e5",
+      "matches_revision108": true
+    },
+    {
+      "path": "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp",
+      "sha256": "f1269d50a8568f1684de34fc8a01de55e98d48131945bfba24d88d90bc1630b5",
+      "matches_revision108": true
+    },
+    {
+      "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+      "sha256": "342429c9aa68b40309a0875d585894a6c5740dee7991178ee47fa6e03faf8319",
+      "matches_revision108": true
+    },
+    {
+      "path": "src/oblib/lib/vector/ob_cuvs_hooks.h",
+      "sha256": "511e43bbec7909ae6642200dab9a8e4fc0ba2ed2ea2b1d3affbc18aff9ff0313",
+      "matches_revision108": true
+    }
+  ],
+  "existing_product_baselines_byte_equal": true,
+  "committed": false,
+  "pushed": false
+}

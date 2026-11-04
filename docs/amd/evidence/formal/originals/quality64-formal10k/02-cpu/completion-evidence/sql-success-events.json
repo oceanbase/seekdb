@@ -1,0 +1,32 @@
+[
+  {
+    "number": 854,
+    "started_utc": "2026-10-28T10:04:52.701736+00:00",
+    "sql": "sql-000854.sql",
+    "session_init_command": "SET SESSION ob_hnsw_ef_search=1000",
+    "actual_session_ob_hnsw_ef_search": 1000,
+    "status": "ok",
+    "row_count": 0,
+    "elapsed_sec": 5.639229618012905
+  },
+  {
+    "number": 855,
+    "started_utc": "2026-10-28T10:04:58.341236+00:00",
+    "sql": "sql-000855.sql",
+    "session_init_command": "SET SESSION ob_hnsw_ef_search=1000",
+    "actual_session_ob_hnsw_ef_search": 1000,
+    "status": "ok",
+    "row_count": 10,
+    "elapsed_sec": 0.021436486393213272
+  },
+  {
+    "number": 856,
+    "started_utc": "2026-10-28T10:04:58.363103+00:00",
+    "sql": "sql-000856.sql",
+    "session_init_command": "SET SESSION ob_hnsw_ef_search=1000",
+    "actual_session_ob_hnsw_ef_search": 1000,
+    "status": "ok",
+    "row_count": 11,
+    "elapsed_sec": 0.008411835879087448
+  }
+]

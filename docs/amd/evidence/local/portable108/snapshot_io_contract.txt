@@ -1,0 +1,1 @@
+{"bridge_sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220", "scope": "actual snapshot I/O; cuVS backend explicitly stubbed", "gpu_executed": false, "passed": true, "checks": 32, "harness_sha256": "4d83e868aa7c93aa5ec69c48a1d7b7738971de86d917ea66b0a436c70b3e532d"}

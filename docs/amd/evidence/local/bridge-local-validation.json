@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "checks": [
+    "known complete 5x2/3x2 GT and row mapping",
+    "tampered input hash rejected",
+    "tampered gold artifact rejected",
+    "incomplete manifest rejected"
+  ],
+  "gpu_executed_locally": false,
+  "smoke_runtime": "parent cloud run only",
+  "sha256": {
+    "build.sh": "28c07d23c5ce572faebd5fce860c6df34f5bc365e9b041fddc39dd535fc9599f",
+    "evaluate_files_ctypes.py": "caa0bddfbf9e21e3143518c8771a9012e6bd2cc61e203976db7f31fb3f698c93",
+    "README.md": "1c8cba284fa41e4532db8ee30e12439cef20d63dfbeadc763061bbabcaa73961",
+    "seekdb_cuvs_bridge.c": "8ff8c519af6e6e20be4ed8d1e300089e4f47e6be15c628ab33ae2126ff945af3",
+    "seekdb_cuvs_bridge.h": "c337c5a749c42ea3eb10daad91ca71a49927b0c5c4d064c94483d8c9cff34d66",
+    "smoke_ctypes.py": "47a042db62443620b0643f1f17f1bb9e9e06d8f7225f39634e93da64d5b32d2a"
+  }
+}

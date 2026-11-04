@@ -1,0 +1,311 @@
+- generic "AMD":
+  - generic: AMD
+- button:
+- link "免费使用":
+  - /url: /login?goto=https%3A%2F%2Foceanbase.yuque.com%2Forg-wiki-obtech-vh7w9r%2Fhc3pio%2Fseebnbaoxot1b0tb
+  - generic: 免费使用
+- heading [level=1]
+- heading "AMD" [level=1]
+- article:
+  - table:
+    - rowgroup:
+      - row "项目 说明":
+        - cell "项目":
+          - generic: 项目
+        - cell "说明":
+          - generic: 说明
+      - row "项目 seekdb × AMD hipVS":
+        - cell "项目":
+          - generic: 项目
+        - cell "seekdb × AMD hipVS":
+          - generic: seekdb × AMD hipVS
+      - row "任务 使用 hipVS 加速 HNSW 索引构建":
+        - cell "任务":
+          - generic: 任务
+        - cell "使用 hipVS 加速 HNSW 索引构建":
+          - generic: 使用 hipVS 加速 HNSW 索引构建
+      - row "性能目标 在结果正确、检索质量达标的前提下，构建加速效果达到大赛公布的预期":
+        - cell "性能目标":
+          - generic: 性能目标
+        - cell "在结果正确、检索质量达标的前提下，构建加速效果达到大赛公布的预期":
+          - generic: 在结果正确、检索质量达标的前提下，构建加速效果达到大赛公布的预期
+      - row "提交产物 实现代码、可复现的测试方法及 CPU/GPU 构建性能对比报告":
+        - cell "提交产物":
+          - generic: 提交产物
+        - cell "实现代码、可复现的测试方法及 CPU/GPU 构建性能对比报告":
+          - generic: 实现代码、可复现的测试方法及 CPU/GPU 构建性能对比报告
+      - row "总分 20":
+        - cell "总分":
+          - generic: 总分
+        - cell "20":
+          - generic: "20"
+  - generic: 一、题目背景
+  - generic: 向量索引构建涉及大量距离计算和图结构处理。随着向量数量和维度增长，构建耗时会影响数据库的导入与检索准备效率。本题要求结合 AMD Radeon GPU 与 hipVS，优化 seekdb 的 HNSW 索引构建链路，并验证实际加速效果。
+  - text: 开始前，请阅读
+  - link "AMD Radeon 使用和部署 seekdb":
+    - /url: https://yuque.antfin.com/ob/sr0nh6/rob7ng9zk9zznr2i
+  - text: ，完成算力平台、ROCm 和 seekdb 实验环境的准备。
+  - generic: 二、题目内容
+  - generic: 2.1 使用 hipVS 加速 HNSW 索引构建
+  - generic: "1."
+  - generic: 在 seekdb 中实现 hipVS 构建加速，使 AMD GPU 实际参与索引构建的核心计算。
+  - generic: "2."
+  - generic: 保持 seekdb 的 HNSW 索引使用语义，构建完成后能够通过 seekdb 正常执行向量查询，正确返回文档 ID 和检索结果。
+  - generic: "3."
+  - generic: 可优化批量构建、数据传输、图构建及必要的格式转换等环节；仅启用 GPU 查询、运行独立 GPU 演示或更改索引参数声明，不能证明完成了构建加速。
+  - generic: "4."
+  - generic: 保留 CPU 基线路径，确保普通 CPU 索引的行为不受影响。GPU 路径不可用时，应明确报错或记录回退，不能把 CPU 回退结果计作 GPU 加速成绩。
+  - generic: 2.2 验证加速效果达到预期
+  - generic: 在相同数据集与统一测试环境下，对比 CPU 基线和 hipVS 加速方案的索引构建耗时，计算：
+  - generic: LaTeX
+  - separator
+  - text: 复制代码
+  - generic: "1"
+  - textbox:
+    - generic: 构建加速比 = CPU 基线构建耗时 / hipVS 方案构建耗时
+  - generic: “达到预期”指构建加速比达到大赛公布的目标，同时通过功能正确性与检索质量检查。 具体目标倍数、数据规模及质量门槛由统一评测配置公布；本题当前不写死目标倍数。
+  - generic: 三、验收标准
+  - generic: 3.1 功能与质量
+  - table:
+    - rowgroup:
+      - row "检查项 要求":
+        - cell "检查项":
+          - generic: 检查项
+        - cell "要求":
+          - generic: 要求
+      - row "GPU 构建路径 有日志或性能分析证据证明 hipVS 实际参与构建，能识别是否发生 CPU 回退":
+        - cell "GPU 构建路径":
+          - generic: GPU 构建路径
+        - cell "有日志或性能分析证据证明 hipVS 实际参与构建，能识别是否发生 CPU 回退":
+          - generic: 有日志或性能分析证据证明 hipVS 实际参与构建，能识别是否发生 CPU 回退
+      - row "索引可用性 完整处理测试向量，构建产物能够通过 seekdb 查询，无数据遗漏、ID 映射错误或非法结果":
+        - cell "索引可用性":
+          - generic: 索引可用性
+        - cell "完整处理测试向量，构建产物能够通过 seekdb 查询，无数据遗漏、ID 映射错误或非法结果":
+          - generic: 完整处理测试向量，构建产物能够通过 seekdb 查询，无数据遗漏、ID 映射错误或非法结果
+      - row "检索质量 使用相同查询集和精确近邻真值检查 Recall@K，CPU/GPU 均达到统一质量门槛":
+        - cell "检索质量":
+          - generic: 检索质量
+        - cell "使用相同查询集和精确近邻真值检查 Recall@K，CPU/GPU 均达到统一质量门槛":
+          - generic: 使用相同查询集和精确近邻真值检查 Recall@K，CPU/GPU 均达到统一质量门槛
+      - row "CPU 路径 原有 CPU 索引仍可正常构建和查询":
+        - cell "CPU 路径":
+          - generic: CPU 路径
+        - cell "原有 CPU 索引仍可正常构建和查询":
+          - generic: 原有 CPU 索引仍可正常构建和查询
+      - row "稳定性 重复构建与查询过程无崩溃、卡死或资源泄漏":
+        - cell "稳定性":
+          - generic: 稳定性
+        - cell "重复构建与查询过程无崩溃、卡死或资源泄漏":
+          - generic: 重复构建与查询过程无崩溃、卡死或资源泄漏
+  - generic: 不能通过减少数据量、降低精度、遗漏构建步骤或牺牲约定的检索质量来获得性能提升。
+  - generic: 3.2 性能测试方法
+  - generic: "1."
+  - generic: 固定条件：使用同一批向量、相同维度与距离类型，固定随机种子、CPU 资源、GPU 型号、软件版本和可比索引参数，记录全部配置。
+  - generic: "2."
+  - generic: 统一起点：原始数据准备完成、待构建索引尚不存在时开始计时。CPU/GPU 两组均重新构建，不能复用已有索引或缓存的构图结果。
+  - generic: "3."
+  - generic: 统一终点：索引完整构建并可供 seekdb 查询时结束计时。需包含数据扫描、CPU/GPU 传输、GPU 同步、格式转换及使索引可用所需的工作；延迟到首次查询的构建也须计入。索引可用性检查使用相同方法。
+  - generic: "4."
+  - generic: 区分开销：数据生成、原始数据导入、环境启动单独记录。GPU 内核耗时可用于分析，但最终加速比按上述端到端构建耗时计算。
+  - generic: "5."
+  - generic: 重复测量：每组至少执行 3 次，保留原始耗时，分别取 CPU/GPU 耗时中位数计算加速比；随后执行查询和 Recall@K 校验。
+  - generic: 建议按以下格式记录实测结果，不填入参考实验中的查询耗时：
+  - table:
+    - rowgroup:
+      - row "数据量 / 维度 CPU 构建耗时 hipVS 构建耗时 构建加速比 CPU / GPU Recall@K 是否达标":
+        - cell "数据量 / 维度":
+          - generic: 数据量 / 维度
+        - cell "CPU 构建耗时":
+          - generic: CPU 构建耗时
+        - cell "hipVS 构建耗时":
+          - generic: hipVS 构建耗时
+        - cell "构建加速比":
+          - generic: 构建加速比
+        - cell "CPU / GPU Recall@K":
+          - generic: CPU / GPU Recall@K
+        - cell "是否达标":
+          - generic: 是否达标
+      - row "实测配置 实测中位数 实测中位数 CPU / hipVS 实测结果 对照统一评测目标":
+        - cell "实测配置":
+          - generic: 实测配置
+        - cell "实测中位数":
+          - generic: 实测中位数
+        - cell "实测中位数":
+          - generic: 实测中位数
+        - cell "CPU / hipVS":
+          - generic: CPU / hipVS
+        - cell "实测结果":
+          - generic: 实测结果
+        - cell "对照统一评测目标":
+          - generic: 对照统一评测目标
+  - generic: 四、实验参考与提交材料
+  - generic: 4.1 实验参考
+  - text: 参考
+  - link "seekdb × hipVS 实验 Notebook":
+    - /url: https://github.com/zihaomu/notebook/blob/main/seekdb_hipvs_notebook/seekdb_hipvs_batch_demo_executed.ipynb
+  - text: ，可了解环境检查、CPU/GPU 对比和 Recall@10 的测量流程。
+  - generic: 该记录在 10,000 条索引向量、4,000 条查询的场景下，展示了批量检索耗时从约 10,031.7 ms 降至 793.1 ms，约 12.65 倍批量检索加速。该数据比较的是 CPU 逐条检索与 GPU 批量检索，不是索引构建加速比；Notebook 也未提供完整的 CPU/GPU 构建耗时对比，不能据此判定本题达标。
+  - generic: Notebook 可用于了解实验环境和测量方法；本题需单独进行构建计时与达标验证。
+  - generic: 4.2 提交材料
+  - generic: ●
+  - generic: 实现代码：提交到 seekdb 的 PR，说明 hipVS 接入位置、构建加速方案和影响范围。
+  - generic: ●
+  - generic: 复现步骤：构建命令、依赖版本、数据生成方式、索引参数及完整测试命令。
+  - generic: ●
+  - generic: 实验报告：硬件配置、CPU/GPU 每轮构建耗时、加速比、Recall@K、GPU 路径证据及达标结论。
+  - generic: 实验结果必须来自自己的实现和运行记录，并清楚区分索引构建性能、单条查询性能与批量查询性能。
+  - paragraph: 若有收获，就点个赞吧
+- generic: 
+- link "林官人":
+  - /url: /linguanren
+- generic: 
+- generic: 今天 10:46
+- generic: 
+- text: "1404"
+- generic: 
+- text: "0"
+- generic: IP 属地浙江
+- generic: 举报
+- generic: 注册 / 登录 语雀进行评论
+- generic: 1514字
+- link "关于语雀":
+  - /url: /help/about
+- link "数据安全":
+  - /url: /about/security
+- link "English":
+  - /url: "?language=en-us"
+- link "快速注册":
+  - /url: /login
+- link:
+  - /url: /dashboard
+- generic "seekdb"
+- navigation:
+  - generic: 搜索
+  - generic: Ctrl + J
+  - generic: 首页
+  - generic: 目录
+  - tabpanel:
+    - link "2026年OceanBase数据库大赛":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/ix20uoszxhifnp4b
+      - generic "2026年OceanBase数据库大赛":
+        - generic: 2026年OceanBase数据库大赛
+    - link "赛题":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/ocqe6xv6mlgapq24
+      - generic "赛题":
+        - generic: 赛题
+    - link "OceanBase seekdb基础事件":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/go4r6aamv5ishhro
+      - generic "OceanBase seekdb基础事件":
+        - generic: OceanBase seekdb基础事件
+    - link "OceanBase seekdb内核":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/ugmhrcw9p21ppp66
+      - generic "OceanBase seekdb内核":
+        - generic: OceanBase seekdb内核
+    - link "PowerContext":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/gp9hi8ikdnef8ryc
+      - generic "PowerContext":
+        - generic: PowerContext
+    - link "AMD":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/seebnbaoxot1b0tb
+      - generic "AMD":
+        - generic: AMD
+    - link "MiniMax":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/qlqnoryzrs7gtqbw
+      - generic "MiniMax":
+        - generic: MiniMax
+    - link "Qoder":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/uygu3273xzlrcmrm
+      - generic "Qoder":
+        - generic: Qoder
+    - link "阶跃星辰":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/kw9wfx4bu9pyvat9
+      - generic "阶跃星辰":
+        - generic: 阶跃星辰
+    - link "Dify":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/lhfslihtnnb8yqh6
+      - generic "Dify":
+        - generic: Dify
+    - link "高德地图":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/qp60miwsbk1mcgod
+      - generic "高德地图":
+        - generic: 高德地图
+    - link "魔搭社区":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/bt7u0qwwz84gt48g
+      - generic "魔搭社区":
+        - generic: 魔搭社区
+    - link "测试":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/ut82q2fcalep4y1r
+      - generic "测试":
+        - generic: 测试
+    - link "课程":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/kr39e5xypy6mowvm
+      - generic "课程":
+        - generic: 课程
+    - link "分享":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/xen6hatoerd7iggg
+      - generic "分享":
+        - generic: 分享
+    - link "中国数据库暑期学校2026":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/bpnhxpu7c7zlx94g
+      - generic "中国数据库暑期学校2026":
+        - generic: 中国数据库暑期学校2026
+    - link "PowerMem 的 LangChain 中间件集成":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/smpp9wl8trfkeev1
+      - generic "PowerMem 的 LangChain 中间件集成":
+        - generic: PowerMem 的 LangChain 中间件集成
+    - link "Document AI Functions":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/gp6voyg9r0qqbt95
+      - generic "Document AI Functions":
+        - generic: Document AI Functions
+    - link "IK 分词器支持用户自定义词典":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/iq4su2iqyuzen05i
+      - generic "IK 分词器支持用户自定义词典":
+        - generic: IK 分词器支持用户自定义词典
+    - link "OceanBase 全文索引构建性能优化":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/qpbdgg2geoh5zoyx
+      - generic "OceanBase 全文索引构建性能优化":
+        - generic: OceanBase 全文索引构建性能优化
+    - link "测试注意事项":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/yt95uatolcbtfgow
+      - generic "测试注意事项":
+        - generic: 测试注意事项
+    - link "队伍/PR/分数统计":
+      - /url: /org-wiki-obtech-vh7w9r/hc3pio/snoeve4gf18ksg85
+      - generic "队伍/PR/分数统计":
+        - generic: 队伍/PR/分数统计
+- generic: 大纲
+- generic "一、题目背景":
+  - link "一、题目背景":
+    - /url: "#yWbIe"
+- generic: 
+- generic "二、题目内容":
+  - link "二、题目内容":
+    - /url: "#k9VLb"
+- generic "2.1 使用 hipVS 加速 HNSW 索引构建":
+  - link "2.1 使用 hipVS 加速 HNSW 索引构建":
+    - /url: "#xwKpK"
+- generic "2.2 验证加速效果达到预期":
+  - link "2.2 验证加速效果达到预期":
+    - /url: "#FX7Mf"
+- generic: 
+- generic "三、验收标准":
+  - link "三、验收标准":
+    - /url: "#TQRBZ"
+- generic "3.1 功能与质量":
+  - link "3.1 功能与质量":
+    - /url: "#yloBL"
+- generic "3.2 性能测试方法":
+  - link "3.2 性能测试方法":
+    - /url: "#ZlvVA"
+- generic: 
+- generic "四、实验参考与提交材料":
+  - link "四、实验参考与提交材料":
+    - /url: "#xbA3v"
+- generic "4.1 实验参考":
+  - link "4.1 实验参考":
+    - /url: "#kM56Y"
+- generic "4.2 提交材料":
+  - link "4.2 提交材料":
+    - /url: "#FUiDi"
+- generic: Adblocker

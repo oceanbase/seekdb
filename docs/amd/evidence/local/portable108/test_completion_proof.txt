@@ -1,0 +1,9 @@
+test_cpu_successful_ddl_and_target_plan (__main__.CompletionProofTests.test_cpu_successful_ddl_and_target_plan) ... ok
+test_gpu_full_sequence_and_exact_receipts (__main__.CompletionProofTests.test_gpu_full_sequence_and_exact_receipts) ... ok
+test_harness_valid_api_proof_and_empty_gpu_object (__main__.CompletionProofTests.test_harness_valid_api_proof_and_empty_gpu_object) ... ok
+test_invalid_evidence_rejected (__main__.CompletionProofTests.test_invalid_evidence_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.107s
+
+OK

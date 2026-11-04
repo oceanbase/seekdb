@@ -1,0 +1,196 @@
+{
+  "status": "PASS",
+  "scope": "Independent original-manifest, complete-prediction/GT and strict-proof review",
+  "local_originals_checked": 18989,
+  "bulk_omitted_locally": 2676,
+  "manifest_items": 21665,
+  "proof_evidence_local_references_checked": 324,
+  "proof_evidence_bulk_hash_only": 24,
+  "full_archive_locally_verified": false,
+  "full_readbacks_independently_reparsed_locally": false,
+  "persistence_verified": false,
+  "datasets": [
+    {
+      "name": "quality64-formal10k",
+      "gt": "gt107",
+      "base_count": 10000,
+      "dimension": 128,
+      "query_count": 100,
+      "k": 10,
+      "base_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442",
+      "query_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4",
+      "gold_sha256": "9a78f1aeb8587f720f46ad882846a77a45cdee7207a3833bdd970d15b5a37d00",
+      "rounds": [
+        {
+          "round": 0,
+          "backend": "cpu",
+          "ddl_seconds": 5.652465473860502,
+          "ddl_to_first_query_seconds": 5.675352983176708,
+          "proven_ready_seconds": 6.18722652643919,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal10k/00-cpu"
+        },
+        {
+          "round": 0,
+          "backend": "gpu",
+          "ddl_seconds": 3.4689138177782297,
+          "ddl_to_first_query_seconds": 3.487781349569559,
+          "proven_ready_seconds": 4.2454331535845995,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal10k/00-gpu"
+        },
+        {
+          "round": 1,
+          "backend": "gpu",
+          "ddl_seconds": 3.820905802771449,
+          "ddl_to_first_query_seconds": 3.840546553954482,
+          "proven_ready_seconds": 4.601356314495206,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal10k/01-gpu"
+        },
+        {
+          "round": 1,
+          "backend": "cpu",
+          "ddl_seconds": 5.635279331356287,
+          "ddl_to_first_query_seconds": 5.6571728847920895,
+          "proven_ready_seconds": 6.157944601029158,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal10k/01-cpu"
+        },
+        {
+          "round": 2,
+          "backend": "cpu",
+          "ddl_seconds": 5.639346957206726,
+          "ddl_to_first_query_seconds": 5.661061344668269,
+          "proven_ready_seconds": 6.174186289310455,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal10k/02-cpu"
+        },
+        {
+          "round": 2,
+          "backend": "gpu",
+          "ddl_seconds": 3.3260330222547054,
+          "ddl_to_first_query_seconds": 3.344835586845875,
+          "proven_ready_seconds": 4.113812426105142,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal10k/02-gpu"
+        }
+      ],
+      "median_build_seconds": {
+        "cpu": 6.174186289310455,
+        "gpu": 4.2454331535845995
+      },
+      "speedup": 1.454312449625388,
+      "all_recall": 1.0
+    },
+    {
+      "name": "quality64-formal100k-warn",
+      "gt": "gt100k",
+      "base_count": 100000,
+      "dimension": 128,
+      "query_count": 100,
+      "k": 10,
+      "base_sha256": "a998b5ea0c9b3cebf291995d5fc82cdf34decfc99260038442266acae3e156ba",
+      "query_sha256": "4a85d4807d8cf06e845f10c145a2510494e3ea1db6c8f3a6eab62bfe282a6601",
+      "gold_sha256": "a9423304a2317e02ce56f85ae661196020e4e387b2b5b1429741398ce25a9874",
+      "rounds": [
+        {
+          "round": 0,
+          "backend": "cpu",
+          "ddl_seconds": 210.90241517871618,
+          "ddl_to_first_query_seconds": 210.9993975777179,
+          "proven_ready_seconds": 215.6182030979544,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal100k-warn/00-cpu"
+        },
+        {
+          "round": 0,
+          "backend": "gpu",
+          "ddl_seconds": 10.590828424319625,
+          "ddl_to_first_query_seconds": 10.77658586576581,
+          "proven_ready_seconds": 15.320032857358456,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal100k-warn/00-gpu"
+        },
+        {
+          "round": 1,
+          "backend": "gpu",
+          "ddl_seconds": 11.518511207774282,
+          "ddl_to_first_query_seconds": 11.69951055943966,
+          "proven_ready_seconds": 16.42342117987573,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal100k-warn/01-gpu"
+        },
+        {
+          "round": 1,
+          "backend": "cpu",
+          "ddl_seconds": 212.5869856774807,
+          "ddl_to_first_query_seconds": 212.68345456570387,
+          "proven_ready_seconds": 217.13001193478703,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal100k-warn/01-cpu"
+        },
+        {
+          "round": 2,
+          "backend": "cpu",
+          "ddl_seconds": 209.1068680882454,
+          "ddl_to_first_query_seconds": 209.20179447717965,
+          "proven_ready_seconds": 213.68172007240355,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal100k-warn/02-cpu"
+        },
+        {
+          "round": 2,
+          "backend": "gpu",
+          "ddl_seconds": 11.93082932010293,
+          "ddl_to_first_query_seconds": 12.022032519802451,
+          "proven_ready_seconds": 16.746494775637984,
+          "hits": 1000,
+          "targets": 1000,
+          "recall": 1.0,
+          "strict_proof": true,
+          "folder": "quality64-formal100k-warn/02-gpu"
+        }
+      ],
+      "median_build_seconds": {
+        "cpu": 215.6182030979544,
+        "gpu": 16.42342117987573
+      },
+      "speedup": 13.128702036951955,
+      "all_recall": 1.0
+    }
+  ]
+}

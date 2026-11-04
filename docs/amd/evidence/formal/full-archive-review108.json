@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "started_utc": "2026-10-28T10:50:13.484137+00:00",
+  "script_sha256": "a1ff8b9bcec1b2d31de699f091d1bdd4b9ea0365ac6f3cdbe4ecb054a482590b",
+  "product_files_modified": false,
+  "download_path": "D:\\ob2026_plan\\runs\\amd107\\evidence-formal108.full.tar.gz",
+  "download_archive": {
+    "bytes": 1293531108,
+    "sha256": "5995e9d5dc371cc7ed09cb958756751c47b2d84a8d03027f093ef17915840d82",
+    "expected_size_and_sha256_match": true
+  },
+  "archive_copy_status": "reused_existing_verified",
+  "archive_path": "D:\\ob2026_plan\\runs\\amd107\\evidence-formal108.full.tar.gz",
+  "manifest_path": "D:\\ob2026_plan\\runs\\amd107\\evidence-formal108.manifest.json",
+  "original_manifest_sha256": "a3e78fd64ca57754f20d706d2e0ad4e7b9001f81aafc75d9517422713191f6fb",
+  "embedded_manifest": {
+    "path": "EXPORT_MANIFEST.json",
+    "bytes": 5773086,
+    "sha256": "a3e78fd64ca57754f20d706d2e0ad4e7b9001f81aafc75d9517422713191f6fb"
+  },
+  "manifest_exact_integer_timestamps_preserved": true,
+  "original_files_verified": 21665,
+  "archive_members_verified": 21666,
+  "original_bytes_verified": 3099202209,
+  "restored_files": 2676,
+  "retained_existing_matching_files": 18989,
+  "compact_omitted_originals": 2676,
+  "extraction_root": "D:\\ob2026_plan\\runs\\amd107\\cloud-final-formal",
+  "unsafe_paths_or_nonregular_entries": 0,
+  "all_original_file_sizes_and_sha256_match": true,
+  "all_restored_files_reread_verified": true,
+  "finished_utc": "2026-10-28T10:51:50.570727+00:00",
+  "elapsed_sec": 97.08661090000533,
+  "verification_scope": "Byte-level full archive, embedded original manifest, all listed original sizes/SHA256, and safe restoration of compact-omitted originals; not a rerun of raw-vector semantic calculations.",
+  "readback_vector_semantics_recomputed_by_this_review": false,
+  "source_crdownload_modified": false,
+  "assembly_receipt": {
+    "path": "D:\\ob2026_plan\\runs\\amd107\\archive-assembly108.receipt.json",
+    "sha256": "631ab996aed326b4df473741284c6fb1376a21b12dd5e4aa452486c45d4fb314"
+  }
+}

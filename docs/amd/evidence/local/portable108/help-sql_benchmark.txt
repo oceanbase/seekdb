@@ -1,0 +1,46 @@
+usage: sql_benchmark.py [-h] --gt-dir GT_DIR [--base BASE] [--query QUERY]
+                        --output OUTPUT [--mode {smoke,formal}] [--host HOST]
+                        [--port PORT] [--user USER]
+                        [--password-env PASSWORD_ENV]
+                        [--driver {auto,pymysql,mysql}] [--mysql MYSQL]
+                        [--schema SCHEMA] [--batch-rows BATCH_ROWS]
+                        [--sql-timeout SQL_TIMEOUT] [--m M]
+                        [--ef-construction EF_CONSTRUCTION]
+                        [--ef-search EF_SEARCH] [--server-log SERVER_LOG]
+                        [--verified-contract VERIFIED_CONTRACT]
+                        [--recall-threshold RECALL_THRESHOLD]
+
+seekdb SQL build/recall diagnostic. Never starts or stops any service. Only
+existing NumPy plus existing PyMySQL (or mysql CLI) are used. Smoke is
+diagnostic ONLY: lib=cuvs and a successful first query are not GPU-build
+proof. Formal mode additionally requires an image-verified completion/proof
+command.
+
+options:
+  -h, --help            show this help message and exit
+  --gt-dir GT_DIR
+  --base BASE           Optional relocated raw file, must match manifest
+                        SHA256
+  --query QUERY         Optional relocated raw file, must match manifest
+                        SHA256
+  --output OUTPUT
+  --mode {smoke,formal}
+  --host HOST
+  --port PORT
+  --user USER
+  --password-env PASSWORD_ENV
+  --driver {auto,pymysql,mysql}
+  --mysql MYSQL
+  --schema SCHEMA       NEW schema, must not already exist
+  --batch-rows BATCH_ROWS
+  --sql-timeout SQL_TIMEOUT
+  --m M
+  --ef-construction EF_CONSTRUCTION
+  --ef-search EF_SEARCH
+  --server-log SERVER_LOG
+  --verified-contract VERIFIED_CONTRACT
+                        Formal-only explicit image-verified completion
+                        command; no default guessed marker
+  --recall-threshold RECALL_THRESHOLD
+                        Formal quality gate, explicitly supplied from verified
+                        rules/config

@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "scope": "FD fix local I/O contract only; actual cuVS/GPU validation performed separately by parent cloud run",
+  "gpu_executed_locally": false,
+  "python_syntax": true,
+  "linux_snapshot_io_assertions": 32,
+  "linux_compiler": "cc -std=c11 -O2 -pthread",
+  "checks": [
+    "real C tmpfile proc-FD serialization",
+    "caller-owned FD remains open",
+    "repeated proc-FD overwrite truncates",
+    "EOF-position caller stream deserialize independent offset",
+    "regular-file atomic save/load",
+    "shape and checksum errors rejected",
+    "scratch files cleaned"
+  ],
+  "sha256": {
+    "seekdb_cuvs_bridge.c": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220",
+    "smoke_ctypes.py": "3fa93fd5ad9ec7d58d7f798e1c8cef025735e82e5512b529f276aa71ef95cc9f",
+    "README.md": "884bedc00328cc60f9ea063ac59ad88cd93c009d78469472c8bd4d50353733d1",
+    "snapshot_io_contract.py": "176c624dcc3ba9817781efc0dfb745b9bd656a76feca92c68fc9bec6bddff2a7"
+  }
+}

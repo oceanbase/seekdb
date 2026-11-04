@@ -1,0 +1,20 @@
+usage: prepare_ground_truth.py [-h] --base BASE --query QUERY --dimension
+                               DIMENSION --base-count BASE_COUNT --query-count
+                               QUERY_COUNT --k K --metric {l2}
+                               [--block-rows BLOCK_ROWS] --output OUTPUT
+
+Exact full-input float64 L2 truth for raw little-endian float32 vectors. Uses
+existing NumPy only. IDs are zero-based physical rows. Output gold.json is the
+mapping expected by run_once.recall; no provided reference GT is consumed.
+
+options:
+  -h, --help            show this help message and exit
+  --base BASE
+  --query QUERY
+  --dimension DIMENSION
+  --base-count BASE_COUNT
+  --query-count QUERY_COUNT
+  --k K
+  --metric {l2}
+  --block-rows BLOCK_ROWS
+  --output OUTPUT       New directory, must not already exist

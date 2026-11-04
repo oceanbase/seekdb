@@ -1,0 +1,35 @@
+[
+  [
+    "================================================================"
+  ],
+  [
+    "|ID|OPERATOR         |NAME               |EST.ROWS|EST.TIME(us)|"
+  ],
+  [
+    "----------------------------------------------------------------"
+  ],
+  [
+    "|0 |VECTOR INDEX SCAN|gpu_r00(ix_gpu_r00)|1       |7           |"
+  ],
+  [
+    "================================================================"
+  ],
+  [
+    "Outputs & filters:"
+  ],
+  [
+    "-------------------------------------"
+  ],
+  [
+    "  0 - output([gpu_r00.c1]), filter(nil), rowset=16"
+  ],
+  [
+    "      access([gpu_r00.c1]), partitions(p0)"
+  ],
+  [
+    "      is_index_back=true, is_global_index=false, "
+  ],
+  [
+    "      range_key([gpu_r00.__vid_1793181838454564], [gpu_r00.__type_17_1793181838684087]), range(MIN,MIN ; MAX,MAX)always true"
+  ]
+]

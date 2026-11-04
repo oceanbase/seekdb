@@ -1,0 +1,47 @@
+{
+  "status": "PASS",
+  "measured_source_snapshot_commit": "111c02a7b510199e1d1a69c46a9c2c6ef9b0312c",
+  "public_base": "76f871eb5a84b664d487b03b3412ce50194135b5",
+  "compatibility_upstream_master": "d69f2dc3e2077ddffa465d5c10f645a52e02bbe3",
+  "product_delta": "Only plugin include name/location and upstream bitmap snprintf fix; GPU logic unchanged",
+  "three_way_plugin_merge": "clean; merged bytes equal current plugin",
+  "actual_latest_master_compile": false,
+  "compile_reason": "Existing cached build lacks real generated rust/config.h; no fake header alias or full Rust rebuild performed",
+  "measured_runtime_is_revision108": true,
+  "product_files": [
+    {
+      "path": "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+      "measured108_sha256": "85dbc1bd6e23837af1d7d0fe9e90c8408fc5f8a7c518e1a4fe539632ce0575e5",
+      "current_sha256": "85dbc1bd6e23837af1d7d0fe9e90c8408fc5f8a7c518e1a4fe539632ce0575e5",
+      "unchanged": true
+    },
+    {
+      "path": "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp",
+      "measured108_sha256": "f1269d50a8568f1684de34fc8a01de55e98d48131945bfba24d88d90bc1630b5",
+      "current_sha256": "e794ffbb44dcc8593751896d5c3b380ddbeae0bafdfff70ba0e5fec49ef04430",
+      "unchanged": false
+    },
+    {
+      "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+      "measured108_sha256": "342429c9aa68b40309a0875d585894a6c5740dee7991178ee47fa6e03faf8319",
+      "current_sha256": "342429c9aa68b40309a0875d585894a6c5740dee7991178ee47fa6e03faf8319",
+      "unchanged": true
+    },
+    {
+      "path": "src/oblib/lib/vector/ob_cuvs_hooks.h",
+      "measured108_sha256": "511e43bbec7909ae6642200dab9a8e4fc0ba2ed2ea2b1d3affbc18aff9ff0313",
+      "current_sha256": "511e43bbec7909ae6642200dab9a8e4fc0ba2ed2ea2b1d3affbc18aff9ff0313",
+      "unchanged": true
+    }
+  ],
+  "production_dispatch_control": {
+    "pass": true,
+    "cases": [
+      "extra-info-gate",
+      "iterative-continuation"
+    ],
+    "extracted_cpp_sha256": "29f2cd3ed1fa3447d53925dc264664804fb92bdb2e8da106c93921826a020097",
+    "same_extracted_program_as108": true,
+    "actual_translation_unit_compile": false
+  }
+}

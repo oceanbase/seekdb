@@ -1,0 +1,24 @@
+{
+  "gt_dir": "/workspace/amd107/gt100k",
+  "base": "/workspace/amd107/scale100k/base.f32",
+  "query": "/workspace/amd107/scale100k/query.f32",
+  "output": "/workspace/amd107/quality64-formal100k-warn",
+  "mode": "formal",
+  "host": "127.0.0.1",
+  "port": 2882,
+  "user": "root",
+  "password_env": "SEEKDB_PASSWORD",
+  "driver": "mysql",
+  "mysql": "mysql",
+  "schema": null,
+  "batch_rows": 250,
+  "sql_timeout": 900,
+  "m": 64,
+  "ef_construction": 400,
+  "ef_search": 1000,
+  "server_log": [
+    "/workspace/amd107/candidate-quality64/log/seekdb.log"
+  ],
+  "verified_contract": "/workspace/amd107/contract-quality64-verified.json",
+  "recall_threshold": 0.96
+}

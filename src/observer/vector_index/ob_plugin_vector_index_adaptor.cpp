@@ -33,6 +33,7 @@
 #include "share/ob_share_util.h"
 #include "common/ob_timeout_ctx.h"
 #include "storage/tx/ob_ts_mgr.h"
+#include "lib/vector/ob_cuvs_hooks.h"
 
 namespace oceanbase
 {
@@ -1357,6 +1358,20 @@ int ObPluginVectorIndexAdaptor::init_sparse_vector_type()
   return ret;
 }
 
+// [hipVS/cuVS] Mark a just-populated index handle for the GPU path when the
+// vector index was declared WITH (lib=cuvs) on a dense L2 HNSW index. Idempotent.
+static inline void ob_mark_cuvs_if_needed(void *algo_data, void *handle)
+{
+  ObVectorIndexParam *param = static_cast<ObVectorIndexParam *>(algo_data);
+  if (handle != nullptr && param != nullptr
+      && param->lib_ == static_cast<ObVectorIndexAlgorithmLib>(3) /* CUVS */
+      && param->dist_algorithm_ == ObVectorIndexDistAlgorithm::VIDA_L2
+      && param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW
+      && param->extra_info_actual_size_ == 0) {
+    oceanbase::common::obvsag::mark_cuvs_index(handle);
+  }
+}
+
 int ObPluginVectorIndexAdaptor::insert_rows(blocksstable::ObDatumRow *rows,
                                             const int64_t vid_idx,
                                             const int64_t type_idx,
@@ -1518,6 +1533,7 @@ int ObPluginVectorIndexAdaptor::insert_rows(blocksstable::ObDatumRow *rows,
                                               ))) {
         }
       } else {
+        ob_mark_cuvs_if_needed(algo_data_, incr_data_->index_);
         if (OB_FAIL(obvectorutil::add_index(incr_data_->index_,
                                               vectors,
                                               incr_vids,
@@ -1705,9 +1721,11 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
         if (OB_NOT_NULL(extra_objs) && extra_column_count > 0 && param->extra_info_actual_size_ > 0 &&
             OB_FAIL(ObVecExtraInfo::extra_infos_to_buf(tmp_allocator, extra_objs, extra_column_count,
                                                        param->extra_info_actual_size_, num, extra_info_buf))) {
+          LOG_WARN("failed to encode extra info.", K(ret), K(param->extra_info_actual_size_));
         } else {
           lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
           if (!is_sparse_vector_index_type()) {
+            ob_mark_cuvs_if_needed(algo_data_, snap_data_->index_);
             if (OB_FAIL(obvectorutil::add_index(snap_data_->index_, vectors, vids, dim, extra_info_buf, num))) {
             }
           } else {
@@ -3176,10 +3194,17 @@ int ObPluginVectorIndexAdaptor::renew_single_snap_index(bool mem_saving_mode)
 {
   int ret = OB_SUCCESS;
   ObVectorIndexAlgorithmType index_type = get_snap_index_type();
-  if (mem_saving_mode) {
+  const ObVectorIndexParam *param = static_cast<const ObVectorIndexParam *>(algo_data_);
+  const bool keep_gpu_snapshot = param != nullptr
+      && param->lib_ == static_cast<ObVectorIndexAlgorithmLib>(3) /* CUVS */
+      && param->dist_algorithm_ == ObVectorIndexDistAlgorithm::VIDA_L2
+      && param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW
+      && param->extra_info_actual_size_ == 0;
+  if (mem_saving_mode && !keep_gpu_snapshot) {
     ObString invalid_prefix("renew");
     if (OB_ISNULL(snap_data_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr snap_data_", K(ret), KP(snap_data_));
     } else {
       TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
       if (OB_FAIL(renew_snapdata_in_lock())) {

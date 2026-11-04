@@ -1,0 +1,70 @@
+{
+  "status": "complete",
+  "created_utc": "2026-10-28T08:49:32.610714+00:00",
+  "script_sha256": "986b3a82dee52dcf1fc5538f815bc7812f1a24df44d943298cc5235cc0442b24",
+  "numpy_version": "2.4.6",
+  "inputs": {
+    "base": {
+      "path": "/workspace/amd107/scale100k/base.f32",
+      "shape": [
+        100000,
+        128
+      ],
+      "sha256": "a998b5ea0c9b3cebf291995d5fc82cdf34decfc99260038442266acae3e156ba"
+    },
+    "query": {
+      "path": "/workspace/amd107/scale100k/query.f32",
+      "shape": [
+        100,
+        128
+      ],
+      "sha256": "4a85d4807d8cf06e845f10c145a2510494e3ea1db6c8f3a6eab62bfe282a6601"
+    }
+  },
+  "metric": "l2",
+  "ranking_distance": "squared_l2",
+  "input_precision": "raw little-endian IEEE754 float32; no header",
+  "calculation_precision": "float64 subtraction, square, sum over dimension",
+  "tie_order": [
+    "ascending float64 squared distance",
+    "ascending zero-based base row ID"
+  ],
+  "query_ids": "all physical query rows, decimal strings 0..query_count-1",
+  "base_ids": "all physical base rows, integers 0..base_count-1",
+  "dimension": 128,
+  "base_count": 100000,
+  "query_count": 100,
+  "k": 10,
+  "recall_targets": 1000,
+  "block_rows": 8192,
+  "sql_text": {
+    "format": "one JSON numeric vector per line; line index is ID",
+    "significant_digits": 9,
+    "python_format": ".8e",
+    "float32_bitwise_roundtrip_all_values": true,
+    "values_checked": {
+      "base": 12800000,
+      "query": 12800
+    },
+    "database_readback": "not performed by this tool; adapter must verify actual SQL storage"
+  },
+  "artifacts": {
+    "gold.json": {
+      "bytes": 6589,
+      "sha256": "a9423304a2317e02ce56f85ae661196020e4e387b2b5b1429741398ce25a9874"
+    },
+    "gold-distances.json": {
+      "bytes": 19448,
+      "sha256": "035eba8f0538d258b88b7ec2f90003b9a99c61b66816008c954f88a4eecdc2a5"
+    },
+    "base.sql-vectors.txt": {
+      "bytes": 198602479,
+      "sha256": "c0beac8df47407c6ff7361d0c9535980400a6dcbe73dfe823e6312dd8a3ca1f2"
+    },
+    "query.sql-vectors.txt": {
+      "bytes": 198508,
+      "sha256": "383577c920c46a62a1de60fbb609137d63d4d53680cec861be31bcec9b9a9a1f"
+    }
+  },
+  "elapsed_sec": 10.210462048649788
+}

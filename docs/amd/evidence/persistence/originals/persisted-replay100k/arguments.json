@@ -1,0 +1,16 @@
+{
+  "report": "/workspace/amd107/quality64-formal100k-warn/report.json",
+  "gt_dir": "/workspace/amd107/gt100k",
+  "base": "/workspace/amd107/scale100k/base.f32",
+  "query": "/workspace/amd107/scale100k/query.f32",
+  "output": "/workspace/amd107/persisted-replay100k",
+  "host": "127.0.0.1",
+  "port": 2882,
+  "user": "root",
+  "password_env": "SEEKDB_PASSWORD",
+  "driver": "mysql",
+  "mysql": "mysql",
+  "sql_timeout": 300,
+  "ef_search": 1000,
+  "recall_threshold": 0.96
+}

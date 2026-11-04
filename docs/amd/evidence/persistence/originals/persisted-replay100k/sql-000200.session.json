@@ -1,0 +1,7 @@
+{
+  "driver": "mysql",
+  "init_command": "SET SESSION ob_hnsw_ef_search=1000",
+  "requested_ef_search": 1000,
+  "actual_session_ob_hnsw_ef_search": 1000,
+  "matches": true
+}

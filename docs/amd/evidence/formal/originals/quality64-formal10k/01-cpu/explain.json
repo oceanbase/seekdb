@@ -1,0 +1,35 @@
+[
+  [
+    "================================================================"
+  ],
+  [
+    "|ID|OPERATOR         |NAME               |EST.ROWS|EST.TIME(us)|"
+  ],
+  [
+    "----------------------------------------------------------------"
+  ],
+  [
+    "|0 |VECTOR INDEX SCAN|cpu_r01(ix_cpu_r01)|1       |7           |"
+  ],
+  [
+    "================================================================"
+  ],
+  [
+    "Outputs & filters:"
+  ],
+  [
+    "-------------------------------------"
+  ],
+  [
+    "  0 - output([cpu_r01.c1]), filter(nil), rowset=16"
+  ],
+  [
+    "      access([cpu_r01.c1]), partitions(p0)"
+  ],
+  [
+    "      is_index_back=true, is_global_index=false, "
+  ],
+  [
+    "      range_key([cpu_r01.__vid_1793181882796541], [cpu_r01.__type_17_1793181883021919]), range(MIN,MIN ; MAX,MAX)always true"
+  ]
+]

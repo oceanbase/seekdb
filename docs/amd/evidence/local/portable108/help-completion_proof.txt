@@ -1,0 +1,27 @@
+usage: completion_proof.py [-h] --schema SCHEMA --table TABLE --index INDEX
+                           --ddl-start-utc DDL_START_UTC --backend {cpu,gpu}
+                           --round ROUND --base-count BASE_COUNT --output
+                           OUTPUT [--bridge-source BRIDGE_SOURCE]
+                           [--bridge-library BRIDGE_LIBRARY]
+                           [--gpu-environment-file GPU_ENVIRONMENT_FILE]
+                           [--observer-pid OBSERVER_PID]
+
+Validate one completed SQL build from saved SQL evidence and bounded logs.
+Read-only with respect to the database, services and source logs. Only proof
+artifacts under the supplied round directory are written. API names below are
+source-proven dispatches, never invented names of profiled GPU kernels.
+
+options:
+  -h, --help            show this help message and exit
+  --schema SCHEMA
+  --table TABLE
+  --index INDEX
+  --ddl-start-utc DDL_START_UTC
+  --backend {cpu,gpu}
+  --round ROUND
+  --base-count BASE_COUNT
+  --output OUTPUT
+  --bridge-source BRIDGE_SOURCE
+  --bridge-library BRIDGE_LIBRARY
+  --gpu-environment-file GPU_ENVIRONMENT_FILE
+  --observer-pid OBSERVER_PID

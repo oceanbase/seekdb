@@ -1,0 +1,28 @@
+{
+  "status": "exported",
+  "created_utc": "2026-10-28T10:10:38.670921+00:00",
+  "files": 21665,
+  "original_bytes": 3099202209,
+  "compact_files": 18989,
+  "compact_omitted": 2676,
+  "snapshot_stable_during_export": true,
+  "warnings": [],
+  "compact_decoded_json_sha256": "9f6d9370a65043a396cb02d0cdc7d9d113701345e488a16abbca7d3d833775a8",
+  "outputs": {
+    "archive": {
+      "path": "/workspace/amd107/evidence-formal108.full.tar.gz",
+      "size": 1293531108,
+      "sha256": "5995e9d5dc371cc7ed09cb958756751c47b2d84a8d03027f093ef17915840d82"
+    },
+    "manifest": {
+      "path": "/workspace/amd107/evidence-formal108.manifest.json",
+      "size": 5773086,
+      "sha256": "a3e78fd64ca57754f20d706d2e0ad4e7b9001f81aafc75d9517422713191f6fb"
+    },
+    "compact": {
+      "path": "/workspace/amd107/evidence-formal108.compact.zlib.b64",
+      "size": 3284669,
+      "sha256": "c3a2b27fe2ab35a177e16d964b5860e5bbb88bc40dccbda61fb9890dddf4faff"
+    }
+  }
+}

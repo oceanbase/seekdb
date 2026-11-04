@@ -1,0 +1,82 @@
+[
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 99,
+    "text": "enum ObVectorIndexAlgorithmLib"
+  },
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 101,
+    "text": "  VIAL_VSAG = 0,"
+  },
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 102,
+    "text": "  VIAL_OB,"
+  },
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 103,
+    "text": "  VIAL_MAX"
+  },
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 203,
+    "text": "    type_(VIAT_MAX), lib_(VIAL_MAX), dim_(0), m_(0), ef_construction_(0), ef_search_(0),"
+  },
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 215,
+    "text": "    lib_ = VIAL_MAX;"
+  },
+  {
+    "path": "src/query/api/query/vector/ob_vector_index_util.h",
+    "line": 272,
+    "text": "  ObVectorIndexAlgorithmLib lib_;"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 257,
+    "text": "            param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 259,
+    "text": "            param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 503,
+    "text": "        if (param.lib_ == ObVectorIndexAlgorithmLib::VIAL_MAX) {"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 504,
+    "text": "          param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 525,
+    "text": "        if (param.lib_ == ObVectorIndexAlgorithmLib::VIAL_MAX) {"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 526,
+    "text": "          param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 1022,
+    "text": "    } else if (new_vec_param.lib_ != ObVectorIndexAlgorithmLib::VIAL_MAX) {"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 1029,
+    "text": "      if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_VSAG) {"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "line": 1031,
+    "text": "      } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_OB) {"
+  }
+]

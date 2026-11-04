@@ -1,0 +1,21 @@
+{
+  "image_adapter_verified": false,
+  "integration_source": "REPLACE with actual candidate commit/source hashes and successful real SQL smoke evidence before enabling",
+  "build_kind": "hnsw",
+  "completion_command": [
+    "python3",
+    "/REPLACE/checkout/tools/benchmark/amd_hnsw/completion_proof.py",
+    "--schema", "{schema}",
+    "--table", "{table}",
+    "--index", "{index}",
+    "--backend", "{backend}",
+    "--round", "{round}",
+    "--base-count", "{base_count}",
+    "--output", "{output}",
+    "--ddl-start-utc", "{ddl_start_utc}",
+    "--bridge-source", "/REPLACE/actual/seekdb_cuvs_bridge.c",
+    "--bridge-library", "/REPLACE/actual/libseekdb_cuvs_bridge.so",
+    "--gpu-environment-file", "/REPLACE/actual/environment.json"
+  ],
+  "activation_note": "Keep image_adapter_verified=false until actual image SQL smoke, same-round completion proof, plan, full bitwise readback and Recall review succeed. GPU evidence uses real API phases and source synchronization, not invented kernel names. Optional --observer-pid records the actual loaded library maps."
+}

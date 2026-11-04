@@ -1,0 +1,79 @@
+{
+  "status": "PASS",
+  "verified_utc": "2026-10-28T07:50:06.836413+00:00",
+  "python": "D:\\ob2026_plan\\ecosystem-easy\\qoder-entry\\.venv\\Scripts\\python.exe",
+  "numpy_version": "2.5.4",
+  "unittest_count": 7,
+  "unittest_status": "7 passed",
+  "tiny_cli_status": "PASS",
+  "tiny_shape": {
+    "base": [
+      5,
+      2
+    ],
+    "query": [
+      3,
+      2
+    ]
+  },
+  "known_gold": {
+    "0": [
+      4,
+      0,
+      1
+    ],
+    "1": [
+      2,
+      4,
+      0
+    ],
+    "2": [
+      3,
+      4,
+      0
+    ]
+  },
+  "raw_cli_argv": [
+    "D:\\ob2026_plan\\ecosystem-easy\\qoder-entry\\.venv\\Scripts\\python.exe",
+    "-B",
+    "D:\\ob2026_plan\\runs\\amd107\\prepare_ground_truth.py",
+    "--base",
+    "D:\\ob2026_plan\\runs\\amd107\\tiny-cli-inputs\\base.f32",
+    "--query",
+    "D:\\ob2026_plan\\runs\\amd107\\tiny-cli-inputs\\query.f32",
+    "--dimension",
+    "2",
+    "--base-count",
+    "5",
+    "--query-count",
+    "3",
+    "--k",
+    "3",
+    "--metric",
+    "l2",
+    "--block-rows",
+    "2",
+    "--output",
+    "D:\\ob2026_plan\\runs\\amd107\\tiny-cli-output"
+  ],
+  "large_dataset_computed": false,
+  "network_or_dependency_install": false,
+  "reference_gt_consumed": false,
+  "tests": [
+    "known-answer squared L2",
+    "cross-block and K-boundary ties by ID",
+    "K equal N",
+    "K0/K>N and invalid counts/dim/block/metric",
+    "truncated/trailing input bytes",
+    "NaN last base row/Inf query",
+    "query count mismatch",
+    "signed zero/subnormal/max f32/text9digits bitwise",
+    "actual run_once.recall complete denominator7/9 and missing-query rejection"
+  ],
+  "hashes": {
+    "prepare_ground_truth.py": "986b3a82dee52dcf1fc5538f815bc7812f1a24df44d943298cc5235cc0442b24",
+    "test_prepare_ground_truth.py": "430c61b276c01b820ffb8be355270dde84f466c400c3f64eceaf2aec70b40fc4",
+    "ground-truth-selftest.txt": "3ca88e31ed2be32dade9099f7205f1baf5f0928d90b33c20181094a85e360cf6",
+    "ground-truth-cli-smoke.txt": "4a6c02b6141f11691ea7a44a978c1f43ffe989482def9131490b3f1eefdc0369"
+  }
+}
