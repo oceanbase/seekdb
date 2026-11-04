@@ -125,13 +125,6 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
                                      "%" PRId64,
                                      default_coll_int))) {
   }
-
-  //OB_SV_SERVER_UUID
-  if (OB_SUCC(ret)) {
-    MEMSET(server_uuid_, '\0', SERVER_UUID_MAX_LEN);
-    if (OB_FAIL(ObExprUuid::gen_server_uuid(server_uuid_, SERVER_UUID_MAX_LEN - 1))) {
-    } else {/*do nothing*/}
-  }
 }
 
 static ObSpecialSysVarValues ob_special_sys_var_values_init;
@@ -2603,7 +2596,10 @@ int ObPreProcessSysVars::change_initial_value()
 int ObPreProcessSysVars::init_sys_var(const ObIArray<std::pair<ObString, ObString>> &sys_vars)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(change_base_values(sys_vars))) {
+  if (OB_FAIL(ObExprUuid::gen_server_uuid(ObSpecialSysVarValues::server_uuid_,
+                                       ObSpecialSysVarValues::SERVER_UUID_MAX_LEN - 1))) {
+    LOG_WARN("failed to generate server UUID", K(ret));
+  } else if (OB_FAIL(change_base_values(sys_vars))) {
   } else if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars())) {
   } else if (OB_FAIL(ObPreProcessSysVars::change_initial_value())) {
   } else if (OB_FAIL(share::ObSysVariables::init_default_values())) {
