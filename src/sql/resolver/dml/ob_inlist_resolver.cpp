@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -28,6 +29,66 @@ using namespace common;
 
 namespace sql
 {
+namespace
+{
+
+// Count values only for choosing the rewrite strategy. Keep all expressions and
+// parameters so cached plans remain correct when parameter values change.
+int count_distinct_integer_inlist_values(const ParseNode &in_list,
+                                        const ParamStore *param_store,
+                                        const int64_t threshold,
+                                        int64_t &distinct_count)
+{
+  int ret = OB_SUCCESS;
+  distinct_count = in_list.num_child_;
+  bool supported = true;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> values;
+  if (OB_ISNULL(in_list.children_)
+      || OB_UNLIKELY(threshold <= 1 || in_list.num_child_ < threshold)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(values.create(threshold, ObMemAttr("InListRewrite")))) {
+    LOG_WARN("failed to create integer inlist value set", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_
+       && values.size() < threshold; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_QUESTIONMARK == node->type_) {
+      if (OB_ISNULL(param_store)
+          || OB_UNLIKELY(node->value_ < 0 || node->value_ >= param_store->count())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        const ObObjParam &param = param_store->at(node->value_);
+        if (!param.is_int()) {
+          supported = false;
+        } else {
+          value = param.get_int();
+        }
+      }
+    } else {
+      // Preserve the existing strategy for NULL and other literal types.
+      supported = false;
+    }
+    if (OB_SUCC(ret) && supported) {
+      if (OB_HASH_EXIST == (ret = values.set_refactored(value, 0))) {
+        ret = OB_SUCCESS;
+      } else if (OB_FAIL(ret)) {
+        LOG_WARN("failed to record integer inlist value", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && supported) {
+    distinct_count = values.size();
+  }
+  return ret;
+}
+
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -350,6 +411,16 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && !is_prepare_stmt
+          && 1 == column_cnt && threshold > 1) {
+        int64_t distinct_count = row_cnt;
+        if (OB_FAIL(count_distinct_integer_inlist_values(
+                in_list, param_store, threshold, distinct_count))) {
+          LOG_WARN("failed to count distinct integer inlist values", K(ret));
+        } else if (distinct_count < threshold) {
+          is_enable = false;
+        }
+      }
     }
   }
   return ret;
