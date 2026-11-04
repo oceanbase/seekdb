@@ -18,8 +18,8 @@
 #define OCEANBASE_SQL_ENGINE_OB_AI_COLUMN_SCHEDULER_H_
 
 #include "lib/container/ob_se_array.h"
-#include "common/ob_i_task.h"
 #include "share/schema/ob_table_schema.h"
+#include "lib/lock/ob_mutex.h"
 
 namespace oceanbase
 {

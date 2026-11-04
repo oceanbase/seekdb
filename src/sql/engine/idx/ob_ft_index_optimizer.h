@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_ENGINE_IDX_OB_FT_INDEX_OPTIMIZER_H_
 
 #include "lib/container/ob_se_array.h"
-#include "common/ob_i_task.h"
 
 namespace oceanbase
 {
