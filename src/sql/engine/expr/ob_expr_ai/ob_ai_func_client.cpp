@@ -128,7 +128,7 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString
 {
   int ret = OB_SUCCESS;
   int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
-  if (OB_ISNULL(url) || headers.empty()) {
+  if (OB_ISNULL(url)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     allocator_ = &allocator;
@@ -140,14 +140,24 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString
     timeout_sec_ = std::min(std::max(static_cast<int64_t>(1), remain_timeout_us / 1000000), static_cast<int64_t>(CURL_MAX_TIMEOUT_SEC));
     abs_timeout_ts_ = remain_timeout_us + ObTimeUtility::current_time();
     if (OB_SUCC(ret)){
-      const uint32_t num_headers = headers.count();
-      for (uint32_t i = 0; OB_SUCC(ret) && i < num_headers; ++i) {
+      if (headers.empty()) {
+        // Providers without auth headers (e.g. ollama) still need a JSON content type.
+        ObString default_header("Content-Type: application/json");
         ObString header_c_str;
-        if (OB_FAIL(ob_write_string(*allocator_, headers.at(i), header_c_str, true))) {
+        if (OB_FAIL(ob_write_string(*allocator_, default_header, header_c_str, true))) {
         } else if (OB_ISNULL(header_list_ = curl_slist_append(header_list_, header_c_str.ptr()))) {
           ret = OB_ERR_UNEXPECTED;
-        } else {
-          LOG_DEBUG("ai_function request header appended", K(i));
+        }
+      } else {
+        const uint32_t num_headers = headers.count();
+        for (uint32_t i = 0; OB_SUCC(ret) && i < num_headers; ++i) {
+          ObString header_c_str;
+          if (OB_FAIL(ob_write_string(*allocator_, headers.at(i), header_c_str, true))) {
+          } else if (OB_ISNULL(header_list_ = curl_slist_append(header_list_, header_c_str.ptr()))) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            LOG_DEBUG("ai_function request header appended", K(i));
+          }
         }
       }
     }
