@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the Rust toolchain required by the seekdb build (see rust/rust-toolchain.toml).
+# Install the Rust toolchain required by the seekdb build (see rust-toolchain.toml).
 # Used by .github/actions/setup-rust and CI jobs that run inside Docker containers.
 set -euo pipefail
 
@@ -50,7 +50,7 @@ fi
 # steps that call `bash build.sh ...` right afterwards, and the cd must not
 # leak into the caller's working directory.
 (
-  cd "$repo_root/rust"
+  cd "$repo_root"
   RUSTUP_AUTO_INSTALL=1 cargo --version
   rustc --version
 )
@@ -60,9 +60,9 @@ fi
 # `cargo` there fails: "no default is configured". Pin the default to the
 # workspace's pinned channel, read from rust-toolchain.toml so the version
 # stays in one place.
-pinned_channel="$(sed -n 's/^channel = "\(.*\)"/\1/p' "$repo_root/rust/rust-toolchain.toml" | head -n 1)"
+pinned_channel="$(sed -n 's/^channel = "\(.*\)"/\1/p' "$repo_root/rust-toolchain.toml" | head -n 1)"
 if [[ -z "$pinned_channel" ]]; then
-  echo "install-rust: failed to read channel from $repo_root/rust/rust-toolchain.toml" >&2
+  echo "install-rust: failed to read channel from $repo_root/rust-toolchain.toml" >&2
   exit 1
 fi
 rustup default "$pinned_channel"
