@@ -93,6 +93,17 @@ protected:
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
   virtual int project_results(const int64_t count);
   int init_merge_heap(const int64_t count);
+  // Non-virtual fast paths around the merge heap. init_merge_heap() fixes the
+  // concrete heap type (simple merger for <= 3 dims, loser tree otherwise) and
+  // nothing derives from these two for ObSRMergeItem, so the qualified calls
+  // below are behavior-identical to the virtual interface calls while skipping
+  // the per-candidate virtual dispatch.
+  inline int merge_heap_push(const ObSRMergeItem &item);
+  inline int merge_heap_pop();
+  inline int merge_heap_top(const ObSRMergeItem *&item);
+  inline bool merge_heap_empty() const;
+  inline bool merge_heap_unique_champion() const;
+  inline int merge_heap_rebuild();
 protected:
   ObIAllocator *iter_allocator_;
   ObSparseRetrievalMergeParam *iter_param_;
@@ -110,9 +121,80 @@ protected:
   // projection column over a double datum, so the per-candidate filter decision
   // is bit-identical to the inline comparison (relevance != 0.0); see cpp.
   bool use_fast_filter_;
+  // typed views of merge_heap_ fixed in init_merge_heap(), backing the
+  // qualified heap calls above
+  ObSRSimpleMerger *simple_merger_;
+  ObSRLoserTree *loser_tree_;
+  // snapshot of dim_iters_ pointers taken at init, so the merge loop indexes a
+  // plain array instead of paying the per-access virtual ObIArray::at dispatch
+  ObFixedArray<ObISRDaaTDimIter *, ObIAllocator> dim_iter_ptr_cache_;
+  // true iff rows are projected into the expr datum vectors directly at cache
+  // time (vectorized + value-copyable doc id), replacing the buffered copy plus
+  // the second write in project_results(); see init()/cache_result().
+  bool direct_project_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };
+
+inline int ObSRDaaTIterImpl::merge_heap_push(const ObSRMergeItem &item)
+{
+  if (nullptr != simple_merger_) {
+    return simple_merger_->ObSRSimpleMerger::push(item);
+  } else if (nullptr != loser_tree_) {
+    return loser_tree_->ObSRLoserTree::push(item);
+  }
+  return common::OB_ERR_UNEXPECTED;
+}
+
+inline int ObSRDaaTIterImpl::merge_heap_pop()
+{
+  if (nullptr != simple_merger_) {
+    return simple_merger_->ObSRSimpleMerger::pop();
+  } else if (nullptr != loser_tree_) {
+    return loser_tree_->ObSRLoserTree::pop();
+  }
+  return common::OB_ERR_UNEXPECTED;
+}
+
+inline int ObSRDaaTIterImpl::merge_heap_top(const ObSRMergeItem *&item)
+{
+  if (nullptr != simple_merger_) {
+    return simple_merger_->ObSRSimpleMerger::top(item);
+  } else if (nullptr != loser_tree_) {
+    return loser_tree_->ObSRLoserTree::top(item);
+  }
+  return common::OB_ERR_UNEXPECTED;
+}
+
+inline bool ObSRDaaTIterImpl::merge_heap_empty() const
+{
+  if (nullptr != simple_merger_) {
+    return simple_merger_->ObSRSimpleMerger::empty();
+  } else if (nullptr != loser_tree_) {
+    return loser_tree_->ObSRLoserTree::empty();
+  }
+  return true;
+}
+
+inline bool ObSRDaaTIterImpl::merge_heap_unique_champion() const
+{
+  if (nullptr != simple_merger_) {
+    return simple_merger_->ObSRSimpleMerger::is_unique_champion();
+  } else if (nullptr != loser_tree_) {
+    return loser_tree_->ObSRLoserTree::is_unique_champion();
+  }
+  return true;
+}
+
+inline int ObSRDaaTIterImpl::merge_heap_rebuild()
+{
+  if (nullptr != simple_merger_) {
+    return simple_merger_->ObSRSimpleMerger::rebuild();
+  } else if (nullptr != loser_tree_) {
+    return loser_tree_->ObSRLoserTree::rebuild();
+  }
+  return common::OB_ERR_UNEXPECTED;
+}
 
 } // namespace storage
 } // namespace oceanbase

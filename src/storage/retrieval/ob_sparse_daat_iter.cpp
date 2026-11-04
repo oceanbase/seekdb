@@ -84,7 +84,11 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     next_round_iter_idxes_(),
     next_round_cnt_(0),
     set_datum_func_(nullptr),
-    use_fast_filter_(false)
+    use_fast_filter_(false),
+    simple_merger_(nullptr),
+    loser_tree_(nullptr),
+    dim_iter_ptr_cache_(),
+    direct_project_(false)
 {
 }
 
@@ -110,6 +114,14 @@ int ObSRDaaTIterImpl::init(
     } else {
       set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_shallow;
     }
+    // Single-phase projection (write rows into the projection expr datum
+    // vectors directly at cache time) is only allowed when the doc id datum is
+    // self-contained, i.e. the same condition that selects set_datum_int: the
+    // projected int datum is a packed value. The shallow path would keep a
+    // pointer into the dim iter's batch storage, which gets overwritten as the
+    // iter advances, so those queries keep the buffered two-phase projection.
+    direct_project_ = iter_param_->eval_ctx_->is_vectorized()
+        && set_datum_func_ == ObISparseRetrievalMergeIter::set_datum_int;
     if (OB_UNLIKELY(dim_iters.count() == 0)) {
     } else if (OB_NOT_NULL(iter_param_->dim_weights_) && dim_iters.count() != iter_param_->dim_weights_->count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -125,11 +137,15 @@ int ObSRDaaTIterImpl::init(
     } else if (FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
     } else if (OB_FAIL(buffered_relevances_.init(max_batch_size))) {
     } else if (OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
+    } else if (FALSE_IT(dim_iter_ptr_cache_.set_allocator(iter_allocator_))) {
+    } else if (OB_FAIL(dim_iter_ptr_cache_.init(dim_iters.count()))) {
+    } else if (OB_FAIL(dim_iter_ptr_cache_.prepare_allocate(dim_iters.count()))) {
     } else if (OB_FAIL(merge_cmp_.init(iter_param_->id_proj_expr_->datum_meta_, &iter_domain_ids_))) {
     } else if (OB_FAIL(init_merge_heap(dim_iters_->count()))) {
     } else {
       for (int64_t i = 0; i < dim_iters.count(); ++i) {
         next_round_iter_idxes_[i] = i;
+        dim_iter_ptr_cache_[i] = dim_iters.at(i);
       }
     }
 
@@ -166,6 +182,8 @@ void ObSRDaaTIterImpl::reset()
     merge_heap_->~ObSRMergeHeap();
     merge_heap_ = nullptr;
   }
+  simple_merger_ = nullptr;
+  loser_tree_ = nullptr;
   if (OB_NOT_NULL(relevance_collector_)) {
     relevance_collector_->reset();
     relevance_collector_ = nullptr;
@@ -174,6 +192,7 @@ void ObSRDaaTIterImpl::reset()
   buffered_domain_ids_.reset();
   buffered_relevances_.reset();
   next_round_iter_idxes_.reset();
+  dim_iter_ptr_cache_.reset();
   next_round_cnt_ = 0;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
@@ -259,7 +278,7 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      if (count > 0 && OB_FAIL(project_results(count))) {
+      if (count > 0 && !direct_project_ && OB_FAIL(project_results(count))) {
       }
     }
 
@@ -299,31 +318,34 @@ int ObSRDaaTIterImpl::fill_merge_heap()
 {
   int ret = OB_SUCCESS;
   ObSRMergeItem item;
+  // loop-invariant loads hoisted out of the per-candidate loop
+  const bool has_dim_weights = OB_NOT_NULL(iter_param_->dim_weights_);
+  const double field_boost = iter_param_->field_boost_;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
     const int64_t iter_idx = next_round_iter_idxes_[i];
-    ObISRDaaTDimIter *dim_iter = nullptr;
-    if (OB_ISNULL(dim_iter = dim_iters_->at(iter_idx))) {
+    ObISRDaaTDimIter *dim_iter = dim_iter_ptr_cache_.at(iter_idx);
+    if (OB_ISNULL(dim_iter)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dim_iter->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("fail to try load next batch dimension data", K(ret));\
+        LOG_WARN("fail to try load next batch dimension data", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
-    } else if (OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
+    } else if (has_dim_weights && FALSE_IT(item.relevance_ = item.relevance_ * field_boost * iter_param_->dim_weights_->at(iter_idx))) {
     } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
-    } else if (OB_FAIL(merge_heap_->push(item))) {
+    } else if (OB_FAIL(merge_heap_push(item))) {
     } else {
       LOG_DEBUG("push item to merge heap", K(ret), K(i), K(iter_idx), K(next_round_cnt_), K(item), K(iter_domain_ids_[iter_idx]));
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (merge_heap_->empty()) {
+  } else if (merge_heap_empty()) {
     ret = OB_ITER_END;
-  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_rebuild())) {
   } else {
     next_round_cnt_ = 0;
   }
@@ -340,14 +362,14 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
   relevance = 0.0;
   got_valid_id = false;
 
-  while (OB_SUCC(ret) && !merge_heap_->empty() && !curr_doc_end) {
-    if (merge_heap_->is_unique_champion()) {
+  while (OB_SUCC(ret) && !merge_heap_empty() && !curr_doc_end) {
+    if (merge_heap_unique_champion()) {
       curr_doc_end = true;
     }
-    if (OB_FAIL(merge_heap_->top(top_item))) {
+    if (OB_FAIL(merge_heap_top(top_item))) {
     } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
-    } else if (OB_FAIL(merge_heap_->pop())) {
+    } else if (OB_FAIL(merge_heap_pop())) {
     } else {
       next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
     }
@@ -419,6 +441,40 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
     // don't need to project
   } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_LIKELY(direct_project_)) {
+    // Single-phase projection for value-copyable doc ids (vectorized + the
+    // set_datum_int case checked at init): write the row straight into the
+    // projection expr datum vectors at batch index $count. This replaces the
+    // buffered ObDocIdExt deep copy plus the second write in project_results()
+    // with one write of the same values. The datum writes and the evaluated
+    // flags below are exactly what project_results(count) did for the same
+    // row, so hit set, row order, relevance values and the LIMIT/OFFSET
+    // counting (still driven by input_row_cnt_/output_row_cnt_) are unchanged.
+    ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+    if (OB_UNLIKELY(count >= eval_ctx->max_batch_size_)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+      guard.set_batch_idx(count);
+      ObExpr *id_proj_expr = iter_param_->id_proj_expr_;
+      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      // identical to set_datum_int(id_proj_datum, doc_id) where doc_id wraps id_datum
+      id_proj_datum.set_int(id_datum.get_int());
+      id_proj_expr->get_evaluated_flags(*eval_ctx).set(count);
+      id_proj_expr->set_evaluated_projected(*eval_ctx);
+      if (iter_param_->need_project_relevance()) {
+        ObExpr *rel_proj_expr = iter_param_->relevance_proj_expr_;
+        ObDatum &rel_proj_datum = rel_proj_expr->locate_datum_for_write(*eval_ctx);
+        rel_proj_datum.set_double(relevance);
+        rel_proj_expr->get_evaluated_flags(*eval_ctx).set(count);
+        rel_proj_expr->set_evaluated_projected(*eval_ctx);
+      }
+      ++count;
+      ++output_row_cnt_;
+      if (limit_param->is_valid() && output_row_cnt_ >= limit) {
+        ret = OB_ITER_END;
+      }
+    }
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
     buffered_relevances_[count] = relevance;
@@ -477,16 +533,20 @@ int ObSRDaaTIterImpl::init_merge_heap(const int64_t count)
   int ret = OB_SUCCESS;
   ObSRSimpleMerger *simple_merge = nullptr;
   ObSRMergeHeap *loser_tree = nullptr;
+  simple_merger_ = nullptr;
+  loser_tree_ = nullptr;
   if (count <= ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
     if (OB_ISNULL(simple_merge = OB_NEWx(ObSRSimpleMerger, iter_allocator_, merge_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       merge_heap_ = simple_merge;
+      simple_merger_ = simple_merge;
     }
   } else if (OB_ISNULL(loser_tree = OB_NEWx(ObSRLoserTree, iter_allocator_, merge_cmp_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     merge_heap_ = loser_tree;
+    loser_tree_ = static_cast<ObSRLoserTree *>(loser_tree);
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(merge_heap_->init(count, count, *iter_allocator_))) {
