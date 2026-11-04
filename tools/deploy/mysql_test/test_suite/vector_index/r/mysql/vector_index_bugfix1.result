@@ -753,3 +753,39 @@ VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
 alter system set vector_memory_limit = 0;
+# Absorption removes the unused parity filter and keeps vector access.
+absorbed	vector_access
+1	1
+id
+1
+2
+# A balanced tree with 1024 OR branches must have the same compact plan.
+absorbed	vector_access
+1	1
+id
+1
+2
+# The dual absorption identity also preserves nullable predicate semantics.
+id
+1
+2
+# Different predicates must not be absorbed.
+retained
+1
+id
+3
+# NO_REWRITE keeps the redundant predicate.
+retained
+1
+# Cached prepared plans must respect changed parameter equality.
+id
+1
+2
+id
+3
+id
+1
+# Exact search remains a correctness control.
+id
+1
+2
