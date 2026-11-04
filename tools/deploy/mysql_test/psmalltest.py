@@ -462,6 +462,7 @@ psmall_test=[
 'vector_index.vector_index_partitioned',
 'vector_index.vector_index_post_create',
 'vector_index.vector_index_rebuild',
+'vector_index.ddl_column_identifier_escaping',
 'vector_index.vector_ivf_index_with_filter',
 'vector_async.async_vec_dml_basic',
 'vector_async.async_vec_ddl_create',
