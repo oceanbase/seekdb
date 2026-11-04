@@ -221,3 +221,29 @@ CALL dbms_vector.rebuild_index('idx','c1_database','v');
 CALL dbms_vector.rebuild_index('idx','c1_database','v',0);
 SELECT `id` AS id,v FROM `c1_database` ORDER BY `id`;
 USE `seekdb_identifier_quoting`;
+
+# Shared DDL must escape column identifiers without depending on the SQL layer.
+USE `seekdb_identifier_quoting`;
+CREATE TABLE ddl_enum_quoted (id INT PRIMARY KEY, `e``n` ENUM('a','b'));
+INSERT INTO ddl_enum_quoted VALUES (1,'a'),(2,'b'),(3,NULL);
+CREATE UNIQUE INDEX ddl_enum_quoted_idx ON ddl_enum_quoted(`e``n`);
+SELECT id, `e``n` FROM ddl_enum_quoted ORDER BY id;
+--error 1062
+INSERT INTO ddl_enum_quoted VALUES (4,'a');
+INSERT INTO ddl_enum_quoted VALUES (4,NULL);
+SELECT COUNT(*) AS rows_after_null FROM ddl_enum_quoted;
+DROP TABLE ddl_enum_quoted;
+
+CREATE TABLE ddl_set_quoted (id INT PRIMARY KEY, `set````value` SET('a','b'));
+INSERT INTO ddl_set_quoted VALUES (1,'a'),(2,'a,b'),(3,NULL);
+CREATE UNIQUE INDEX ddl_set_quoted_idx ON ddl_set_quoted(`set````value`);
+SELECT id, `set````value` FROM ddl_set_quoted ORDER BY id;
+--error 1062
+INSERT INTO ddl_set_quoted VALUES (4,'a,b');
+DROP TABLE ddl_set_quoted;
+
+CREATE TABLE ddl_unicode_quoted (id INT PRIMARY KEY, `列``名` ENUM('a','b'));
+INSERT INTO ddl_unicode_quoted VALUES (1,'a'),(2,'b');
+CREATE UNIQUE INDEX ddl_unicode_quoted_idx ON ddl_unicode_quoted(`列``名`);
+SELECT id, `列``名` FROM ddl_unicode_quoted ORDER BY id;
+DROP TABLE ddl_unicode_quoted;
