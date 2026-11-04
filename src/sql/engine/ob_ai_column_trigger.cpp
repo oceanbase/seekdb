@@ -36,13 +36,9 @@ ObAiColumnTrigger::~ObAiColumnTrigger()
 
 bool ObAiColumnTrigger::has_ai_columns(const share::schema::ObTableSchema& table_schema)
 {
-  // Check if table has any AI columns
-  for (int64_t i = 0; i < table_schema.get_column_count(); i++) {
-    const ObColumnSchemaV2* column = table_schema.get_column(i);
-    if (NULL != column && column->is_ai_column()) {
-      return true;
-    }
-  }
+  // TODO: Check if table has any AI columns
+  // For now, return false as placeholder until DDL parser integration is complete
+  UNUSED(table_schema);
   return false;
 }
 
@@ -52,45 +48,11 @@ int ObAiColumnTrigger::on_insert(ObExecContext& ctx,
 {
   int ret = OB_SUCCESS;
 
-  if (!has_ai_columns(table_schema)) {
-    return ret; // No AI columns, nothing to do
-  }
-
-  // Get row ID (primary key)
-  uint64_t row_id = OB_INVALID_ID;
-  if (new_row.row_key_cell_cnt_ > 0 && new_row.cells_[0].is_int()) {
-    row_id = new_row.cells_[0].get_int();
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Cannot extract row ID from new row", K(ret));
-  }
-
-  // Process each AI column
-  for (int64_t i = 0; i < table_schema.get_column_count() && OB_SUCC(ret); i++) {
-    const ObColumnSchemaV2* column = table_schema.get_column(i);
-    if (NULL == column || !column->is_ai_column()) {
-      continue;
-    }
-
-    uint64_t column_id = column->get_column_id();
-    int64_t cell_idx = column->get_cell_index();
-
-    if (cell_idx < 0 || cell_idx >= new_row.count_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid cell index for AI column", K(ret), K(column_id), K(cell_idx));
-      continue;
-    }
-
-    const ObObj& source_value = new_row.cells_[cell_idx];
-    if (source_value.is_null()) {
-      continue; // Skip NULL values
-    }
-
-    // Trigger AI processing
-    if (OB_FAIL(process_ai_column(ctx, table_schema, column_id, source_value, row_id))) {
-      LOG_WARN("Failed to process AI column", K(ret), K(column_id));
-    }
-  }
+  // TODO: Integrate with DDL parser to identify AI columns
+  // For now, this is a placeholder that returns success without processing
+  UNUSED(ctx);
+  UNUSED(table_schema);
+  UNUSED(new_row);
 
   return ret;
 }
@@ -102,50 +64,12 @@ int ObAiColumnTrigger::on_update(ObExecContext& ctx,
 {
   int ret = OB_SUCCESS;
 
-  if (!has_ai_columns(table_schema)) {
-    return ret; // No AI columns, nothing to do
-  }
-
-  // Get row ID
-  uint64_t row_id = OB_INVALID_ID;
-  if (new_row.row_key_cell_cnt_ > 0 && new_row.cells_[0].is_int()) {
-    row_id = new_row.cells_[0].get_int();
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Cannot extract row ID from updated row", K(ret));
-  }
-
-  // Check which AI columns changed
-  for (int64_t i = 0; i < table_schema.get_column_count() && OB_SUCC(ret); i++) {
-    const ObColumnSchemaV2* column = table_schema.get_column(i);
-    if (NULL == column || !column->is_ai_column()) {
-      continue;
-    }
-
-    uint64_t column_id = column->get_column_id();
-    int64_t cell_idx = column->get_cell_index();
-
-    if (cell_idx < 0 || cell_idx >= new_row.count_ || cell_idx >= old_row.count_) {
-      continue;
-    }
-
-    const ObObj& old_value = old_row.cells_[cell_idx];
-    const ObObj& new_value = new_row.cells_[cell_idx];
-
-    // Only trigger if value changed
-    if (old_value == new_value) {
-      continue;
-    }
-
-    if (new_value.is_null()) {
-      continue; // Skip NULL values
-    }
-
-    // Trigger AI processing for updated value
-    if (OB_FAIL(process_ai_column(ctx, table_schema, column_id, new_value, row_id))) {
-      LOG_WARN("Failed to process updated AI column", K(ret), K(column_id));
-    }
-  }
+  // TODO: Integrate with DDL parser to identify AI columns
+  // For now, this is a placeholder that returns success without processing
+  UNUSED(ctx);
+  UNUSED(table_schema);
+  UNUSED(old_row);
+  UNUSED(new_row);
 
   return ret;
 }
