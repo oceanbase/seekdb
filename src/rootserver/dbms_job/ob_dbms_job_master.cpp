@@ -400,7 +400,6 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
                           ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
-  const uint64_t table_ids[] = {OB_ALL_JOB_TID};
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(sql_client)
@@ -414,8 +413,7 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
   } else if (OB_FAIL(job_utils_.init(sql_client))) {
   } else if (OB_FAIL(alive_jobs_.create(1024))) {
   } else if (OB_FAIL(job_table_change_watcher_.register_tables(
-                 GCTX.internal_table_change_notifier_, table_ids,
-                 ARRAYSIZEOF(table_ids)))) {
+                 {OB_ALL_JOB_TID}))) {
     LOG_WARN("failed to register dbms job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
@@ -695,9 +693,8 @@ int ObDBMSJobMaster::load_and_register_new_jobs() {
       }
     }
   }
-  LOG_INFO("load and reconcile dbms jobs", K(ret), "target_commit_version",
-           job_table_change_watcher_.get_target_commit_version(),
-           K(schedule_generation_), K(job_infos));
+  LOG_INFO("load and reconcile dbms jobs", K(ret), K(schedule_generation_),
+           K(job_infos));
   return ret;
 }
 
@@ -812,29 +809,28 @@ int ObDBMSJobMaster::check_table_change_(ObDBMSJobKey *job_key, bool &handled)
     allocator_.free(job_key);
     handled = true;
   } else {
-    const bool force_refresh =
+    const bool need_full_reload =
         OB_ISNULL(job_key) || ATOMIC_LOAD(&needs_reconcile_);
-    share::InternalTableChangeWatcher::CheckResult check_result;
-    const int status_ret = job_table_change_watcher_.check_changed(
-        check_result,
-        force_refresh ? share::InternalTableChangeWatcher::FORCE_REFRESH
-                      : share::InternalTableChangeWatcher::REFRESH_IF_CHANGED);
+    share::InternalTableChangeWatcher::CheckResult check_result =
+        share::InternalTableChangeWatcher::NO_CHANGE;
+    int status_ret = OB_SUCCESS;
+    if (!need_full_reload) {
+      status_ret = job_table_change_watcher_.check_changed(check_result);
+    }
     const bool need_reconcile =
-        force_refresh || OB_SUCCESS != status_ret ||
+        need_full_reload || OB_SUCCESS != status_ret ||
         share::InternalTableChangeWatcher::NO_CHANGE != check_result;
     if (need_reconcile) {
-      bool defer_until_visible =
-          OB_SUCCESS != status_ret ||
-          share::InternalTableChangeWatcher::REFRESH_ALLOWED != check_result;
+      const bool defer_until_visible = !need_full_reload &&
+          (OB_SUCCESS != status_ret ||
+           share::InternalTableChangeWatcher::REFRESH_ALLOWED != check_result);
       if (OB_SUCCESS != status_ret) {
         LOG_WARN("fail to get dbms job table change version; defer reconcile",
                  K(status_ret));
       } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
                  check_result) {
         LOG_DEBUG(
-            "defer dbms job reconciliation until GTS reaches commit version",
-            "commit_version",
-            job_table_change_watcher_.get_target_commit_version());
+            "defer dbms job reconciliation until GTS reaches commit version");
       }
       if (defer_until_visible) {
         // Do not run a due job or read the table before the notified commit is
@@ -851,6 +847,7 @@ int ObDBMSJobMaster::check_table_change_(ObDBMSJobKey *job_key, bool &handled)
       } else {
         ret = load_and_register_new_jobs();
         if (OB_SUCC(ret) &&
+            !need_full_reload &&
             OB_FAIL(job_table_change_watcher_.mark_refreshed())) {
           LOG_WARN("failed to acknowledge refreshed dbms job table", K(ret));
         }

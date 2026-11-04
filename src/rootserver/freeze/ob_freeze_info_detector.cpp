@@ -57,7 +57,6 @@ int ObMajorMergeInfoDetector::init(
     ObThreadIdling &major_scheduler_idling)
 {
   int ret = OB_SUCCESS;
-  const uint64_t table_ids[] = {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID};
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else {
@@ -69,8 +68,7 @@ int ObMajorMergeInfoDetector::init(
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
     } else if (OB_FAIL(table_change_watcher_.register_tables(
-                   GCTX.internal_table_change_notifier_, table_ids,
-                   ARRAYSIZEOF(table_ids)))) {
+                   {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID}))) {
       LOG_WARN("register freeze table change tracking failed", KR(ret));
     } else {
       is_inited_ = true;
@@ -281,8 +279,7 @@ int ObMajorMergeInfoDetector::try_reload_freeze_info()
     share::InternalTableChangeWatcher::CheckResult check_result;
     share::InternalTableChangeWatcher::CheckErrorStage error_stage;
     const int check_ret = table_change_watcher_.check_changed(
-        check_result, share::InternalTableChangeWatcher::REFRESH_IF_CHANGED,
-        &error_stage);
+        check_result, &error_stage);
     if (OB_SUCCESS != check_ret) {
       LOG_WARN("fail to check freeze table change, defer reload",
                KR(check_ret));
@@ -302,9 +299,7 @@ int ObMajorMergeInfoDetector::try_reload_freeze_info()
       // Standby metadata is unchanged; avoid issuing the periodic inner SQL.
     } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
                check_result) {
-      LOG_DEBUG("defer freeze metadata reload until GTS reaches commit version",
-                "commit_version",
-                table_change_watcher_.get_target_commit_version());
+      LOG_DEBUG("defer freeze metadata reload until GTS reaches commit version");
     } else if (OB_FAIL(major_merge_info_mgr_->reload(
                    true /*force_reload_global_info*/))) {
     } else if (OB_FAIL(table_change_watcher_.mark_refreshed())) {

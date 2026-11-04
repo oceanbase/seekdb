@@ -54,17 +54,15 @@ ObTimezoneMgr &ObTimezoneMgr::get_instance()
 int ObTimezoneMgr::init(ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  const uint64_t table_ids[] = {share::OB_ALL_SYS_STAT_TID,
-                                share::OB_ALL_TIME_ZONE_NAME_TID,
-                                share::OB_ALL_TIME_ZONE_TRANSITION_TID,
-                                share::OB_ALL_TIME_ZONE_TRANSITION_TYPE_TID};
   is_inited_ = true;
   if (OB_FAIL(init_timezone(sql_proxy))) {
   } else if (OB_FAIL(timer_.init("TimezoneMgr", ObMemAttr("TimezoneMgr")))) {
     LOG_WARN("init timezone timer failed", K(ret));
   } else if (OB_FAIL(table_change_watcher_.register_tables(
-                 GCTX.internal_table_change_notifier_, table_ids,
-                 ARRAYSIZEOF(table_ids)))) {
+                 {share::OB_ALL_SYS_STAT_TID,
+                  share::OB_ALL_TIME_ZONE_NAME_TID,
+                  share::OB_ALL_TIME_ZONE_TRANSITION_TID,
+                  share::OB_ALL_TIME_ZONE_TRANSITION_TYPE_TID}))) {
     LOG_WARN("register timezone table change tracking failed", K(ret));
   }
   return ret;
@@ -148,9 +146,7 @@ int ObTimezoneMgr::refresh_timezone_info_if_changed_()
     // The timer remains active, but unchanged tables need no inner SQL.
   } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
              check_result) {
-    LOG_DEBUG("defer timezone refresh until GTS reaches commit version",
-              "commit_version",
-              table_change_watcher_.get_target_commit_version());
+    LOG_DEBUG("defer timezone refresh until GTS reaches commit version");
   } else if (OB_FAIL(refresh_timezone_info())) {
     LOG_WARN("refresh changed timezone tables failed", K(ret));
   } else if (OB_FAIL(table_change_watcher_.mark_refreshed())) {

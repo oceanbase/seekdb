@@ -119,13 +119,12 @@ int ObFreezeInfoMgr::server_module_init(ObFreezeInfoMgr* &freeze_info_mgr)
 int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
-  } else if (OB_FAIL(reload_task_.init(notifier))) {
+  } else if (OB_FAIL(reload_task_.init())) {
   } else {
     inited_ = true;
   }
@@ -432,16 +431,14 @@ ObFreezeInfoMgr::ReloadTask::ReloadTask(ObFreezeInfoMgr &mgr)
     : inited_(false), check_runtime_status_(), mgr_(mgr),
       table_change_watcher_() {}
 
-int ObFreezeInfoMgr::ReloadTask::init(
-    share::InternalTableChangeNotifier *notifier) {
+int ObFreezeInfoMgr::ReloadTask::init() {
   int ret = OB_SUCCESS;
-  const uint64_t table_ids[] = {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID,
-                                OB_ALL_ACQUIRED_SNAPSHOT_TID};
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(table_change_watcher_.register_tables(
-                 notifier, table_ids, ARRAYSIZEOF(table_ids)))) {
+                 {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID,
+                  OB_ALL_ACQUIRED_SNAPSHOT_TID}))) {
     STORAGE_LOG(WARN, "fail to register freeze table change tracking", K(ret));
   } else {
     inited_ = true;
@@ -554,9 +551,7 @@ void ObFreezeInfoMgr::ReloadTask::runTimerTask()
                    KR(check_ret));
     } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
                check_result) {
-      LOG_DEBUG("defer freeze info refresh until GTS reaches commit version",
-                "commit_version",
-                table_change_watcher_.get_target_commit_version());
+      LOG_DEBUG("defer freeze info refresh until GTS reaches commit version");
     }
 
     // SQLite-backed merge state has no table change sequence and must keep its

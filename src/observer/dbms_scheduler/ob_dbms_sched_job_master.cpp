@@ -51,7 +51,6 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
                           ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
-  const uint64_t table_ids[] = {OB_ALL_SCHEDULER_JOB_TID};
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(sql_proxy)
@@ -62,8 +61,7 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
   } else if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr("DbmsSched_Job")))) {
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
   } else if (OB_FAIL(scheduler_job_table_change_watcher_.register_tables(
-                 GCTX.internal_table_change_notifier_, table_ids,
-                 ARRAYSIZEOF(table_ids)))) {
+                 {OB_ALL_SCHEDULER_JOB_TID}))) {
     LOG_WARN("failed to register scheduler job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
@@ -206,33 +204,24 @@ int ObDBMSSchedJobMaster::schedule_due_jobs()
     } else if (!write_enabled) {
       ret = OB_EAGAIN;
     } else {
-      bool changed = false;
-      const int status_ret =
-          scheduler_job_table_change_watcher_.has_unprocessed_changes(changed);
-      if (OB_SUCCESS != status_ret || changed) {
-        // Keep the due key queued until the table change is visible and
-        // check_runtime_jobs() has reconciled its schedule.
-        ret = OB_EAGAIN;
+      ObDBMSSchedJobKey *job_key = wait_vector_.at(0);
+      if (OB_ISNULL(job_key) || !job_key->is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("unexpected invalid scheduler job key", K(ret), KPC(job_key));
       } else {
-        ObDBMSSchedJobKey *job_key = wait_vector_.at(0);
-        if (OB_ISNULL(job_key) || !job_key->is_valid()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("unexpected invalid scheduler job key", K(ret), KPC(job_key));
-        } else {
-          const int64_t delay = job_key->get_execute_at() - ObTimeUtility::current_time();
-          if (delay > 0) {
-            break;
-          }
-          common::ObCurTraceId::TraceId job_trace_id;
-          job_trace_id.init(GCTX.self_addr());
-          ObTraceIdGuard trace_id_guard(job_trace_id);
-          int tmp_ret = wait_vector_.remove(wait_vector_.begin());
-          if (OB_SUCCESS != tmp_ret) {
-            ret = tmp_ret;
-            LOG_WARN("fail to remove scheduler job from wait vector", K(ret));
-          } else if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {
-            LOG_WARN("fail to schedule single dbms scheduler job", K(tmp_ret));
-          }
+        const int64_t delay = job_key->get_execute_at() - ObTimeUtility::current_time();
+        if (delay > 0) {
+          break;
+        }
+        common::ObCurTraceId::TraceId job_trace_id;
+        job_trace_id.init(GCTX.self_addr());
+        ObTraceIdGuard trace_id_guard(job_trace_id);
+        int tmp_ret = wait_vector_.remove(wait_vector_.begin());
+        if (OB_SUCCESS != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("fail to remove scheduler job from wait vector", K(ret));
+        } else if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {
+          LOG_WARN("fail to schedule single dbms scheduler job", K(tmp_ret));
         }
       }
     }
@@ -418,15 +407,15 @@ int ObDBMSSchedJobMaster::check_runtime_jobs()
       ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       LOG_INFO("server is read-only, not check new jobs, and remove exist jobs");
     } else {
-      const bool force_refresh = !ATOMIC_LOAD(&has_loaded_primary_jobs_);
+      const bool has_loaded_primary_jobs =
+          ATOMIC_LOAD(&has_loaded_primary_jobs_);
       share::InternalTableChangeWatcher::CheckResult check_result;
       const int status_ret = scheduler_job_table_change_watcher_.check_changed(
-          check_result,
-          force_refresh
-              ? share::InternalTableChangeWatcher::FORCE_REFRESH
-              : share::InternalTableChangeWatcher::REFRESH_IF_CHANGED);
+          check_result);
+      const bool refresh_allowed =
+          share::InternalTableChangeWatcher::REFRESH_ALLOWED == check_result;
       const bool need_reconcile =
-          force_refresh || OB_SUCCESS != status_ret ||
+          !has_loaded_primary_jobs || OB_SUCCESS != status_ret ||
           share::InternalTableChangeWatcher::NO_CHANGE != check_result;
       if (need_reconcile) {
         ATOMIC_STORE(&has_loaded_primary_jobs_, false);
@@ -439,30 +428,32 @@ int ObDBMSSchedJobMaster::check_runtime_jobs()
                    check_result) {
           LOG_DEBUG(
               "defer scheduler job reconciliation until GTS reaches commit "
-              "version",
-              "commit_version",
-              scheduler_job_table_change_watcher_.get_target_commit_version());
+              "version");
         }
         if (OB_SUCCESS != ret) {
           // Keep the scheduler unloaded and retry on the next loop.
-        } else if (share::InternalTableChangeWatcher::REFRESH_ALLOWED !=
+        } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
                    check_result) {
           // The notified commit is not visible to an inner-SQL snapshot yet.
-        } else if (OB_FAIL(check_new_jobs())) {
-          LOG_WARN("fail to reconcile runtime scheduler jobs", K(ret));
-        } else if (OB_FAIL(
-                       scheduler_job_table_change_watcher_.mark_refreshed())) {
-          LOG_WARN("failed to acknowledge refreshed scheduler job table",
-                   K(ret));
-        } else {
-          ATOMIC_STORE(&has_loaded_primary_jobs_, true);
+        } else if (!has_loaded_primary_jobs ||
+                   refresh_allowed) {
+          // Read the table directly when the in-memory job snapshot has not
+          // been loaded; otherwise reconcile only after a visible change.
+          if (OB_FAIL(check_new_jobs())) {
+            LOG_WARN("fail to reconcile runtime scheduler jobs", K(ret));
+          } else if (refresh_allowed &&
+                     OB_FAIL(
+                         scheduler_job_table_change_watcher_.mark_refreshed())) {
+            LOG_WARN("failed to acknowledge refreshed scheduler job table",
+                     K(ret));
+          } else {
+            ATOMIC_STORE(&has_loaded_primary_jobs_, true);
+          }
         }
       }
     }
   }
-  LOG_DEBUG("check runtime scheduler jobs", K(ret), "target_commit_version",
-            scheduler_job_table_change_watcher_.get_target_commit_version(),
-            K_(has_loaded_primary_jobs));
+  LOG_DEBUG("check runtime scheduler jobs", K(ret), K_(has_loaded_primary_jobs));
   return ret;
 }
 

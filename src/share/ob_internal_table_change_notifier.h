@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <initializer_list>
+
 #include "lib/container/ob_array.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "share/ob_internal_table_change_version.h"
@@ -23,20 +25,17 @@
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObServer;
-}
 namespace share
 {
-
-class InternalTableChangeWatcher;
 
 class InternalTableChangeNotifier
 {
 public:
   using ChangeVersion = InternalTableChangeVersion;
   using GtsProvider = int (*)(SCN &gts);
+
+  InternalTableChangeNotifier();
+  ~InternalTableChangeNotifier();
 
   int init();
   void destroy();
@@ -51,12 +50,11 @@ public:
   // Consumers wait for GTS to reach it before starting an inner-SQL refresh.
   void notify_table_changed(uint64_t table_id, const SCN &commit_version);
   void mark_all_tables_changed();
+  // Read a table's current change version and check commit visibility.
+  int get_change_version(uint64_t table_id, ChangeVersion &version) const;
+  int is_change_visible(const SCN &commit_version, bool &is_visible) const;
 
 private:
-  friend class InternalTableChangeWatcher;
-  friend class ::oceanbase::observer::ObServer;
-  InternalTableChangeNotifier();
-  ~InternalTableChangeNotifier();
   DISALLOW_COPY_AND_ASSIGN(InternalTableChangeNotifier);
 
   struct TableEntry {
@@ -80,9 +78,8 @@ private:
 
   const TableEntry *find_table_entry_(uint64_t table_id) const;
   TableEntry *find_table_entry_(uint64_t table_id);
-  int get_change_version_(uint64_t table_id, ChangeVersion &version) const;
-  int is_change_visible(const SCN &commit_version, bool &is_visible) const;
-  static bool is_change_visible(const SCN &commit_version, const SCN &gts)
+  static bool is_commit_version_visible(const SCN &commit_version,
+                                       const SCN &gts)
   {
     return commit_version.is_valid() && gts.is_valid() && gts >= commit_version;
   }
@@ -100,11 +97,6 @@ private:
 class InternalTableChangeWatcher
 {
 public:
-  enum CheckMode {
-    REFRESH_IF_CHANGED,
-    FORCE_REFRESH,
-  };
-
   enum CheckResult {
     NO_CHANGE,
     CHANGE_NOT_VISIBLE,
@@ -117,33 +109,21 @@ public:
     VISIBILITY_CHECK_ERROR,
   };
 
-  InternalTableChangeWatcher();
   ~InternalTableChangeWatcher() = default;
   DISALLOW_COPY_AND_ASSIGN(InternalTableChangeWatcher);
 
   // Must be called during module initialization, before the notifier is sealed.
-  // A repeated registration with the same notifier and table list is
-  // idempotent.
-  int register_tables(InternalTableChangeNotifier *notifier,
-                      const uint64_t *table_ids, int64_t table_count);
+  // Registers the watched tables once; subsequent calls are no-ops.
+  int register_tables(std::initializer_list<uint64_t> table_ids);
 
   // Captures the current target versions and checks GTS visibility. The caller
   // must call mark_refreshed() only after the associated refresh succeeds.
-  int check_changed(CheckResult &result, CheckMode mode = REFRESH_IF_CHANGED,
+  int check_changed(CheckResult &result,
                     CheckErrorStage *error_stage = nullptr);
-
-  // A non-consuming probe for execution gates that only need to know whether
-  // an unprocessed notification exists; it deliberately does not query GTS.
-  int has_unprocessed_changes(bool &changed) const;
 
   // Advances only to the target captured by the most recent REFRESH_ALLOWED
   // result, leaving notifications received during the refresh for next time.
   int mark_refreshed();
-
-  const SCN &get_target_commit_version() const
-  {
-    return target_commit_version_;
-  }
 
 private:
   struct WatchedTable {
@@ -156,10 +136,9 @@ private:
           target_version_() {}
   };
 
-  common::ObSEArray<WatchedTable, 4> watched_tables_;
-  InternalTableChangeNotifier *notifier_;
-  SCN target_commit_version_;
-  bool target_captured_;
+  common::ObArray<WatchedTable> watched_tables_{};
+  SCN target_commit_version_ = SCN::min_scn();
+  bool target_captured_ = false;
 };
 
 } // namespace share

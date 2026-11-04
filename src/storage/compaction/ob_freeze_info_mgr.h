@@ -165,7 +165,7 @@ private:
   public:
     ReloadTask(ObFreezeInfoMgr &mgr);
     virtual ~ReloadTask() {}
-    int init(share::InternalTableChangeNotifier *notifier);
+    int init();
     virtual void runTimerTask();
     int refresh_merge_info();
 

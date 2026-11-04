@@ -24,11 +24,9 @@ namespace share
 {
 
 struct InternalTableChangeVersion {
-  uint64_t change_seq_;
-  SCN commit_version_;
+  uint64_t change_seq_ = 0;
+  SCN commit_version_ = SCN::min_scn();
 
-  InternalTableChangeVersion()
-      : change_seq_(0), commit_version_(SCN::min_scn()) {}
   bool operator==(const InternalTableChangeVersion &other) const
   {
     return change_seq_ == other.change_seq_

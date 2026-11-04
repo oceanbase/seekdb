@@ -19,6 +19,7 @@
 #include "lib/atomic/ob_atomic.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_sort.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -176,7 +177,7 @@ void InternalTableChangeNotifier::notify_table_changed(
   }
 }
 
-int InternalTableChangeNotifier::get_change_version_(
+int InternalTableChangeNotifier::get_change_version(
     const uint64_t table_id,
     ChangeVersion &version) const
 {
@@ -214,7 +215,7 @@ int InternalTableChangeNotifier::is_change_visible(
   } else if (OB_FAIL(gts_provider_(gts))) {
     LOG_WARN("failed to get GTS for internal table refresh", K(ret));
   } else {
-    is_visible = is_change_visible(commit_version, gts);
+    is_visible = is_commit_version_visible(commit_version, gts);
   }
   return ret;
 }
@@ -228,67 +229,33 @@ void InternalTableChangeNotifier::mark_all_tables_changed()
   }
 }
 
-InternalTableChangeWatcher::InternalTableChangeWatcher()
-  : watched_tables_(),
-    notifier_(nullptr),
-    target_commit_version_(SCN::min_scn()),
-    target_captured_(false)
-{
-}
-
 int InternalTableChangeWatcher::register_tables(
-    InternalTableChangeNotifier *notifier, const uint64_t *table_ids,
-    const int64_t table_count)
+    const std::initializer_list<uint64_t> table_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(notifier)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("internal table change notifier is not initialized", K(ret));
-  } else if (OB_ISNULL(table_ids) || table_count <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments to register internal table watcher", K(ret),
-             KP(notifier), KP(table_ids), K(table_count));
-  } else if (OB_NOT_NULL(notifier_) && notifier_ != notifier) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("internal table watcher is already bound to another notifier",
-             K(ret));
-  } else if (OB_NOT_NULL(notifier_) && watched_tables_.count() != table_count) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("internal table watcher cannot change its table list", K(ret),
-             K(table_count), "registered_table_count", watched_tables_.count());
-  } else {
-    const bool already_registered = OB_NOT_NULL(notifier_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_count; ++i) {
-      if (already_registered &&
-          watched_tables_.at(i).table_id_ != table_ids[i]) {
-        ret = OB_STATE_NOT_MATCH;
-        LOG_WARN("internal table watcher cannot change its table list", K(ret),
-                 "index", i, "old_table_id", watched_tables_.at(i).table_id_,
-                 "new_table_id", table_ids[i]);
-      } else {
-        for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
-          if (table_ids[j] == table_ids[i]) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("duplicate table id in internal table watcher", K(ret),
-                     K(i), "table_id", table_ids[i]);
+  if (watched_tables_.count() == 0) {
+    InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
+    if (OB_ISNULL(notifier)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("internal table change notifier is not initialized", K(ret));
+    } else {
+      for (const uint64_t table_id : table_ids) {
+        if (OB_FAIL(notifier->register_table(table_id))) {
+          LOG_WARN("failed to register table with internal table change notifier",
+                   K(ret), K(table_id));
+        } else {
+          WatchedTable watched_table;
+          watched_table.table_id_ = table_id;
+          if (OB_FAIL(watched_tables_.push_back(watched_table))) {
+            LOG_WARN("failed to save watched table", K(ret), K(table_id));
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(notifier->register_table(table_ids[i]))) {
-          LOG_WARN("failed to register table with internal table watcher",
-                   K(ret), "table_id", table_ids[i]);
-        } else if (OB_SUCC(ret) && !already_registered) {
-          WatchedTable watched_table;
-          watched_table.table_id_ = table_ids[i];
-          if (OB_FAIL(watched_tables_.push_back(watched_table))) {
-            LOG_WARN("failed to save watched table", K(ret), "table_id",
-                     table_ids[i]);
-          }
+        if (OB_FAIL(ret)) {
+          break;
         }
       }
     }
-    if (OB_SUCC(ret)) {
-      notifier_ = notifier;
-    } else if (!already_registered) {
+    if (OB_FAIL(ret)) {
       watched_tables_.reset();
       target_captured_ = false;
     }
@@ -297,7 +264,6 @@ int InternalTableChangeWatcher::register_tables(
 }
 
 int InternalTableChangeWatcher::check_changed(CheckResult &result,
-                                              const CheckMode mode,
                                               CheckErrorStage *error_stage)
 {
   int ret = OB_SUCCESS;
@@ -307,9 +273,10 @@ int InternalTableChangeWatcher::check_changed(CheckResult &result,
   if (OB_NOT_NULL(error_stage)) {
     *error_stage = NO_CHECK_ERROR;
   }
+  InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
   target_captured_ = false;
   target_commit_version_ = SCN::min_scn();
-  if (OB_ISNULL(notifier_) || watched_tables_.count() <= 0) {
+  if (OB_ISNULL(notifier) || watched_tables_.count() <= 0) {
     ret = OB_NOT_INIT;
     if (OB_NOT_NULL(error_stage)) {
       *error_stage = VERSION_CHECK_ERROR;
@@ -318,7 +285,7 @@ int InternalTableChangeWatcher::check_changed(CheckResult &result,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < watched_tables_.count(); ++i) {
       WatchedTable &watched_table = watched_tables_.at(i);
-      if (OB_FAIL(notifier_->get_change_version_(
+      if (OB_FAIL(notifier->get_change_version(
               watched_table.table_id_, watched_table.target_version_))) {
         if (OB_NOT_NULL(error_stage)) {
           *error_stage = VERSION_CHECK_ERROR;
@@ -333,9 +300,9 @@ int InternalTableChangeWatcher::check_changed(CheckResult &result,
                      watched_table.target_version_.commit_version_);
       }
     }
-    if (OB_SUCC(ret) && (!changed && REFRESH_IF_CHANGED == mode)) {
+    if (OB_SUCC(ret) && !changed) {
       result = NO_CHANGE;
-    } else if (OB_SUCC(ret) && OB_FAIL(notifier_->is_change_visible(
+    } else if (OB_SUCC(ret) && OB_FAIL(notifier->is_change_visible(
                                    target_commit_version_, is_visible))) {
       if (OB_NOT_NULL(error_stage)) {
         *error_stage = VISIBILITY_CHECK_ERROR;
@@ -352,34 +319,10 @@ int InternalTableChangeWatcher::check_changed(CheckResult &result,
   return ret;
 }
 
-int InternalTableChangeWatcher::has_unprocessed_changes(bool &changed) const
-{
-  int ret = OB_SUCCESS;
-  changed = false;
-  if (OB_ISNULL(notifier_) || watched_tables_.count() <= 0) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("internal table watcher is not registered", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && !changed && i < watched_tables_.count();
-         ++i) {
-      const WatchedTable &watched_table = watched_tables_.at(i);
-      InternalTableChangeVersion target_version;
-      if (OB_FAIL(notifier_->get_change_version_(watched_table.table_id_,
-                                                 target_version))) {
-        LOG_WARN("failed to get watched internal table version", K(ret),
-                 "table_id", watched_table.table_id_);
-      } else {
-        changed = target_version != watched_table.processed_version_;
-      }
-    }
-  }
-  return ret;
-}
-
 int InternalTableChangeWatcher::mark_refreshed()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(notifier_) || watched_tables_.count() <= 0) {
+  if (watched_tables_.count() <= 0) {
     ret = OB_NOT_INIT;
     LOG_WARN("internal table watcher is not registered", K(ret));
   } else if (!target_captured_) {
