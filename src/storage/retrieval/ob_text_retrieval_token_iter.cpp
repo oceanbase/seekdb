@@ -412,6 +412,9 @@ ObTextRetrievalDaaTTokenIter::ObTextRetrievalDaaTTokenIter()
     count_(0),
     relevance_(),
     doc_id_(),
+    fast_doc_ids_(),
+    fast_id_vals_(),
+    value_id_fast_(false),
     cmp_func_(nullptr),
     is_inited_(false)
 {
@@ -444,6 +447,14 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
       } else if (FALSE_IT(doc_id_.set_allocator(allocator_))) {
       } else if (OB_FAIL(doc_id_.init(max_batch_size_))) {
       } else if (OB_FAIL(doc_id_.prepare_allocate(max_batch_size_))) {
+      } else if (FALSE_IT(value_id_fast_ = (inv_scan_domain_id_col_->datum_meta_.type_ == common::ObUInt64Type
+          || inv_scan_domain_id_col_->datum_meta_.type_ == common::ObIntType))) {
+      } else if (OB_UNLIKELY(value_id_fast_ && (FALSE_IT(fast_id_vals_.set_allocator(allocator_))
+          || OB_FAIL(fast_id_vals_.init(max_batch_size_))
+          || OB_FAIL(fast_id_vals_.prepare_allocate(max_batch_size_))))) {
+      } else if (OB_UNLIKELY(value_id_fast_ && (FALSE_IT(fast_doc_ids_.set_allocator(allocator_))
+          || OB_FAIL(fast_doc_ids_.init(max_batch_size_))
+          || OB_FAIL(fast_doc_ids_.prepare_allocate(max_batch_size_))))) {
       } else {
         is_inited_ = true;
       }
@@ -463,6 +474,8 @@ void ObTextRetrievalDaaTTokenIter::reset()
 {
   relevance_.reset();
   doc_id_.reset();
+  fast_doc_ids_.reset();
+  fast_id_vals_.reset();
   token_iter_->reset();
   cur_idx_ = -1;
   count_ = 0;
@@ -496,6 +509,31 @@ int ObTextRetrievalDaaTTokenIter::get_next_row() {
   return ret;
 }
 
+int ObTextRetrievalDaaTTokenIter::save_docid(const ObDatum &src, const int64_t i)
+{
+  int ret = OB_SUCCESS;
+  // Value-copy equivalent of ObDocIdExt::from_datum for integer domain ids:
+  // the id payload (<= 8 bytes) is stored in the stable fast_id_vals_ slot and
+  // the datum view points at it carrying the source's pack_ (len/null/flags).
+  // Consumers (null_first_cmp_, get_int(), to_obj) read the same bytes the
+  // deep copy into ObDocIdExt::buf_ would hold; for a null datum from_datum
+  // likewise keeps the source view untouched (no copy on null).
+  ObDatum &dst = fast_doc_ids_.at(i);
+  dst.pack_ = src.pack_;
+  if (OB_LIKELY(!src.is_null())) {
+    if (OB_LIKELY(sizeof(int64_t) == src.len_)) {
+      fast_id_vals_.at(i) = src.get_int();
+    } else {
+      fast_id_vals_.at(i) = 0;
+      MEMCPY(&fast_id_vals_.at(i), src.ptr_, src.len_);
+    }
+    dst.ptr_ = reinterpret_cast<const char *>(&fast_id_vals_.at(i));
+  } else {
+    dst.ptr_ = src.ptr_;
+  }
+  return ret;
+}
+
 int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
 {
   int ret = OB_SUCCESS;
@@ -513,7 +551,10 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_UNLIKELY(!value_id_fast_)) {
+          if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+          }
+        } else if (OB_FAIL(save_docid(*doc_id_datum.at(i), i))) {
         }
       }
     }
@@ -531,8 +572,11 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-        };
+        if (OB_UNLIKELY(!value_id_fast_)) {
+          if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+          }
+        } else if (OB_FAIL(save_docid(*doc_id_datum.at(i), i))) {
+        }
       }
     }
   }
@@ -556,7 +600,10 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
       if (OB_FAIL(cmp_func_(
-              id_datum, doc_id_[cur_idx_].get_datum(), result, nullptr))) {
+              id_datum,
+              value_id_fast_ ? fast_doc_ids_.at(cur_idx_)
+                             : doc_id_[cur_idx_].get_datum(),
+              result, nullptr))) {
       } else if (result <= 0) {
         find = true;
       } else {
@@ -571,7 +618,10 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(cmp_func_(
-                   id_datum, doc_id_[cur_idx_].get_datum(), result, nullptr))) {
+                   id_datum,
+                   value_id_fast_ ? fast_doc_ids_.at(cur_idx_)
+                                  : doc_id_[cur_idx_].get_datum(),
+                   result, nullptr))) {
     } else if (result <= 0) {
       find = true;
     } else {
@@ -597,6 +647,8 @@ int ObTextRetrievalDaaTTokenIter::get_curr_id(const ObDatum *&id_datum) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cur_idx_ >= count_)) {
     ret = OB_ARRAY_OUT_OF_RANGE;
+  } else if (OB_LIKELY(value_id_fast_)) {
+    id_datum = &fast_doc_ids_.at(cur_idx_);
   } else {
     id_datum = &doc_id_[cur_idx_].get_datum();
   }
