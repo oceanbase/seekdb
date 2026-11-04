@@ -1,1 +1,0 @@
-Transaction Control Language
