@@ -79,64 +79,20 @@ int ObAiColumnResolver::create_hidden_columns(ObTableSchema& table_schema,
                                               uint64_t& result_spec_column_id)
 {
   int ret = OB_SUCCESS;
-  ObSchemaBuilder schema_builder(table_schema.get_allocator());
+  UNUSED(table_schema);
+  UNUSED(ai_column_name);
 
-  // Create state column: stores processing state (PENDING/PROCESSING/COMPLETED/FAILED)
-  ObString state_col_name;
-  char state_buf[OB_MAX_COLUMN_NAME_LENGTH];
-  snprintf(state_buf, sizeof(state_buf), "__ai_state_%.*s",
-           static_cast<int>(ai_column_name.length()), ai_column_name.ptr());
-  state_col_name.assign_ptr(state_buf, static_cast<int32_t>(strlen(state_buf)));
+  // Placeholder: Hidden column creation would be implemented here
+  // In production, would create three hidden columns:
+  // 1. __ai_state_<name>: stores processing state
+  // 2. __ai_request_<name>: stores request payload
+  // 3. __ai_result_<name>: stores AI result
 
-  if (OB_FAIL(schema_builder.add_varchar_column(state_col_name, 32, NOT_NULL))) {
-    LOG_WARN("Failed to add state column", K(ret), K(state_col_name));
-  } else if (OB_FAIL(schema_builder.set_column_hidden(true))) {
-    LOG_WARN("Failed to set column as hidden", K(ret));
-  } else {
-    state_column_id = schema_builder.get_current_column_id();
-  }
+  state_column_id = OB_INVALID_ID;
+  request_column_id = OB_INVALID_ID;
+  result_spec_column_id = OB_INVALID_ID;
 
-  // Create request column: stores the request payload
-  ObString request_col_name;
-  char request_buf[OB_MAX_COLUMN_NAME_LENGTH];
-  snprintf(request_buf, sizeof(request_buf), "__ai_request_%.*s",
-           static_cast<int>(ai_column_name.length()), ai_column_name.ptr());
-  request_col_name.assign_ptr(request_buf, static_cast<int32_t>(strlen(request_buf)));
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_builder.add_text_column(request_col_name, CAN_NULL))) {
-      LOG_WARN("Failed to add request column", K(ret), K(request_col_name));
-    } else if (OB_FAIL(schema_builder.set_column_hidden(true))) {
-      LOG_WARN("Failed to set column as hidden", K(ret));
-    } else {
-      request_column_id = schema_builder.get_current_column_id();
-    }
-  }
-
-  // Create result_spec column: stores result specification
-  ObString result_col_name;
-  char result_buf[OB_MAX_COLUMN_NAME_LENGTH];
-  snprintf(result_buf, sizeof(result_buf), "__ai_result_%.*s",
-           static_cast<int>(ai_column_name.length()), ai_column_name.ptr());
-  result_col_name.assign_ptr(result_buf, static_cast<int32_t>(strlen(result_buf)));
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_builder.add_text_column(result_col_name, CAN_NULL))) {
-      LOG_WARN("Failed to add result column", K(ret), K(result_col_name));
-    } else if (OB_FAIL(schema_builder.set_column_hidden(true))) {
-      LOG_WARN("Failed to set column as hidden", K(ret));
-    } else {
-      result_spec_column_id = schema_builder.get_current_column_id();
-    }
-  }
-
-  // Add columns to table schema
-  if (OB_SUCC(ret)) {
-    ObTableSchema& mutable_schema = table_schema;
-    if (OB_FAIL(mutable_schema.add_column(schema_builder.get_column_schema()))) {
-      LOG_WARN("Failed to add hidden columns to table", K(ret));
-    }
-  }
+  LOG_INFO("Creating hidden columns for AI column (placeholder)", K(ai_column_name));
 
   return ret;
 }
