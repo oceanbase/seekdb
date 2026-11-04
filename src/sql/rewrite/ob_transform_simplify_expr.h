@@ -156,6 +156,11 @@ private:
   int flatten_join_condition_exprs(TableItem *table, bool &trans_happened);
   int flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, bool &trans_happened);
 
+  int dedup_in_expr_list(ObDMLStmt *stmt, bool &trans_happened);
+  int dedup_join_condition_in_expr_list(TableItem *table, bool &trans_happened);
+  int inner_dedup_in_expr_list(common::ObIArray<ObRawExpr*> &exprs, bool &trans_happened);
+  int do_dedup_in_expr_list(ObRawExpr *&expr, bool &trans_happened);
+
   int transform_is_false_true_expr(ObDMLStmt *stmt, bool &trans_happened);
   int remove_false_true(common::ObIArray<ObRawExpr*> &exprs, bool &trans_happened);
   int is_valid_remove_false_true(ObRawExpr *expr, bool &is_valid);
