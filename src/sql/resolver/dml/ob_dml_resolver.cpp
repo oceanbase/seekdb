@@ -5344,8 +5344,38 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        OrderItem &order_item = stmt->get_order_item(0);
+        if (T_FUN_SYS_INNER_PRODUCT != tmp_expr->get_expr_type()) {
+          stmt->set_has_vec_approx(true);
+        } else if (!is_descending_direction(order_item.order_type_)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "ASC ordering with inner_product in APPROXIMATE vector search is");
+        } else {
+          ObSysFunRawExpr *negative_inner_product = NULL;
+          const ObOrderDirection rewritten_direction =
+              is_null_first(order_item.order_type_) ? NULLS_FIRST_ASC : NULLS_LAST_ASC;
+          if (OB_ISNULL(params_.expr_factory_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(
+                         T_FUN_SYS_NEGATIVE_INNER_PRODUCT, negative_inner_product))) {
+          } else if (OB_ISNULL(negative_inner_product)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            negative_inner_product->set_func_name(
+                ObString::make_string(N_VECTOR_NEGATIVE_INNER_PRODUCT));
+            if (OB_FAIL(negative_inner_product->set_param_exprs(tmp_expr->get_param_expr(0),
+                                                                tmp_expr->get_param_expr(1)))) {
+            } else if (OB_FAIL(negative_inner_product->formalize(session_info_))) {
+            } else {
+              order_item.expr_ = negative_inner_product;
+              // Negation reverses the ordering direction but does not change NULL placement.
+              order_item.order_type_ = rewritten_direction;
+              stmt->set_has_vec_approx(true);
+            }
+          }
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
