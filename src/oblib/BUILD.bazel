@@ -506,6 +506,7 @@ cc_library(
         "lib/ob_errno.h",
         "lib/ob_name_def.h",
         "lib/ob_name_id_def.h",
+        "lib/string/ob_identifier_escape.h",
         "lib/time/Time.h",
         "lib/utility/ob_backtrace.h",
         "lib/utility/ob_defer.h",
