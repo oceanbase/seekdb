@@ -16,15 +16,15 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
-#if defined(__EMSCRIPTEN__)
+#include "rust/config.h"
 #include "common/ob_timeout_ctx.h"
-#endif
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_local_management_service.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
@@ -672,7 +672,12 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
+  // The core table can be slow on a fresh database. Keep one internal SQL
+  // deadline for all statements in this transaction.
+  ObTimeoutCtx timeout_ctx;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(
+                 timeout_ctx, config::internal_sql_execute_timeout()))) {
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
