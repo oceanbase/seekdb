@@ -1,0 +1,133 @@
+DROP TABLE IF EXISTS t_issue1512_regression;
+CREATE TABLE t_issue1512_regression (
+id INT PRIMARY KEY,
+category5 INT,
+embedding VECTOR(3),
+VECTOR INDEX idx_embedding(embedding)
+WITH (
+distance=l2,
+type=hnsw,
+lib=vsag,
+m=16,
+ef_construction=128,
+ef_search=64
+)
+);
+INSERT INTO t_issue1512_regression VALUES
+(1, 1, '[1,0,0]'),
+(2, 2, '[0,1,0]'),
+(3, 3, '[0,0,1]'),
+(4, 4, '[1,1,0]'),
+(5, 5, '[0,1,1]'),
+(6, 1, '[1,0,1]');
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3);
+ids
+1,2,3,6
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,1,2,3);
+ids
+1,2,3,6
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 NOT IN (1,2,3,1,2,3);
+ids
+4,5
+SELECT 4 NOT IN (1,2,NULL,1,2,NULL) AS result;
+result
+NULL
+EXPLAIN SELECT
+/*+ opt_param('inlist_rewrite_threshold', 4) */
+id
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding, '[1,0,0]')
+APPROXIMATE LIMIT 3;
+Query Plan
+=========================================================================================
+|ID|OPERATOR                               |NAME                  |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_issue1512_regression|3       |3           |
+=========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1512_regression.id]), filter([t_issue1512_regression.category5 IN (1, 2, 3, 1, 2, 3)]), rowset=16
+      access([t_issue1512_regression.id], [t_issue1512_regression.category5]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t_issue1512_regression.id]), range(MIN ; MAX)always true
+EXPLAIN SELECT
+/*+ opt_param('inlist_rewrite_threshold', 4) */
+id
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,4,1,2)
+ORDER BY l2_distance(embedding, '[1,0,0]')
+APPROXIMATE LIMIT 3;
+Query Plan
+=============================================================================================
+|ID|OPERATOR                                   |NAME                  |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------------------------
+|0 |TOP-N SORT                                 |                      |3       |5           |
+|1 |└─SUBPLAN FILTER                           |                      |3       |4           |
+|2 |  ├─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_issue1512_regression|6       |3           |
+|3 |  └─HASH DISTINCT                          |                      |4       |2           |
+|4 |    └─VALUES TABLE ACCESS                  |VALUES_TABLE1         |6       |1           |
+=============================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1512_regression.id]), filter(nil), rowset=16
+      sort_keys([l2_distance(t_issue1512_regression.embedding, cast('[1,0,0]', ARRAY(18, -1))), ASC]), topn(3)
+  1 - output([l2_distance(t_issue1512_regression.embedding, cast('[1,0,0]', ARRAY(18, -1)))], [t_issue1512_regression.id]), filter([t_issue1512_regression.category5 
+      = ANY(subquery(1))]), rowset=16
+      exec_params_(nil), onetime_exprs_(nil), init_plan_idxs_([1]), use_batch=false
+  2 - output([t_issue1512_regression.id], [t_issue1512_regression.category5], [l2_distance(t_issue1512_regression.embedding, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([t_issue1512_regression.id], [t_issue1512_regression.embedding], [t_issue1512_regression.category5]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t_issue1512_regression.id]), range(MIN ; MAX)always true
+  3 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  4 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+SET @issue1512_saved_cache = @@ob_enable_plan_cache;
+SET ob_enable_plan_cache = 1;
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,1,1,1,1,1);
+ids
+1,6
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,4,5,5);
+ids
+1,2,3,4,5,6
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,1,1,1,1,1);
+ids
+1,6
+SET ob_enable_plan_cache = @issue1512_saved_cache;
+PREPARE issue1512_stmt FROM
+'SELECT /*+ opt_param(''inlist_rewrite_threshold'', 4) */
+ GROUP_CONCAT(id ORDER BY id) AS ids
+ FROM t_issue1512_regression
+ WHERE category5 IN (?,?,?,?,?,?)';
+SET @a=1, @b=2, @c=3, @d=1, @e=2, @f=3;
+EXECUTE issue1512_stmt
+USING @a,@b,@c,@d,@e,@f;
+ids
+1,2,3,6
+SET @d=4, @e=5, @f=5;
+EXECUTE issue1512_stmt
+USING @a,@b,@c,@d,@e,@f;
+ids
+1,2,3,4,5,6
+DEALLOCATE PREPARE issue1512_stmt;
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+4 NOT IN (1,2,NULL,1,2,NULL) AS result;
+result
+NULL
+DROP TABLE t_issue1512_regression;
