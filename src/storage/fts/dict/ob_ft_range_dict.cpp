@@ -381,6 +381,23 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
+  // Memo probe first: the scan below is a pure function of the character
+  // bytes against the fixed range_dicts_, so a repeated character can
+  // reuse the range index it resolved before.
+  if (single_word.length() >= 1 && single_word.length() <= RANGE_MEMO_MAX_BYTES) {
+    RangeMemoEntry &entry =
+        range_memo_[range_memo_slot(single_word.ptr(), single_word.length())];
+    if (entry.valid && entry.len == single_word.length()
+        && 0 == MEMCMP(entry.bytes, single_word.ptr(), single_word.length())) {
+      if (entry.range_idx >= 0) {
+        dict = range_dicts_[entry.range_idx].dict_;
+      } else {
+        ret = OB_ENTRY_NOT_EXIST;
+      }
+      return ret;
+    }
+  }
+  int found_idx = -1;
   bool found = false;
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
     if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
@@ -392,12 +409,23 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
                              single_word)
                >= 0) {
       dict = range_dicts_[i].dict_;
+      found_idx = i;
       found = true;
     }
   }
   if (!found) {
     // not found, dis match
     ret = OB_ENTRY_NOT_EXIST;
+  }
+  if (OB_SUCC(ret) || OB_ENTRY_NOT_EXIST == ret) {
+    if (single_word.length() >= 1 && single_word.length() <= RANGE_MEMO_MAX_BYTES) {
+      RangeMemoEntry &entry =
+          range_memo_[range_memo_slot(single_word.ptr(), single_word.length())];
+      entry.valid = 1;
+      entry.len = static_cast<uint8_t>(single_word.length());
+      MEMCPY(entry.bytes, single_word.ptr(), single_word.length());
+      entry.range_idx = static_cast<int32_t>(found_idx);
+    }
   }
   return ret;
 }

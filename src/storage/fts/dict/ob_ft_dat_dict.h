@@ -167,7 +167,7 @@ template <typename DataType = void>
 class ObFTDATReader
 {
 public:
-  ObFTDATReader(ObFTDAT *dat) : dat_(dat) {}
+  ObFTDATReader(ObFTDAT *dat) : dat_(dat), code_memo_() {}
 
   // Match single word with hit.
   int match_with_hit(const ObString &single_word,
@@ -175,7 +175,36 @@ public:
                      ObDATrieHit &hit) const;
 
 private:
+  // Direct-mapped memo of the word->code hash map lookup for single
+  // characters. The same character is looked up once per active hit plus
+  // once to start a new hit, so one character position probes the hash
+  // map several times with identical bytes. An entry is a pure snapshot
+  // of one find() call on the DAT block, which is immutable for the
+  // reader's lifetime, so a memo hit returns exactly what find() would
+  // have returned; the DAT base/check walk itself stays per-hit. The
+  // reader lives and dies with one parser instance and is never shared
+  // across threads, so the fixed-size mutable array needs no locking and
+  // adds at most CODE_MEMO_SLOTS * sizeof(CodeMemoEntry) bytes.
+  static constexpr int64_t CODE_MEMO_SLOTS = 256; // power of two
+  static constexpr int64_t CODE_MEMO_MAX_BYTES = 4; // one utf8mb4 char
+  struct CodeMemoEntry
+  {
+    char bytes[CODE_MEMO_MAX_BYTES];
+    uint8_t len; // key length in bytes; 0 = empty slot
+    bool exists; // whether find() succeeded
+    int32_t code; // valid only when exists
+  };
+  static int64_t code_memo_slot(const char *ptr, const int64_t len)
+  {
+    uint64_t h = 1469598103934665603ULL ^ static_cast<uint64_t>(len);
+    for (int64_t i = 0; i < len; ++i) {
+      h = (h ^ static_cast<unsigned char>(ptr[i])) * 1099511628211ULL;
+    }
+    return static_cast<int64_t>(h & (CODE_MEMO_SLOTS - 1));
+  }
+
   ObFTDAT *dat_;
+  mutable CodeMemoEntry code_memo_[CODE_MEMO_SLOTS];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);

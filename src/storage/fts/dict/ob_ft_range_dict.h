@@ -39,7 +39,8 @@ public:
                 ObFTCacheRangeContainer *range_container,
                 const ObFTDictDesc &desc)
       : is_inited_(false), desc_(desc), range_alloc_(lib::ObMemAttr("Range Dict")),
-        range_dicts_(&range_alloc_), range_container_(range_container)
+        range_dicts_(&range_alloc_), range_container_(range_container),
+        range_memo_()
   {
   }
   ~ObFTRangeDict() override{};
@@ -100,12 +101,37 @@ private:
   int find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const;
 
 private:
+  // Direct-mapped memo of find_first_char_range(): range_dicts_ is fixed
+  // once init() has built it, so the (character -> range index) answer is
+  // a pure function of the character bytes. The linear scan costs two
+  // collation strcmp calls per range per dispatched character. Entries
+  // are filled only after init() could have run (lookup starts as scan),
+  // and this object belongs to one parser on one thread, so the
+  // fixed-size mutable array needs no locking and is bounded.
+  static constexpr int64_t RANGE_MEMO_SLOTS = 256; // power of two
+  static constexpr int64_t RANGE_MEMO_MAX_BYTES = 4; // one utf8mb4 char
+  struct RangeMemoEntry
+  {
+    char bytes[RANGE_MEMO_MAX_BYTES];
+    uint8_t len; // key length in bytes
+    uint8_t valid; // slot filled
+    int32_t range_idx; // index into range_dicts_; -1 = no range
+  };
+  static int64_t range_memo_slot(const char *ptr, const int64_t len)
+  {
+    uint64_t h = 1469598103934665603ULL ^ static_cast<uint64_t>(len);
+    for (int64_t i = 0; i < len; ++i) {
+      h = (h ^ static_cast<unsigned char>(ptr[i])) * 1099511628211ULL;
+    }
+    return static_cast<int64_t>(h & (RANGE_MEMO_SLOTS - 1));
+  }
   static constexpr int DEFAULT_KEY_PER_RANGE = 50000; // by estimated
   bool is_inited_;
   ObFTDictDesc desc_;
   ObArenaAllocator range_alloc_;
   ObVector<ObFTRange, ObArenaAllocator> range_dicts_;
   ObFTCacheRangeContainer *range_container_; // only used to read cache
+  mutable RangeMemoEntry range_memo_[RANGE_MEMO_SLOTS];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTRangeDict);
