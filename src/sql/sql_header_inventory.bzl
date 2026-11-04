@@ -416,4 +416,5 @@ SQL_COMPOSITION_HEADERS = [
     "das/iter/ob_das_text_retrieval_eval_node.h",
     "parser/fts_base.h",
     "parser/fts_parse.h",
+    "resolver/dml/inlist_cardinality.h",
 ]
