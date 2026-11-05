@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -263,6 +264,57 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+int ObInListResolver::check_few_distinct_integer_values(const ParseNode &in_list,
+                                                       const ParamStore *param_store,
+                                                       const ObObjType integer_type,
+                                                       const int64_t threshold,
+                                                       bool &has_few_distinct_values)
+{
+  int ret = OB_SUCCESS;
+  has_few_distinct_values = false;
+  hash::ObHashSet<uint64_t, hash::NoPthreadDefendMode> values;
+  bool all_integer = true;
+  if (threshold <= 1 || in_list.num_child_ <= 0 || OB_ISNULL(in_list.children_)
+      || (ObIntType != integer_type && ObUInt64Type != integer_type)) {
+    // Leave unsupported lists and explicitly forced rewrites unchanged.
+  } else if (OB_FAIL(values.create(threshold, "SqlInListNDV", "SqlInListNDV"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_integer && values.size() < threshold
+                        && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      uint64_t value = 0;
+      if (OB_ISNULL(node)) {
+        all_integer = false;
+      } else if ((T_INT == node->type_ && ObIntType == integer_type)
+                 || (T_UINT64 == node->type_ && ObUInt64Type == integer_type)) {
+        value = static_cast<uint64_t>(node->value_);
+      } else if (T_QUESTIONMARK == node->type_ && OB_NOT_NULL(param_store)
+                 && node->value_ >= 0 && node->value_ < param_store->count()) {
+        const ObObjParam &param = param_store->at(node->value_);
+        if (param.get_type() != integer_type) {
+          // In particular, do not inspect NULL or unknown parameter values.
+          all_integer = false;
+        } else {
+          value = ObIntType == integer_type ? static_cast<uint64_t>(param.get_int())
+                                           : param.get_uint64();
+        }
+      } else {
+        all_integer = false;
+      }
+      if (all_integer) {
+        const int hash_ret = values.set_refactored(value, 0 /* do not overwrite */);
+        if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
+          ret = hash_ret;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && all_integer) {
+      has_few_distinct_values = values.size() < threshold;
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -347,6 +399,25 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
           ret = OB_ERR_UNEXPECTED;
         } else if (ob_is_enum_or_set_type(rewrite_info.param_types_.at(j).obj_type_)) {
           is_enable = false;
+        }
+      }
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt && threshold > 1
+          && !is_prepare_stmt && 1 == rewrite_info.param_types_.count()) {
+        const ObObjType integer_type = rewrite_info.param_types_.at(0).obj_type_;
+        if (ObIntType == integer_type || ObUInt64Type == integer_type) {
+          bool has_few_distinct_values = false;
+          const int tmp_ret = check_few_distinct_integer_values(in_list, param_store,
+                                                               integer_type, threshold,
+                                                               has_few_distinct_values);
+          if (OB_SUCCESS != tmp_ret) {
+            // This is only a cost decision; allocation failure must not fail the SQL.
+            LOG_WARN("failed to count distinct integer IN values", K(tmp_ret));
+          } else if (has_few_distinct_values) {
+            // Ordinary IN already deduplicates its hash table and selectivity inputs.
+            // Retain every original node/parameter so cached plans remain correct
+            // when subsequent parameter values differ from this compilation.
+            is_enable = false;
+          }
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;

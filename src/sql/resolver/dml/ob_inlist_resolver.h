@@ -101,6 +101,11 @@ public:
                                const ParseNode *&ret_node);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
+  static int check_few_distinct_integer_values(const ParseNode &in_list,
+                                               const ParamStore *param_store,
+                                               const ObObjType integer_type,
+                                               const int64_t threshold,
+                                               bool &has_few_distinct_values);
   static int get_inlist_rewrite_info(const ParseNode &in_list,
                                      const int64_t column_cnt,
                                      int64_t col_idx,
