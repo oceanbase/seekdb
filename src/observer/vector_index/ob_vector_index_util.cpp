@@ -52,6 +52,8 @@ using schema::ObPartitionLevel;
 using schema::ObSchemaGetterGuard;
 using schema::ObTableSchema;
 
+static constexpr uint64_t MAX_HNSW_PRIMARY_PRE_FILTER_SCAN_ROWS = 100000;
+
 int ObVectorIndexUtil::get_vector_index_prefix(
     const schema::ObTableSchema &index_table_schema,
     ObString &prefix)
@@ -5874,8 +5876,15 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
     if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
+      // A large primary-range pre-filter scans every table row to materialize
+      // candidates. Once brute force is no longer applicable, use the existing
+      // secondary-index selectivity limit to avoid that scan for dense filters.
+      const double max_pre_filter_rate =
+          vc_info.row_count_ > MAX_HNSW_PRIMARY_PRE_FILTER_SCAN_ROWS
+              ? ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX
+              : ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY;
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
-                                    && vc_info.selectivity_ <= ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY) ?
+                                    && vc_info.selectivity_ <= max_pre_filter_rate) ?
                                     ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER : ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
     } else {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_IDX
