@@ -15,6 +15,7 @@
 //! seekdb's timestamped file convention on top of spdlog's public Sink API.
 //! Open files, append/reopen/rotation and retention have one owner.
 use chrono::Local;
+#[cfg(unix)]
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -126,17 +127,20 @@ impl Output {
             // std::File uses Win32 HANDLEs; stdout/stderr use CRT descriptors.
             #[cfg(windows)]
             let fd = {
-                let _ = file;
-                let path = CString::new(self.path.to_string_lossy().as_bytes())?;
+                // Reopening through the CRT denies FILE_SHARE_DELETE and
+                // prevents rotation while stdout/stderr hold the descriptor.
+                let redirected = file.try_clone()?;
                 let fd = unsafe {
-                    libc::open(
-                        path.as_ptr(),
+                    libc::open_osfhandle(
+                        redirected.as_raw_handle() as libc::intptr_t,
                         libc::O_WRONLY | libc::O_APPEND | libc::O_BINARY,
                     )
                 };
                 if fd < 0 {
                     return Err(io::Error::last_os_error());
                 }
+                // The descriptor now owns this duplicate Win32 handle.
+                std::mem::forget(redirected);
                 fd
             };
             let result = (|| {
