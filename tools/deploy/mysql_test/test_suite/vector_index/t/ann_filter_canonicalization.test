@@ -1,0 +1,112 @@
+# Regression for #1535. Plan checks avoid timing and estimate expectations.
+--disable_query_log
+--disable_result_log
+SET @ann_saved_sql_mode = @@sql_mode;
+SET sql_mode = '';
+CREATE TABLE ann_filter_canon (
+  id INT PRIMARY KEY, category INT, parity VARCHAR(8), embedding VECTOR(2),
+  KEY idx_category(category),
+  VECTOR INDEX idx_vec(embedding) WITH
+    (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO ann_filter_canon VALUES
+  (1,1,'even','[1,0]'), (2,1,'odd','[2,0]'),
+  (3,2,'even','[3,0]'), (4,2,'odd','[4,0]'),
+  (5,NULL,'even','[5,0]'), (6,1,NULL,'[6,0]'),
+  (7,NULL,NULL,'[7,0]'), (8,3,'odd','[8,0]');
+SET ob_hnsw_ef_search = 64;
+
+# A one-operator EXPLAIN BASIC has its operator on row 4 and filters on row 8.
+# Check the operator too, so a changed plan shape cannot silently pass.
+let $ann_explain = EXPLAIN BASIC SELECT id FROM ann_filter_canon WHERE category = 1 AND (category = 1 OR parity = 'even') ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+let $ann_operator = query_get_value("$ann_explain", "Query Plan", 4);
+if (`SELECT LOCATE('VECTOR INDEX ADAPTIVE SCAN', "$ann_operator") = 0`)
+{
+  die Expected an adaptive vector index scan;
+}
+let $ann_filter = query_get_value("$ann_explain", "Query Plan", 8);
+if (`SELECT LOCATE('parity', "$ann_filter") > 0 OR LOCATE('category', "$ann_filter") = 0`)
+{
+  die AND absorption must eliminate the redundant parity filter;
+}
+
+let $ann_no_rewrite = EXPLAIN BASIC SELECT /*+ NO_REWRITE */ id FROM ann_filter_canon WHERE category = 1 AND (category = 1 OR parity = 'even') ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+let $ann_filter = query_get_value("$ann_no_rewrite", "Query Plan", 8);
+if (`SELECT LOCATE('parity', "$ann_filter") = 0`)
+{
+  die NO_REWRITE must retain the original filter;
+}
+
+SET @ann_branches = 'category = 1 OR parity = ''even''';
+let $ann_levels = 10;
+while ($ann_levels)
+{
+  SET @ann_branches = CONCAT('(', @ann_branches, ') AND (', @ann_branches, ')');
+  dec $ann_levels;
+}
+SET @ann_large_sql = CONCAT('SELECT id FROM ann_filter_canon WHERE category = 1 AND (',
+  @ann_branches, ') ORDER BY l2_distance(embedding, ''[0,0]'') APPROXIMATE LIMIT 8');
+let $ann_large_explain = `SELECT CONCAT('EXPLAIN BASIC ', @ann_large_sql)`;
+let $ann_filter = query_get_value("$ann_large_explain", "Query Plan", 8);
+if (`SELECT LOCATE('parity', "$ann_filter") > 0 OR LOCATE('category', "$ann_filter") = 0`)
+{
+  die The 1024-branch predicate must have the compact filter;
+}
+PREPARE ann_large_query FROM @ann_large_sql;
+
+--enable_result_log
+--echo # compact
+SELECT id FROM ann_filter_canon WHERE category = 1
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+--echo # absorption
+SELECT id FROM ann_filter_canon
+WHERE category = 1 AND (category = 1 OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+--echo # balanced 1024 branches
+EXECUTE ann_large_query;
+DEALLOCATE PREPARE ann_large_query;
+--echo # changed literal in the same SQL shape
+SELECT id FROM ann_filter_canon
+WHERE category = 1 AND (category = 2 OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+--echo # original literal after cache reuse
+SELECT id FROM ann_filter_canon
+WHERE category = 1 AND (category = 1 OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+--echo # OR absorption
+SELECT id FROM ann_filter_canon
+WHERE category = 1 OR (category = 1 AND parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+--echo # nullable category
+SELECT id FROM ann_filter_canon
+WHERE category IS NULL AND (category IS NULL OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+--echo # NULL comparison
+SELECT id FROM ann_filter_canon
+WHERE category = 1 AND (category = NULL OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') APPROXIMATE LIMIT 8;
+
+PREPARE ann_canon_ps FROM 'SELECT id FROM ann_filter_canon WHERE category = ? AND (category = ? OR parity = ?) ORDER BY l2_distance(embedding, \'[0,0]\') APPROXIMATE LIMIT 8';
+SET @ann_outer = 1, @ann_inner = 1, @ann_parity = 'even';
+--echo # equal prepared bindings
+EXECUTE ann_canon_ps USING @ann_outer, @ann_inner, @ann_parity;
+SET @ann_inner = 2;
+--echo # different prepared bindings
+EXECUTE ann_canon_ps USING @ann_outer, @ann_inner, @ann_parity;
+SET @ann_inner = NULL;
+--echo # NULL inner binding
+EXECUTE ann_canon_ps USING @ann_outer, @ann_inner, @ann_parity;
+SET @ann_outer = NULL;
+--echo # NULL outer binding
+EXECUTE ann_canon_ps USING @ann_outer, @ann_inner, @ann_parity;
+DEALLOCATE PREPARE ann_canon_ps;
+--echo # exact control
+SELECT id FROM ann_filter_canon
+WHERE category = 1 AND (category = 1 OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0]') LIMIT 8;
+
+--disable_result_log
+DROP TABLE ann_filter_canon;
+SET sql_mode = @ann_saved_sql_mode;
+--enable_result_log
+--enable_query_log

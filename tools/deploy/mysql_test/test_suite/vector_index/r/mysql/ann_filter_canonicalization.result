@@ -1,0 +1,53 @@
+# compact
+id
+1
+2
+6
+# absorption
+id
+1
+2
+6
+# balanced 1024 branches
+id
+1
+2
+6
+# changed literal in the same SQL shape
+id
+1
+# original literal after cache reuse
+id
+1
+2
+6
+# OR absorption
+id
+1
+2
+6
+# nullable category
+id
+5
+7
+# NULL comparison
+id
+1
+# equal prepared bindings
+id
+1
+2
+6
+# different prepared bindings
+id
+1
+# NULL inner binding
+id
+1
+# NULL outer binding
+id
+# exact control
+id
+1
+2
+6
