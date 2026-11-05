@@ -34,6 +34,17 @@ load(
 
 declare_share_semantic_header_targets()
 
+cc_library(
+    name = "rs_timeout_policy",
+    hdrs = ["ob_rs_timeout_policy.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/share:__pkg__",
+        "//unittest/share:__pkg__",
+    ],
+)
+
 _VECTOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "vector",
