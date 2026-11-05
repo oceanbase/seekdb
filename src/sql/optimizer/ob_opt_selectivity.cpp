@@ -4043,6 +4043,58 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
       ret = OB_SUCCESS;
       max_value.set_max_value();
     }
+  } else if ((T_OP_ADD == expr->get_expr_type() || T_OP_MINUS == expr->get_expr_type()) &&
+             2 == expr->get_param_count()) {
+    const ObRawExpr *left_expr = expr->get_param_expr(0);
+    const ObRawExpr *right_expr = expr->get_param_expr(1);
+    const ObRawExpr *value_expr = NULL;
+    const ObRawExpr *identity_expr = NULL;
+    ObObj identity_value;
+    bool got_result = false;
+    if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!ob_is_numeric_type(expr->get_data_type())) {
+      // do nothing
+    } else if (T_OP_ADD == expr->get_expr_type() &&
+               left_expr->is_static_scalar_const_expr() &&
+               !right_expr->is_static_scalar_const_expr()) {
+      identity_expr = left_expr;
+      value_expr = right_expr;
+    } else if (right_expr->is_static_scalar_const_expr() &&
+               !left_expr->is_static_scalar_const_expr()) {
+      identity_expr = right_expr;
+      value_expr = left_expr;
+    }
+    if (OB_FAIL(ret) || OB_ISNULL(identity_expr) || OB_ISNULL(value_expr)) {
+      // do nothing
+    } else if (!ob_is_numeric_type(value_expr->get_data_type())) {
+      // do nothing
+    } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
+                           ctx.get_opt_ctx().get_exec_ctx(),
+                           identity_expr,
+                           identity_value,
+                           got_result,
+                           ctx.get_allocator()))) {
+    } else if (!got_result || identity_value.is_null() || !identity_value.is_zero()) {
+      // Only additive identities are safe without deriving a new range bound.
+    } else {
+      ObObj value_min;
+      ObObj value_max;
+      if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, value_expr,
+                                               value_min, value_max)))) {
+      } else if (value_min.is_min_value() || value_min.is_max_value() ||
+                 value_max.is_min_value() || value_max.is_max_value() ||
+                 value_min.is_null() || value_max.is_null()) {
+        // do nothing
+      } else if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, value_min))) {
+        ret = OB_SUCCESS;
+      } else if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, value_max))) {
+        ret = OB_SUCCESS;
+      } else {
+        min_value = value_min;
+        max_value = value_max;
+      }
+    }
   } else if (T_FUN_SYS_DATE == expr->get_expr_type()) {
     if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, expr->get_param_expr(0),
                                              min_value, max_value)))) {
