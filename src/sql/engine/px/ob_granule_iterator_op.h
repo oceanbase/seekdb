@@ -49,6 +49,18 @@ class ObGITaskReBalancer
 public:
   int init(ObExecContext *ctx, ObGranulePump *gi_pump, int64_t total_worker_count,
            int64_t split_gi_task_cost, int64_t initial_task_count, int64_t gi_op_id);
+  // The rebalancer is placed into the execution arena by
+  // ObGIOpInput::init_task_rebalancer(); the arena does not run destructors.
+  // Each worker op decrements close_ref_cnt_ in inner_close() and the last one
+  // releases the OS condition variable.
+  bool close_once()
+  {
+    return 0 == ATOMIC_AAF(&close_ref_cnt_, -1);
+  }
+  void destroy()
+  {
+    cond_.destroy();
+  }
   inline void scale_total_worker_count(int64_t total_worker_count)
   {
     total_worker_count_ = total_worker_count;
@@ -102,6 +114,7 @@ private:
   int64_t *threads_id_{nullptr};
   ObThreadCond cond_; // for who is responsibility for detect
   common::ObSpinLock pullup_version_lock_{common::ObLatchIds::SQL_GI_SHARE_POOL_LOCK};
+  int64_t close_ref_cnt_{0};
 };
 
 class ObGIOpInput : public ObOpInput

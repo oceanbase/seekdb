@@ -43,6 +43,7 @@ int ObGITaskReBalancer::init(ObExecContext *ctx, ObGranulePump *gi_pump, int64_t
     LOG_WARN("failed to allocate memory", K(total_worker_count));
   } else if (OB_FAIL(cond_.init(common::ObWaitEventIds::DEFAULT_COND_WAIT))) {
   } else {
+    close_ref_cnt_ = total_worker_count;
     split_gi_task_cost_ = split_gi_task_cost;
     initial_task_count_ = initial_task_count;
     gi_op_id_ = gi_op_id;
@@ -712,6 +713,9 @@ int ObGranuleIteratorOp::inner_open()
 
 int ObGranuleIteratorOp::inner_close()
 {
+  if (OB_NOT_NULL(MY_INPUT.task_balancer_) && MY_INPUT.task_balancer_->close_once()) {
+    MY_INPUT.task_balancer_->destroy();
+  }
   if (OB_NOT_NULL(rf_msg_)) {
     // rf_msg_ is got from PX_P2P_DH map
     // do not destroy it, because other worker thread may not start yet

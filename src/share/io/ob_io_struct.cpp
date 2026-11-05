@@ -1329,17 +1329,20 @@ void ObDeviceChannel::destroy()
     ch->wait();
   }
   for (int64_t i = 0; i < async_channels_.count(); ++i) {
-    ObIOChannel *ch = async_channels_.at(i);
+    ObAsyncIOChannel *ch = static_cast<ObAsyncIOChannel *>(async_channels_.at(i));
     if (nullptr != allocator_ && nullptr != ch) {
-      ch->~ObIOChannel();
+      // Call the concrete destructor: an explicit ~ObIOChannel() only runs the
+      // base class and would skip the derived members (e.g. the sync channel's
+      // ObThreadCond, which owns an OS condition variable).
+      ch->~ObAsyncIOChannel();
       allocator_->free(ch);
     }
   }
   async_channels_.destroy();
   for (int64_t i = 0; i < sync_channels_.count(); ++i) {
-    ObIOChannel *ch = sync_channels_.at(i);
+    ObSyncIOChannel *ch = static_cast<ObSyncIOChannel *>(sync_channels_.at(i));
     if (nullptr != allocator_ && nullptr != ch) {
-      ch->~ObIOChannel();
+      ch->~ObSyncIOChannel();
       allocator_->free(ch);
     }
   }
