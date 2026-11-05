@@ -1,0 +1,38 @@
+# Regression for shared DDL identifier escaping (issue #1469).
+--disable_query_log
+
+--disable_warnings
+DROP TABLE IF EXISTS ddl_quoted_column_names;
+--enable_warnings
+
+CREATE TABLE ddl_quoted_column_names (
+  `id``pk` INT PRIMARY KEY,
+  `a``b` INT,
+  ```edge``` INT,
+  `a````b` INT,
+  `enum``value` ENUM('red', 'blue'),
+  `set``value` SET('one', 'two')
+);
+INSERT INTO ddl_quoted_column_names VALUES
+  (1, 7, 8, 9, 'red', 'one,two'),
+  (2, NULL, 18, 19, 'blue', 'two');
+
+# Index backfill exercises both original names and their SELECT aliases.
+CREATE INDEX idx_embedded ON ddl_quoted_column_names (`a``b`);
+CREATE INDEX idx_edge ON ddl_quoted_column_names (```edge```);
+CREATE INDEX idx_repeated ON ddl_quoted_column_names (`a````b`);
+
+# ENUM/SET backfill casts the escaped original name to unsigned.
+CREATE INDEX idx_enum ON ddl_quoted_column_names (`enum``value`);
+CREATE INDEX idx_set ON ddl_quoted_column_names (`set``value`);
+
+# A nullable unique key also exercises shadow primary-key column aliases.
+CREATE UNIQUE INDEX idx_nullable_unique ON ddl_quoted_column_names (`a``b`);
+
+--enable_query_log
+SELECT `id``pk` AS id, `a``b` AS embedded, ```edge``` AS edge_name, `a````b` AS repeated, `enum``value` + 0 AS enum_number, `set``value` + 0 AS set_number FROM ddl_quoted_column_names ORDER BY `id``pk`;
+SELECT COUNT(DISTINCT index_name) AS quoted_indexes FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'ddl_quoted_column_names' AND index_name IN ('idx_embedded', 'idx_edge', 'idx_repeated', 'idx_enum', 'idx_set', 'idx_nullable_unique');
+
+--disable_query_log
+DROP TABLE ddl_quoted_column_names;
+--enable_query_log
