@@ -21,9 +21,7 @@ use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
-use std::sync::atomic::{
-    AtomicBool, AtomicI32, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
-};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, RwLock, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -84,7 +82,6 @@ use crate::packet::{
 pub(crate) use crate::bridge::ffi::{
     ob_sql_sock_handler_on_close, ob_sql_sock_handler_on_connect,
     ob_sql_sock_handler_on_disconnect, ob_sql_sock_handler_on_readable, NioGreetingInfo,
-    ob_sql_nio_log_accept_state, ob_sql_nio_log_reactor_state,
     NioLoginAttr, NioLoginView, NioMysqlCellView, NioMysqlCommandField, NioMysqlCommandView,
     NioMysqlFieldView, NioMysqlKvView, NioMysqlOkView, NioMysqlRowView, NioTlsConfig,
     NioTlsSessionInfo, NioTlsStringView, ObSqlSockHandler, ObSqlSockSession,

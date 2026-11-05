@@ -389,39 +389,6 @@ pub mod ffi {
             sess: *mut ObSqlSockSession,
             err: i32,
         );
-        unsafe fn ob_sql_nio_log_accept_state(
-            kind: i32,
-            raw_error: i32,
-            drain_id: u64,
-            accepted: u64,
-            transient_errors: u32,
-            consecutive_errors: u32,
-            outcome: i32,
-        );
-        unsafe fn ob_sql_nio_log_reactor_state(
-            poll_result: i32,
-            poll_id: u64,
-            event_count: u64,
-            listener_events: u64,
-            accept_calls: u64,
-            accepted: u64,
-            cxx_connect_attempts: u64,
-            cxx_connect_returns: u64,
-            cxx_connect_rejects: u64,
-            greeting_sent: u64,
-            greeting_deferred: u64,
-            greeting_failed: u64,
-            greeting_flushed: u64,
-            admission_register_failed: u64,
-            dispatch_handoff: u64,
-            dispatch_direct: u64,
-            dispatch_queue_full: u64,
-            greeting_close_before_flush: u64,
-            listener_event_flags: u32,
-            listener_os_probe_state: u32,
-            listener_os_probe_revents: u32,
-            listener_os_probe_raw_error: i32,
-        );
     }
 
     extern "Rust" {
