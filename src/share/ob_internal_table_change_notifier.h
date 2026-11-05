@@ -97,6 +97,8 @@ private:
 class InternalTableChangeWatcher
 {
 public:
+  InternalTableChangeWatcher() = default;
+
   enum CheckResult {
     NO_CHANGE,
     CHANGE_NOT_VISIBLE,

@@ -25,6 +25,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":cluster_topology",
             ":config",
             ":core_types",
+            ":internal_table_change_notifier",
             ":scn_interface",
             ":local_storage_interface",
             ":local_table_schema",
