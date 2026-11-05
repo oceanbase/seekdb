@@ -33,6 +33,7 @@
 #include "common/object/ob_object.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_tablet_local_checksum_table_storage.h"
+#include "lib/allocator/page_arena.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -541,6 +542,54 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+// Escape the backtick character of an identifier so that the identifier can be
+// embedded safely between backticks in generated DDL SQL. The helper lives in
+// share on purpose: reusing sql::ObSQLUtils::generate_new_name_with_escape_character
+// here would make the terminal share module depend on the upper sql module.
+static int escape_ddl_identifier(
+    ObIAllocator &allocator,
+    const ObString &src,
+    ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const char escape_char = '`';
+  int64_t dst_len = src.length();
+  char *buf = NULL;
+  if (OB_ISNULL(src.ptr()) || dst_len <= 0) {
+    dst.reset();
+  } else if (NULL == src.find(escape_char)) {
+    dst = src;
+  } else {
+    for (int64_t i = 0; i < src.length(); ++i) {
+      if (escape_char == src[i]) {
+        ++dst_len;
+      }
+    }
+    if (NULL == (buf = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for escaped identifier", K(ret), K(dst_len));
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < src.length(); ++i) {
+        if (escape_char == src[i]) {
+          buf[pos++] = escape_char;
+          buf[pos++] = escape_char;
+        } else {
+          buf[pos++] = src[i];
+        }
+      }
+      if (OB_UNLIKELY(pos != dst_len)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected escaped identifier length", K(ret), K(pos), K(dst_len));
+      } else {
+        buf[pos] = '\0';
+        dst.assign_ptr(buf, static_cast<int32_t>(dst_len));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -550,8 +599,13 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  ObArenaAllocator allocator("ObDDLIdent");
+  ObString escaped_column_name = column_name_info.column_name_;
+  if ((with_origin_name || with_alias_name)
+      && OB_FAIL(escape_ddl_identifier(allocator, column_name_info.column_name_, escaped_column_name))) {
+  }
   // append comma
-  if (with_comma) {
+  if (OB_SUCC(ret) && with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
@@ -559,9 +613,9 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -572,7 +626,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   return ret;
