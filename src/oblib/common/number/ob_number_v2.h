@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LIB_NUMBER_OB_NUMBER_V2_H_
 #define OCEANBASE_LIB_NUMBER_OB_NUMBER_V2_H_
 #include <stdint.h>
+#include <inttypes.h>
 #include <algorithm>
 #include "lib/ob_define.h"
 #include "lib/worker.h"
@@ -2891,7 +2892,7 @@ int knuth_probe_quotient(
   if (OB_FAIL(qq_mul_v.ensure(v.size() + 1))) {
   } else if (OB_FAIL(poly_mono_mul(v, qq, qq_mul_v))) {
     ObCStringHelper helper;
-    _OB_LOG(WARN, "%lu mul %s u=%s fail, ret=%d", qq, helper.convert(v), helper.convert(u), ret);
+    _OB_LOG(WARN, "%" PRIu64 " mul %s u=%s fail, ret=%d", qq, helper.convert(v), helper.convert(u), ret);
   } else if (OB_FAIL(u_sub.ensure(n + 1))) {
   } else if (OB_FAIL(poly_poly_sub(u.ref(j, j + n), qq_mul_v.ref(1, n + 1), u_sub,
                                                 negative, truevalue))) {
@@ -2901,7 +2902,7 @@ int knuth_probe_quotient(
   } else if (!negative
              && OB_FAIL(u.assign(u_sub, j, j + n))) {
     ObCStringHelper helper;
-    _OB_LOG(WARN, "assign %s to u[%ld,%ld] fail, ret=%d", helper.convert(u_sub), j, j + n, ret);
+    _OB_LOG(WARN, "assign %s to u[%" PRId64 ",%" PRId64 "] fail, ret=%d", helper.convert(u_sub), j, j + n, ret);
   } else {
     // do nothing
   }
@@ -2919,7 +2920,7 @@ int knuth_probe_quotient(
       _OB_LOG(WARN, "%s add %s fail, ret=%d", helper.convert(u_sub), helper.convert(v), ret);
     } else if (OB_FAIL(u.assign(u_add.ref(1, n + 1), j, j + n))) {
       ObCStringHelper helper;
-      _OB_LOG(WARN, "assign %s to u[%ld,%ld] fail, ret=%d",
+      _OB_LOG(WARN, "assign %s to u[%" PRId64 ",%" PRId64 "] fail, ret=%d",
               helper.convert(u_add.ref(1, n + 1)), j, j + n, ret);
     } else {
       // do nothing

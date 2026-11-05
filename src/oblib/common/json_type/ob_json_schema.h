@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_JSON_SCHEMA
 #define OCEANBASE_SQL_OB_JSON_SCHEMA
 #include "common/xml/ob_multi_mode_interface.h"
+#include <inttypes.h>
 #include "ob_json_base.h"
 #include "ob_json_tree.h"
 
@@ -56,7 +57,7 @@ typedef union ObJsonSchemaType {
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, buf_len, pos, "falgs_ = %ld", flags_);
+    databuff_printf(buf, buf_len, pos, "falgs_ = %" PRId64 "", flags_);
     return pos;
   }
 } ObJsonSchemaType;

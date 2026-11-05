@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_ID_MAP_H_
 #define  OCEANBASE_COMMON_ID_MAP_H_
 #include "lib/ob_define.h"
+#include <inttypes.h>
 #include "lib/allocator/ob_malloc.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/lock/ob_spin_rwlock.h"
@@ -120,11 +121,11 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::init(const ID_TYPE num)
     _OB_LOG(WARN, "have inited");
     ret = OB_INIT_TWICE;
   } else if (0 >= num) {
-    _OB_LOG(WARN, "invalid param num=%lu", (uint64_t)num);
+    _OB_LOG(WARN, "invalid param num=%" PRIu64 "", (uint64_t)num);
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == (array_ = (Node *)common::ob_malloc((num + 1) * sizeof(Node),
                                                          memattr_))) {
-    _OB_LOG(WARN, "malloc array fail num=%lu", (uint64_t)(num + 1));
+    _OB_LOG(WARN, "malloc array fail num=%" PRIu64 "", (uint64_t)(num + 1));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_SUCCESS != (ret = free_list_.init(num))) {
   } else {
@@ -134,7 +135,7 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::init(const ID_TYPE num)
       array_[i].id = i;
       if (0 != i
           && OB_SUCCESS != (ret = free_list_.push(&(array_[i])))) {
-        _OB_LOG(WARN, "push to free list fail ret=%d i=%lu", ret, (uint64_t)i);
+        _OB_LOG(WARN, "push to free list fail ret=%d i=%" PRIu64 "", ret, (uint64_t)i);
         break;
       }
     }
@@ -169,7 +170,7 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::assign(T *value, ID_TYPE &id)
     ret = OB_NOT_INIT;
   } else if (OB_SUCCESS != (ret = free_list_.pop(node))
              || NULL == node) {
-    _OB_LOG(WARN, "no more id free list size=%ld", free_list_.get_total());
+    _OB_LOG(WARN, "no more id free list size=%" PRId64 "", free_list_.get_total());
     ret = (OB_SUCCESS == ret) ? OB_ALLOCATE_MEMORY_FAILED : ret;
   } else {
     id = node->id;
@@ -255,7 +256,7 @@ void ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::revert(const ID_TYPE id, const bool eras
       array_[pos].data = NULL;
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = free_list_.push(&(array_[pos])))) {
-        _OB_LOG_RET(ERROR, tmp_ret, "push to free list fail ret=%d free list size=%ld", tmp_ret,
+        _OB_LOG_RET(ERROR, tmp_ret, "push to free list fail ret=%d free list size=%" PRId64 "", tmp_ret,
                   free_list_.get_total());
       }
     }
@@ -280,7 +281,7 @@ void ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::erase(const ID_TYPE id)
       array_[pos].data = NULL;
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = free_list_.push(&(array_[pos])))) {
-        _OB_LOG_RET(ERROR, tmp_ret, "push to free list fail ret=%d free list size=%ld", tmp_ret,
+        _OB_LOG_RET(ERROR, tmp_ret, "push to free list fail ret=%d free list size=%" PRId64 "", tmp_ret,
                   free_list_.get_total());
       }
     }

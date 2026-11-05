@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/log/ob_log_generator.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -138,11 +139,11 @@ static int serialize_log_entry(char *buf, const int64_t len, int64_t &pos, ObLog
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || 0 >= len || pos > len || OB_ISNULL(log_data) || 0 >= data_len) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(ERROR, "serialize_log_entry(buf=%p, len=%ld, pos=%ld, log_data=%p, data_len=%ld)=>%d",
+    _OB_LOG(ERROR, "serialize_log_entry(buf=%p, len=%" PRId64 ", pos=%" PRId64 ", log_data=%p, data_len=%" PRId64 ")=>%d",
             buf, len, pos, log_data, data_len, ret);
   } else if (pos + entry.get_serialize_size() + data_len > len) {
     ret = OB_BUF_NOT_ENOUGH;
-    _OB_LOG(DEBUG, "pos[%ld] + entry.serialize_size[%ld] + data_len[%ld] > len[%ld]",
+    _OB_LOG(DEBUG, "pos[%" PRId64 "] + entry.serialize_size[%" PRId64 "] + data_len[%" PRId64 "] > len[%" PRId64 "]",
             pos, entry.get_serialize_size(), data_len, len);
   } else if (OB_FAIL(entry.serialize(buf, len, pos))) {
   } else {
@@ -162,11 +163,11 @@ static int generate_log(char *buf, const int64_t len, int64_t &pos, ObLogCursor 
       !cursor.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "generate_log(buf=%p, len=%ld, pos=%ld, log_data=%p, data_len=%ld, cursor=%s)=>%d",
+    _OB_LOG(ERROR, "generate_log(buf=%p, len=%" PRId64 ", pos=%" PRId64 ", log_data=%p, data_len=%" PRId64 ", cursor=%s)=>%d",
             buf, len, pos, log_data, data_len, helper.convert(cursor), ret);
   } else if (entry.get_serialize_size() + data_len > len) {
     ret = OB_LOG_TOO_LARGE;
-    _OB_LOG(WARN, "header[%ld] + data_len[%ld] > len[%ld]", entry.get_serialize_size(), data_len,
+    _OB_LOG(WARN, "header[%" PRId64 "] + data_len[%" PRId64 "] > len[%" PRId64 "]", entry.get_serialize_size(), data_len,
             len);
   } else if (OB_FAIL(cursor.next_entry(entry, cmd, log_data, data_len))) {
     ObCStringHelper helper;
@@ -193,7 +194,7 @@ int ObLogGenerator:: do_write_log(const LogCommand cmd, const char *log_data,
   } else if (OB_FAIL(generate_log(log_buf_, log_buf_len_ - reserved_len, pos_,
                                   end_cursor_, cmd, log_data, data_len))
              && OB_BUF_NOT_ENOUGH != ret) {
-    _OB_LOG(WARN, "generate_log(pos=%ld)=>%d", pos_, ret);
+    _OB_LOG(WARN, "generate_log(pos=%" PRId64 ")=>%d", pos_, ret);
   }
   return ret;
 }
@@ -214,7 +215,7 @@ int ObLogGenerator::switch_log()
                                                end_cursor_.file_id_ + 1))) {
   } else if (OB_FAIL(do_write_log(OB_LOG_SWITCH_LOG, buf, buf_len, 0))) {
   } else {
-    _OB_LOG(INFO, "switch_log(file_id=%ld, log_id=%ld)", end_cursor_.file_id_, end_cursor_.log_id_);
+    _OB_LOG(INFO, "switch_log(file_id=%" PRId64 ", log_id=%" PRId64 ")", end_cursor_.file_id_, end_cursor_.log_id_);
   }
   return ret;
 }

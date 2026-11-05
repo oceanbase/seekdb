@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_SHARE_OB_LOG_GENERATOR_
 
 #include "lib/net/ob_addr.h"
+#include <inttypes.h>
 #include "common/log/ob_log_cursor.h"
 #include "common/log/ob_log_entry.h"
 #include "common/log/ob_log_constants.h"
@@ -84,12 +85,12 @@ int generate_log(char *buf, const int64_t len, int64_t &pos, ObLogCursor &cursor
   int64_t end_pos = data_pos;
   if (OB_ISNULL(buf) || 0 >= len || pos > len || !cursor.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(ERROR, "generate_log(buf=%p, len=%ld, pos=%ld, cursor=%s)=>%d",
+    _OB_LOG(ERROR, "generate_log(buf=%p, len=%" PRId64 ", pos=%" PRId64 ", cursor=%s)=>%d",
             buf, len, pos, cursor.to_str(), ret);
   } else if (OB_FAIL(data.serialize(buf, len, end_pos))) {
     if (entry.get_serialize_size() + data.get_serialize_size() > len) {
       ret = OB_LOG_TOO_LARGE;
-      _OB_LOG(WARN, "log too large(size=%ld, limit=%ld)", data.get_serialize_size(), len);
+      _OB_LOG(WARN, "log too large(size=%" PRId64 ", limit=%" PRId64 ")", data.get_serialize_size(), len);
     } else {
       ret = OB_BUF_NOT_ENOUGH;
     }
@@ -119,7 +120,7 @@ int ObLogGenerator::write_log(const LogCommand cmd, T &data)
   } else if (OB_FAIL(generate_log(log_buf_, log_buf_len_ - ObLogConstants::LOG_BUF_RESERVED_SIZE, 
                                   pos_, end_cursor_, cmd, data))
              && OB_BUF_NOT_ENOUGH != ret) {
-    _OB_LOG(WARN, "generate_log(pos=%ld)=>%d", pos_, ret);
+    _OB_LOG(WARN, "generate_log(pos=%" PRId64 ")=>%d", pos_, ret);
   }
   return ret;
 }

@@ -263,9 +263,9 @@ void easy_request_addbuf(easy_request_t *r, easy_buf_t *b)
         s->nextb = &b->node;
         s->buf_count++;
         if (unlikely(s->enable_trace)) {
-            easy_debug_log("request add buffer, session=%p, count=%ld", s, s->buf_count);
+            easy_debug_log("request add buffer, session=%p, count=%" PRId64 "", s, s->buf_count);
         }
-        easy_debug_log("request add buffer, session=%p, count=%ld", s, s->buf_count);
+        easy_debug_log("request add buffer, session=%p, count=%" PRId64 "", s, s->buf_count);
     }
 
     easy_list_add_tail(&b->node, &ms->c->output);

@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_LOG_OB_LOG_ENTRY_
 
 #include "common/ob_record_header.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -156,7 +157,7 @@ struct ObLogEntry
     int64_t pos = 0;
     databuff_printf(buf, buf_len, pos, "[LogEntry] ");
     pos += header_.to_string(buf + pos, buf_len - pos);
-    databuff_printf(buf, buf_len, pos, " seq=%lu cmd=%d", seq_, cmd_);
+    databuff_printf(buf, buf_len, pos, " seq=%" PRIu64 " cmd=%d", seq_, cmd_);
     return pos;
   }
 

@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_OB_DEFINE_H_
 // common system headers
 #include <stdint.h>  // for int64_t etc.
+#include <inttypes.h>
 #include <stdio.h>
 #ifndef _WIN32
 #include <sys/syscall.h>
@@ -607,9 +608,9 @@ const uint64_t OB_COUNT_AGG_PD_COLUMN_ID = INT32_MAX - 1;
 
 const int64_t OB_MAX_AUTOINC_SEQ_VALUE = (1LL << 40) - 1; // max value for 40bit
 
-const char *const OB_UPDATE_MSG_FMT = "Rows matched: %ld  Changed: %ld  Warnings: %ld";
-const char *const OB_INSERT_MSG_FMT = "Records: %ld  Duplicates: %ld  Warnings: %ld";
-const char *const OB_LOAD_DATA_MSG_FMT = "Records: %ld  Deleted: %ld  Skipped: %ld  Warnings: %ld";
+const char *const OB_UPDATE_MSG_FMT = "Rows matched: %" PRId64 "  Changed: %" PRId64 "  Warnings: %" PRId64 "";
+const char *const OB_INSERT_MSG_FMT = "Records: %" PRId64 "  Duplicates: %" PRId64 "  Warnings: %" PRId64 "";
+const char *const OB_LOAD_DATA_MSG_FMT = "Records: %" PRId64 "  Deleted: %" PRId64 "  Skipped: %" PRId64 "  Warnings: %" PRId64 "";
 const char OB_PADDING_CHAR = ' ';
 const char OB_PADDING_BINARY = '\0';
 const char *const OB_VALUES = "__values";

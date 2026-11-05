@@ -15,6 +15,7 @@
  */
 
 #include "lib/allocator/ob_malloc.h"
+#include <inttypes.h>
 #include "common/timezone/ob_timezone_util.h"
 
 #define O_BINARY  0 /* Flag to my_open for binary files */
@@ -428,14 +429,14 @@ int ObTimezoneUtils::print_tz_to_sql(const char* tz_name)
   {
     _OB_LOG(INFO, "INSERT INTO time_zone_transition (Time_zone_id, Transition_time, Transition_type_id) VALUES");
     for (i= 0; i < sp.timecnt; i++)
-      _OB_LOG(INFO, "%s(@time_zone_id, %ld, %u)", (i == 0 ? " " : ","), sp.ats[i], (uint)sp.types[i]);
+      _OB_LOG(INFO, "%s(@time_zone_id, %" PRId64 ", %u)", (i == 0 ? " " : ","), sp.ats[i], (uint)sp.types[i]);
     _OB_LOG(INFO, ";");
   }
 
   _OB_LOG(INFO, "INSERT INTO time_zone_transition_type (Time_zone_id, Transition_type_id, Offset, Is_DST, Abbreviation) VALUES");
 
   for (i= 0; i < sp.typecnt; i++)
-    _OB_LOG(INFO, "%s(@time_zone_id, %lu, %ld, %lu, '%s')",
+    _OB_LOG(INFO, "%s(@time_zone_id, %" PRIu64 ", %" PRId64 ", %" PRIu64 ", '%s')",
             (i == 0 ? " " : ","), i,
             sp.ttis[i].tt_gmtoff, sp.ttis[i].tt_isdst,
             sp.chars + sp.ttis[i].tt_abbrind);

@@ -15,6 +15,7 @@
  */
 
 #include "ob_malloc.h"
+#include <inttypes.h>
 #include <cstdlib>
 #include <cstring>
 #if defined(__linux__)
@@ -180,8 +181,8 @@ int oceanbase::common::ObMemBuf::ensure_space(const int64_t size, const lib::ObL
   int64_t buf_len = size > buf_size_ ? size : buf_size_;
 
   if (size <= 0 || (NULL != buf_ptr_ && buf_size_ <= 0)) {
-    _OB_LOG(WARN, "invalid param, size=%ld, buf_ptr_=%p, "
-              "buf_size_=%ld",
+    _OB_LOG(WARN, "invalid param, size=%" PRId64 ", buf_ptr_=%p, "
+              "buf_size_=%" PRId64 "",
               size, buf_ptr_, buf_size_);
     ret = OB_ERROR;
   } else if (NULL == buf_ptr_ || (NULL != buf_ptr_ && size > buf_size_)) {

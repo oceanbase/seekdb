@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_OB_JSON_TREE
 
 #include "ob_json_base.h"
+#include <inttypes.h>
 #include "ob_json_path.h"
 #include "lib/container/ob_array_iterator.h"
 #include "common/number/ob_number_v2.h" // for number::ObNumber
@@ -198,7 +199,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, buf_len, pos, "json object element_count = %lu", element_count());
+    databuff_printf(buf, buf_len, pos, "json object element_count = %" PRIu64 "", element_count());
     return pos;
   }
   OB_INLINE ObJsonNodeType json_type() const override { return ObJsonNodeType::J_OBJECT; }
@@ -342,7 +343,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, buf_len, pos, "json array element_count = %lu", element_count());
+    databuff_printf(buf, buf_len, pos, "json array element_count = %" PRIu64 "", element_count());
     return pos;
   }
   OB_INLINE ObJsonNodeType json_type() const override { return ObJsonNodeType::J_ARRAY; }
@@ -524,7 +525,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, buf_len, pos, "json int value = %ld", value_);
+    databuff_printf(buf, buf_len, pos, "json int value = %" PRId64 "", value_);
     return pos;
   }
   OB_INLINE virtual ObJsonNodeType json_type() const override { return ObJsonNodeType::J_INT; }
@@ -553,7 +554,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, buf_len, pos, "json uint value = %lu", value_);
+    databuff_printf(buf, buf_len, pos, "json uint value = %" PRIu64 "", value_);
     return pos;
   }
   OB_INLINE ObJsonNodeType json_type() const override { return ObJsonNodeType::J_UINT; }
