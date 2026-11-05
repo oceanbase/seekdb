@@ -19,6 +19,7 @@
 // Local tablet checksum persistence and lookup.
 
 #include "share/ob_tablet_local_checksum_operator.h"
+#include <inttypes.h>
 #include "share/storage/ob_tablet_local_checksum_table_storage.h"
 #include "share/storage/local_store.h"
 namespace oceanbase
@@ -145,12 +146,12 @@ int ObTabletColumnChecksumMeta::deserialize(const char *buf, const int64_t buf_l
 int64_t ObTabletColumnChecksumMeta::get_string_length() const
 {
   int64_t len = 0;
-  len += sizeof("magic:%lX,");
+  len += sizeof("magic:%" PRIX64 ",");
   len += sizeof("compat:%d,");
   len += sizeof("method:%d,");
   len += sizeof("bytes:%d,");
   len += sizeof("colcnt:%d,");
-  len += sizeof("%d:%ld,") * column_checksums_.count();
+  len += sizeof("%d:%" PRId64 ",") * column_checksums_.count();
   len += get_serialize_size();
   return len;
 }
@@ -159,7 +160,7 @@ int64_t ObTabletColumnChecksumMeta::get_string(char *buf, const int64_t buf_len)
 {
   int64_t pos = 0;
   int32_t column_cnt = static_cast<int32_t>(column_checksums_.count());
-  common::databuff_printf(buf, buf_len, pos, "magic:%lX,", MAGIC_NUMBER);
+  common::databuff_printf(buf, buf_len, pos, "magic:%" PRIX64 ",", MAGIC_NUMBER);
   common::databuff_printf(buf, buf_len, pos, "compat:%d,", compat_version_);
   common::databuff_printf(buf, buf_len, pos, "method:%d,", checksum_method_);
   common::databuff_printf(buf, buf_len, pos, "bytes:%d,", checksum_bytes_);
@@ -167,9 +168,9 @@ int64_t ObTabletColumnChecksumMeta::get_string(char *buf, const int64_t buf_len)
 
   for (int32_t i = 0; i < column_cnt; ++i) {
     if (column_cnt - 1 != i) {
-      common::databuff_printf(buf, buf_len, pos, "%d:%ld,", i, column_checksums_.at(i));
+      common::databuff_printf(buf, buf_len, pos, "%d:%" PRId64 ",", i, column_checksums_.at(i));
     } else {
-      common::databuff_printf(buf, buf_len, pos, "%d:%ld", i, column_checksums_.at(i));
+      common::databuff_printf(buf, buf_len, pos, "%d:%" PRId64 "", i, column_checksums_.at(i));
     }
   }
   return pos;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB_TIME
 #include "share/ob_time_utility2.h"
+#include <inttypes.h>
 
 #define IS_MINUS(str, is_minus) \
   if (OB_SUCC(ret)) \
@@ -201,7 +202,7 @@ int ObTimeUtility2::timestamp_format_to_str(const struct tm &t, int64_t usec, co
             break;
           }
           case 'f': { //Microseconds (000000..999999)
-            ret = databuff_printf(buf, buf_len, pos, "%06ld", usec);
+            ret = databuff_printf(buf, buf_len, pos, "%06" PRId64 "", usec);
             break;
           }
           case 'H': { //Hour (00..23)

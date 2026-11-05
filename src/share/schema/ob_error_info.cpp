@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "share/rc/ob_server_runtime.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "ob_error_info.h"
 #include "lib/oblog/ob_warning_buffer.h"
@@ -268,9 +269,9 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
   int64_t affected_rows = 0;
   if (ERROR_STATUS_NO_ERROR != error_info.get_error_status()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
-                                                  AND obj_seq = %ld \
-                                                  AND obj_type = %ld", 
+  } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %" PRId64 " \
+                                                  AND obj_seq = %" PRId64 " \
+                                                  AND obj_type = %" PRId64 "", 
              OB_ALL_ERROR_TNAME, 
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
@@ -292,9 +293,9 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
   ObSqlString sql;
   if (false == error_info.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
-                                                                  AND obj_seq = %ld\
-                                                                  AND obj_type = %ld",
+  } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %" PRId64 "  \
+                                                                  AND obj_seq = %" PRId64 "\
+                                                                  AND obj_type = %" PRId64 "",
              OB_ALL_ERROR_TNAME,
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),

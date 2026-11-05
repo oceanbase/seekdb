@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_user_sql_service.h"
+#include <inttypes.h>
 
 #include <stddef.h>
 
@@ -149,11 +150,11 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
     bool is_first = true;
     // delete row from __all_role_grantee_map
     if (is_role) {
-      if (OB_FAIL(del_sql.append_fmt("DELETE FROM %s WHERE ROLE_ID = %lu and GRANTEE_ID IN (",
+      if (OB_FAIL(del_sql.append_fmt("DELETE FROM %s WHERE ROLE_ID = %" PRIu64 " and GRANTEE_ID IN (",
           OB_ALL_ROLE_GRANTEE_MAP_TNAME,
           ObSchemaUtils::get_extract_schema_id(user_id)))) {
       }
-    } else if (FAILEDx(del_sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %lu and ROLE_ID IN (",
+    } else if (FAILEDx(del_sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %" PRIu64 " and ROLE_ID IN (",
         OB_ALL_ROLE_GRANTEE_MAP_TNAME,
         ObSchemaUtils::get_extract_schema_id(user_id)))) {
     }
@@ -181,7 +182,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
         if (OB_FAIL(del_sql.append_fmt(", "))) {
         }
       }
-      if (FAILEDx(del_sql.append_fmt("%lu", ObSchemaUtils::get_extract_schema_id(id)))) {
+      if (FAILEDx(del_sql.append_fmt("%" PRIu64 "", ObSchemaUtils::get_extract_schema_id(id)))) {
       }
 
       // genereate insert sql stmt
@@ -190,7 +191,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
         }
       }
       const int64_t is_deleted = 1;
-      if (OB_SUCC(ret) && OB_FAIL(insert_sql.append_fmt("(now(6), now(6), %lu, %lu, %ld, %ld, %lu, %lu)", 
+      if (OB_SUCC(ret) && OB_FAIL(insert_sql.append_fmt("(now(6), now(6), %" PRIu64 ", %" PRIu64 ", %" PRId64 ", %" PRId64 ", %" PRIu64 ", %" PRIu64 ")", 
           ObSchemaUtils::get_extract_schema_id(is_role ? id : user_id), 
           ObSchemaUtils::get_extract_schema_id(is_role ? user_id : id),
           new_schema_version, 

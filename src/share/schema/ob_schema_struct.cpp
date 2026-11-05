@@ -5725,7 +5725,7 @@ DEF_TO_STRING(ObPrintPackedPrivArray)
   int ret = OB_SUCCESS;
   ret = BUF_PRINTF("\"");
   if (packed_priv_array_.count() > 0 ){
-    ret = BUF_PRINTF("%ld", packed_priv_array_[0]);
+    ret = BUF_PRINTF("%" PRId64 "", packed_priv_array_[0]);
     /*FOREACH(it, packed_priv_array_) {
       if ((*it) != NULL) {
         ret = BUF_PRINTF("%lld", *(*it));

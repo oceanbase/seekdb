@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX    SHARE
 
 #include <cmath>
+#include <inttypes.h>
 #include "share/resource/ob_server_resource.h"
 #include "share/ob_server_struct.h"
 
@@ -682,17 +683,17 @@ DEF_TO_STRING(ObServerResource)
   if (log_disk_size_ > 0) {
     (void)databuff_printf(buf, buf_len, pos, "log_disk_size:\"%.9gGB\", ", (double)log_disk_size_/1024/1024/1024);
   } else {
-    (void)databuff_printf(buf, buf_len, pos, "log_disk_size:%ld, ", log_disk_size_);
+    (void)databuff_printf(buf, buf_len, pos, "log_disk_size:%" PRId64 ", ", log_disk_size_);
   }
   // iops
-  (void)databuff_printf(buf, buf_len, pos, "min_iops:%ld, max_iops:%ld, iops_weight:%ld, ", min_iops_, max_iops_, iops_weight_);
+  (void)databuff_printf(buf, buf_len, pos, "min_iops:%" PRId64 ", max_iops:%" PRId64 ", iops_weight:%" PRId64 ", ", min_iops_, max_iops_, iops_weight_);
   // net bandwidth
   if (INT64_MAX == max_net_bandwidth_) {
     (void)databuff_printf(buf, buf_len, pos, "max_net_bandwidth:INT64_MAX, ");
   } else {
     (void)databuff_printf(buf, buf_len, pos, "max_net_bandwidth:\"%.9gGB\", ", (double)max_net_bandwidth_/1024/1024/1024);
   }
-  (void)databuff_printf(buf, buf_len, pos, "net_bandwidth_weight:%ld, ", net_bandwidth_weight_);
+  (void)databuff_printf(buf, buf_len, pos, "net_bandwidth_weight:%" PRId64 ", ", net_bandwidth_weight_);
   J_OBJ_END();
   return pos;
 }

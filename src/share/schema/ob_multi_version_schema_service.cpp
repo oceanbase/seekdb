@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_publish_signal.h"
@@ -2775,7 +2776,7 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
         int64_t idx = tablet_idxs.at(i);
         if (idx < 0 || idx >= tablet_ids.count()) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(tablet_ids_sql.append_fmt("%s%lu",
+        } else if (OB_FAIL(tablet_ids_sql.append_fmt("%s%" PRIu64 "",
                    i == start_idx ? "" : ", ", tablet_ids.at(idx).id()))) {
         }
       } // end for
@@ -2783,7 +2784,7 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
       if (FAILEDx(sql.assign_fmt(
           "SELECT * FROM (SELECT *, row_number() "
           "OVER (PARTITION BY tablet_id ORDER BY schema_version DESC) AS row_num "
-          "FROM %s WHERE tablet_id in (%.*s) AND schema_version <= %ld) "
+          "FROM %s WHERE tablet_id in (%.*s) AND schema_version <= %" PRId64 ") "
           "WHERE row_num = 1",
           OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME,
           tablet_ids_sql.string().length(),

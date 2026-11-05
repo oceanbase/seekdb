@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_inner_table_operator.h"
+#include <inttypes.h>
 
 using namespace oceanbase;
 using namespace common;
@@ -265,7 +266,7 @@ int ObInnerTableOperator::update_int_column(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql.assign_fmt("%s=%ld", column_name, value))) {
+  } else if (OB_FAIL(sql.assign_fmt("%s=%" PRId64 "", column_name, value))) {
   } else if (OB_FAIL(do_update_column_(proxy, key, sql.ptr(), affected_rows))) {
   }
 
@@ -286,7 +287,7 @@ int ObInnerTableOperator::update_uint_column(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql.assign_fmt("%s=%lu", column_name, value))) {
+  } else if (OB_FAIL(sql.assign_fmt("%s=%" PRIu64 "", column_name, value))) {
   } else if (OB_FAIL(do_update_column_(proxy, key, sql.ptr(), affected_rows))) {
   }
 
@@ -351,8 +352,8 @@ int ObInnerTableOperator::compare_and_swap(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql.assign_fmt("%s=%ld", column_name, new_value))) {
-  } else if (OB_FAIL(predicates.assign_fmt("%s=%ld", column_name, old_value))) {
+  } else if (OB_FAIL(sql.assign_fmt("%s=%" PRId64 "", column_name, new_value))) {
+  } else if (OB_FAIL(predicates.assign_fmt("%s=%" PRId64 "", column_name, old_value))) {
   } else if (OB_FAIL(do_compare_and_swap_(proxy, key, sql.ptr(), predicates.ptr(), affected_rows))) {
   }
 
@@ -641,7 +642,7 @@ int ObInnerTableOperator::do_increase_column_by_(
   
   const char *tname = get_table_name();
 
-  if (OB_FAIL(sql.assign_fmt("update %s set %s=%s+%ld", tname, column_name, column_name, value))) {
+  if (OB_FAIL(sql.assign_fmt("update %s set %s=%s+%" PRId64 "", tname, column_name, column_name, value))) {
   } else if (OB_FAIL(key.build_pkey_predicates(predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
   } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
