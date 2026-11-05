@@ -113,8 +113,12 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Length", N_ST_LENGTH);
       } else if (expr.arg_cnt_ == 2) {
         // transfer to unit
-        if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(
-                       gis_unit->get_string(), srs, res_num, res_num))) {
+        ObString unit_str;
+        const ObExpr *unit_arg = expr.args_[1];
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+                ctx.exec_ctx_, temp_allocator, *gis_unit, unit_arg->datum_meta_,
+                unit_arg->obj_meta_.has_lob_header(), unit_str))) {
+        } else if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(unit_str, srs, res_num, res_num))) {
         } else if (std::isinf(res_num)) {
           ret = OB_OPERATE_OVERFLOW;
           LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Length", N_ST_LENGTH);

@@ -76,6 +76,7 @@ public:
   {
   public:
     const static int64_t BUF_SIZE = 24 * 1024;
+    const static int64_t BUF_ALIGNMENT = 16;
     friend class ObISQLClient;
 
     ReadResult();
@@ -94,6 +95,7 @@ public:
     int create_handler(T *&res, Args &... args)
     {
       static_assert(sizeof(T) <= sizeof(buf_), "buffer not enough");
+      static_assert(alignof(T) <= BUF_ALIGNMENT, "buffer alignment not enough");
       if (NULL != result_handler_) {
         reset();
       }
@@ -103,7 +105,7 @@ public:
     }
   private:
     sqlclient::ObISQLResultHandler *result_handler_;
-    char buf_[BUF_SIZE];
+    alignas(BUF_ALIGNMENT) char buf_[BUF_SIZE];
     bool enable_use_result_; // when true, use mysql_use_result() instead of mysql_store_result()
   };
 

@@ -23,6 +23,8 @@ using namespace common;
 namespace blocksstable
 {
 
+const MacroBlockId MacroBlockId::EMPTY_LIST_ENTRY(0, EMPTY_ENTRY_BLOCK_INDEX, 0);
+
 MacroBlockId::MacroBlockId()
   : first_id_(0), second_id_(INT64_MAX), third_id_(0)
 {

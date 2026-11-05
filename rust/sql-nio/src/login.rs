@@ -18,6 +18,7 @@ use crate::capability::{
     CLIENT_SECURE_CONNECTION,
 };
 use crate::codec::read_lenenc;
+use crate::NioLoginAttr;
 
 pub(crate) const MAX_LOGIN_BODY_LEN: usize = 1024 * 1024;
 
@@ -46,15 +47,6 @@ fn take_field(b: &[u8], at: &mut usize, len: usize) -> Option<(i32, i32)> {
     let len_i32 = i32::try_from(len).ok()?;
     *at = end;
     Some((off, len_i32))
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct NioLoginAttr {
-    pub key_off: i32,
-    pub key_len: i32,
-    pub value_off: i32,
-    pub value_len: i32,
 }
 
 #[derive(Clone, Debug)]

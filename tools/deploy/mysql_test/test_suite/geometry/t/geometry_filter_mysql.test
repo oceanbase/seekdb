@@ -594,3 +594,50 @@ insert into t1 values (8, ST_GeomFromText('POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))', 
 select /*+ index(t1 g) */ c1, ST_AsText(g) FROM t1 where ST_Contains(g, ST_GeomFromText('POINT(1 -1)', 4326)) or ST_Equals(g, ST_GeomFromText('POINT(1 1)', 4326));
 select /*+ full(t1) */ c1, ST_AsText(g) FROM t1 where ST_Contains(g, ST_GeomFromText('POINT(1 -1)', 4326)) or ST_Equals(g, ST_GeomFromText('POINT(1 1)', 4326));
 drop table t1;
+
+--disable_warnings
+DROP TABLE IF EXISTS gis_covering_wide, gis_covering_holes;
+--enable_warnings
+CREATE TABLE gis_covering_wide(id INT PRIMARY KEY, g GEOMETRY NOT NULL SRID 4326, SPATIAL INDEX sx(g));
+INSERT INTO gis_covering_wide VALUES
+(1, ST_GeomFromText('LINESTRING(-120 0,0 0,120 0)', 4326, 'axis-order=long-lat')),
+(2, ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat'));
+SET @origin = ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat');
+--disable_query_log
+--source mysql_test/include/create_plan_table.inc
+--enable_query_log
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='cover_wide'
+SELECT id FROM gis_covering_wide FORCE INDEX(sx) WHERE ST_Intersects(g, @origin);
+EXPLAIN INTO plan_table SET statement_id='cover_distance'
+SELECT id FROM gis_covering_wide FORCE INDEX(sx) WHERE _ST_DWithin(g, @origin, 1.7976931348623157e308);
+--enable_result_log
+SELECT COUNT(*) = 1 AS wide_uses_spatial_index FROM plan_table
+WHERE statement_id = 'cover_wide' AND operator = 'TABLE RANGE SCAN' AND object_alias = 'gis_covering_wide(sx)';
+SELECT COUNT(*) = 1 AS distance_uses_spatial_index FROM plan_table
+WHERE statement_id = 'cover_distance' AND operator = 'TABLE RANGE SCAN' AND object_alias = 'gis_covering_wide(sx)';
+SELECT GROUP_CONCAT(id ORDER BY id) AS wide_index FROM gis_covering_wide FORCE INDEX(sx) WHERE ST_Intersects(g, @origin);
+SELECT GROUP_CONCAT(id ORDER BY id) AS wide_full FROM gis_covering_wide IGNORE INDEX(sx) WHERE ST_Intersects(g, @origin);
+SELECT GROUP_CONCAT(id ORDER BY id) AS distance_index FROM gis_covering_wide FORCE INDEX(sx) WHERE _ST_DWithin(g, @origin, 1.7976931348623157e308);
+SELECT GROUP_CONCAT(id ORDER BY id) AS distance_full FROM gis_covering_wide IGNORE INDEX(sx) WHERE _ST_DWithin(g, @origin, 1.7976931348623157e308);
+CREATE TABLE gis_covering_holes(id INT PRIMARY KEY, g GEOMETRY NOT NULL SRID 0, SPATIAL INDEX sx(g));
+INSERT INTO gis_covering_holes VALUES
+(1, ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0),(2 2,2 8,8 8,8 2,2 2))')),
+(2, ST_GeomFromText('POINT(5 5)'));
+SET @hole = ST_GeomFromText('POINT(5 5)');
+SET @moved = ST_GeomFromText('POINT(20 20)');
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='cover_hole'
+SELECT id FROM gis_covering_holes FORCE INDEX(sx) WHERE ST_Intersects(g, @hole);
+--enable_result_log
+SELECT COUNT(*) = 1 AS hole_uses_spatial_index FROM plan_table
+WHERE statement_id = 'cover_hole' AND operator = 'TABLE RANGE SCAN' AND object_alias = 'gis_covering_holes(sx)';
+SELECT GROUP_CONCAT(id ORDER BY id) AS hole_index FROM gis_covering_holes FORCE INDEX(sx) WHERE ST_Intersects(g, @hole);
+SELECT GROUP_CONCAT(id ORDER BY id) AS hole_full FROM gis_covering_holes IGNORE INDEX(sx) WHERE ST_Intersects(g, @hole);
+UPDATE gis_covering_holes SET g = @moved WHERE id = 2;
+SELECT GROUP_CONCAT(id ORDER BY id) AS old_location FROM gis_covering_holes FORCE INDEX(sx) WHERE ST_Intersects(g, @hole);
+SELECT GROUP_CONCAT(id ORDER BY id) AS new_location FROM gis_covering_holes FORCE INDEX(sx) WHERE ST_Intersects(g, @moved);
+DELETE FROM gis_covering_holes WHERE id = 2;
+SELECT GROUP_CONCAT(id ORDER BY id) AS deleted_location FROM gis_covering_holes FORCE INDEX(sx) WHERE ST_Intersects(g, @moved);
+SELECT GROUP_CONCAT(id ORDER BY id) AS remaining_ids FROM gis_covering_holes;
+DROP TABLE gis_covering_wide, gis_covering_holes, plan_table;

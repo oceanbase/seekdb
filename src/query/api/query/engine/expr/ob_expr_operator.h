@@ -33,7 +33,6 @@
 #include "common/object/ob_obj_compare.h"
 #include "common/ob_accuracy.h"
 #include "common/mysqlclient/ob_mysql_global.h"
-#include "objit/common/ob_item_type.h"
 #include "query/parser/ob_item_type.h"
 #include "query/engine/expr/ob_expr_res_type.h"
 #include "query/engine/expr/ob_expr.h"

@@ -213,7 +213,6 @@ public:
       serial_final_scn_(share::SCN::max_scn()),
       serial_final_seq_no_(),
       serial_sync_scn_(share::SCN::min_scn()),
-      callback_main_list_append_count_(0),
       callback_remove_for_trans_end_count_(0),
       callback_remove_for_remove_memtable_count_(0),
       callback_remove_for_fast_commit_count_(0),
@@ -295,8 +294,6 @@ public:
   void reset_pdml_stat();
   uint64_t get_main_list_length() const
   { return callback_list_.get_length(); }
-  int64_t get_callback_main_list_append_count() const
-  { return callback_main_list_append_count_; }
   int64_t get_callback_remove_for_trans_end_count() const
   { return callback_remove_for_trans_end_count_; }
   int64_t get_callback_remove_for_remove_memtable_count() const
@@ -307,8 +304,6 @@ public:
   { return callback_remove_for_rollback_to_count_; }
   int64_t get_callback_ext_info_log_count() const
   { return callback_ext_info_log_count_; }
-  void add_main_list_append_cnt(int64_t cnt = 1)
-  { ATOMIC_AAF(&callback_main_list_append_count_, cnt); }
   void add_tx_end_callback_remove_cnt(int64_t cnt = 1)
   { ATOMIC_AAF(&callback_remove_for_trans_end_count_, cnt); }
   void add_release_memtable_callback_remove_cnt(int64_t cnt = 1)
@@ -407,7 +402,6 @@ private:
   // it means the serial logging or serial replay has been finished
   share::SCN serial_sync_scn_;
   // statistics for callback remove
-  int64_t callback_main_list_append_count_;
   int64_t callback_remove_for_trans_end_count_;
   int64_t callback_remove_for_remove_memtable_count_;
   int64_t callback_remove_for_fast_commit_count_;

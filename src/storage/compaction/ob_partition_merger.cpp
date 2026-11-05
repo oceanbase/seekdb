@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_partition_merger.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tablet_scheduler.h"

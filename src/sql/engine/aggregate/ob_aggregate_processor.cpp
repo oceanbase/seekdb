@@ -7314,11 +7314,10 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
                                             mvt_agg_result &mvt_res)
 {
   int ret = OB_SUCCESS;
-  uint32_t column_cnt = 0;
   bool is_param_done = false;
   int param_cnt = 0;
   mvt_res.inited_ = true;
-  // try get first geom column and column number
+  // try get first geom column
   for (uint32_t i = 0; i < aggr_info.param_exprs_.count() && OB_SUCC(ret); i++) {
     if (i == 0) {
       param_cnt = tmp_obj[i].get_int();
@@ -7326,9 +7325,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
     } 
     ObExpr *expr = aggr_info.param_exprs_.at(i);
     if (i >= mvt_res.column_offset_ && expr->type_ == T_REF_COLUMN) {
-      ObString key_name;
       is_param_done = true;
-      column_cnt++;
       if (i + 1 >= obj_cnt) {
         ret = OB_ERR_UNEXPECTED;
       } else if (expr->obj_meta_.is_geometry() && mvt_res.geom_idx_ == UINT32_MAX) {
@@ -7339,8 +7336,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
           } 
         } else if (mvt_res.geom_name_.case_compare(tmp_obj[i + 1].get_string()) == 0) {
           mvt_res.geom_idx_ = i;
-        } else if (OB_FAIL(ob_write_string(allocator, tmp_obj[i + 1].get_string(), key_name, true))) {
-        } else if (OB_FAIL(mvt_res.keys_.push_back(key_name))) {
+        } else if (OB_FAIL(mvt_res.add_key(tmp_obj[i + 1].get_string()))) {
         }
       } else if (!mvt_res.feature_id_name_.empty() && mvt_res.feat_id_idx_ == UINT32_MAX
                 && mvt_res.feature_id_name_.case_compare(tmp_obj[i + 1].get_string()) == 0
@@ -7349,8 +7345,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
         mvt_res.feat_id_idx_ = i;
       } else if (!expr->obj_meta_.is_json() // json type will be expanded
                 && !expr->obj_meta_.is_enum_or_set()
-                && OB_FAIL(ob_write_string(allocator, tmp_obj[i + 1].get_string(), key_name, true))) {
-      } else if (!expr->obj_meta_.is_json() && !expr->obj_meta_.is_enum_or_set() && OB_FAIL(mvt_res.keys_.push_back(key_name))) {
+                && OB_FAIL(mvt_res.add_key(tmp_obj[i + 1].get_string()))) {
       }
     } else if (!is_param_done) {
       ObObjType type = tmp_obj[i].get_type();
@@ -7424,10 +7419,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
     if (!mvt_res.feature_id_name_.empty() && mvt_res.feat_id_idx_ == UINT32_MAX) {
       // can't find feature id column
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    } else {
-      mvt_res.column_cnt_ = column_cnt;
-      if (OB_FAIL(mvt_res.init_layer())) {
-      }
+    } else if (OB_FAIL(mvt_res.init_layer())) {
     }
   }
   return ret;

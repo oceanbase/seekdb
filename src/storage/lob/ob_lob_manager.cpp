@@ -30,6 +30,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "query/engine/expr/ob_expr_util.h"
+#include "lib/utility/utility.h"
 
 namespace oceanbase
 {
@@ -84,9 +85,9 @@ int ObLobManager::init()
   lib::ObMemAttr mem_attr("LobAllocator", ObCtxIds::LOB_CTX_ID);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(allocator_.init(common::ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
+  } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
   } else if (OB_FAIL(ext_info_log_allocator_.init(
-      common::ObMallocAllocator::get_instance(), 
+      lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       lib::ObMemAttr("ExtInfoLog", ObCtxIds::LOB_CTX_ID)))) {
   } else {
@@ -602,7 +603,7 @@ int ObLobManager::compare(ObLobAccessParam& param_left,
 
 void ObLobManager::transform_lob_id(uint64_t src, uint64_t &dst)
 {
-  dst = htonll(src << 1);
+  dst = ob_htonll(src << 1);
   char *bytes = reinterpret_cast<char*>(&dst);
   bytes[7] |= 0x01;
 }

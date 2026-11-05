@@ -17,13 +17,13 @@
 #ifndef _OCEANBASE_SQL_OB_SQL_UTILS_H
 #define _OCEANBASE_SQL_OB_SQL_UTILS_H
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/ob_range.h"
 #include "sql/rewrite/ob_query_range_provider.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_vector.h"
 #include "lib/container/ob_2d_array.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_mbr.h"
 #include "query/engine/expr/ob_sql_expression.h" // ObISqlExpression, ObExprCtx
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
 #include "share/ob_simple_batch.h"
@@ -66,7 +66,7 @@ class ObDMLStmt;
 class ObOpRawExpr;
 class OrderItem;
 class ObSqlExecutorCtx;
-class ObTableLocation;
+class TableAccessPlan;
 class ObQueryRange;
 class ObSqlExpression;
 class ObPhysicalPlan;
@@ -84,7 +84,6 @@ class ObColumnRefRawExpr;
 class ObResolverParams;
 class ObGlobalHint;
 class ObSqlSchemaGuard;
-class ObCandiTabletLoc;
 struct ObPlanCacheCtx;
 
 struct EstimatedPartition {
@@ -641,9 +640,6 @@ public:
   static int check_enable_mysql_compatible_dates(const sql::ObSQLSessionInfo *session,
                                                  const bool is_ddl_scenario,
                                                  bool &enabled);
-
-  static int get_strong_partition_replica_addr(const ObCandiTabletLoc &phy_part_loc_info,
-                                               ObAddr &selected_addr);
 
   static int match_ccl_rule(ObIAllocator &alloc, ObSQLSessionInfo &session, ObSqlCtx &context,
                             const ObString &sql, bool is_ps_mode,

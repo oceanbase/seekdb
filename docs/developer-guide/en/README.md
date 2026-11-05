@@ -17,27 +17,18 @@ This section helps you set up the development environment and get OceanBase seek
 2. [Get the code, build and run](build-and-run.md) - Clone the repository, build the project, and connect to the seekdb server
 3. [Build for Android](android.md) - Cross-compile and run seekdb on an Android arm64-v8a device
 4. [Build for iOS](ios.md) - Cross-compile seekdb into SeekDB.framework for iOS devices and simulators
-5. [Homebrew optimization](homebrew.md) - Configure mirrors when Homebrew downloads are slow
+5. [Build for WebAssembly](webassembly.md) - Compile seekdb with Emscripten into a WebAssembly engine and browser SQL shell
+6. [Homebrew optimization](homebrew.md) - Configure mirrors when Homebrew downloads are slow
 
 ### 2. Development Basics
 
 Once you have the environment set up, these guides will help you develop effectively:
 
-1. [Coding Conventions](coding-convention.md) - Learn OceanBase seekdb's programming habits and conventions
-2. [Coding Standard](coding-standard.md) - Detailed C++ coding standards and constraints
-3. [Write and run unit tests](unittest.md) - How to write and execute unit tests
-4. [Running MySQL test](mysqltest.md) - How to run MySQL compatibility tests
-5. [Debug](debug.md) - Debugging techniques and tools
+1. [Rust refactoring guidelines](rust-refactoring.md) - Design, implementation, and acceptance requirements for Rust migrations and refactors
+2. [Write and run unit tests](unittest.md) - How to write and execute unit tests
+3. [Running MySQL test](mysqltest.md) - How to run MySQL compatibility tests
 
-### 3. Understanding the Codebase
-
-Before you start developing a big feature, it's recommended to read these documents to better understand OceanBase seekdb's internals:
-
-1. [Logging System](logging.md) - How logging works in OceanBase seekdb
-2. [Memory Management](memory.md) - Memory management strategies and best practices
-3. [Basic Data Structures](container.md) - Core data structures used in the codebase
-
-### 4. Contribute to OceanBase seekdb
+### 3. Contribute to OceanBase seekdb
 
 Ready to contribute? This guide will help you get involved in the OceanBase community:
 

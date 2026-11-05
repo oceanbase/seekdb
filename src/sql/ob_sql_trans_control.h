@@ -233,7 +233,7 @@ public:
    *   therefore if trans_result not been collected completed, trans_result.incomplete flag must be set
    *   before do rollback.
    *   and if trans_result was incomplete, SQL-engine should pass the participant to transaction layer
-   *   (the participant was calculated from table-locations inner this function)
+   *   (the participant was calculated from tablet accesses inner this function)
    *
    * for example: the sql-task executed timeout and its result was unknown, and then do rollback_savepoint;
    *   in this case, the trans_result was incomplete, the flag must been set.

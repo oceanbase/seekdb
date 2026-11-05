@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/expr/ob_expr_estimate_ndv.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1082,6 +1082,8 @@ int ObHashGroupByOp::alloc_group_row(const int64_t group_id, ObGroupRowItem &ite
   } else if (OB_FAIL(aggr_processor_.get_group_row(group_id, item.group_row_))) {
   } else if (OB_ISNULL(item.group_row_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else {
+    item.is_expr_row_ = false;
   }
   return ret;
 }

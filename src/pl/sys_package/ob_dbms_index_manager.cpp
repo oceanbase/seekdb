@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dbms_index_manager.h"
 #include "query/change_stream/ob_change_stream_service.h"
 #include "share/rc/ob_server_runtime.h"

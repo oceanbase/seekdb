@@ -1,0 +1,24 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "jemalloc_hook_cases",
+    srcs = ["test_jemalloc_hook.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+    target_compatible_with = select({
+        "//bazel:sanity_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+cc_test(
+    name = "test_jemalloc_hook",
+    linkstatic = True,
+    deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
+)

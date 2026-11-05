@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/das/iter/ob_das_hnsw_scan_iter.h"
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/blocksstable/ob_datum_row.h"

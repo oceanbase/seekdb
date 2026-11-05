@@ -19,7 +19,6 @@
 
 #include "sql/optimizer/stat/ob_stats_estimator.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
-#include "sql/optimizer/ob_phy_table_location_info.h"
 
 namespace oceanbase
 {
@@ -103,12 +102,6 @@ public:
                                                    const ObIArray<ObObjectID> &partition_ids,
                                                    ObIArray<EstimateBlockRes> &estimate_res);
 
-  static int get_tablet_locations(ObExecContext &ctx,
-                                  const uint64_t ref_table_id,
-                                  const ObIArray<ObTabletID> &tablet_ids,
-                                  const ObIArray<ObObjectID> &partition_ids,
-                                  ObCandiTabletLocIArray &candi_tablet_locs);
-
   static int get_all_tablet_id_and_object_id(const ObTableStatParam &param,
                                              ObIArray<ObTabletID> &tablet_ids,
                                              ObIArray<ObObjectID> &partition_ids);
@@ -120,10 +113,13 @@ public:
 
   static int get_async_gather_stats_tables(ObExecContext &ctx,
                                            const int64_t max_table_cnt,
+                                           const bool only_collectable,
                                            int64_t &last_table_id,
                                            int64_t &last_tablet_id,
                                            int64_t &total_part_cnt,
                                            ObIArray<AsyncStatTable> &stat_tables);
+
+  static int has_async_gather_stats_tables(ObExecContext &ctx, bool &has_pending);
 
   static int check_async_gather_need_sample(ObExecContext &ctx, ObTableStatParam &param);
 

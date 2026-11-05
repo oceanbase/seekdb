@@ -55,15 +55,9 @@ public:
   static const int64_t INVALID_ID = -1;
   static const int64_t SESS_CREATE_TS_BIT = 22;
   static const int64_t SESS_ID_BIT = 32;
-#ifndef _WIN32
-  static const int64_t INVALID_RAW_OWNER_ID = ((1ULL << 54) - 1);
-  static const int64_t SESS_CREATE_TS_MASK = (1L << SESS_CREATE_TS_BIT) - 1;
-  static const int64_t SESS_ID_MASK = (1L << SESS_ID_BIT) - 1;
-#else
   static const int64_t INVALID_RAW_OWNER_ID = ((UINT64_C(1) << 54) - 1);
   static const int64_t SESS_CREATE_TS_MASK = (INT64_C(1) << SESS_CREATE_TS_BIT) - 1;
   static const int64_t SESS_ID_MASK = (INT64_C(1) << SESS_ID_BIT) - 1;
-#endif
   ObTableLockOwnerID() :
     type_(static_cast<unsigned char>(ObLockOwnerType::INVALID_OWNER_TYPE)),
     id_(INVALID_ID) {}

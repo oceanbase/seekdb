@@ -639,7 +639,7 @@ int ObTableModifyOp::inner_open()
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
   if (OB_FAIL(init_foreign_key_operation())) {
   } else if (MY_SPEC.plan_->has_nested_sql() && OB_FAIL(open_inner_conn())) {
-  } else if (OB_FAIL(calc_single_table_loc())) {
+  } else if (OB_FAIL(resolve_single_table_access())) {
   } else if (OB_FAIL(check_need_exec_single_row())) {
   } else {
     init_das_dml_ctx();
@@ -844,7 +844,7 @@ int ObTableModifyOp::inner_rescan()
   }
   if (OB_SUCC(ret)) {
     dml_modify_rows_.clear();
-    if (OB_FAIL(calc_single_table_loc())) {
+    if (OB_FAIL(resolve_single_table_access())) {
     }
   }
   return ret;
@@ -864,10 +864,10 @@ int ObTableModifyOp::get_gi_task()
   ObGranuleTaskInfo gi_task_info;
   GIPrepareTaskMap *gi_prepare_map = nullptr;
   ObDASCtx &das_ctx = ctx_.get_das_ctx();
-  ObTableID table_loc_id = OB_INVALID_ID;
+  ObTableID table_ref_id = OB_INVALID_ID;
   ObTableID ref_table_id = OB_INVALID_ID;
   ObTabletID tablet_id;
-  if (OB_FAIL(MY_SPEC.get_single_table_loc_id(table_loc_id, ref_table_id))) {
+  if (OB_FAIL(MY_SPEC.get_single_table_ref_id(table_ref_id, ref_table_id))) {
   } else if (OB_FAIL(ctx_.get_gi_task_map(gi_prepare_map))) {
   } else if (OB_FAIL(gi_prepare_map->get_refactored(MY_SPEC.id_, gi_task_info))) {
     if (ret != OB_HASH_NOT_EXIST) {
@@ -878,34 +878,34 @@ int ObTableModifyOp::get_gi_task()
       iter_end_ = true;
       ret = OB_SUCCESS;
     }
-  } else if (OB_ISNULL(get_input()->table_loc_) &&
-      OB_ISNULL(get_input()->table_loc_ = das_ctx.get_table_loc_by_id(table_loc_id, ref_table_id))) {
+  } else if (OB_ISNULL(get_input()->table_access_) &&
+      OB_ISNULL(get_input()->table_access_ = das_ctx.find_table_access(table_ref_id, ref_table_id))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    get_input()->tablet_loc_ = gi_task_info.tablet_loc_;
+    get_input()->tablet_access_ = gi_task_info.tablet_access_;
     LOG_DEBUG("DML operator consume a task", K(ret),
               K(gi_task_info), KPC(get_input()), K(MY_SPEC.id_), K(get_input()));
   }
   return ret;
 }
 
-int ObTableModifyOp::calc_single_table_loc()
+int ObTableModifyOp::resolve_single_table_access()
 {
   int ret = OB_SUCCESS;
   if (!MY_SPEC.use_dist_das_) {
-    ObTableID table_loc_id = OB_INVALID_ID;
+    ObTableID table_ref_id = OB_INVALID_ID;
     ObTableID ref_table_id = OB_INVALID_ID;
     ObDASCtx &das_ctx = ctx_.get_das_ctx();
-    ObDASTableLoc *table_loc = nullptr;
+    DASRuntimeTableAccess *table_access = nullptr;
     if (OB_UNLIKELY(MY_SPEC.gi_above_)) {
       if (OB_FAIL(get_gi_task())) {
       }
-    } else if (OB_FAIL(MY_SPEC.get_single_table_loc_id(table_loc_id, ref_table_id))) {
-    } else if (OB_ISNULL(table_loc = das_ctx.get_table_loc_by_id(table_loc_id, ref_table_id))) {
+    } else if (OB_FAIL(MY_SPEC.get_single_table_ref_id(table_ref_id, ref_table_id))) {
+    } else if (OB_ISNULL(table_access = das_ctx.find_table_access(table_ref_id, ref_table_id))) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      get_input()->table_loc_ = table_loc;
-      get_input()->tablet_loc_ = table_loc->get_first_tablet_loc();
+      get_input()->table_access_ = table_access;
+      get_input()->tablet_access_ = table_access->get_first_tablet_access();
     }
   }
   return ret;

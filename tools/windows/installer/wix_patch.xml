@@ -1,6 +1,0 @@
-<CPackWiXPatch>
-  <!-- Pull the custom-action/PATH fragment into the server feature. -->
-  <CPackWiXFragment Id="CM_C_server">
-    <ComponentRef Id="SeekDBPathEnv" />
-  </CPackWiXFragment>
-</CPackWiXPatch>

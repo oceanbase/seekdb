@@ -54,30 +54,6 @@ FlushLogCbCtx& FlushLogCbCtx::operator=(const FlushLogCbCtx &arg)
   return *this;
 }
 
-FlushMetaCbCtx::FlushMetaCbCtx()
-    : type_ (INVALID_META_TYPE),
-      base_lsn_()
-{
-}
-
-FlushMetaCbCtx::~FlushMetaCbCtx()
-{
-  reset();
-}
-
-void FlushMetaCbCtx::reset()
-{
-  type_ = INVALID_META_TYPE;
-  base_lsn_.reset();
-}
-
-FlushMetaCbCtx &FlushMetaCbCtx::operator=(const FlushMetaCbCtx &arg)
-{
-  this->type_ = arg.type_;
-  this->base_lsn_ = arg.base_lsn_;
-  return *this;
-}
-
 TruncatePrefixBlocksCbCtx::TruncatePrefixBlocksCbCtx(const LSN &lsn) : lsn_(lsn)
 {
 }
@@ -101,14 +77,6 @@ TruncatePrefixBlocksCbCtx& TruncatePrefixBlocksCbCtx::operator=(const TruncatePr
   return *this;
 }
 
-bool PurgeThrottlingCbCtx::is_valid() const
-{
-  return (purge_type_ > INVALID_PURGE_TYPE && purge_type_ < MAX_PURGE_TYPE);
-}
 
-void PurgeThrottlingCbCtx::reset()
-{
-  purge_type_ = MAX_PURGE_TYPE;
-} 
 } // end of logservice
 } // end of oceanbase

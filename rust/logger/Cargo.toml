@@ -1,0 +1,23 @@
+[package]
+name = "logger"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "seekdb runtime log backend using the unmodified spdlog-rs async pool."
+
+[dependencies]
+spdlog-rs = { version = "=0.5.3", features = ["multi-thread"] }
+chrono = "0.4"
+libc = "0.2"
+cxx = "=1.0.202"
+log = "0.4"
+
+[dev-dependencies]
+mio = { version = "1", features = ["os-poll", "net"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[lints.clippy]
+# The documented pointer contracts are collected in src/bridge.rs.
+missing_safety_doc = "allow"

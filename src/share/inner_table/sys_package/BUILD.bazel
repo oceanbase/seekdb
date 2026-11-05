@@ -39,10 +39,12 @@ filegroup(
     srcs = _SYSPACK_SQL_FILES,
 )
 
-# syspack_codegen.py derives all input paths from its own location and writes
-# syspack_source.cpp beside itself. Copy the declared inputs into the action
-# temp directory first so the legacy script remains unchanged while the
-# source tree stays immutable.
+_SYSPACK_COMMAND = (
+    '"$(location @host_tools//:python)" -B $(location syspack_codegen.py)' +
+    ' --output $(RULEDIR)/bazel_generated/syspack/syspack_source.cpp' +
+    ' --release-dir $(RULEDIR)/bazel_generated/syspack_release'
+)
+
 genrule(
     name = "generate_syspack",
     srcs = [
@@ -52,21 +54,9 @@ genrule(
     outs = [
         "bazel_generated/syspack/syspack_source.cpp",
     ] + _SYSPACK_RELEASE_OUTS,
-    cmd = """
-      set -euo pipefail
-      work_dir="$$(mktemp -d "$${TMPDIR}/seekdb_syspack_codegen.XXXXXX")"
-      source_out="$(RULEDIR)/bazel_generated/syspack/syspack_source.cpp"
-      release_dir="$(RULEDIR)/bazel_generated/syspack_release"
-      mkdir -p "$${work_dir}" "$$(dirname "$${source_out}")" "$${release_dir}"
-      cp $(location syspack_codegen.py) "$${work_dir}/syspack_codegen.py"
-      for input in $(locations :_configured_syspack_sql); do
-        cp "$${input}" "$${work_dir}/$$(basename "$${input}")"
-      done
-      PYTHONDONTWRITEBYTECODE=1 python3 \
-        "$${work_dir}/syspack_codegen.py" \
-        --release-dir "$${release_dir}"
-      mv "$${work_dir}/syspack_source.cpp" "$${source_out}"
-    """,
+    tools = ["@host_tools//:python"],
+    cmd = _SYSPACK_COMMAND,
+    cmd_bat = "call " + _SYSPACK_COMMAND,
     tags = ["manual"],
     visibility = ["//src/pl:__pkg__"],
 )

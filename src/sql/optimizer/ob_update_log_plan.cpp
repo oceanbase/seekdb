@@ -426,7 +426,7 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(check_index_update(update_info.assignments_, *index_schema, 
-                                            update_info.table_id_ != update_info.loc_table_id_,
+                                            update_info.table_id_ != update_info.target_table_ref_id_,
                                             index_update))) {
       } else if (!index_update) {
           // do nothing

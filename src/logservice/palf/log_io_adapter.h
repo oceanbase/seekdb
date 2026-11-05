@@ -31,6 +31,7 @@ class ObDeviceManager;
 namespace share
 {
 class ObLocalDevice;
+struct LocalIOConfig;
 }
 namespace palf
 {
@@ -38,19 +39,15 @@ namespace palf
 class LogIODeviceWrapper
 {
 public:
-  static LogIODeviceWrapper &get_instance() {
-    static LogIODeviceWrapper instance;
-    return instance;
-  }
-public:
   LogIODeviceWrapper() : log_local_device_(NULL), device_manager_(NULL), is_inited_(false) {}
   int init(const char *clog_dir, 
            const int64_t disk_io_thread_count,
            const int64_t max_io_depth,
            common::ObIOManager *io_manager,
-           common::ObDeviceManager *device_manager);
+           common::ObDeviceManager *device_manager,
+           const share::LocalIOConfig &io_config);
   void destroy();
-  share::ObLocalDevice* get_local_device();
+  common::ObIODevice *get_local_device();
 private:
   share::ObLocalDevice *log_local_device_;
   common::ObDeviceManager *device_manager_;
@@ -101,7 +98,6 @@ private:
 };
 }
 
-#define LOG_IO_DEVICE_WRAPPER ::oceanbase::palf::LogIODeviceWrapper::get_instance()
 }
 
 #endif

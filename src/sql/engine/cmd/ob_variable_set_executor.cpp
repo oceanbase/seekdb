@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "query/command/ob_root_service_serialization.h"

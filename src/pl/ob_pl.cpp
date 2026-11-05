@@ -1012,7 +1012,7 @@ struct ObPLExecTraceIdGuard {
         && OB_NOT_NULL(ObCurTraceId::get_trace_id())
         && !(trace_id == *ObCurTraceId::get_trace_id())) {
       origin_trace_id_.set(*ObCurTraceId::get_trace_id());
-      ObCurTraceId::get_trace_id()->set(trace_id);
+      ObCurTraceId::set(trace_id);
     }
   }
 
@@ -1020,7 +1020,7 @@ struct ObPLExecTraceIdGuard {
   {
     if (origin_trace_id_.is_valid() && OB_NOT_NULL(ObCurTraceId::get_trace_id())) {
       ObCurTraceId::TraceId curr_trace_id = *ObCurTraceId::get_trace_id();
-      ObCurTraceId::get_trace_id()->set(origin_trace_id_);
+      ObCurTraceId::set(origin_trace_id_);
     }
   }
 
@@ -2922,7 +2922,29 @@ int ObPL::check_exec_priv(
      && OB_INVALID_ID != pkg_id && !ObTriggerInfo::is_trigger_package_id(pkg_id)
      && OB_INVALID_ID != db_id && OB_INVALID_ID != func_id) {
 
-    CK (exec_ctx.get_my_session() != NULL);
+    ObSQLSessionInfo *session = exec_ctx.get_my_session();
+    const ObPackageInfo *package_info = NULL;
+    CK (OB_NOT_NULL(session));
+    OZ (guard->get_package_info(pkg_id, package_info));
+    CK (OB_NOT_NULL(package_info));
+    // Built-in system packages expose public APIs whose sensitive operations
+    // enforce their own object privileges. User packages need an explicit
+    // database EXECUTE grant unless the effective user owns the package.
+    if (OB_SUCC(ret)
+        && !(package_info->get_database_id() == OB_SYS_DATABASE_ID
+             && package_info->get_owner_id() == OB_SYS_USER_ID)
+        && package_info->get_owner_id() != session->get_priv_user_id()) {
+      ObSessionPrivInfo session_priv;
+      ObStmtNeedPrivs required(exec_ctx.get_allocator());
+      ObNeedPriv need_priv;
+      need_priv.db_ = database_name;
+      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
+      need_priv.priv_set_ = OB_PRIV_EXECUTE;
+      OZ (guard->get_session_priv_info(session->get_priv_user_id(), database_name, session_priv));
+      OZ (required.need_privs_.init(1));
+      OZ (required.need_privs_.push_back(need_priv));
+      OZ (guard->check_priv(session_priv, session->get_enable_role_array(), required));
+    }
   }
   if (OB_SUCC(ret) && pkg_id == OB_INVALID_ID) {
     share::schema::ObSessionPrivInfo session_priv;

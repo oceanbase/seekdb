@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_static_engine_cg.h"
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
@@ -1846,10 +1846,10 @@ int ObStaticEngineCG::generate_delete_with_das(ObLogDelete &op, ObTableDeleteSpe
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < delete_table_list.count(); ++i) {
-    const uint64_t loc_table_id = delete_table_list.at(i);
+    const uint64_t target_table_ref_id = delete_table_list.at(i);
     ObSEArray<IndexDMLInfo *, 4> index_delete_infos;
     ObTableDeleteSpec::DelCtDefArray &ctdefs = spec.del_ctdefs_.at(i);
-    if (OB_FAIL(op.get_index_dml_infos(loc_table_id,
+    if (OB_FAIL(op.get_index_dml_infos(target_table_ref_id,
                                        index_delete_infos))) {
     } else if (OB_FAIL(ctdefs.allocate_array(phy_plan_->get_allocator(),
                                              index_delete_infos.count()))) {
@@ -2056,10 +2056,10 @@ int ObStaticEngineCG::generate_update_with_das(ObLogUpdate &op, ObTableUpdateSpe
   }
   bool find = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < table_list.count(); ++i) {
-    const uint64_t loc_table_id = table_list.at(i);
+    const uint64_t target_table_ref_id = table_list.at(i);
     ObSEArray<IndexDMLInfo *, 4> index_dml_infos;
     ObTableUpdateSpec::UpdCtDefArray &ctdefs = spec.upd_ctdefs_.at(i);
-    if (OB_FAIL(op.get_index_dml_infos(loc_table_id, index_dml_infos))) {
+    if (OB_FAIL(op.get_index_dml_infos(target_table_ref_id, index_dml_infos))) {
     } else if (OB_FAIL(ctdefs.allocate_array(phy_plan_->get_allocator(), index_dml_infos.count()))) {
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < index_dml_infos.count(); ++j) {
@@ -2614,7 +2614,7 @@ int ObStaticEngineCG::generate_spec(ObLogGranuleIterator &op, ObGranuleIteratorS
   if (log_op_def::LOG_TABLE_SCAN == child_log_op->get_type()) {
     ObLogTableScan *log_tsc = NULL;
     log_tsc = static_cast<ObLogTableScan*>(child_log_op);
-    // Here keep index_table_id and table_scan->get_loc_ref_table_id consistent.
+    // Here keep index_table_id and table_scan->get_scan_source_table_id consistent.
     spec.set_related_id(log_tsc->get_index_table_id());
   }
   ObPhyPlanType execute_type = spec.plan_->get_plan_type();
@@ -2815,11 +2815,11 @@ int ObStaticEngineCG::generate_basic_receive_spec(ObLogExchange &op, ObPxReceive
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(coord->get_table_locations().prepare_allocate(op.get_pruning_table_locations().count(),
+      } else if (OB_FAIL(coord->get_table_access_plans().prepare_allocate(op.get_pruning_access_plans().count(),
           phy_plan_->get_allocator()))) {
       } else {
-        for (int i = 0; i < op.get_pruning_table_locations().count() && OB_SUCC(ret); ++i) {
-          OZ(coord->get_table_locations().at(i).assign(op.get_pruning_table_locations().at(i)));
+        for (int i = 0; i < op.get_pruning_access_plans().count() && OB_SUCC(ret); ++i) {
+          OZ(coord->get_table_access_plans().at(i).assign(op.get_pruning_access_plans().at(i)));
         }
       }
       LOG_TRACE("map worker to px coordinator", K(spec.get_type()),
@@ -3537,7 +3537,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
   OZ(set_partition_range_info(op, spec));
 
   if (OB_SUCC(ret)) {
-    spec.table_loc_id_ = op.get_table_id();
+    spec.table_ref_id_ = op.get_table_id();
     spec.ref_table_id_ = op.get_ref_table_id();
     spec.is_index_global_ = op.get_is_index_global();
     spec.frozen_version_ = op.get_plan()->get_optimizer_context().get_global_hint().frozen_version_;
@@ -3555,7 +3555,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       phy_plan_->set_contain_table_scan(true);
     }
     if (OB_NOT_NULL(op.get_table_partition_info())) {
-      op.get_table_partition_info()->get_table_location().set_use_das(spec.use_dist_das_);
+      op.get_table_partition_info()->get_table_access_plan().set_use_das(spec.use_dist_das_);
     }
     if (NULL != op.get_limit_expr()) {
       CK(op.get_limit_expr()->get_result_type().is_integer_type());
@@ -3579,7 +3579,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
     }
     LOG_TRACE("CG index table scan",
               K(spec.tsc_ctdef_.scan_ctdef_.ref_table_id_),
-              K(spec.table_loc_id_),
+              K(spec.table_ref_id_),
               K(spec.ref_table_id_),
               K(op.get_ref_table_id()),
               K(op.get_index_table_id()),
@@ -4168,7 +4168,7 @@ int ObStaticEngineCG::set_partition_range_info(ObLogTableScan &op, ObTableScanSp
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = op.get_table_id();
-  uint64_t ref_table_id = op.get_location_table_id();
+  uint64_t ref_table_id = op.get_table_ref_id();
   uint64_t index_id = op.get_index_table_id();
   ObLogPlan *log_plan = op.get_plan();
   const ObDMLStmt *stmt = op.get_stmt();
@@ -4194,7 +4194,7 @@ int ObStaticEngineCG::set_partition_range_info(ObLogTableScan &op, ObTableScanSp
              || is_cte_table(ref_table_id)) {
     /*do nothing*/
   } else if (!stmt->is_select_stmt()
-             || tbl_part_info->get_table_location().has_generated_column()) {
+             || tbl_part_info->get_table_access_plan().has_generated_column()) {
     /*do nothing*/
   } else if (OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_sql_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
@@ -4545,7 +4545,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op,
     phy_plan_->set_use_pdml(true);
     spec.is_returning_ = op.pdml_is_returning();
     spec.is_pdml_index_maintain_ = op.is_index_maintenance();
-    spec.table_location_uncertain_ = op.is_table_location_uncertain(); // row-movement target table
+    spec.has_dynamic_tablets_ = op.has_dynamic_tablets(); // row-movement target table
     spec.is_pdml_update_split_ = op.is_pdml_update_split();
     int64_t partition_expr_idx = OB_INVALID_INDEX;
     if (OB_FAIL(ret)) {
@@ -5706,7 +5706,7 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     phy_plan.set_contains_assignment(log_plan.get_optimizer_context().has_var_assign());
     phy_plan.set_require_local_execution(!log_plan.get_optimizer_context().get_exchange_allocated());
     phy_plan.set_plan_type(log_plan.get_optimizer_context().get_phy_plan_type());
-    phy_plan.set_location_type(log_plan.get_optimizer_context().get_location_type());
+    phy_plan.set_access_shape(log_plan.get_optimizer_context().get_access_shape());
     phy_plan.set_param_count(log_plan.get_stmt()->get_pre_param_size());
     phy_plan.set_signature(log_plan.get_signature());
     phy_plan.set_plan_hash_value(log_plan.get_signature());
@@ -5765,11 +5765,11 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     }
   }
 
-  // set location cons
+  // set access cons
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(sql_ctx)) {
       // do nothing
-    } else if (OB_FAIL(phy_plan.set_location_constraints(sql_ctx->base_constraints_,
+    } else if (OB_FAIL(phy_plan.set_access_constraints(sql_ctx->base_constraints_,
                                                   sql_ctx->strict_constraints_,
                                                   sql_ctx->non_strict_constraints_))) {
     }
@@ -6240,12 +6240,12 @@ int ObStaticEngineCG::add_output_datum_check_flag(ObOpSpec &spec)
 }
 
 int ObStaticEngineCG::generate_calc_part_id_expr(const ObRawExpr &src,
-                                                 const ObDASTableLocMeta *loc_meta,
+                                                 const DASTableAccessMeta *access_meta,
                                                  ObExpr *&dst)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_rt_expr(src, dst))) {
-  } else if (loc_meta != nullptr && !loc_meta->unuse_related_pruning_) {
+  } else if (access_meta != nullptr && !access_meta->unuse_related_pruning_) {
     // Related local index tablet_id pruning can only be used in a local plan (all operators
     //use the same das context),
     //because the distributed plan will pass tablet_id through exchange operator,
@@ -6253,7 +6253,7 @@ int ObStaticEngineCG::generate_calc_part_id_expr(const ObRawExpr &src,
     //unused related pruning in distributed plan's dml operator,
     //we will build the related tablet_id map when dml operator be opened in distributed plan
     CalcPartitionBaseInfo *calc_part_info = static_cast<CalcPartitionBaseInfo*>(dst->extra_info_);
-    if (OB_FAIL(calc_part_info->related_table_ids_.assign(loc_meta->related_table_ids_))) {
+    if (OB_FAIL(calc_part_info->related_table_ids_.assign(access_meta->related_table_ids_))) {
     }
   }
   return ret;

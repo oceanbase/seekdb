@@ -2332,17 +2332,8 @@ int ObVectorIndexUtil::check_extra_info_size(const ObTableSchema &tbl_schema,
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "rowkey_size > extra_info_max_size");
         }
       } else {
-        // !is_extra_max_size_set, means use seesion extra param
-        uint64_t session_extra_info_max_size = 0;
-        // todo(wmj): not use session extra param, because some mr not ready to use extra_info
-        // ***if use session extra param, need update extra_info_max_size in index param***
-        // if (OB_FAIL(session_info.get_ob_hnsw_extra_info_max_size(session_extra_info_max_size))) {
-        //   LOG_WARN("fail to get session extra info max size", K(ret));
-        // }
-        if (extra_info_actual_size > session_extra_info_max_size) {
-          LOG_INFO("extra_info_actual_size larger than session_extra_info_max_size", K(extra_info_actual_size), K(rowkey_size), K(session_extra_info_max_size));
-          extra_info_actual_size = 0;
-        }
+        // Automatic extra info is disabled unless the index specifies a size.
+        extra_info_actual_size = 0;
       }
     }
   }

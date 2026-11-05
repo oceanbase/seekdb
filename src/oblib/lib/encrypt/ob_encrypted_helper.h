@@ -63,7 +63,7 @@ private:
    */
   typedef struct SHA1_CONTEXT
   {
-    unsigned long  Length;    /* Message length in bits      */
+    uint64_t Length;    /* Message length in bits      */
     uint32_t Intermediate_Hash[SHA1_HASH_SIZE / 4]; /* Message Digest  */
     int Computed;     /* Is the digest computed?     */
     int Corrupted;    /* Is the message digest corrupted? */

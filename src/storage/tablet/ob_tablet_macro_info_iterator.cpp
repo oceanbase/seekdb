@@ -85,7 +85,7 @@ int ObMacroInfoIterator::init(const ObTabletMacroType target_type, const ObTable
   } else {
     const MacroBlockId &entry_block = macro_info.entry_block_;
     ObMemAttr mem_attr("TabletBlockId");
-    if (!IS_EMPTY_BLOCK_LIST(entry_block)) {
+    if (!entry_block.is_empty_list_entry()) {
       if (OB_FAIL(block_reader_.init(entry_block, mem_attr))) {
       } else {
         is_linked_ = true;
@@ -122,7 +122,7 @@ int ObMacroInfoIterator::reuse()
       block_reader_.reset();
       const MacroBlockId &entry_block = macro_info_->entry_block_;
       ObMemAttr mem_attr("TabletBlockId");
-      if (OB_UNLIKELY(!entry_block.is_valid() || IS_EMPTY_BLOCK_LIST(entry_block))) {
+      if (OB_UNLIKELY(!entry_block.is_valid() || entry_block.is_empty_list_entry())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(block_reader_.init(entry_block, mem_attr))) {
       }

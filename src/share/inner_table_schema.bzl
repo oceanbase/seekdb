@@ -8,7 +8,7 @@ def inner_table_schema_cpp_outputs(unity_groups):
     """Returns Bazel output paths for every generated schema implementation."""
     outputs = []
     for group in unity_groups:
-        for src in group.srcs + group.generated_srcs:
+        for src in group.srcs:
             if src.startswith(_SCHEMA_CPP_PREFIX) and src.endswith(".cpp"):
                 output = _BAZEL_OUTPUT_PREFIX + src[len(_SOURCE_PREFIX):]
                 if output not in outputs:

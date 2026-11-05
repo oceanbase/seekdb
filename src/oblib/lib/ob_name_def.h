@@ -1091,4 +1091,8 @@
 #define N_AI_EMBED                          "ai_embed"
 #define N_AI_RERANK                         "ai_rerank"
 #define N_AI_PROMPT                         "ai_prompt"
+#define N_READ_CSV                          "read_csv"
+#define N_READ_JSON                         "read_json"
+#define N_READ_PARQUET                      "read_parquet"
+#define N_GLOB                              "glob"
 #endif //OCEANBASE_LIB_OB_NAME_DEF_H_

@@ -23,6 +23,7 @@ namespace oceanbase
 {
 namespace share
 {
+class LocalStore;
 
 static const int64_t TELEMETRY_UUID_STRING_LENGTH = 36;
 
@@ -46,7 +47,7 @@ int generate_telemetry_uuid(const char *machine_id,
                             char *uuid,
                             const int64_t uuid_len);
 
-int report_telemetry(const char *reporter, const char *event_name);
+int report_telemetry(LocalStore &store, const char *reporter, const char *event_name);
 
 } // namespace share
 } // namespace oceanbase

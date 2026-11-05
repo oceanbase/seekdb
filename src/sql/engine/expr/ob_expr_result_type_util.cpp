@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "src/sql/engine/ob_exec_context.h"

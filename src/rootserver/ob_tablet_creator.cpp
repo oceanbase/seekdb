@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tablet_creator.h"
 #include "share/ob_share_util.h"
 #include "storage/tx/ob_trans_service.h"

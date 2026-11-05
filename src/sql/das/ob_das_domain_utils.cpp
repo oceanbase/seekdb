@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/container/ob_se_array.h"
 #include "common/json_type/ob_json_bin.h"
 #include "share/ob_errno.h"
@@ -154,7 +154,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   const ObSrsBoundsItem *srs_bound = NULL;
   uint32_t srid = UINT32_MAX;
   uint64_t rowkey_num = das_ctdef.table_param_.get_data_table().get_rowkey_column_num();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SpatialCovering"));
 
   if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, srid))) {
   } else if (srid != 0 &&
@@ -164,31 +164,32 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
               OB_FAIL(srs_provider.get_srs_bounds(srid, srs_item, srs_bound))) {
   } else {
-    ObS2Adapter s2object(&allocator, srid != 0 ? srs_item->is_geographical_srs() : false);
-    ObSpatialMBR spa_mbr;
-    ObS2Cellids cellids;
+    ObSpatialCovering covering;
     char *mbr = nullptr;
     int64_t mbr_len = 0;
     void *rows_buf = nullptr;
     blocksstable::ObDatumRow *rows = nullptr;
-    if (OB_FAIL(s2object.init(wkb_str, srs_bound))) {
-    } else if (OB_FAIL(s2object.get_cellids(cellids, false))) {
-    } else if (OB_FAIL(s2object.get_mbr(spa_mbr))) {
-    } else if (spa_mbr.is_empty()) {
-      if (cellids.size() == 0) {
+    if (OB_FAIL(build_spatial_covering(wkb_str,
+                                       srid != 0 ? srs_item->is_geographical_srs() : false,
+                                       srs_bound,
+                                       ObSpatialCoveringKind::INDEX,
+                                       0.0,
+                                       covering))) {
+    } else if (covering.mbr_.is_empty()) {
+      if (covering.cells_.size() == 0) {
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
       }
     } else if (OB_ISNULL(mbr = reinterpret_cast<char *>(allocator.alloc(OB_DEFAULT_MBR_SIZE)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(spa_mbr.to_char(mbr, mbr_len))) {
-    } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(allocator.alloc(cellids.size() * sizeof(blocksstable::ObDatumRow))))) {
+    } else if (OB_FAIL(covering.mbr_.to_char(mbr, mbr_len))) {
+    } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(allocator.alloc(covering.cells_.size() * sizeof(blocksstable::ObDatumRow))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      rows = new (rows_buf) blocksstable::ObDatumRow[cellids.size()];
+      rows = new (rows_buf) blocksstable::ObDatumRow[covering.cells_.size()];
       int64_t cellid_col_idx = 0;
       int64_t mbr_col_idx = 1;
-      for (uint64_t i = 0; OB_SUCC(ret) && i < cellids.size(); i++) {
+      for (uint64_t i = 0; OB_SUCC(ret) && i < covering.cells_.size(); i++) {
         if (OB_FAIL(rows[i].init(allocator, rowkey_num))) {
         } else {
           // Index row[cellid_obj][mbr_obj][rowkey_obj]
@@ -202,7 +203,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
             }
           }
           if (OB_SUCC(ret)) {
-            rows[i].storage_datums_[cellid_col_idx].set_uint(cellids.at(i));
+            rows[i].storage_datums_[cellid_col_idx].set_uint(covering.cells_.at(i));
             ObString mbr_val(mbr_len, mbr);
             rows[i].storage_datums_[mbr_col_idx].set_string(mbr_val);
             // not set_collation_type(CS_TYPE_BINARY) and set_collation_level(CS_LEVEL_IMPLICIT)

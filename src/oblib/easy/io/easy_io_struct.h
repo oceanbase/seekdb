@@ -2,12 +2,20 @@
 #define EASY_IO_STRUCT_H_
 
 #include "easy_define.h"
+#ifdef __EMSCRIPTEN__
+// Shared address/thread headers only need these opaque pointer types. The
+// browser build does not link easy's native OpenSSL transport implementation.
+typedef struct ssl_st SSL;
+typedef struct ssl_ctx_st SSL_CTX;
+typedef struct ssl_session_st SSL_SESSION;
+#else
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/conf.h>
 #include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/crypto.h>
+#endif
 
 /**
  * IO structure definition

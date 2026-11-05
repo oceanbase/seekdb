@@ -494,7 +494,6 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "ob_enable_transformation",
   "ob_global_debug_sync",
   "ob_hnsw_ef_search",
-  "ob_hnsw_extra_info_max_size",
   "ob_ivf_nprobes",
   "ob_log_level",
   "ob_max_read_stale_time",
@@ -1216,7 +1215,6 @@ const ObSysVarClassType ObSysVarMeta::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR_OB_ENABLE_TRANSFORMATION,
   SYS_VAR_OB_GLOBAL_DEBUG_SYNC,
   SYS_VAR_OB_HNSW_EF_SEARCH,
-  SYS_VAR_OB_HNSW_EXTRA_INFO_MAX_SIZE,
   SYS_VAR_OB_IVF_NPROBES,
   SYS_VAR_OB_LOG_LEVEL,
   SYS_VAR_OB_MAX_READ_STALE_TIME,
@@ -2187,7 +2185,6 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[] = {
   "socket",
   "enable_optimizer_rowgoal",
   "ob_ivf_nprobes",
-  "ob_hnsw_extra_info_max_size",
   "_push_join_predicate",
   "ob_sparse_drop_ratio_search"
 };

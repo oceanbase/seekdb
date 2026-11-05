@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+Copyright (c) 2025 OceanBase.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Run real seekdb SQL and vector search in your browser with WebAssembly.">
+  <title>seekdb shell · WebAssembly</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./shell.css">
+  <script type="module" src="./shell.mjs"></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="./shell.html" aria-label="seekdb shell home"><span class="brand-mark" aria-hidden="true"></span>seekdb</a>
+    <span id="version-label" class="wasm-label" aria-label="seekdb version" aria-live="polite"></span>
+    <nav aria-label="Resources">
+      <a href="https://www.seekdb.ai/" target="_blank" rel="noopener noreferrer">Website</a>
+      <a href="https://github.com/oceanbase/seekdb" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </nav>
+  </header>
+  <main class="terminal" aria-label="seekdb SQL shell">
+    <h1 class="sr-only">seekdb SQL shell</h1>
+    <div class="toolbar">
+      <div class="connection"><span id="status-dot" class="status-dot" data-state="loading"></span><strong id="database-name">seekdb</strong><span id="storage-badge" class="storage-badge">memory://</span></div>
+      <div class="toolbar-actions">
+        <details id="example-menu" class="menu">
+          <summary title="Choose an example to run">Examples</summary>
+          <div class="menu-items" role="group" aria-label="Examples">
+            <button type="button" data-example="hybrid" disabled>Hybrid Search</button>
+            <button type="button" data-example="fork" disabled>Fork Table</button>
+          </div>
+        </details>
+        <details id="instance-menu" class="menu">
+          <summary title="Clear existing data and start a new instance">New Instance</summary>
+          <div class="menu-items" role="group" aria-label="New instance storage">
+            <button id="memory-button" type="button" title="Discard the current database and start an empty instance in memory">Memory</button>
+            <button id="opfs-button" type="button" title="Discard the current database, clear stored data and start an empty OPFS instance">OPFS</button>
+          </div>
+        </details>
+        <button id="clear-button" title="Clear output (Ctrl+L)">Clear</button>
+      </div>
+    </div>
+    <div class="runtime-status sr-only" role="status" aria-live="polite"><span id="status-text">Loading WebAssembly and starting seekdb…</span></div>
+    <div id="terminal-scroll" class="terminal-scroll" tabindex="-1" aria-label="Terminal">
+      <section id="transcript" class="transcript" aria-label="SQL output"></section>
+    <form id="query-form" class="composer">
+      <label for="sql" class="prompt" id="prompt">seekdb&gt;</label>
+      <textarea id="sql" rows="1" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="SQL statement" placeholder="loading…" disabled></textarea>
+    </form>
+    </div>
+    <footer class="terminal-footer">
+      <span id="activity-time"></span>
+      <span id="engine-label">seekdb · wasm</span>
+    </footer>
+  </main>
+  <noscript>This shell needs JavaScript and a browser that supports WebAssembly threads.</noscript>
+</body>
+</html>

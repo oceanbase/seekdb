@@ -1,0 +1,27 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "tx_replay_executor_cases",
+    srcs = ["test_tx_replay_executor.cpp"],
+    alwayslink = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//src/storage:tx_replay_test_headers",
+    ],
+)
+
+cc_test(
+    name = "test_tx_replay_executor",
+    size = "small",
+    linkstatic = True,
+    # liboceanbase supplies the C++ runtime; select rules_cc's $ORIGIN rpath.
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":tx_replay_executor_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

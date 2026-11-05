@@ -158,7 +158,7 @@ int ObLobMetaBuilder::generate_lob_meta_table_name(
   // __AUX_LOB_META_<table_id>_
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if ((pos = snprintf(buf, buf_size, "__AUX_LOB_META_%lu_", new_table_id)) >= buf_size || pos < 0) {
+  } else if ((pos = snprintf(buf, buf_size, "__AUX_LOB_META_%" PRIu64 "_", new_table_id)) >= buf_size || pos < 0) {
     ret = common::OB_BUF_NOT_ENOUGH;
   }
 

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/allocator/ob_malloc.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log.h"

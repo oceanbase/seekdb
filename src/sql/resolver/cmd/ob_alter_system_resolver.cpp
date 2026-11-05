@@ -25,7 +25,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 
 namespace oceanbase
 {
@@ -430,27 +430,6 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
   }
   return ret;
 }
-int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(T_REFRESH_MEMORY_STAT != parse_tree.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_REFRESH_MEMORY_STAT", "type", get_type_name(parse_tree.type_));
-  } else {
-    ObRefreshMemStatStmt *stmt = create_stmt<ObRefreshMemStatStmt>();
-    if (NULL == stmt) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("create ObRefreshMemStatStmt failed");
-    } else {
-      stmt_ = stmt;
-      if (OB_UNLIKELY(NULL == parse_tree.children_)) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-  }
-  return ret;
-}
-
 int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

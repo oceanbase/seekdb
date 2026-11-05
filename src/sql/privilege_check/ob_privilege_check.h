@@ -71,6 +71,12 @@ public:
   static int get_stmt_need_privs(const share::schema::ObSessionPrivInfo &session_priv,
                                  const ObStmt *basic_stmt,
                                  common::ObIArray<share::schema::ObNeedPriv> &stmt_need_priv);
+  // Public invoker-rights maintenance packages must authorize their effective
+  // caller rather than an internal SQL connection used for the operation.
+  static int check_maintenance_priv(const ObSqlCtx &ctx,
+                                    const common::ObString &database_name,
+                                    const common::ObString &table_name,
+                                    const ObPrivSet required_privs);
   static int check_read_only(const ObSqlCtx &ctx,
                              const stmt::StmtType stmt_type,
                              const bool has_global_variable,

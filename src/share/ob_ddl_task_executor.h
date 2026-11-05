@@ -25,7 +25,6 @@
 #include "lib/profile/ob_trace_id.h"
 #include "lib/thread/ob_async_task_queue.h"
 #include "lib/thread/thread_pool.h"
-#include "share/location_cache/ob_location_struct.h"
 #include "share/ob_errno.h"
 #include "share/ob_thread_pool.h"
 
@@ -78,10 +77,10 @@ private:
   static bool is_timeout(const int ret_code) {
     return common::OB_TIMEOUT == ret_code || common::OB_TRANS_STMT_TIMEOUT == ret_code || common::OB_CONNECT_ERROR == ret_code
         || common::OB_WAITQUEUE_TIMEOUT == ret_code || common::OB_SESSION_NOT_FOUND == ret_code || common::OB_TRANS_TIMEOUT == ret_code
-        || common::OB_TRANS_UNKNOWN == ret_code || common::OB_GET_LOCATION_TIME_OUT == ret_code || common::OB_PACKET_STATUS_UNKNOWN == ret_code
+        || common::OB_TRANS_UNKNOWN == ret_code || common::OB_PACKET_STATUS_UNKNOWN == ret_code
         || common::OB_TRANS_NEED_ROLLBACK == ret_code || common::OB_RPC_SEND_ERROR == ret_code || common::OB_RPC_CONNECT_ERROR == ret_code
         || common::OB_RPC_POST_ERROR == ret_code || common::OB_TRANS_ROLLBACKED == ret_code || common::OB_TRANS_KILLED == ret_code
-        || common::OB_GET_LOCATION_TIME_OUT == ret_code || common::OB_TRANS_RPC_TIMEOUT == ret_code || common::OB_LIBEASY_ERROR == ret_code
+        || common::OB_TRANS_RPC_TIMEOUT == ret_code || common::OB_LIBEASY_ERROR == ret_code
         || common::OB_TRANS_CTX_NOT_EXIST == ret_code || OB_ERR_SESSION_INTERRUPTED == ret_code;
   }
   static bool is_retry(const int ret_code) {

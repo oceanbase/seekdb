@@ -230,9 +230,9 @@ public:
 typedef ObCommonKV<common::ObString, common::ObString> ObStringKV;
 
 // Pointer-free C++ sidecar for the Rust command metadata. The command itself
-// stays in ObMySQLRawPacket::cmd_. The ABI-facing NioMysqlCommandView is
+// stays in ObMySQLRawPacket::cmd_. The ABI-facing oceanbase::nio::NioMysqlCommandView is
 // copied field-by-field at the packet-storage boundary, so this core packet
-// header does not depend on nio.h and never retains a Rust view pointer.
+// header never retains a Rust view pointer.
 enum class ObMySQLCommandLayout : uint32_t {
   BYTES = 1,
   FIELD_LIST = 2,

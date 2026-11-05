@@ -29,7 +29,7 @@ int ObGranuleTaskInfo::assign(const ObGranuleTaskInfo &other)
   if (this != &other) {
     if (OB_FAIL(ranges_.assign(other.ranges_))) {
     } else {
-      tablet_loc_ = other.tablet_loc_;
+      tablet_access_ = other.tablet_access_;
       task_id_ = other.task_id_;
       granule_type_ = other.granule_type_;
     }

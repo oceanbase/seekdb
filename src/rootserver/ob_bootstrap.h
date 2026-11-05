@@ -167,11 +167,9 @@ private:
       int64_t cost = end_ts - begin_ts_; \
       begin_ts_ = end_ts ; \
       if (OB_SUCC(ret)) { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(INFO, "STEP_%ld.%ld:%s execute success, cost=%ld", \
                        major_step, step_id_, function_name, cost); \
       } else { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(WARN, "STEP_%ld.%ld:%s execute fail, ret=%d, cost=%ld", \
                        major_step, step_id_, function_name, ret, cost); \
       }\
@@ -190,11 +188,9 @@ private:
       int64_t cost = end_ts - begin_ts_; \
       begin_ts_ = end_ts ; \
       if (OB_SUCC(ret)) { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(INFO, "STEP_%ld.%ld:%s execute success, cost=%ld", \
                        major_step, step_id_, __FUNCTION__, cost); \
       } else { \
-        ObTaskController::get().allow_next_syslog(); \
         _BOOTSTRAP_LOG(WARN, "STEP_%ld.%ld:%s execute fail, ret=%d, cost=%ld", \
                        major_step, step_id_, __FUNCTION__, ret, cost); \
       }\

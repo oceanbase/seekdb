@@ -243,18 +243,15 @@ public:
       const ObTablet &old_tablet);
 
   bool is_valid() const;
-  // refresh memtable and update tablet_addr_ and table_store_addr_ sequence, only used by slog ckpt
-  int refresh_memtable_and_update_seq(const uint64_t seq);
   int32_t get_version() const { return version_; }
   void dec_macro_ref_cnt();
   int inc_macro_ref_cnt();
   // these interfaces is only for tiny mode
-  // load_$member: member will always exist in disk(slog file/macro block), so read from disk then deserialize
+  // load_$member: member will always exist in disk (local storage/macro block), so read from disk then deserialize
   // fetch_$member: member may exist in memory or disk, if in memory, get it directly, if in disk,
   //                read from disk then put into kv cache, and return kv cache handle for caller
   int fetch_table_store(ObTabletMemberWrapper<ObTabletTableStore> &wrapper) const;
   int load_macro_info(
-      const int64_t ls_epoch,
       common::ObArenaAllocator &allocator,
       ObTabletMacroInfo *&tablet_macro_info,
       bool &in_memory) const;
@@ -317,11 +314,6 @@ public:
       const int64_t len,
       int64_t &pos);
   int release_ref_cnt(
-      common::ObArenaAllocator &allocator,
-      const char *buf,
-      const int64_t len,
-      int64_t &pos);
-  int inc_snapshot_ref_cnt(
       common::ObArenaAllocator &allocator,
       const char *buf,
       const int64_t len,
@@ -537,7 +529,6 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
   int get_max_column_cnt_on_schema_recorder(int64_t &max_column_cnt);
   int get_max_schema_version(int64_t &schema_version);
-  int get_ls_epoch(int64_t &ls_epoch);
   int get_sstable_column_checksum(
     const blocksstable::ObSSTable &sstable,
     common::ObIArray<int64_t> &column_checksums) const;

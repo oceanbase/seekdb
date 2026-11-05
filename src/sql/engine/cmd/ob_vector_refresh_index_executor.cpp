@@ -25,6 +25,7 @@
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_table_schema.h"
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
+#include "sql/privilege_check/ob_privilege_check.h"
 
 namespace oceanbase {
 namespace sql {
@@ -241,6 +242,8 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     } else if (OB_ISNULL(base_table_schema)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "base table name");
+    } else if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                   *ctx_->get_sql_ctx(), base_db_name, base_name, OB_PRIV_INDEX))) {
     } else if (FALSE_IT(base_table_id = base_table_schema->get_table_id())) {
     } else if (OB_FAIL(generate_vector_aux_index_name(
                   VectorIndexAuxType::DOMAIN_INDEX, base_table_id, index_name,
@@ -320,6 +323,9 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
   } else if (OB_FAIL(schema_checker_.get_database_schema( domain_table_schema->get_database_id(), database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                 *ctx_->get_sql_ctx(), database_schema->get_database_name_str(),
+                 base_table_schema->get_table_name_str(), OB_PRIV_INDEX))) {
   }  
   // get index id table schema if need 
   if (OB_FAIL(ret)) {

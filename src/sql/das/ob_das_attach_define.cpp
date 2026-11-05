@@ -108,10 +108,10 @@ OB_DEF_SERIALIZE(ObDASAttachSpec)
   bool has_attach_ctdef = attach_ctdef_ != nullptr;
   OB_UNIS_ENCODE(has_attach_ctdef);
   if (has_attach_ctdef) {
-    OB_UNIS_ENCODE(attach_loc_metas_.size());
-    FOREACH_X(it, attach_loc_metas_, OB_SUCC(ret)) {
-      const ObDASTableLocMeta *loc_meta = *it;
-      OB_UNIS_ENCODE(*loc_meta);
+    OB_UNIS_ENCODE(attach_access_metas_.size());
+    FOREACH_X(it, attach_access_metas_, OB_SUCC(ret)) {
+      const DASTableAccessMeta *access_meta = *it;
+      OB_UNIS_ENCODE(*access_meta);
     }
     OZ(serialize_ctdef_tree(buf, buf_len, pos, attach_ctdef_));
   }
@@ -127,12 +127,12 @@ OB_DEF_DESERIALIZE(ObDASAttachSpec)
     int64_t list_size = 0;
     OB_UNIS_DECODE(list_size);
     for (int i = 0; OB_SUCC(ret) && i < list_size; ++i) {
-      ObDASTableLocMeta *loc_meta = OB_NEWx(ObDASTableLocMeta, &allocator_, allocator_);
-      if (OB_ISNULL(loc_meta)) {
+      DASTableAccessMeta *access_meta = OB_NEWx(DASTableAccessMeta, &allocator_, allocator_);
+      if (OB_ISNULL(access_meta)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(attach_loc_metas_.push_back(loc_meta))) {
+      } else if (OB_FAIL(attach_access_metas_.push_back(access_meta))) {
       } else {
-        OB_UNIS_DECODE(*loc_meta);
+        OB_UNIS_DECODE(*access_meta);
       }
     }
     OZ(deserialize_ctdef_tree(buf, data_len, pos, attach_ctdef_));
@@ -146,10 +146,10 @@ OB_DEF_SERIALIZE_SIZE(ObDASAttachSpec)
   bool has_attach_ctdef = attach_ctdef_ != nullptr;
   OB_UNIS_ADD_LEN(has_attach_ctdef);
   if (has_attach_ctdef) {
-    OB_UNIS_ADD_LEN(attach_loc_metas_.size());
-    FOREACH(it, attach_loc_metas_) {
-      const ObDASTableLocMeta *loc_meta = *it;
-      OB_UNIS_ADD_LEN(*loc_meta);
+    OB_UNIS_ADD_LEN(attach_access_metas_.size());
+    FOREACH(it, attach_access_metas_) {
+      const DASTableAccessMeta *access_meta = *it;
+      OB_UNIS_ADD_LEN(*access_meta);
     }
     len += get_ctdef_tree_serialize_size(attach_ctdef_);
   }
@@ -230,18 +230,18 @@ int ObDASAttachSpec::deserialize_ctdef_tree(const char *buf,
   return ret;
 }
 
-const ObDASTableLocMeta *ObDASAttachSpec::get_attach_loc_meta(int64_t table_location_id,
+const DASTableAccessMeta *ObDASAttachSpec::get_attach_access_meta(int64_t table_ref_id,
                                                               int64_t ref_table_id) const
 {
-  const ObDASTableLocMeta *loc_meta = nullptr;
-  FOREACH_X(it, attach_loc_metas_, nullptr == loc_meta) {
-    const ObDASTableLocMeta *tmp_loc_meta = *it;
-    if (tmp_loc_meta->table_loc_id_ == table_location_id &&
-        tmp_loc_meta->ref_table_id_ == ref_table_id) {
-      loc_meta = tmp_loc_meta;
+  const DASTableAccessMeta *access_meta = nullptr;
+  FOREACH_X(it, attach_access_metas_, nullptr == access_meta) {
+    const DASTableAccessMeta *tmp_access_meta = *it;
+    if (tmp_access_meta->table_ref_id_ == table_ref_id &&
+        tmp_access_meta->ref_table_id_ == ref_table_id) {
+      access_meta = tmp_access_meta;
     }
   }
-  return loc_meta;
+  return access_meta;
 }
 
 int ObDASAttachSpec::set_calc_exprs(const ExprFixedArray &calc_exprs, const int64_t max_batch_size)

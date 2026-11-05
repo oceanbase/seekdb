@@ -5,7 +5,6 @@
 set -euo pipefail
 
 WORKSPACE="${GITHUB_WORKSPACE:?}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_DIR="${SEEKDB_TASK_DIR:?}"
 SLICE_IDX="${SLICE_IDX:-0}"
 SLICES="${SLICES:-4}"
@@ -21,7 +20,7 @@ for lib_dir in "$CLIENT_ROOT/lib" "$CLIENT_ROOT/lib64"; do
   fi
 done
 
-exec python3 "$SCRIPT_DIR/mysqltest_for_seekdb.py" run \
+exec python3 "$WORKSPACE/tools/deploy/mysqltest.py" run \
   --seekdb "$SEEKDB_BINARY" \
   --obclient "$CLIENT_ROOT/bin/obclient" \
   --mysqltest "$CLIENT_ROOT/bin/mysqltest" \

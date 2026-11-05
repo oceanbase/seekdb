@@ -42,7 +42,7 @@ public:
     OB_UNIS_VERSION(1);
   public:
     WarningItem() : timestamp_(0),
-                    log_level_(ObLogger::USER_WARN),
+                    log_level_(USER_WARN),
                     line_no_(0),
                     code_(OB_MAX_ERROR_CODE),
                     column_no_(0)
@@ -65,11 +65,11 @@ public:
       timestamp_ = 0;
       line_no_ = 0; 
       column_no_ = 0; 
-      log_level_ = ObLogger::USER_WARN;
+      log_level_ = USER_WARN;
     }
     inline void set(const char *str) {snprintf(msg_, STR_LEN, "%s", str);}
     inline void set_code(int code) { code_ = code; }
-    inline void set_log_level(ObLogger::UserMsgLevel level) { log_level_ = level; }
+    inline void set_log_level(UserMsgLevel level) { log_level_ = level; }
     inline const char *get() const {return static_cast<const char *>(msg_);}
     inline int get_code() const { return code_; }
     inline void set_line_no(int line_no) { line_no_ = line_no; }
@@ -135,7 +135,7 @@ public:
   inline const ObWarningBuffer::WarningItem *get_warning_item(const uint32_t idx) const;
   TO_STRING_KV(K_(err), K_(item), K_(total_warning_count), K_(is_log_on));
 private:
-  inline void append_msg(ObLogger::UserMsgLevel msg_level, const char *str, int code, const char *sql_state = nullptr);
+  inline void append_msg(UserMsgLevel msg_level, const char *str, int code, const char *sql_state = nullptr);
 private:
   // const define
   static const uint32_t MAX_BUFFER_SIZE = 64;
@@ -180,7 +180,7 @@ inline const ObWarningBuffer::WarningItem *ObWarningBuffer::get_warning_item(con
   return item;
 }
 
-inline void ObWarningBuffer::append_msg(ObLogger::UserMsgLevel msg_level, const char *str,
+inline void ObWarningBuffer::append_msg(UserMsgLevel msg_level, const char *str,
                                         int code, const char *sql_state)
 {
   // warning_buffer will be reset before requests handled
@@ -212,12 +212,12 @@ inline void ObWarningBuffer::append_msg(ObLogger::UserMsgLevel msg_level, const 
 
 inline void ObWarningBuffer::append_warning(const char *str, int code, const char *sql_state)
 {
-  append_msg(ObLogger::USER_WARN, str, code, sql_state);
+  append_msg(USER_WARN, str, code, sql_state);
 }
 
 inline void ObWarningBuffer::append_note(const char *str, int code)
 {
-  append_msg(ObLogger::USER_NOTE, str, code);
+  append_msg(USER_NOTE, str, code);
 }
 
 ////////////////////////////////////////////////////////////////

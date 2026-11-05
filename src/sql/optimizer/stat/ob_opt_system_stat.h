@@ -44,7 +44,7 @@ public:
     }
     uint64_t hash() const
     {
-      return common::murmurhash(this, sizeof(Key), 0);
+      return 0;
     }
     int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
     bool operator==(const ObIKVCacheKey &other) const

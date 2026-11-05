@@ -101,7 +101,7 @@ public:
   static inline bool is_type_needed(uint64_t needed_transform_types,
                                     TRANSFORM_TYPE type)
   {
-    return (needed_transform_types & (1L << type)) != 0;
+    return (needed_transform_types & (1ULL << type)) != 0;
   }
 
   void clear_needed_types()
@@ -111,7 +111,7 @@ public:
 
   void add_needed_types(TRANSFORM_TYPE type)
   {
-    needed_transform_types_ |= (1L << type);
+    needed_transform_types_ |= (1ULL << type);
   }
 
   inline int64_t get_max_iteration_count()

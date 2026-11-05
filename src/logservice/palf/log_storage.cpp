@@ -74,34 +74,6 @@ int LogStorage::init(const char *base_dir, const char *sub_dir, const LSN &base_
   return ret;
 }
 
-int LogStorage::load_manifest_for_meta_storage(block_id_t &expected_next_block_id)
-{
-  int ret = OB_SUCCESS;
-  block_id_t log_tail_block_id = lsn_2_block(log_tail_, logical_block_size_);
-  block_id_t log_tail_offset = lsn_2_offset(log_tail_, logical_block_size_);
-  // if last block is full or empty, last_block_id will be the next block id of 'last block',
-  // the valid block header is in prev block.
-  block_id_t last_block_id = (0 == log_tail_offset ? log_tail_block_id - 1 : log_tail_block_id);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (0 == log_tail_offset && 0 == log_tail_block_id) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, there is no valid meta at first block", KPC(this));
-  // NB: nowdays, we not support switch block when updat manifest failed, therefore, we don't need
-  // handle this case.
-  //
-  // If we need support switch block when write failed, the solution is that:
-	// 1. only delete prev block when in append_meta interface;
-	// 2. if last meta block is empty, we also need read its block header.
-  } else if (OB_FAIL(
-                 read_block_header_(last_block_id, log_block_header_))) {
-  } else {
-    expected_next_block_id= lsn_2_block(log_block_header_.get_min_lsn(), logical_block_size_);
-    PALF_LOG(INFO, "load_manifest_for_meta_storage success", K(ret), KPC(this), K(expected_next_block_id));
-  }
-  return ret;
-}
-
 void LogStorage::destroy()
 {
   is_inited_ = false;
@@ -210,39 +182,6 @@ int LogStorage::writev(const LSNArray &lsn_array,
         merge_start_idx = idx_to_be_merged;
       }
     } while (merge_start_idx < count && OB_SUCC(ret));
-  }
-  return ret;
-}
-
-int LogStorage::append_meta(const char *buf, const int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  const bool need_switch_block = need_switch_block_();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (NULL == buf || 0 >= buf_len || buf_len != MAX_INFO_BLOCK_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (log_tail_ + buf_len
-             > LSN((lsn_2_block(log_tail_, logical_block_size_) + 1) * logical_block_size_)) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "not support cross-file write", K(ret), KPC(this));
-  } else if (true == need_switch_block && OB_FAIL(inner_switch_block_())) {
-    PALF_LOG(ERROR, "switch_next_block failed", K(ret), K(log_tail_));
-  } else if (true == need_append_block_header_
-             && OB_FAIL(append_block_header_used_for_meta_storage_())) {
-    PALF_LOG(ERROR, "append_block_header_used_for_meta_storage_ failed", K(ret), KPC(this));
-  } else if (OB_FAIL(block_mgr_.pwrite(lsn_2_block(log_tail_, logical_block_size_),
-                                       get_phy_offset_(log_tail_),
-                                       buf,
-                                       buf_len))) {
-  } else if (true == need_switch_block 
-             && OB_FAIL(delete_prev_block_for_meta_())) {
-    PALF_LOG(ERROR, "delete_prev_block_ failed", K(ret), KPC(this));
-  } else {
-    curr_block_writable_size_ -= buf_len;
-    update_log_tail_guarded_by_lock_(buf_len);
-    PALF_LOG(INFO, "LogStorage append meta success", K(ret), K(log_block_header_),
-             K(log_tail_), KPC(this));
   }
   return ret;
 }
@@ -446,27 +385,6 @@ const LSN LogStorage::get_end_lsn() const
   return log_tail_;
 }
   
-// @brief this function is called for 'switch_next_block'(redo log).
-int LogStorage::update_manifest_used_for_meta_storage(const block_id_t expected_max_block_id)
-{
-  int ret = OB_SUCCESS;
-  block_id_t log_tail_block_id = lsn_2_block(log_tail_, logical_block_size_);
-  block_id_t last_block_id = (0 == curr_block_writable_size_ ? log_tail_block_id - 1 : log_tail_block_id);
-  // for meta storage, it will record manifest for log storage in block header,
-  // we can not write block header in 'log_tail_block_id', this will cause write 
-  // log error in LogBlockMgr because 'log_tail_block_id' is not same as 'curr_writable_block_id'(LogBlockMgr)
-  // assume 'log_tail_' is equal to PALF_PHY_BLOCK_SIZE, 'log_tail_block_id' is 1, however
-  // 'curr_writable_block_id' is 0.
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogMetaStorage not inited", KPC(this), K(expected_max_block_id));
-  } else if (OB_FAIL(update_block_header_(last_block_id, LSN(expected_max_block_id*logical_block_size_), SCN::min_scn()))) {
-  } else {
-    PALF_LOG(INFO, "update_manifest_used_for_meta_storage success", K(ret), KPC(this));
-  }
-  return ret;
-}
-
 bool LogStorage::need_switch_block_() const
 {
   // NB: Nowdays, each block is fulled with data.
@@ -611,22 +529,6 @@ int LogStorage::inner_switch_block_()
   return ret;
 }
 
-int LogStorage::append_block_header_used_for_meta_storage_()
-{
-  // For meta storage, the 'log_block_header_' is always valid except the first write
-  //
-  // 1. After restart, 'log_block_header_' will reinit to the block header of last valid block.
-  // 2. In case of switching block, 'log_block_header' will be the result of last update.
-	//
-	// NB: nowdays, we no need to handle the case append block header into meta block failed.
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(append_block_header_(log_block_header_.get_min_lsn(), SCN::min_scn()))) {
-  } else {
-    PALF_LOG(INFO, "append_block_header_used_for_meta_storage_ success", K(ret), KPC(this));
-  }
-  return ret;
-}
-
 int LogStorage::update_block_header_(const block_id_t block_id,
                                      const LSN &block_min_lsn,
                                      const SCN &block_min_scn)
@@ -656,7 +558,6 @@ int LogStorage::append_block_header_(const LSN &block_min_lsn,
   const block_id_t block_id = lsn_2_block(log_tail_, logical_block_size_);
   return update_block_header_(block_id, block_min_lsn, block_min_scn);
 }
-
 
 void LogStorage::update_log_tail_guarded_by_lock_(const int64_t log_size)
 {
@@ -723,23 +624,6 @@ int LogStorage::read_block_header_(const block_id_t block_id,
 }
 
 // NB: delete each block before last block, and last block must exist valid data.
-int LogStorage::delete_prev_block_for_meta_()
-{
-  int ret = OB_SUCCESS;
-  block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
-  block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
-  if (OB_FAIL(block_mgr_.get_block_id_range(min_block_id, max_block_id))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, there are must some blocks", K(ret), KPC(this));
-  } else {
-    for (block_id_t delete_block_id = min_block_id;
-         OB_SUCC(ret) && delete_block_id < max_block_id; delete_block_id++) {
-      if (OB_FAIL(block_mgr_.delete_block(delete_block_id))) {
-      }
-    }
-  }
-  return ret;
-}
 
 int LogStorage::inner_pread_(const LSN &read_lsn,
                              const int64_t in_read_size,

@@ -266,7 +266,7 @@ int ObSchema2DDLSql::type2str(
         int64_t value = 0;
         if (OB_FAIL(column_schema.get_orig_default_value().get_int(value))) {
         } else {
-          n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %ld", value);
+          n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %" PRId64, value);
         }
       } else if (ObTinyIntType == column_schema.get_data_type()) {
         int8_t value = 0;
@@ -279,7 +279,7 @@ int ObSchema2DDLSql::type2str(
         uint64_t value = 0;
         if (OB_FAIL(column_schema.get_orig_default_value().get_uint64(value))) {
         } else {
-          n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %ld", value);
+          n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %" PRIu64, value);
         }
       } else if (ObVarcharType == column_schema.get_data_type()) {
         ObString value;

@@ -170,8 +170,8 @@ public:
 
   static int validate_local_tablets(
       ObExecContext &exec_ctx,
-      const common::ObIArray<const ObTableLocation*> &table_locations,
-      common::ObIArray<ObCandiTableLoc*> &tablet_locations);
+      const common::ObIArray<const TableAccessPlan*> &table_access_plans,
+      common::ObIArray<TableAccessTargets*> &tablet_accesses);
 
 public:
   ObLogPlan(ObOptimizerContext &ctx, const ObDMLStmt *stmt);
@@ -257,16 +257,16 @@ public:
 
   int update_re_est_cost(ObLogicalOperator *op);
 
-  int collect_table_location(ObLogicalOperator *op);
-  int collect_vec_index_location_related_info(ObLogTableScan &tsc_op, 
-                                              TableLocRelInfo& rel_info);
-  int collect_location_related_info(ObLogicalOperator &op);
-  int build_location_related_tablet_ids();
+  int collect_access_plans(ObLogicalOperator *op);
+  int collect_vec_index_access_related_info(ObLogTableScan &tsc_op,
+                                              RelatedTableAccessInfo& rel_info);
+  int collect_access_related_info(ObLogicalOperator &op);
+  int build_related_tablet_ids();
   int check_das_need_keep_ordering(ObLogicalOperator *op);
   int set_scan_order(ObLogicalOperator *op);
   int check_das_need_scan_with_domain_id(ObLogicalOperator *op);
 
-  int gen_das_table_location_info(ObLogTableScan *table_scan,
+  int gen_das_access_plans(ObLogTableScan *table_scan,
                                   ObTablePartitionInfo *&table_partition_info);
 
   int check_das_dppr_filter_exprs(const ObIArray<ObRawExpr *> &input_filters,
@@ -308,15 +308,15 @@ public:
     return append(info, optimizer_context_.get_table_partition_info());
   }
 
-  int remove_duplicate_constraint(ObLocationConstraintContext &location_constraint,
+  int remove_duplicate_constraint(TableAccessConstraintContext &access_constraint,
                                   ObSqlCtx &sql_ctx) const;
-  int remove_duplicate_base_table_constraint(ObLocationConstraintContext &location_constraint) const;
+  int remove_duplicate_base_table_constraint(TableAccessConstraintContext &access_constraint) const;
   int remove_duplicate_pwj_constraint(ObIArray<ObPwjConstraint *> &pwj_constraints) const;
   int replace_pwj_constraints(ObIArray<ObPwjConstraint *> &constraints,
                               const int64_t from,
                               const int64_t to) const;
   int remove_duplicate_constraints();
-  int sort_pwj_constraint(ObLocationConstraintContext &location_constraint) const;
+  int sort_pwj_constraint(TableAccessConstraintContext &access_constraint) const;
 
   int get_current_semi_infos(const ObIArray<SemiInfo*> &semi_infos,
                              const ObIArray<TableItem*> &table_items,
@@ -333,7 +333,7 @@ public:
 
   int prepare_ordermap_pathset(const JoinOrderArray base_level);
 
-  int select_location(ObIArray<ObTablePartitionInfo *> &tbl_part_info_list);
+  int select_access_targets(ObIArray<ObTablePartitionInfo *> &tbl_part_info_list);
 
   int get_subplan(const ObRawExpr *expr, SubPlanInfo *&info);
 
@@ -355,7 +355,7 @@ public:
                            bool index_back,
                            bool need_set,
                            double &cost);
-  int is_partition_in_same_server(const ObIArray<const ObCandiTableLoc *> &phy_location_infos,
+  int is_partition_in_same_server(const ObIArray<const TableAccessTargets *> &table_targets,
                                   bool &is_same,
                                   bool &multi_part_table,
                                   common::ObAddr &first_addr);
@@ -373,7 +373,7 @@ public:
   int check_stmt_need_multi_partition_dml(const ObDMLStmt &stmt,
                                           const ObIArray<IndexDMLInfo *> &index_dml_infos,
                                           bool &is_multi_part_dml);
-  int check_location_need_multi_partition_dml(ObLogicalOperator &top,
+  int check_access_needs_multi_partition_dml(ObLogicalOperator &top,
                                               uint64_t table_id,
                                               bool &is_multi_part_dml,
                                               bool &is_result_local,
@@ -1742,10 +1742,10 @@ protected:
 private: // member functions
   static int distribute_filters_to_baserels(ObIArray<ObJoinOrder*> &base_level,
                                             ObIArray<ObSEArray<ObRawExpr*,4>> &baserel_filters);
-  int calc_and_set_exec_pwj_map(ObLocationConstraintContext &location_constraint) const;
+  int calc_and_set_exec_pwj_map(TableAccessConstraintContext &access_constraint) const;
 
   int check_pwj_cons(const ObPwjConstraint &pwj_cons,
-                     const common::ObIArray<LocationConstraint> &base_location_cons,
+                     const common::ObIArray<TableAccessConstraint> &base_access_constraints,
                      ObStrictPwjComparer &pwj_comparer,
                      PWJTabletIdMap &pwj_map) const;
   int get_histogram_by_join_exprs(ObOptimizerContext &optimizer_ctx,

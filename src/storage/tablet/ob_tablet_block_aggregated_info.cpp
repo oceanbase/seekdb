@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_block_aggregated_info.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
+#include "storage/blockstore/ob_linked_macro_block_writer.h"
 #include "storage/tablet/ob_tablet.h"
 
 namespace oceanbase
@@ -75,7 +75,7 @@ int ObBlockInfoSet::init(
  * ---------------------------------------ObTabletMacroInfo----------------------------------------
  */
 ObTabletMacroInfo::ObTabletMacroInfo()
-  : entry_block_(ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK),
+  : entry_block_(MacroBlockId::EMPTY_LIST_ENTRY),
     meta_block_info_arr_(), data_block_info_arr_(), shared_data_block_info_arr_(), is_inited_(false)
 {
 }
@@ -87,7 +87,7 @@ ObTabletMacroInfo::~ObTabletMacroInfo()
 
 void ObTabletMacroInfo::reset()
 {
-  entry_block_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
+  entry_block_ = MacroBlockId::EMPTY_LIST_ENTRY;
   meta_block_info_arr_.reset();
   data_block_info_arr_.reset();
   shared_data_block_info_arr_.reset();
@@ -326,7 +326,7 @@ int64_t ObTabletMacroInfo::get_serialize_size() const
 int64_t ObTabletMacroInfo::get_deep_copy_size() const
 {
   int64_t len = sizeof(ObTabletMacroInfo);
-  if (IS_EMPTY_BLOCK_LIST(entry_block_)) {
+  if (entry_block_.is_empty_list_entry()) {
     len += meta_block_info_arr_.get_deep_copy_size();
     len += data_block_info_arr_.get_deep_copy_size();
     len += shared_data_block_info_arr_.get_deep_copy_size();
@@ -347,7 +347,7 @@ int ObTabletMacroInfo::deep_copy(char *buf, const int64_t buf_len, ObTabletMacro
     ObTabletMacroInfo *tablet_macro_info = new (buf) ObTabletMacroInfo();
     pos = sizeof(ObTabletMacroInfo);
     tablet_macro_info->entry_block_ = entry_block_;
-    if (IS_EMPTY_BLOCK_LIST(entry_block_)) {
+    if (entry_block_.is_empty_list_entry()) {
       if (OB_FAIL(meta_block_info_arr_.deep_copy(buf, buf_len, pos, tablet_macro_info->meta_block_info_arr_))) {
       } else if (OB_FAIL(data_block_info_arr_.deep_copy(buf, buf_len, pos, tablet_macro_info->data_block_info_arr_))) {
       } else if (OB_FAIL(shared_data_block_info_arr_.deep_copy(

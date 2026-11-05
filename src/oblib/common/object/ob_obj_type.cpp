@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include <inttypes.h>
 #include "ob_obj_type.h"
 #include "common/object/ob_object.h"
 namespace oceanbase
@@ -180,7 +181,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     if (precision < 0) {                                                                                \
       ret = databuff_printf(buff, buff_length, pos, STYPE1 STYPE2);                                     \
     } else {                                                                                            \
-      ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%ld)" STYPE2, precision);                  \
+      ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%" PRId64 ")" STYPE2, precision);                  \
     }                                                                                                   \
     return ret;                                                                                         \
   }
@@ -196,7 +197,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     if (scale <= 0) {                                                                                   \
       ret = databuff_printf(buff, buff_length, pos, STYPE1 STYPE2);                                     \
     } else {                                                                                            \
-      ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%ld)" STYPE2, scale);                      \
+      ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%" PRId64 ")" STYPE2, scale);                      \
     }                                                                                                   \
     return ret;                                                                                         \
   }
@@ -212,7 +213,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     if (scale < 0) {                                                                                    \
       ret = databuff_printf(buff, buff_length, pos, STYPE1 STYPE2);                                     \
     } else {                                                                                            \
-      ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%ld)" STYPE2, scale);                      \
+      ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%" PRId64 ")" STYPE2, scale);                      \
     }                                                                                                   \
     return ret;                                                                                         \
   }
@@ -227,7 +228,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     if (precision < 0 || scale < 0) {                                                                   \
       ret = databuff_printf(buff, buff_length, pos, "%s%s", STYPE1, STYPE2);                              \
     } else {                                                                                              \
-      ret = databuff_printf(buff, buff_length, pos, "%s(%ld,%ld)%s", STYPE1, precision, scale, STYPE2);   \
+      ret = databuff_printf(buff, buff_length, pos, "%s(%" PRId64 ",%" PRId64 ")%s", STYPE1, precision, scale, STYPE2);   \
     }                                                                                                     \
     return ret;                                                                                           \
   }
@@ -241,9 +242,9 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     UNUSED(precision);                                                  \
     UNUSED(scale) ;                                                     \
     if (CS_TYPE_BINARY == coll_type) {                                  \
-      ret = databuff_printf(buff, buff_length, pos, STYPE2 "(%ld)", length); \
+      ret = databuff_printf(buff, buff_length, pos, STYPE2 "(%" PRId64 ")", length); \
     } else {                                                            \
-      ret = databuff_printf(buff, buff_length, pos, "%s(%ld)", STYPE1, length); \
+      ret = databuff_printf(buff, buff_length, pos, "%s(%" PRId64 ")", STYPE1, length); \
     }                                                                   \
     return ret;                                                         \
   }

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/das/iter/ob_das_global_lookup_iter.h"
 #include "sql/das/iter/ob_das_merge_iter.h"
 #include "sql/das/ob_das_attach_define.h"
@@ -84,7 +84,7 @@ int ObDASGlobalLookupIter::add_rowkey()
   ObObjectID first_partition_id = OB_INVALID_ID;
   ObTabletID tablet_id(OB_INVALID_ID);
   ObDASScanOp *das_scan_op = nullptr;
-  ObDASTabletLoc *tablet_loc = nullptr;
+  DASRuntimeTabletAccess *tablet_access = nullptr;
   ObDASCtx *das_ctx = nullptr;
   bool reuse_das_op = false;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_MERGE);
@@ -99,12 +99,12 @@ int ObDASGlobalLookupIter::add_rowkey()
                                           tablet_id))) {
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(das_ctx->extended_tablet_loc(*lookup_rtdef_->table_loc_,
+    } else if (OB_FAIL(das_ctx->ensure_tablet_access(*lookup_rtdef_->table_access_,
                                                     tablet_id,
-                                                    tablet_loc,
+                                                    tablet_access,
                                                     partition_id,
                                                     first_partition_id))) {
-    } else if (OB_FAIL(merge_iter->create_das_task(tablet_loc, das_scan_op, reuse_das_op))) {
+    } else if (OB_FAIL(merge_iter->create_das_task(tablet_access, das_scan_op, reuse_das_op))) {
     } else if (!reuse_das_op) {
       das_scan_op->set_scan_ctdef(lookup_ctdef_);
       das_scan_op->set_scan_rtdef(lookup_rtdef_);
@@ -259,16 +259,16 @@ int ObDASGlobalLookupIter::attach_related_taskinfo(ObDASScanOp &target_op, ObDAS
   } else if (attach_rtdef->op_type_ == DAS_OP_TABLE_SCAN) {
     const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(attach_rtdef->ctdef_);
     ObDASScanRtDef *scan_rtdef = static_cast<ObDASScanRtDef*>(attach_rtdef);
-    ObDASTableLoc *table_loc = scan_rtdef->table_loc_;
-    ObDASTabletLoc *tablet_loc = ObDASUtils::get_related_tablet_loc(
-        *target_op.get_tablet_loc(), table_loc->loc_meta_->ref_table_id_);
-    if (OB_ISNULL(tablet_loc)) {
+    DASRuntimeTableAccess *table_access = scan_rtdef->table_access_;
+    DASRuntimeTabletAccess *tablet_access = ObDASUtils::get_related_tablet_access(
+        *target_op.get_tablet_access(), table_access->access_meta_->ref_table_id_);
+    if (OB_ISNULL(tablet_access)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(target_op.set_related_task_info(scan_ctdef,
                                                        scan_rtdef,
-                                                       tablet_loc->tablet_id_))) {
+                                                       tablet_access->tablet_id_))) {
     } else {
-      table_loc->is_reading_ = true;
+      table_access->is_reading_ = true;
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < attach_rtdef->children_cnt_; ++i) {

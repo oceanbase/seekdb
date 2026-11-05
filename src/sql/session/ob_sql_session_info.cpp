@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include <new>
 #include "data_plane/ob_iter_cache_api.h"
 #include "data_plane/ob_tx_ctx_cache_api.h"
@@ -706,9 +706,9 @@ void ObSQLSessionInfo::update_show_warnings_buf()
   for (int64_t i = 0; i < warnings_buf_.get_readable_warning_count(); i++) {
     const ObWarningBuffer::WarningItem *item = warnings_buf_.get_warning_item(i);
     if (OB_ISNULL(item)) {
-    } else if (item->log_level_ == common::ObLogger::UserMsgLevel::USER_WARN) {
+    } else if (item->log_level_ == common::USER_WARN) {
       show_warnings_buf_.append_warning(item->msg_, item->code_);
-    } else if (item->log_level_ == common::ObLogger::UserMsgLevel::USER_NOTE) {
+    } else if (item->log_level_ == common::USER_NOTE) {
       show_warnings_buf_.append_note(item->msg_, item->code_);
     }
   }
@@ -1583,6 +1583,7 @@ void ObSQLSessionInfo::ObCachedRuntimeConfig::refresh()
       px_join_skew_minfreq_ = config::_px_join_skew_minfreq();
       enable_decimal_int_type_ = config::_enable_decimal_int_type();
       enable_mysql_compatible_dates_ = config::_enable_mysql_compatible_dates();
+      enable_file_sql_ = false; // default OFF for security
       // 7. print_sample_ppm_ for flt
       ATOMIC_STORE(&print_sample_ppm_, config::_print_sample_ppm());
     }

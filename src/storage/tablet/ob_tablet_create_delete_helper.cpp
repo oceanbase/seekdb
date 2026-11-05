@@ -19,7 +19,6 @@
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/meta_store/ob_storage_meta_io_util.h"
 
 #define USING_LOG_PREFIX STORAGE
 

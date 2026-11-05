@@ -49,7 +49,7 @@ struct EstimateCostInfo;
 struct ObSqlPlanItem;
 struct PlanText;
 class ObPxResourceAnalyzer;
-struct partition_location
+struct partition_access
 {
   int64_t partition_id;
   // server id
@@ -514,7 +514,7 @@ struct ObExchangeInfo
   // repart target ref table id in pkey shuffle
   // the same as table_scan's get_ref_table_id
   int64_t repartition_ref_table_id_;
-  // repart target table location id in pkey shuffle
+  // repart target table access id in pkey shuffle
   // the same as table_scan's get_table_id
   int64_t repartition_table_id_;
   ObString repartition_table_name_;
@@ -1061,13 +1061,13 @@ public:
   {
     return phy_plan_type_;
   }
-  inline void set_location_type(ObPhyPlanType location_type)
+  inline void set_access_shape(ObPhyPlanType access_shape)
   {
-    location_type_ = location_type;
+    access_shape_ = access_shape;
   }
-  inline ObPhyPlanType get_location_type() const
+  inline ObPhyPlanType get_access_shape() const
   {
-    return location_type_;
+    return access_shape_;
   }
   /*
    * get cur_op's output ordering
@@ -1235,7 +1235,7 @@ public:
    *  The default implementation will iterate over the context to see if there are
    *  more exprs that can be produced - ie. the exprs that they depend on have been
    *  produced. An expression will be categorized into filter, join predicates or
-   *  output expressions and placed at proper location once it is produced.
+   *  output expressions and placed at proper access once it is produced.
    */
   virtual int allocate_expr_post(ObAllocExprContext &ctx);
 
@@ -1341,20 +1341,20 @@ public:
   int allocate_material_node_above();
   int allocate_monitoring_dump_node_above(uint64_t flags, uint64_t line_id);
 
-  virtual int gen_location_constraint(void *ctx);
+  virtual int gen_access_constraint(void *ctx);
 
   /**
-   * Generate a table's location constraint for pdml index maintain op
+   * Generate a table's access constraint for pdml index maintain op
    */
-  int get_tbl_loc_cons_for_pdml_index(LocationConstraint &loc_cons);
+  int get_access_constraint_for_pdml_index(TableAccessConstraint &access_constraints);
   /**
-   * Generate a table's location constraint for table scan op
+   * Generate a table's access constraint for table scan op
    */
-  int get_tbl_loc_cons_for_scan(LocationConstraint &loc_cons);
+  int get_access_constraint_for_scan(TableAccessConstraint &access_constraints);
   /**
-   * @brief Generate a table's location constraint for insert op
+   * @brief Generate a table's access constraint for insert op
    */
-  int get_tbl_loc_cons_for_insert(LocationConstraint &loc_cons, bool &is_multi_part_dml);
+  int get_access_constraint_for_insert(TableAccessConstraint &access_constraints, bool &is_multi_part_dml);
 
   int get_table_scan(ObLogicalOperator *&tsc, uint64_t table_id);
 
@@ -1623,19 +1623,19 @@ public:
   {
     return is_partition_wise_ && !exchange_allocated_ &&
            NULL != get_sharding() &&
-           get_sharding()->is_distributed_with_table_location_and_partitioning();
+           get_sharding()->is_partitioned_multi_tablet_with_targets();
   }
   inline bool is_affinite_partition_wise()
   {
     return is_partition_wise_ && exchange_allocated_ &&
            NULL != get_sharding() &&
-           get_sharding()->is_distributed_with_table_location_and_partitioning();
+           get_sharding()->is_partitioned_multi_tablet_with_targets();
   }
   inline bool is_extended_partition_wise()
   {
     return is_partition_wise_ && exchange_allocated_ &&
            NULL != get_sharding() &&
-           get_sharding()->is_distributed_without_table_location_with_partitioning();
+           get_sharding()->is_partitioned_multi_tablet_without_targets();
   }
   int collect_batch_exec_param_pre(void* ctx);
   int collect_batch_exec_param_post(void* ctx);
@@ -1874,15 +1874,15 @@ protected:
   // Non-strict partition wise join constraint, requires the base table partitions within the group to be physically identical
   ObPwjConstraint non_strict_pwj_constraint_;
   // The physical distribution of the dependent tables
-  //ObLocationConstraint if there is only one element, then only need to constrain whether the location type is consistent;
-  //                    If there are multiple elements, then each location's corresponding physical distribution needs to be verified to be the same
-  ObLocationConstraint location_constraint_;
+  //TableAccessConstraints if there is only one element, then only need to constrain whether the access type is consistent;
+  //                    If there are multiple elements, then each access's corresponding physical distribution needs to be verified to be the same
+  TableAccessConstraints access_constraint_;
   // Used for constraint extraction of multi part dml
-  // multi_part_location_constraint_ can only have one constraint element
-  ObLocationConstraint multi_part_location_constraint_;
+  // multi_part_access_constraint_ can only have one constraint element
+  TableAccessConstraints multi_part_access_constraint_;
   bool exchange_allocated_;
   ObPhyPlanType phy_plan_type_;
-  ObPhyPlanType location_type_;
+  ObPhyPlanType access_shape_;
   bool is_partition_wise_;
   PxOpSizeFactor px_est_size_factor_;
   int64_t plan_depth_;

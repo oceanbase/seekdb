@@ -52,7 +52,6 @@ LogIOTask::LogIOTask(const int64_t palf_epoch)
 	reset();
 	palf_epoch_ = palf_epoch;
 	init_task_ts_ = ObTimeUtility::current_time();
-  submit_seq_ = 0;
 }
 
 LogIOTask::~LogIOTask() 
@@ -65,7 +64,6 @@ void LogIOTask::reset()
 	palf_epoch_ = -1;
 	init_task_ts_ = OB_INVALID_TIMESTAMP;
   push_cb_into_cb_pool_ts_ = OB_INVALID_TIMESTAMP;
-  submit_seq_ = 0;
 }
 
 // NB: if do_task failed, the caller(LogIOWorker) is responsible for freeing LogIOTask. 
@@ -115,11 +113,6 @@ int LogIOTask::after_consume(IPalfEnvImpl *palf_env_impl)
 LogIOTaskType LogIOTask::get_io_task_type()
 {
 	return get_io_task_type_();
-}
-
-bool LogIOTask::need_purge_throttling()
-{
-  return need_purge_throttling_();
 }
 
 int64_t LogIOTask::get_init_task_ts()
@@ -217,85 +210,6 @@ int64_t LogIOFlushLogTask::get_io_size_() const
   return write_buf_.get_total_size();
 }
 
-LogIOFlushMetaTask::LogIOFlushMetaTask(const int64_t palf_epoch) :
-	LogIOTask(palf_epoch),
-	flush_meta_cb_ctx_(),
-  buf_(NULL),
-  buf_len_(0),
-  is_inited_(false)
-{
-}
-
-LogIOFlushMetaTask::~LogIOFlushMetaTask()
-{
-  destroy();
-}
-
-int LogIOFlushMetaTask::init(const FlushMetaCbCtx &flush_meta_cb_ctx,
-                             const char *buf,
-                             const int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask has inited!!!", K(ret));
-  } else if (false == flush_meta_cb_ctx.is_valid()
-             || NULL == buf || 0 >= buf_len) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(flush_meta_cb_ctx),
-        KP(buf), K(buf_len));
-  } else {
-    flush_meta_cb_ctx_ = flush_meta_cb_ctx;
-		buf_ = buf;
-    buf_len_ = buf_len;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-void LogIOFlushMetaTask::destroy()
-{
-  if (IS_INIT) {
-    is_inited_ = false;
-    buf_len_ = 0;
-    if (NULL != buf_) {
-      server_free(const_cast<char*>(buf_));
-      buf_ = NULL;
-    }
-    flush_meta_cb_ctx_.reset();
-  }
-}
-
-int LogIOFlushMetaTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret));
-  } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_append_meta(buf_, buf_len_))) {
-  } else if (OB_FAIL(push_task_into_cb_thread_pool_(cb_thread_pool, this))) {
-  } else {
-  }
-  return ret;
-}
-
-int LogIOFlushMetaTask::after_consume_(IPalfHandleImplGuard &guard)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret));
-  } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_after_flush_meta(flush_meta_cb_ctx_))) {
-  } else {
-  }
-  return ret;
-}
-
-void LogIOFlushMetaTask::free_this_(IPalfEnvImpl *palf_env_impl)
-{
-  palf_env_impl->get_log_allocator()->free_log_io_flush_meta_task(this);
-}
-
 LogIOTruncatePrefixBlocksTask::LogIOTruncatePrefixBlocksTask(const int64_t palf_epoch)
     : LogIOTask(palf_epoch), truncate_prefix_blocks_ctx_(), is_inited_(false)
 {}
@@ -348,7 +262,7 @@ int LogIOTruncatePrefixBlocksTask::after_consume_(IPalfHandleImplGuard &guard)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret));
+    PALF_LOG(ERROR, "LogIOTruncatePrefixBlocksTask not inited!!!", K(ret));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_after_truncate_prefix_blocks(
                  truncate_prefix_blocks_ctx_))) {
   } else {
@@ -426,7 +340,7 @@ int BatchLogIOFlushLogTask::push_back(LogIOFlushLogTask *task)
   const int64_t task_size = task->get_io_size_();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret), KPC(this));
+    PALF_LOG(ERROR, "BatchLogIOFlushLogTask not inited!!!", K(ret), KPC(this));
   } else if (accum_size_ > SINGLE_TASK_MAX_SIZE) {
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_FAIL(io_task_array_.push_back(task))) {
@@ -442,7 +356,7 @@ int BatchLogIOFlushLogTask::do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalf
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret), KPC(this));
+    PALF_LOG(ERROR, "BatchLogIOFlushLogTask not inited!!!", K(ret), KPC(this));
   } else if (io_task_array_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "BatchLogIOFlushLogTask is empty", K(ret), KPC(this));
@@ -460,7 +374,7 @@ int BatchLogIOFlushLogTask::push_flush_cb_to_thread_pool_(LogIOTaskCbThreadPool 
   const int64_t count = io_task_array_.count();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret), KPC(this));
+    PALF_LOG(ERROR, "BatchLogIOFlushLogTask not inited!!!", K(ret), KPC(this));
   } else {
     const int64_t current_time = ObTimeUtility::current_time();
     for (int64_t i = 0; i < count && OB_SUCC(ret); i++) {
@@ -534,68 +448,6 @@ void BatchLogIOFlushLogTask::clear_memory_(IPalfEnvImpl *palf_env_impl)
       task->free_this(palf_env_impl);
       io_task_array_[i] = NULL;
     }
-  }
-}
-
-LogIOPurgeThrottlingTask::LogIOPurgeThrottlingTask(const int64_t palf_epoch) :
-  LogIOTask(palf_epoch), purge_ctx_(), is_inited_(false)
-  {}
-
-LogIOPurgeThrottlingTask::~LogIOPurgeThrottlingTask()
-{
-  destroy();
-}
-
-void LogIOPurgeThrottlingTask::reset()
-{
-  is_inited_ = false;
-  purge_ctx_.reset();
-  LogIOTask::reset();
-}
-
-void LogIOPurgeThrottlingTask::destroy()
-{
-  if (IS_INIT) {
-    reset();
-  }
-}
-
-int LogIOPurgeThrottlingTask::init(const PurgeThrottlingCbCtx & purge_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    PALF_LOG(ERROR, "LogIOPurgeThrottlingTask init failed",KPC(this));
-  } else if (OB_UNLIKELY(!purge_ctx.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid purge_ctx", K(purge_ctx), KPC(this));
-  } else {
-    purge_ctx_ = purge_ctx;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-int LogIOPurgeThrottlingTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard)
-{
-  UNUSED(guard);
-  int ret = OB_SUCCESS;
-  ret = push_task_into_cb_thread_pool_(cb_thread_pool, this);
-  return ret;
-}
-
-int LogIOPurgeThrottlingTask::after_consume_(IPalfHandleImplGuard &guard)
-{
-  UNUSED(guard);
-  return OB_SUCCESS;
-}
-
-void LogIOPurgeThrottlingTask::free_this_(IPalfEnvImpl *palf_env_impl)
-{
-  if (OB_ISNULL(palf_env_impl) || OB_ISNULL(palf_env_impl->get_log_allocator())) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "palf_env_impl or log_allocator is NULL", KPC(this), KP(palf_env_impl))
-  } else {
-    palf_env_impl->get_log_allocator()->free_log_io_purge_throttling_task(this);
   }
 }
 

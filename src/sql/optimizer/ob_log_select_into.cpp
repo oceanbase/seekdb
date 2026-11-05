@@ -50,7 +50,7 @@ int ObLogSelectInto::compute_plan_type()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObLogicalOperator::compute_plan_type())) {
   } else if (LOG_EXCHANGE == child->get_type()) {
-    location_type_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
+    access_shape_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
   } else { /*do nothing*/ }
   return ret;
 }

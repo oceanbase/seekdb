@@ -15,6 +15,8 @@
  */
 
 #include "log_meta.h"
+#include "share/storage/local_store.h"
+#include "share/inner_table/local_table_schema.h"
 
 namespace oceanbase
 {
@@ -46,18 +48,6 @@ int LogMeta::generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
     version_ = LOG_META_VERSION;
     log_mode_meta_.generate(access_mode, init_ref_scn);
     PALF_LOG(INFO, "generate_by_palf_base_info success", KPC(this));
-  }
-  return ret;
-}
-
-int LogMeta::load(const char *buf, int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  if (NULL == buf || 0 >= buf_len) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf), K(buf_len));
-  } else if (OB_FAIL(this->deserialize(buf, buf_len, pos))) {
   }
   return ret;
 }
@@ -141,5 +131,100 @@ DEFINE_GET_SERIALIZE_SIZE(LogMeta)
   size += log_snapshot_meta_.get_serialize_size();
   return size;
 }
+
+namespace meta_store {
+using namespace share;
+using namespace share::palf_meta;
+namespace {
+int check_commit(int ret)
+{
+  if (OB_IO_ERROR == ret) {
+    PALF_LOG(ERROR, "local PALF metadata commit is uncertain; stop before changing log files", K(ret));
+    ob_abort();
+  }
+  return ret;
+}
+
+int write_meta(LocalStore &store, const LogMeta &meta, bool create)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("PalfMeta");
+  const int64_t size = meta.get_serialize_size();
+  char *buf = static_cast<char *>(allocator.alloc(size));
+  int64_t pos = 0;
+  int64_t affected = 0;
+  if (!meta.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(buf)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(meta.serialize(buf, size, pos))) {
+  } else {
+    // Log IO advances the manifest independently; update only the snapshot.
+    auto request = create ? LocalRequest::upsert(schema()) : LocalRequest::update(schema());
+    request.set(Payload, LocalValue::blob(buf, pos));
+    if (create) {
+      request.set(Id, int64_t(0)).set(ExpectedNextBlockId, int64_t(0));
+    } else {
+      request.eq(Id, int64_t(0));
+    }
+    if (OB_FAIL(check_commit(store.execute(request, &affected)))) {
+    } else if (affected != 1) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  return ret;
+}
+}
+
+int create(LocalStore &store, const LogMeta &meta)
+{
+  return write_meta(store, meta, true);
+}
+
+int save(LocalStore &store, const LogMeta &meta)
+{
+  return write_meta(store, meta, false);
+}
+
+int load(LocalStore &store, LogMeta &meta, block_id_t &expected_next_block_id)
+{
+  return store.query(LocalRequest::select(schema(), {Payload, ExpectedNextBlockId}).eq(Id, int64_t(0)),
+      [&](LocalRowReader &row) {
+        int ret = OB_SUCCESS;
+        int size = 0;
+        const char *buf = static_cast<const char *>(row.get_blob(0, &size));
+        const int64_t block_id = row.get_int64(1);
+        int64_t pos = 0;
+        if (OB_ISNULL(buf) || size <= 0 || block_id < 0 || block_id >= LOG_INVALID_BLOCK_ID) {
+          ret = OB_INVALID_DATA;
+        } else if (OB_FAIL(meta.deserialize(buf, size, pos))) {
+        } else if (pos != size || !meta.is_valid()) {
+          ret = OB_INVALID_DATA;
+        } else {
+          expected_next_block_id = static_cast<block_id_t>(block_id);
+        }
+        return ret;
+      });
+}
+
+int update_manifest(LocalStore &store, block_id_t expected_next_block_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected = 0;
+  if (!is_valid_block_id(expected_next_block_id)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(check_commit(store.execute(LocalRequest::update(schema()).eq(Id, int64_t(0))
+      .set(ExpectedNextBlockId, static_cast<int64_t>(expected_next_block_id)), &affected)))) {
+  } else if (affected != 1) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int remove(LocalStore &store)
+{
+  return check_commit(store.execute(LocalRequest::erase(schema()).eq(Id, int64_t(0))));
+}
+} // namespace meta_store
 } // end namespace palf
 } // end namespace oceanbase

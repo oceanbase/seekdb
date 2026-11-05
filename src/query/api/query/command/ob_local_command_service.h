@@ -39,7 +39,6 @@ class ObILocalCommandService
 {
 public:
   virtual ~ObILocalCommandService() = default;
-  virtual int refresh_memory_stat() = 0;
   virtual int clear_expired_deadlock_events() = 0;
   virtual int set_tracepoint(const obcall::ObSetTracepointParam &arg) = 0;
   virtual int cancel_sys_task(const share::ObTaskId &task_id) = 0;

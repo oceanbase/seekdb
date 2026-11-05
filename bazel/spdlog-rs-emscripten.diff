@@ -1,0 +1,13 @@
+--- a/src/record.rs
++++ b/src/record.rs
+@@ -280,3 +280,10 @@
++    #[cfg(target_os = "emscripten")]
++    #[must_use]
++    fn get_current_tid_inner() -> u64 {
++        // Emscripten represents a pthread by its address in shared Wasm memory.
++        unsafe { libc::pthread_self() as u64 }
++    }
++
+     #[cfg(target_os = "freebsd")]
+     #[must_use]
+     fn get_current_tid_inner() -> u64 {

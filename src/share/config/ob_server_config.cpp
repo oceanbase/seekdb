@@ -18,7 +18,7 @@
 
 #include "share/rc/ob_server_runtime.h"
 #include "ob_server_config.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 
 #include "lib/alloc/alloc_func.h"
 #include "lib/cpu/ob_cpu_topology.h"

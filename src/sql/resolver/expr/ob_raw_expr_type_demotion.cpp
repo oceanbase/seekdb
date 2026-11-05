@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"

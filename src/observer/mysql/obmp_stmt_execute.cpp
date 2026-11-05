@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
-#include "nio.h"
+#include "rust/config.h"
+#include "rust/sql_nio.h"
 
 #include "obmp_stmt_execute.h"
 #include "lib/ob_running_mode.h"
@@ -55,15 +55,43 @@ namespace observer
 inline int ObPSAnalysisChecker::detection(const int64_t len)
 {
   int ret = OB_SUCCESS;
-  if (!need_check_) {
-  } else if (*pos_ + len > end_pos_) {
+  if (OB_ISNULL(pos_) || OB_ISNULL(*pos_) || OB_ISNULL(begin_pos_)
+      || OB_UNLIKELY(len < 0 || *pos_ < begin_pos_ || *pos_ > end_pos_
+                     || len > end_pos_ - *pos_)) {
     ret = OB_ERR_MALFORMED_PS_PACKET;
     LOG_USER_ERROR(OB_ERR_MALFORMED_PS_PACKET);
     LOG_ERROR("malformed ps data packet, please check the number and content of data packet parameters", K(ret), KP(pos_), KP(begin_pos_),
-    K(end_pos_ - begin_pos_), K(len), K(data_len_), K(remain_len()));
+    K(len), K(data_len_));
   }
   return ret;
 }
+
+namespace
+{
+int read_checked_length(const char *&data, uint64_t &length,
+                        ObPSAnalysisChecker *checker)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(checker) && OB_FAIL(checker->detection(1))) {
+  } else {
+    const uint8_t marker = static_cast<uint8_t>(*data);
+    const int64_t prefix_length = marker == 252 ? 3 : marker == 253 ? 4 : marker == 254 ? 9 : 1;
+    if (OB_NOT_NULL(checker) && OB_FAIL(checker->detection(prefix_length))) {
+    } else if (marker == 254) {
+      // The legacy get_length helper truncates this form to its low 32 bits.
+      // Decode the complete wire length before comparing it with the packet.
+      ++data;
+      uint32_t low = 0;
+      uint32_t high = 0;
+      ObMySQLUtil::get_uint4(data, low);
+      ObMySQLUtil::get_uint4(data, high);
+      length = (static_cast<uint64_t>(high) << 32) | low;
+    } else if (OB_FAIL(ObMySQLUtil::get_length(data, length))) {
+    }
+  }
+  return ret;
+}
+} // namespace
 
 void ObPsSessionInfoParamsCleaner::operator()(
     common::hash::HashMapPair<uint64_t, ObPsSessionInfo *> &entry) {
@@ -126,8 +154,6 @@ ObMPStmtExecute::ObMPStmtExecute(const share::ObGlobalContext &gctx)
       exec_end_timestamp_(0),
       prepare_packet_sent_(false),
       params_num_(0),
-      params_value_len_(0),
-      params_value_(NULL),
       curr_sql_idx_(0)
 {
   ctx_.exec_type_ = MpQuery;
@@ -565,7 +591,6 @@ int ObMPStmtExecute::before_process()
       ret = OB_ERR_UNEXPECTED;
     } else {
       OZ (request_params(session, pos, ps_stmt_checksum, alloc));
-      OZ (store_params_value_to_str(alloc, *session));
     }
     if (session != NULL) {
       revert_session(session);
@@ -591,11 +616,6 @@ int ObMPStmtExecute::after_process(int error_code)
   if (OB_FAIL(ObMPBase::after_process(error_code))) {
   }
   return ret;
-}
-
-int ObMPStmtExecute::store_params_value_to_str(ObIAllocator &alloc, sql::ObSQLSessionInfo &session)
-{
-  return sql::store_params_value_to_str(alloc, session, params_, params_value_, params_value_len_);
 }
 
 int ObMPStmtExecute::parse_request_type(const char *&pos, int64_t num_of_params,
@@ -732,19 +752,6 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
     }
   }
   return ret;
-}
-
-bool ObMPStmtExecute::is_contain_complex_element(const sql::ParamTypeArray &param_types) const
-{
-  bool b_ret = false;
-  for (int64_t i = 0; i < param_types.count(); i++) {
-    const obmysql::EMySQLFieldType field_type = param_types.at(i);
-    if (MYSQL_TYPE_COMPLEX == field_type) {
-      b_ret = true;
-      break;
-    }
-  }
-  return b_ret;
 }
 
 int ObMPStmtExecute::set_standard_timestamp_param(
@@ -974,19 +981,19 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
   handled = false;
   const int64_t param_count = ps_session_info.get_param_count();
   const int64_t tail_len = analysis_checker_.remain_len();
-  NioMysqlExecuteParamMeta *cached = NULL;
-  NioMysqlExecuteParam *parsed = NULL;
+  oceanbase::nio::NioMysqlExecuteParamMeta *cached = NULL;
+  oceanbase::nio::NioMysqlExecuteParam *parsed = NULL;
   uint8_t *long_data = NULL;
-  NioMysqlExecuteParseResult parse_result = {};
+  oceanbase::nio::NioMysqlExecuteParseResult parse_result = {};
   const ParamTypeArray &cached_types = ps_session_info.get_param_types();
   const ParamTypeFlagArray &cached_flags =
       ps_session_info.get_param_type_flags();
 
-  static_assert(sizeof(NioMysqlExecuteParamMeta) == 4,
+  static_assert(sizeof(oceanbase::nio::NioMysqlExecuteParamMeta) == 4,
                 "execute parameter meta ABI mismatch");
-  static_assert(sizeof(NioMysqlExecuteParam) == 40,
+  static_assert(sizeof(oceanbase::nio::NioMysqlExecuteParam) == 40,
                 "execute parameter descriptor ABI mismatch");
-  static_assert(sizeof(NioMysqlExecuteParseResult) == 8,
+  static_assert(sizeof(oceanbase::nio::NioMysqlExecuteParseResult) == 8,
                 "execute parse result ABI mismatch");
 
   if (OB_ISNULL(session) || param_count < 0 || tail_len < 0 ||
@@ -995,9 +1002,9 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
   } else if (param_count > INT64_MAX / static_cast<int64_t>(sizeof(*parsed))) {
     ret = OB_SIZE_OVERFLOW;
   } else if (param_count > 0 &&
-             (OB_ISNULL(parsed = static_cast<NioMysqlExecuteParam *>(
+             (OB_ISNULL(parsed = static_cast<oceanbase::nio::NioMysqlExecuteParam *>(
                             alloc.alloc(param_count * sizeof(*parsed)))) ||
-              OB_ISNULL(cached = static_cast<NioMysqlExecuteParamMeta *>(
+              OB_ISNULL(cached = static_cast<oceanbase::nio::NioMysqlExecuteParamMeta *>(
                             alloc.alloc(param_count * sizeof(*cached)))) ||
               OB_ISNULL(long_data = static_cast<uint8_t *>(
                             alloc.alloc(param_count))))) {
@@ -1021,25 +1028,25 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
     }
   }
 
-  int parse_ret = NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT;
+  int parse_ret = static_cast<int32_t>(oceanbase::nio::ExecuteStatus::InvalidArgument);
   if (OB_SUCC(ret)) {
     const int64_t cached_count = cached_types.count() == param_count &&
                                          cached_flags.count() == param_count
                                      ? param_count
                                      : 0;
-    parse_ret = nio_parse_mysql_execute_params(
+    parse_ret = oceanbase::nio::parse_mysql_execute_params(
         tail, tail_len, param_count, cached, cached_count, long_data,
         param_count, parsed, param_count, &parse_result);
-    if (NIO_MYSQL_EXECUTE_PARSE_UNSUPPORTED == parse_ret) {
+    if (static_cast<int32_t>(oceanbase::nio::ExecuteStatus::Unsupported) == parse_ret) {
       handled = false;
     } else {
       handled = true;
-      if (NIO_MYSQL_EXECUTE_PARSE_MALFORMED == parse_ret) {
+      if (static_cast<int32_t>(oceanbase::nio::ExecuteStatus::Malformed) == parse_ret) {
         ret = OB_ERR_MALFORMED_PS_PACKET;
         LOG_USER_ERROR(OB_ERR_MALFORMED_PS_PACKET);
-      } else if (NIO_MYSQL_EXECUTE_PARSE_CAPACITY == parse_ret) {
+      } else if (static_cast<int32_t>(oceanbase::nio::ExecuteStatus::Capacity) == parse_ret) {
         ret = OB_SIZE_OVERFLOW;
-      } else if (NIO_MYSQL_EXECUTE_PARSE_OK != parse_ret) {
+      } else if (static_cast<int32_t>(oceanbase::nio::ExecuteStatus::Ok) != parse_ret) {
         ret = OB_ERR_UNEXPECTED;
       }
       if (OB_FAIL(ret)) {
@@ -1059,11 +1066,11 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
   ParamTypeArray new_types;
   ParamTypeFlagArray new_flags;
   for (int64_t i = 0; OB_SUCC(ret) && handled && i < param_count; ++i) {
-    const NioMysqlExecuteParam &desc = parsed[i];
+    const oceanbase::nio::NioMysqlExecuteParam &desc = parsed[i];
     const EMySQLFieldType mysql_type =
         static_cast<EMySQLFieldType>(desc.mysql_type);
     const bool is_unsigned =
-        0 != (desc.flags & NIO_MYSQL_EXECUTE_PARAM_UNSIGNED);
+        0 != (desc.flags & static_cast<uint8_t>(oceanbase::nio::ExecuteFlag::Unsigned));
     ObObjParam &param = params_->at(i);
     ObObjType ob_type = ObMaxType;
     param.reset();
@@ -1073,18 +1080,18 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (NIO_MYSQL_EXECUTE_VALUE_NULL == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Null) == desc.kind) {
       param.set_null();
       if (ob_is_accuracy_length_valid_tc(ob_type)) {
         param.set_collation_type(cs_conn);
         param.set_collation_level(CS_LEVEL_COERCIBLE);
       }
-    } else if (NIO_MYSQL_EXECUTE_VALUE_LONG_DATA == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::LongData) == desc.kind) {
       if (OB_FAIL(materialize_standard_long_data(alloc, *session, mysql_type,
                                                  charset, cs_conn, i, param))) {
       }
-    } else if (NIO_MYSQL_EXECUTE_VALUE_I64 == desc.kind ||
-               NIO_MYSQL_EXECUTE_VALUE_U64 == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::I64) == desc.kind ||
+               static_cast<uint8_t>(oceanbase::nio::ExecuteKind::U64) == desc.kind) {
       const int64_t signed_value = static_cast<int64_t>(desc.value);
       switch (mysql_type) {
       case MYSQL_TYPE_TINY:
@@ -1111,23 +1118,23 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
         ret = OB_ERR_ILLEGAL_TYPE;
         break;
       }
-    } else if (NIO_MYSQL_EXECUTE_VALUE_F32_BITS == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::F32Bits) == desc.kind) {
       const uint32_t bits = static_cast<uint32_t>(desc.value);
       float value = 0;
       MEMCPY(&value, &bits, sizeof(value));
       param.set_float(value);
-    } else if (NIO_MYSQL_EXECUTE_VALUE_F64_BITS == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::F64Bits) == desc.kind) {
       double value = 0;
       MEMCPY(&value, &desc.value, sizeof(value));
       param.set_double(value);
-    } else if (NIO_MYSQL_EXECUTE_VALUE_YEAR == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Year) == desc.kind) {
       uint8_t year = 0;
       if (OB_FAIL(ObTimeConverter::int_to_year(static_cast<int64_t>(desc.value),
                                                year))) {
       } else {
         param.set_year(year);
       }
-    } else if (NIO_MYSQL_EXECUTE_VALUE_BYTES == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Bytes) == desc.kind) {
       if (desc.value_off < 0 || desc.value_len < 0 ||
           desc.value_off > tail_len ||
           desc.value_len > tail_len - desc.value_off) {
@@ -1140,18 +1147,18 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
                                              cs_conn, bytes, param))) {
         }
       }
-    } else if (NIO_MYSQL_EXECUTE_VALUE_DATE == desc.kind ||
-               NIO_MYSQL_EXECUTE_VALUE_DATETIME == desc.kind ||
-               NIO_MYSQL_EXECUTE_VALUE_TIMESTAMP == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Date) == desc.kind ||
+               static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Datetime) == desc.kind ||
+               static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Timestamp) == desc.kind) {
       if (OB_FAIL(set_standard_timestamp_param(
               mysql_type, desc.year, desc.month, desc.day, desc.hour,
               desc.minute, desc.second, desc.microseconds, 0 == desc.value_len,
               session->get_timezone_info(), param))) {
       }
-    } else if (NIO_MYSQL_EXECUTE_VALUE_TIME == desc.kind) {
+    } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Time) == desc.kind) {
       if (OB_FAIL(set_standard_time_param(
               desc.days, desc.hour, desc.minute, desc.second, desc.microseconds,
-              0 != (desc.flags & NIO_MYSQL_EXECUTE_PARAM_NEGATIVE),
+              0 != (desc.flags & static_cast<uint8_t>(oceanbase::nio::ExecuteFlag::Negative)),
               0 == desc.value_len, param))) {
       }
     } else {
@@ -1161,13 +1168,13 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
     }
 
     if (OB_SUCC(ret)) {
-      if (NIO_MYSQL_EXECUTE_VALUE_NULL != desc.kind) {
+      if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Null) != desc.kind) {
         // Preserve the legacy binary-protocol parameter coercibility used by
         // expression type deduction and string comparison.
         param.set_collation_level(CS_LEVEL_COERCIBLE);
       }
       param.set_param_meta();
-      if (NIO_MYSQL_EXECUTE_VALUE_NULL != desc.kind) {
+      if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Null) != desc.kind) {
         param.set_length(param.get_val_len());
       }
       if (1 == parse_result.new_params_bound_flag) {
@@ -1297,9 +1304,6 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
                   param_types, param_type_flags, param_type_infos))) {
           }
         }
-        if (OB_SUCC(ret) && is_contain_complex_element(param_types)) {
-          analysis_checker_.need_check_ = false;
-        }
       }
       if (OB_SUCC(ret) && is_arraybinding_) {
         OZ (check_param_type_for_arraybinding(param_type_infos));
@@ -1342,7 +1346,7 @@ int ObMPStmtExecute::decode_type_info(const char*& buf, TypeInfo &type_info)
   PS_DEFENSE_CHECK(1) // check first byte
   {
     uint64_t length = 0;
-    if (OB_FAIL(ObMySQLUtil::get_length(buf, length))) {
+    if (OB_FAIL(read_checked_length(buf, length, &analysis_checker_))) {
     } else {
       PS_DEFENSE_CHECK(length)
       {
@@ -1355,7 +1359,7 @@ int ObMPStmtExecute::decode_type_info(const char*& buf, TypeInfo &type_info)
   {
     uint64_t length = 0;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObMySQLUtil::get_length(buf, length))) {
+    } else if (OB_FAIL(read_checked_length(buf, length, &analysis_checker_))) {
     } else {
       PS_DEFENSE_CHECK(length)
       {
@@ -1368,7 +1372,7 @@ int ObMPStmtExecute::decode_type_info(const char*& buf, TypeInfo &type_info)
   {
     uint64_t version = 0;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObMySQLUtil::get_length(buf, version))) {
+    } else if (OB_FAIL(read_checked_length(buf, version, &analysis_checker_))) {
     }
   }
   return ret;
@@ -1759,8 +1763,7 @@ OB_NOINLINE int ObMPStmtExecute::process_retry(ObSQLSessionInfo &session,
   param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(!lib::is_mini_mode() ? OB_MALLOC_BIG_BLOCK_SIZE
-                                        : OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+                                        : OB_MALLOC_MIDDLE_BLOCK_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {
     ret = do_process(session,
                      param_store,
@@ -1913,7 +1916,7 @@ int ObMPStmtExecute::process()
   bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
 
-  ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+  const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1932,10 +1935,6 @@ int ObMPStmtExecute::process()
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     SQL_INFO_GUARD(ctx_.cur_sql_, ObString(ctx_.sql_id_));
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
-    session.get_raw_audit_record().request_memory_used_ = 0;
-    observer::ObProcessMallocCallback pmcb(0,
-          session.get_raw_audit_record().request_memory_used_);
-    lib::ObMallocCallbackGuard guard(pmcb);
     session.set_thread_id(GETTID());
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     int64_t packet_len = pkt.get_clen();
@@ -2194,8 +2193,7 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
       ObCollationType cur_cs_type = ObCharset::get_default_collation(charset);
       PS_STATIC_DEFENSE_CHECK(checker, 1)
       {
-        // check first byte of `length` field and trust the encoder reguarding the remaining bytes.
-        if (OB_FAIL(ObMySQLUtil::get_length(data, length))) {
+        if (OB_FAIL(read_checked_length(data, length, checker))) {
         }
         PS_STATIC_DEFENSE_CHECK(checker, length)
         {
@@ -2375,7 +2373,7 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
         // 1. read count
         PS_DEFENSE_CHECK(1)
         {
-          if (OB_FAIL(ObMySQLUtil::get_length(data, count))) {
+          if (OB_FAIL(read_checked_length(data, count, &analysis_checker_))) {
           }
         }
         // 2. make null map

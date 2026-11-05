@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_SESSION
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_basic_session_info.h"
 #include "share/config/ob_config_helper.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -1906,7 +1906,7 @@ int ObBasicSessionInfo::set_cur_phy_plan(const ObPhysicalPlan *cur_phy_plan)
   return ret;
 }
 
-void ObBasicSessionInfo::set_current_trace_id(common::ObCurTraceId::TraceId *trace_id)
+void ObBasicSessionInfo::set_current_trace_id(const common::ObCurTraceId::TraceId *trace_id)
 {
   if (OB_ISNULL(trace_id)) {
   } else {

@@ -222,11 +222,11 @@ int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
     // Write to storage layer by partition
     FOREACH_X(it, tablet_id_array, OB_SUCC(ret)) {
       ObTabletID tablet_id = *it;
-      ObDASTabletLoc *tablet_loc = nullptr;
-      ObDASTableLoc *table_loc = dml_rtdef_->das_base_rtdef_.table_loc_;
+      DASRuntimeTabletAccess *tablet_access = nullptr;
+      DASRuntimeTableAccess *table_access = dml_rtdef_->das_base_rtdef_.table_access_;
       if (OB_FAIL(cache_.get_row_iterator(tablet_id, row_iter))) {
-      } else if (OB_FAIL(DAS_CTX(ctx).extended_tablet_loc(*table_loc, tablet_id, tablet_loc))) {
-      } else if (OB_FAIL(writer_->write_rows(ctx, tablet_loc, *row_iter))) {
+      } else if (OB_FAIL(DAS_CTX(ctx).ensure_tablet_access(*table_access, tablet_id, tablet_access))) {
+      } else if (OB_FAIL(writer_->write_rows(ctx, tablet_access, *row_iter))) {
       }
       if (NULL != row_iter) {
         row_iter->close();
