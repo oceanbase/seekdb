@@ -2842,10 +2842,17 @@ int ObCmpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     const ObRawExpr *left_expr = expr.get_param_expr(0);
     const ObRawExpr *right_expr = expr.get_param_expr(1);
     ObCmpSelEstimator *cmp_estimator = static_cast<ObCmpSelEstimator*>(estimator);
+    bool l_expr_changed = false;
+    bool r_expr_changed = false;
     if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(left_expr, left_expr)) ||
                OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(right_expr, right_expr))) {
+    } else if (OB_FAIL(ObOptSelectivity::strip_identity_arith_expr(left_expr, left_expr, l_expr_changed)) ||
+               OB_FAIL(ObOptSelectivity::strip_identity_arith_expr(right_expr, right_expr, r_expr_changed))) {
+      // The comparison is still estimated from the original expression, stripping the
+      // identity operations here only recovers the column, so that the selectivity of
+      // the column statistics is used instead of the default inequality selectivity.
     } else if ((left_expr->is_column_ref_expr() && right_expr->is_const_expr()) ||
                (left_expr->is_const_expr() && right_expr->is_column_ref_expr())) {
       cmp_estimator->can_calc_sel_ = true;
