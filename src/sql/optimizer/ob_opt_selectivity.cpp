@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_opt_selectivity.h"
+#include <cmath>
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
@@ -4043,6 +4044,11 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
       ret = OB_SUCCESS;
       max_value.set_max_value();
     }
+  } else if (T_OP_ADD == expr->get_expr_type() || T_OP_MINUS == expr->get_expr_type() ||
+             T_OP_MUL == expr->get_expr_type() || T_OP_DIV == expr->get_expr_type()) {
+    if (OB_FAIL(SMART_CALL(calc_arith_expr_min_max(table_metas, ctx, expr,
+                                                   min_value, max_value)))) {
+    }
   } else if (T_FUN_SYS_DATE == expr->get_expr_type()) {
     if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, expr->get_param_expr(0),
                                              min_value, max_value)))) {
@@ -4137,6 +4143,122 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
                min_value.is_null() || max_value.is_null()) {
       min_value.set_min_value();
       max_value.set_max_value();
+    }
+  }
+  return ret;
+}
+
+/*
+ * Derive the min/max value of `var OP const` or `const OP var` from the min/max value of `var`,
+ * where OP is +, -, * or /. Within these cases the expr is monotonic in `var`, e.g.
+ *   min(c1 + 2) = min(c1) + 2,  min(10 - c1) = 10 - max(c1),  min(c1 * -2) = max(c1) * -2
+ * so that `c1 + 2 > 12` gets the same range selectivity as `c1 > 10`.
+ * `const / var`, multiplication or division by zero and non-numeric operands are ignored.
+ */
+int ObOptSelectivity::calc_arith_expr_min_max(const OptTableMetas &table_metas,
+                                              const OptSelectivityCtx &ctx,
+                                              const ObRawExpr *expr,
+                                              ObObj &min_value,
+                                              ObObj &max_value)
+{
+  int ret = OB_SUCCESS;
+  const ObRawExpr *var_expr = NULL;
+  const ObRawExpr *const_expr = NULL;
+  bool is_var_left = true;
+  bool is_valid = false;
+  double const_value = 0.0;
+  double var_min = 0.0;
+  double var_max = 0.0;
+  double res_min = 0.0;
+  double res_max = 0.0;
+  ObObj var_min_obj;
+  ObObj var_max_obj;
+  min_value.set_min_value();
+  max_value.set_max_value();
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null expr", K(ret));
+  } else if (2 != expr->get_param_count() ||
+             OB_ISNULL(expr->get_param_expr(0)) ||
+             OB_ISNULL(expr->get_param_expr(1))) {
+    // do nothing
+  } else if (!expr->get_param_expr(0)->is_static_scalar_const_expr() &&
+             expr->get_param_expr(1)->is_static_scalar_const_expr()) {
+    var_expr = expr->get_param_expr(0);
+    const_expr = expr->get_param_expr(1);
+    is_var_left = true;
+    is_valid = true;
+  } else if (expr->get_param_expr(0)->is_static_scalar_const_expr() &&
+             !expr->get_param_expr(1)->is_static_scalar_const_expr()) {
+    var_expr = expr->get_param_expr(1);
+    const_expr = expr->get_param_expr(0);
+    is_var_left = false;
+    is_valid = T_OP_DIV != expr->get_expr_type();
+  }
+  if (OB_FAIL(ret) || !is_valid) {
+  } else if (!ob_is_numeric_type(expr->get_data_type()) ||
+             !ob_is_numeric_type(var_expr->get_data_type()) ||
+             ObBitType == expr->get_data_type() ||
+             ObBitType == var_expr->get_data_type()) {
+    is_valid = false;
+  } else if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, var_expr,
+                                                  var_min_obj, var_max_obj)))) {
+  } else if (var_min_obj.is_min_value() || var_min_obj.is_max_value() || var_min_obj.is_null() ||
+             var_max_obj.is_min_value() || var_max_obj.is_max_value() || var_max_obj.is_null() ||
+             !ob_is_numeric_type(var_min_obj.get_type()) ||
+             !ob_is_numeric_type(var_max_obj.get_type())) {
+    is_valid = false;
+  } else if (OB_FAIL(calc_const_numeric_value(ctx, const_expr, const_value, is_valid))) {
+  } else if (!is_valid) {
+    // do nothing
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&var_min_obj, var_min)) ||
+             OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&var_max_obj, var_max))) {
+  } else {
+    switch (expr->get_expr_type()) {
+      case T_OP_ADD: {
+        res_min = var_min + const_value;
+        res_max = var_max + const_value;
+        break;
+      }
+      case T_OP_MINUS: {
+        res_min = is_var_left ? var_min - const_value : const_value - var_max;
+        res_max = is_var_left ? var_max - const_value : const_value - var_min;
+        break;
+      }
+      case T_OP_MUL: {
+        res_min = const_value > 0 ? var_min * const_value : var_max * const_value;
+        res_max = const_value > 0 ? var_max * const_value : var_min * const_value;
+        is_valid = const_value != 0;
+        break;
+      }
+      case T_OP_DIV: {
+        res_min = const_value > 0 ? var_min / const_value : var_max / const_value;
+        res_max = const_value > 0 ? var_max / const_value : var_min / const_value;
+        is_valid = const_value != 0;
+        break;
+      }
+      default: {
+        is_valid = false;
+        break;
+      }
+    }
+  }
+  if (OB_FAIL(ret) || !is_valid) {
+  } else if (!std::isfinite(res_min) || !std::isfinite(res_max) || res_min > res_max ||
+             (res_min < 0 && ob_is_unsigned_type(expr->get_data_type()))) {
+    // do nothing
+  } else {
+    ObObj tmp_min;
+    ObObj tmp_max;
+    tmp_min.set_double(res_min);
+    tmp_max.set_double(res_max);
+    if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, tmp_min)) ||
+        OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, tmp_max))) {
+      // the range is out of the result type, ignore it
+      ret = OB_SUCCESS;
+    } else {
+      min_value = tmp_min;
+      max_value = tmp_max;
     }
   }
   return ret;
