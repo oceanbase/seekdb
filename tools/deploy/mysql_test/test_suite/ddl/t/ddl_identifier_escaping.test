@@ -1,0 +1,48 @@
+# Regression for shared DDL identifier escaping; related to issue #1469.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS ddl_ident_plain;
+DROP TABLE IF EXISTS ddl_ident_enum;
+DROP TABLE IF EXISTS ddl_ident_set;
+--enable_warnings
+
+CREATE TABLE ddl_ident_plain (
+  id INT PRIMARY KEY,
+  enum_col ENUM('a', 'b')
+);
+INSERT INTO ddl_ident_plain VALUES (1, 'a');
+CREATE UNIQUE INDEX uk_plain ON ddl_ident_plain(enum_col);
+SELECT id, enum_col AS value FROM ddl_ident_plain ORDER BY id;
+
+CREATE TABLE ddl_ident_enum (
+  id INT PRIMARY KEY,
+  `e``n` ENUM('a', 'b')
+);
+INSERT INTO ddl_ident_enum VALUES (1, 'a');
+CREATE UNIQUE INDEX uk_enum ON ddl_ident_enum(`e``n`);
+SELECT id, `e``n` AS value FROM ddl_ident_enum ORDER BY id;
+--disable_result_log
+--error ER_DUP_ENTRY
+INSERT INTO ddl_ident_enum VALUES (2, 'a');
+--enable_result_log
+INSERT INTO ddl_ident_enum VALUES (3, 'b');
+SELECT id, `e``n` AS value FROM ddl_ident_enum ORDER BY id;
+
+CREATE TABLE ddl_ident_set (
+  id INT PRIMARY KEY,
+  ```s````n``` SET('a', 'b')
+);
+INSERT INTO ddl_ident_set VALUES (1, 'a');
+CREATE UNIQUE INDEX uk_set ON ddl_ident_set(```s````n```);
+SELECT id, ```s````n``` AS value FROM ddl_ident_set ORDER BY id;
+--disable_result_log
+--error ER_DUP_ENTRY
+INSERT INTO ddl_ident_set VALUES (2, 'a');
+--enable_result_log
+INSERT INTO ddl_ident_set VALUES (3, 'b');
+SELECT id, ```s````n``` AS value FROM ddl_ident_set ORDER BY id;
+
+DROP TABLE ddl_ident_plain;
+DROP TABLE ddl_ident_enum;
+DROP TABLE ddl_ident_set;
+--enable_query_log
