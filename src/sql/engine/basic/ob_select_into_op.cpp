@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "ob_select_into_op.h"
+#include "lib/utility/ob_platform_io.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -1202,18 +1203,16 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 {
   int ret = OB_SUCCESS;
   ObString file_path = file_name.split_on(file_name.reverse_find('/'));
-  char full_path_buf[PATH_MAX+1];
+  char full_path_buf[common::MAX_PATH_SIZE] = {0};
   char *actual_path = nullptr;
   ObSqlString sql_str;
   ObString secure_file_priv;
   
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
-#ifdef _WIN32
-  } else if (OB_ISNULL(actual_path = _fullpath(full_path_buf, sql_str.ptr(), PATH_MAX))) {
-#else
-  } else if (OB_ISNULL(actual_path = realpath(sql_str.ptr(), full_path_buf))) {
-#endif
+  } else if (0 != common::ob_absolute_path_utf8(sql_str.ptr(), full_path_buf,
+                                                sizeof(full_path_buf))) {
     ret = OB_FILE_NOT_EXIST;
+  } else if (FALSE_IT(actual_path = full_path_buf)) {
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
                                                                 SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),

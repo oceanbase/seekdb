@@ -27,6 +27,7 @@
 #include "query/resolver/ob_partition_type_policy.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "lib/utility/utility.h"
+#include "lib/utility/ob_platform_io.h"
 #include "sql/parser/parse_malloc.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
@@ -6063,7 +6064,8 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     MEMCPY(buf, secure_file_priv.ptr(), secure_file_priv.length());
 
     struct stat path_stat;
-    if (0 != stat(buf, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
+    if (0 != stat(buf, &path_stat)
+        || 0 == ob_stat_is_dir(static_cast<uint32_t>(path_stat.st_mode))) {
       ret = OB_ERR_NO_PRIVILEGE;
     } else {
       MEMSET(buf, 0, sizeof(buf));
@@ -6118,7 +6120,7 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       const char * const secure_file_path = server_secure_path_allowlist[i];
       struct stat path_stat;
       stat(secure_file_path, &path_stat);
-      if (0 == S_ISDIR(path_stat.st_mode)) {
+      if (0 == ob_stat_is_dir(static_cast<uint32_t>(path_stat.st_mode))) {
         // continue
       } else {
         MEMSET(buf, 0, sizeof(buf));
