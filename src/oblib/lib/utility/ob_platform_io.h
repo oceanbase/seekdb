@@ -32,6 +32,14 @@ namespace common
 // is always opened in binary mode.
 int ob_open_utf8(const char *path, int flags, int mode);
 
+// Opens the directory `path` and returns a descriptor, with the POSIX
+// open(path, O_RDONLY | O_DIRECTORY) contract. The Windows CRT cannot open a
+// directory through _wopen, so this uses CreateFileW with
+// FILE_FLAG_BACKUP_SEMANTICS and wraps the handle as a descriptor; write access
+// is requested first so descriptors that are flushed keep working, and a
+// directory without write permission is opened read-only.
+int ob_open_dir_utf8(const char *path);
+
 // Positioned reads and writes. They behave like POSIX pread(2)/pwrite(2) on
 // every platform:
 //   - a read that starts at or beyond EOF transfers 0 bytes;
@@ -44,6 +52,23 @@ int ob_open_utf8(const char *path, int flags, int mode);
 // EINTR like they would with the POSIX calls.
 int64_t ob_pread_fd(int fd, void *buf, int64_t count, int64_t offset);
 int64_t ob_pwrite_fd(int fd, const void *buf, int64_t count, int64_t offset);
+
+// Flushes an open descriptor. POSIX: fsync(2). Windows: _commit, then
+// FlushFileBuffers on the underlying handle. A directory descriptor cannot be
+// flushed by the CRT; because NTFS journals directory metadata, the flush of a
+// directory is reported as success, which is the contract the PALF Windows shim
+// this replaces had. File descriptors report a failed flush as -1 with errno.
+int ob_fsync_fd(int fd);
+
+// Sets the size of an open file. POSIX: ftruncate(2); Windows: _chsize_s.
+int ob_ftruncate_fd(int fd, int64_t length);
+
+// Reserves `length` bytes for an open file, growing it when it is shorter.
+// Linux: fallocate(fd, 0, 0, length); macOS: ftruncate (the new bytes read as
+// zero); Windows: _chsize_s. PALF calls this on the empty file it just created
+// with O_EXCL, so growing the file and Linux's allocate-without-shrinking
+// contract coincide.
+int ob_fallocate_fd(int fd, int64_t length);
 
 // Metadata reported by ob_stat_utf8(). The POSIX stat/lstat fields used by the
 // database are exposed with explicit widths; fields that Windows does not have
@@ -95,6 +120,21 @@ int ob_unlink_utf8(const char *path);
 int ob_rename_utf8(const char *old_path, const char *new_path);
 int ob_symlink_utf8(const char *target_path, const char *link_path);
 int ob_truncate_utf8(const char *path, int64_t length);
+
+// Directory-descriptor relative forms of the operations above, with the
+// openat(2)/fstatat(2)/renameat(2)/unlinkat(2) contract: `path` is relative to
+// `dir_fd`, and an absolute path ignores the descriptor. On POSIX these are the
+// native calls; on Windows the descriptor is resolved to the UTF-8 absolute
+// name of its directory, and the extended-length path handling consequently
+// stays in this file. Return values are the same as the path-based helpers.
+int ob_openat_utf8(int dir_fd, const char *path, int flags, int mode);
+int ob_statat_utf8(int dir_fd, const char *path, ObPlatformFileStat &stat,
+                   bool follow_link = true);
+int ob_renameat_utf8(int old_dir_fd, const char *old_path,
+                     int new_dir_fd, const char *new_path);
+
+// Removes `path` under `dir_fd`. `is_dir` selects rmdir(2) over unlink(2).
+int ob_unlinkat_utf8(int dir_fd, const char *path, bool is_dir);
 
 // Free and total space of the filesystem containing `path`.
 int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free_space);

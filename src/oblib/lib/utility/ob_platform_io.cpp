@@ -344,6 +344,117 @@ int fill_stat_from_attributes(const wchar_t *extended_path, DWORD attributes,
   return ret;
 }
 
+// Converts a NUL-terminated UTF-16 string to a new[]-allocated UTF-8 string.
+// Returns NULL with errno set on failure.
+char *wide_to_utf8_alloc(const wchar_t *wide)
+{
+  char *result = NULL;
+  const int utf8_size = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, NULL, 0, NULL, NULL);
+  if (utf8_size <= 0) {
+    errno = EINVAL;
+  } else if (NULL == (result = new (std::nothrow) char[utf8_size])) {
+    errno = ENOMEM;
+  } else if (0 == ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, result, utf8_size, NULL, NULL)) {
+    delete[] result;
+    result = NULL;
+    errno = EINVAL;
+  }
+  return result;
+}
+
+// Returns the plain absolute UTF-8 name of the object behind `handle`.
+// GetFinalPathNameByHandleW reports the verbatim form ("\\?\C:\..." or
+// "\\?\UNC\server\..."); the path helpers add the extended-length prefix
+// themselves, so the prefix is stripped here.
+char *handle_to_utf8(const HANDLE handle)
+{
+  char *result = NULL;
+  const DWORD need = ::GetFinalPathNameByHandleW(handle, NULL, 0, FILE_NAME_NORMALIZED);
+  if (0 == need) {
+    errno = win32_error_to_errno(::GetLastError());
+  } else {
+    wchar_t *normalized = new (std::nothrow) wchar_t[need];
+    if (NULL == normalized) {
+      errno = ENOMEM;
+    } else {
+      const DWORD written = ::GetFinalPathNameByHandleW(handle, normalized, need,
+                                                        FILE_NAME_NORMALIZED);
+      if (0 == written || written >= need) {
+        errno = (0 == written) ? win32_error_to_errno(::GetLastError())
+                               : name_too_long_errno();
+      } else {
+        wchar_t *clean = new (std::nothrow) wchar_t[written + 1];
+        if (NULL == clean) {
+          errno = ENOMEM;
+        } else {
+          size_t clean_len = 0;
+          if (written > 8 && 0 == ::wcsncmp(normalized, L"\\\\?\\UNC\\", 8)) {
+            // "\\?\UNC\server\share" -> "\\server\share".
+            clean[0] = L'\\';
+            clean[1] = L'\\';
+            ::wmemcpy(clean + 2, normalized + 8, written - 8 + 1);
+            clean_len = written - 6;
+          } else if (written > 4 && 0 == ::wcsncmp(normalized, L"\\\\?\\", 4)) {
+            ::wmemcpy(clean, normalized + 4, written - 4 + 1);
+            clean_len = written - 4;
+          } else {
+            ::wmemcpy(clean, normalized, written + 1);
+            clean_len = written;
+          }
+          clean[clean_len] = L'\0';
+          result = wide_to_utf8_alloc(clean);
+          delete[] clean;
+        }
+      }
+      delete[] normalized;
+    }
+  }
+  return result;
+}
+
+// Resolves the path `rel_path` relative to the directory behind `dir_fd` into a
+// new[]-allocated absolute UTF-8 name that the path-based helpers accept. An
+// absolute `rel_path` is returned unchanged, as openat(2) ignores `dir_fd` then.
+char *resolve_at_path(int dir_fd, const char *rel_path)
+{
+  char *result = NULL;
+  if (NULL == rel_path || '\0' == rel_path[0]) {
+    errno = EINVAL;
+  } else if (dir_fd < 0) {
+    // See ob_pread_fd: the CRT terminates the process on invalid descriptors,
+    // so reject them before _get_osfhandle.
+    errno = EBADF;
+  } else if (ob_is_absolute_path_utf8(rel_path)) {
+    const size_t rel_len = ::strlen(rel_path);
+    if (NULL == (result = new (std::nothrow) char[rel_len + 1])) {
+      errno = ENOMEM;
+    } else {
+      ::memcpy(result, rel_path, rel_len + 1);
+    }
+  } else {
+    const HANDLE handle = reinterpret_cast<HANDLE>(::_get_osfhandle(dir_fd));
+    char *dir_path = NULL;
+    if (INVALID_HANDLE_VALUE == handle) {
+      errno = EBADF;
+    } else if (NULL != (dir_path = handle_to_utf8(handle))) {
+      size_t dir_len = ::strlen(dir_path);
+      while (dir_len > 0 && ('\\' == dir_path[dir_len - 1] || '/' == dir_path[dir_len - 1])) {
+        --dir_len;
+      }
+      const size_t rel_len = ::strlen(rel_path);
+      if (NULL == (result = new (std::nothrow) char[dir_len + 1 + rel_len + 1])) {
+        errno = ENOMEM;
+      } else {
+        ::memcpy(result, dir_path, dir_len);
+        result[dir_len] = '\\';
+        ::memcpy(result + dir_len + 1, rel_path, rel_len + 1);
+      }
+      delete[] dir_path;
+    }
+  }
+  return result;
+}
+
 } // namespace platform_io_internal
 
 #endif // _WIN32
@@ -403,6 +514,44 @@ int ob_open_utf8(const char *path, int flags, int mode)
     errno = EINVAL;
   } else {
     fd = ::open(path, flags, static_cast<mode_t>(mode));
+  }
+#endif
+  return fd;
+}
+
+int ob_open_dir_utf8(const char *path)
+{
+  int fd = -1;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL != extended_path) {
+    HANDLE handle = ::CreateFileW(extended_path, GENERIC_READ | GENERIC_WRITE,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                  NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (INVALID_HANDLE_VALUE == handle) {
+      // A directory the process may only read still has to be scannable.
+      const DWORD error = ::GetLastError();
+      handle = ::CreateFileW(extended_path, GENERIC_READ,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                             NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+      if (INVALID_HANDLE_VALUE == handle) {
+        errno = platform_io_internal::win32_error_to_errno(error);
+      }
+    }
+    if (INVALID_HANDLE_VALUE != handle) {
+      fd = ::_open_osfhandle(reinterpret_cast<intptr_t>(handle), _O_RDONLY);
+      if (-1 == fd) {
+        errno = EMFILE;
+        ::CloseHandle(handle);
+      }
+    }
+    delete[] extended_path;
+  }
+#else
+  if (NULL == path || '\0' == path[0]) {
+    errno = EINVAL;
+  } else {
+    fd = ::open(path, O_RDONLY | O_DIRECTORY);
   }
 #endif
   return fd;
@@ -512,6 +661,70 @@ int64_t ob_pwrite_fd(int fd, const void *buf, int64_t count, int64_t offset)
   return static_cast<int64_t>(::pwrite(fd, buf, static_cast<size_t>(count),
                                         static_cast<off_t>(offset)));
 #endif
+}
+
+int ob_fsync_fd(int fd)
+{
+  int ret = 0;
+#ifdef _WIN32
+  if (0 > fd) {
+    // See ob_pread_fd: the CRT terminates the process on invalid descriptors.
+    errno = EBADF;
+    ret = -1;
+  } else if (0 == ::_commit(fd)) {
+    ret = 0;
+  } else {
+    const HANDLE handle = reinterpret_cast<HANDLE>(::_get_osfhandle(fd));
+    BY_HANDLE_FILE_INFORMATION info;
+    bool is_directory = false;
+    if (INVALID_HANDLE_VALUE == handle) {
+      errno = EBADF;
+      ret = -1;
+    } else if (FALSE != ::GetFileInformationByHandle(handle, &info)) {
+      is_directory = 0 != (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    }
+    if (-1 != ret) {
+      if (FALSE != ::FlushFileBuffers(handle)) {
+        ret = 0;
+      } else if (is_directory) {
+        // NTFS journals directory metadata; a directory handle cannot always be
+        // flushed, and PALF retries a failure forever. Report success, which is
+        // what the Windows shim this replaces did.
+        ret = 0;
+      } else {
+        errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+        ret = -1;
+      }
+    }
+  }
+#else
+  ret = ::fsync(fd);
+#endif
+  return ret;
+}
+
+int ob_ftruncate_fd(int fd, int64_t length)
+{
+  int ret = 0;
+#ifdef _WIN32
+  ret = (0 == ::_chsize_s(fd, length)) ? 0 : -1;
+#else
+  ret = ::ftruncate(fd, static_cast<off_t>(length));
+#endif
+  return ret;
+}
+
+int ob_fallocate_fd(int fd, int64_t length)
+{
+  int ret = 0;
+#ifdef _WIN32
+  ret = (0 == ::_chsize_s(fd, length)) ? 0 : -1;
+#elif defined(__APPLE__) || defined(__EMSCRIPTEN__)
+  ret = ::ftruncate(fd, static_cast<off_t>(length));
+#else
+  ret = ::fallocate(fd, 0, 0, static_cast<off_t>(length));
+#endif
+  return ret;
 }
 
 class ObPlatformDir
@@ -759,6 +972,84 @@ int ob_truncate_utf8(const char *path, int64_t length)
   }
 #else
   ret = ::truncate(path, static_cast<off_t>(length));
+#endif
+  return ret;
+}
+
+int ob_openat_utf8(int dir_fd, const char *path, int flags, int mode)
+{
+  int fd = -1;
+#ifdef _WIN32
+  char *resolved = platform_io_internal::resolve_at_path(dir_fd, path);
+  if (NULL != resolved) {
+    fd = ob_open_utf8(resolved, flags, mode);
+    delete[] resolved;
+  }
+#else
+  fd = ::openat(dir_fd, path, flags, static_cast<mode_t>(mode));
+#endif
+  return fd;
+}
+
+int ob_statat_utf8(int dir_fd, const char *path, ObPlatformFileStat &stat, bool follow_link)
+{
+  int ret = 0;
+#ifdef _WIN32
+  char *resolved = platform_io_internal::resolve_at_path(dir_fd, path);
+  if (NULL == resolved) {
+    ret = -1;
+  } else {
+    ret = ob_stat_utf8(resolved, stat, follow_link);
+    delete[] resolved;
+  }
+#else
+  struct stat os_stat;
+  const int flags = follow_link ? 0 : AT_SYMLINK_NOFOLLOW;
+  if (0 != ::fstatat(dir_fd, path, &os_stat, flags)) {
+    ret = -1;
+  } else {
+    platform_io_internal::fill_stat(os_stat, stat);
+  }
+#endif
+  return ret;
+}
+
+int ob_renameat_utf8(int old_dir_fd, const char *old_path,
+                     int new_dir_fd, const char *new_path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  char *resolved_old = platform_io_internal::resolve_at_path(old_dir_fd, old_path);
+  char *resolved_new = NULL;
+  if (NULL == resolved_old) {
+    ret = -1;
+  } else if (NULL == (resolved_new = platform_io_internal::resolve_at_path(new_dir_fd,
+                                                                          new_path))) {
+    ret = -1;
+  } else {
+    ret = ob_rename_utf8(resolved_old, resolved_new);
+  }
+  delete[] resolved_old;
+  delete[] resolved_new;
+#else
+  ret = ::renameat(old_dir_fd, old_path, new_dir_fd, new_path);
+#endif
+  return ret;
+}
+
+int ob_unlinkat_utf8(int dir_fd, const char *path, bool is_dir)
+{
+  int ret = 0;
+#ifdef _WIN32
+  char *resolved = platform_io_internal::resolve_at_path(dir_fd, path);
+  if (NULL == resolved) {
+    ret = -1;
+  } else {
+    ret = is_dir ? ob_rmdir_utf8(resolved) : ob_unlink_utf8(resolved);
+    delete[] resolved;
+  }
+#else
+  ret = ::unlinkat(dir_fd, path, is_dir ? AT_REMOVEDIR : 0);
 #endif
   return ret;
 }
