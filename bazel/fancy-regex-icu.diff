@@ -1,0 +1,211 @@
+diff --git a/src/parse.rs b/src/parse.rs
+--- a/src/parse.rs
++++ b/src/parse.rs
+@@ -544,7 +544,42 @@
+             return Err(Error::ParseError(ix, ParseError::TrailingBackslash));
+         };
+         let end = ix + 1 + codepoint_len(b);
+-        Ok(if b.is_ascii_digit() {
++        Ok(if b == b'0' && self.flag(FLAG_ICU_OCTAL) {
++            // SQL/ICU zero-prefixed octal is an escape, never capture group zero.
++            // This runs at a parsed escape token, including inside a class;
++            // escaped backslashes and comments never reach this branch as \0.
++            let mut end = ix + 2;
++            let mut value = 0u32;
++            let mut digits = 0;
++            while digits < 3 {
++                let Some(&digit) = bytes.get(end) else {
++                    break;
++                };
++                if !(b'0'..=b'7').contains(&digit) {
++                    break;
++                }
++                let next = value * 8 + u32::from(digit - b'0');
++                if next > 255 {
++                    break;
++                }
++                value = next;
++                digits += 1;
++                end += 1;
++            }
++            if digits == 0 {
++                return Err(Error::ParseError(
++                    ix,
++                    ParseError::InvalidEscape(r"\0".into()),
++                ));
++            }
++            (
++                end,
++                Expr::Literal {
++                    val: char::from(value as u8).to_string(),
++                    casei: self.flag(FLAG_CASEI),
++                },
++            )
++        } else if b.is_ascii_digit() {
+             return self.parse_numbered_backref(ix + 1);
+         } else if matches!(b, b'k') && !in_class {
+             // Named backref: \k<name>
+@@ -946,6 +981,50 @@
+                     nest += 1;
+                     class.push('[');
+                     let mut end = ix + 1;
++
++                    // A POSIX class is written `[:name:]`. ICU rejects the
++                    // word-boundary forms `[[:<:]]`/`[[:>:]]`; the delegate parser
++                    // would otherwise accept them as ordinary class content. Only the
++                    // opt-in ICU mode changes this, so the native default stays.
++                    if bytes.get(end) == Some(&b':') && self.flag(FLAG_ICU_POSIX_CLASS) {
++                        let mut name_end = end + 1;
++                        while name_end < self.re.len()
++                            && bytes[name_end] != b':'
++                            && bytes[name_end] != b']'
++                        {
++                            name_end += 1;
++                        }
++                        if bytes.get(name_end) == Some(&b':')
++                            && bytes.get(name_end + 1) == Some(&b']')
++                        {
++                            let raw = &self.re[end + 1..name_end];
++                            // POSIX allows an optional negation prefix; keep it.
++                            let name = raw.strip_prefix('^').unwrap_or(raw);
++                            if name.is_empty() || name.contains(['{', '}', '[', ']'])
++                                || name == "<" || name == ">"
++                            {
++                                return Err(Error::ParseError(ix, ParseError::PropertySyntax));
++                            }
++                            let ascii_posix = regex_syntax::ast::ClassAsciiKind::from_name(name).is_some();
++                            let unicode_prop = regex_syntax::Parser::new()
++                                .parse(&format!("\\p{{{}}}", name))
++                                .is_ok();
++                            if !ascii_posix && !unicode_prop {
++                                // A smaller backend property table cannot establish ICU invalidity.
++                                return Err(Error::ParseError(ix, ParseError::UnsupportedProperty));
++                            }
++                            if !ascii_posix {
++                                // Consume the complete POSIX token as one Unicode property.
++                                // Undo the nested opening bracket already recorded above.
++                                class.pop();
++                                nest -= 1;
++                                let escape = if raw.starts_with('^') { "P" } else { "p" };
++                                class.push_str(&format!("\\{}{{{}}}", escape, name));
++                                ix = name_end + 2;
++                                continue;
++                            }
++                        }
++                    }
+
+                     // Handle `]` after `[` or `[^` in nested classes
+                     // Check for negated character class
+diff --git a/src/parse_flags.rs b/src/parse_flags.rs
+--- a/src/parse_flags.rs
++++ b/src/parse_flags.rs
+@@ -16,3 +16,9 @@
+ pub const FLAG_CRLF: u32 = 1 << 7;
+ /// Flag bit for treating numbered groups as non-capturing when named groups exist
+ pub const FLAG_IGNORE_NUMBERED_GROUPS_WHEN_NAMED_GROUPS_EXIST: u32 = 1 << 8;
++
++/// Opt-in SQL/ICU POSIX character-class compatibility.
++pub const FLAG_ICU_POSIX_CLASS: u32 = 1 << 13;
++
++/// Opt-in SQL/ICU zero-prefixed octal escapes.
++pub const FLAG_ICU_OCTAL: u32 = 1 << 9;
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -540,6 +540,8 @@
+     /// vector instead. `None` disables the check.
+     max_prog_size: Option<usize>,
+     oniguruma_mode: bool,
++    icu_posix_class: bool,
++    icu_octal: bool,
+     ignore_numbered_groups_when_named_groups_exist: bool,
+     hard_regex_runtime_options: HardRegexRuntimeOptions,
+     bytes_mode: BytesMode,
+@@ -573,6 +575,8 @@
+             )
+             .field("max_prog_size", &self.max_prog_size)
+             .field("oniguruma_mode", &self.oniguruma_mode)
++            .field("icu_posix_class", &self.icu_posix_class)
++            .field("icu_octal", &self.icu_octal)
+             .field(
+                 "ignore_numbered_groups_when_named_groups_exist",
+                 &self.ignore_numbered_groups_when_named_groups_exist,
+@@ -598,6 +602,8 @@
+             delegate_dfa_skip_cache_capacity_check: true,
+             max_prog_size: None,
+             oniguruma_mode: false,
++            icu_posix_class: false,
++            icu_octal: false,
+             ignore_numbered_groups_when_named_groups_exist: false,
+             hard_regex_runtime_options: HardRegexRuntimeOptions::default(),
+             bytes_mode: BytesMode::default(),
+@@ -653,6 +659,8 @@
+             | oniguruma_mode
+             | crlf
+             | named_groups_only
++            | Self::get_flag_value(self.icu_posix_class, FLAG_ICU_POSIX_CLASS)
++            | Self::get_flag_value(self.icu_octal, FLAG_ICU_OCTAL)
+     }
+ }
+
+@@ -695,6 +703,18 @@
+         self
+     }
+
++    /// Enable SQL/ICU zero-prefixed octal escapes (default: false).
++    pub fn icu_octal(&mut self, yes: bool) -> &mut Self {
++        self.options.icu_octal = yes;
++        self
++    }
++
++    /// Reject POSIX classes ICU does not define (default: false).
++    pub fn icu_posix_class(&mut self, yes: bool) -> &mut Self {
++        self.options.icu_posix_class = yes;
++        self
++    }
++
+     /// Override default case insensitive
+     /// this is to enable/disable casing via builder instead of a flag within
+     /// the raw string pattern which will be parsed
+@@ -1131,6 +1151,18 @@
+     /// many patterns.
+     pub fn pattern(&mut self, pattern: String) -> &mut Self {
+         self.pattern = pattern;
++        self
++    }
++
++    /// See [`RegexOptionsBuilder::icu_octal`].
++    pub fn icu_octal(&mut self, yes: bool) -> &mut Self {
++        self.options.icu_octal(yes);
++        self
++    }
++
++    /// See [`RegexOptionsBuilder::icu_posix_class`].
++    pub fn icu_posix_class(&mut self, yes: bool) -> &mut Self {
++        self.options.icu_posix_class(yes);
+         self
+     }
+
+diff --git a/src/error.rs b/src/error.rs
+--- a/src/error.rs
++++ b/src/error.rs
+@@ -54,6 +54,10 @@
+     TargetNotRepeatable,
+     /// Couldn't parse group name
+     InvalidGroupName,
++    /// Unsupported POSIX/Unicode property syntax (e.g. `[[:<:]]`)
++    PropertySyntax,
++    /// Property name is not supported by this backend.
++    UnsupportedProperty,
+     /// Invalid group id in escape sequence
+     InvalidGroupNameBackref(String),
+ }
+@@ -139,6 +143,8 @@
+             }
+             ParseError::InvalidBackref => write!(f, "Invalid back reference"),
+             ParseError::InvalidGroupName => write!(f, "Could not parse group name"),
++            ParseError::PropertySyntax => write!(f, "Unsupported property syntax"),
++            ParseError::UnsupportedProperty => write!(f, "Unsupported property name"),
+             ParseError::InvalidGroupNameBackref(s) => {
+                 write!(f, "Invalid group name in back reference: {}", s)
+             }

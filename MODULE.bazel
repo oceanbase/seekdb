@@ -45,6 +45,13 @@ crate.annotation(
     patches = ["//bazel:spdlog-rs-emscripten.diff"],
     patch_args = ["-p1"],
 )
+crate.annotation(
+    crate = "fancy-regex",
+    version = "0.20.0",
+    repositories = ["rust_crates"],
+    patches = ["//bazel:fancy-regex-icu.diff"],
+    patch_args = ["-p1"],
+)
 _RUST_PLATFORMS = [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
