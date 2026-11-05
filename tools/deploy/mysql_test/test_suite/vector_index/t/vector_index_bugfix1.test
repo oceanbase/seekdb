@@ -663,3 +663,74 @@ order by p.cardinality, p.plan_id;
 drop table t_issue1439_or_selectivity;
 
 alter system set vector_memory_limit = 0;
+
+# issue #1535: simplify ANN predicates without changing approximate Top-K.
+--disable_warnings
+drop table if exists t_issue1535_ann_simplify;
+--enable_warnings
+create table t_issue1535_ann_simplify(
+  id int primary key,
+  embedding vector(3) not null,
+  category int,
+  parity varchar(8),
+  key idx_category(category))
+  organization heap;
+insert into t_issue1535_ann_simplify values
+  (1, '[1,0,0]', 1, 'odd'),
+  (2, '[2,0,0]', 2, 'even'),
+  (3, '[3,0,0]', 1, 'even'),
+  (4, '[4,0,0]', null, 'even'),
+  (5, '[5,0,0]', 1, null),
+  (6, '[6,0,0]', null, null),
+  (7, '[7,0,0]', 2, 'odd');
+create vector index idx_embedding on t_issue1535_ann_simplify(embedding)
+  with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=64, ef_search=64,
+        sync_mode=immediate);
+alter system flush plan cache;
+
+# Absorption holds for nullable predicates as well as TRUE/FALSE predicates.
+select id as simplified_id from t_issue1535_ann_simplify
+where category = 1
+  and (category = 1 or parity = 'even')
+  and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as simplified_id from t_issue1535_ann_simplify
+where category = 1 or (category = 1 and parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+
+# Check the actual cached ANN filters, not only equivalent result sets.
+select count(*) > 0 as has_ann_plan,
+       max(instr(p.filter_predicates, ' OR ')) = 0 as redundant_or_removed,
+       max(instr(p.access_predicates, '.parity')) = 0 as unused_column_removed
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_ann_simplify') > 0
+  and instr(s.statement, 'simplified_id') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+# Equal-parameter constraints must guard reuse after predicate simplification.
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 2 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 2 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+
+# Query hints must still disable simplification when explicitly requested.
+select /*+ NO_REWRITE */ id as unsimplified_id from t_issue1535_ann_simplify
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select count(*) > 0 as has_ann_plan,
+       max(instr(p.filter_predicates, ' OR ')) > 0 as no_rewrite_respected
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_ann_simplify') > 0
+  and instr(s.statement, 'unsimplified_id') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+drop table t_issue1535_ann_simplify;
