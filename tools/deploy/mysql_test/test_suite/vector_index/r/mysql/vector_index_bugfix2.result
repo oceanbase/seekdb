@@ -1,0 +1,29 @@
+# Vector Index Bugfix: duplicated predicates in an approximate vector query
+# issue 1489
+drop table if exists t_issue1489_dup_pred;
+create table t_issue1489_dup_pred(
+id bigint not null,
+embedding vector(3) not null,
+category int not null,
+primary key(id),
+vector key idx_embedding(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+analyze table t_issue1489_dup_pred;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1489_DUP_PRED', numrows=>200000);
+alter system flush plan cache;
+select count(distinct s.plan_id) as plans_with_vector_scan
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1489_dup_pred') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+plans_with_vector_scan
+2
+select count(distinct p.filter_predicates) as distinct_filters
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1489_dup_pred') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+distinct_filters
+1
+drop table t_issue1489_dup_pred;
+alter system set vector_memory_limit = 0;
