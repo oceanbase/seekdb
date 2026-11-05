@@ -4278,12 +4278,22 @@ int ObDMLResolver::resolve_file_table_options(const ParseNode *option_node,
         } else {
           options.json_format_ = str_value;
         }
-      } else if (0 == name.case_compare("delimiter")) {
+      } else if (0 == name.case_compare("delimiter")
+                 || 0 == name.case_compare("delim")
+                 || 0 == name.case_compare("sep")) {
+        // the names of the option of the delimiter of the duckdb reader
         if (!is_str_value) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "delimiter");
         } else {
           options.delimiter_ = str_value;
+        }
+      } else if (0 == name.case_compare("auto_detect")) {
+        // the schema of a file is always inferred, the option is only
+        // accepted when it asks for the inference
+        if (!is_bool_value || 0 == int_value) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option 'auto_detect = false'");
         }
       } else if (0 == name.case_compare("quote")) {
         if (!is_str_value) {

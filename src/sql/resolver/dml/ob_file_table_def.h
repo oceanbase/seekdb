@@ -180,7 +180,10 @@ inline bool ob_file_is_supported_format(const ObFileScanFormat format,
       break;
     }
     case ObFileScanFormat::JSON: {
-      ret = (0 == value.case_compare("newline_delimited"));
+      // the names of the format of the duckdb reader, the json reader reads
+      // the newline delimited json files
+      ret = (0 == value.case_compare("newline_delimited")
+             || 0 == value.case_compare("ndjson"));
       break;
     }
     case ObFileScanFormat::PARQUET: {

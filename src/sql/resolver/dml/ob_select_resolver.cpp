@@ -3216,8 +3216,9 @@ int ObSelectResolver::resolve_into_copy_options(const ParseNode *node, ObSelectI
     } else {
       const ObString name(name_node->str_len_, name_node->str_value_);
       if (0 == name.case_compare("format")) {
-        // only the csv format is supported
-        if (OB_ISNULL(value_node) || T_IDENT != value_node->type_) {
+        // only the csv format is supported, the value is a name or a text
+        if (OB_ISNULL(value_node)
+            || (T_IDENT != value_node->type_ && T_VARCHAR != value_node->type_)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "format");
         } else {
@@ -3231,7 +3232,7 @@ int ObSelectResolver::resolve_into_copy_options(const ParseNode *node, ObSelectI
         // the header option is a flag, it may hold a boolean value
         if (OB_ISNULL(value_node)) {
           into_item.has_header_ = true;
-        } else if (T_BOOL == value_node->type_) {
+        } else if (T_BOOL == value_node->type_ || T_INT == value_node->type_) {
           into_item.has_header_ = 0 != value_node->value_;
         } else {
           ret = OB_INVALID_ARGUMENT;
