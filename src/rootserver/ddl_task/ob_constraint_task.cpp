@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_constraint_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -139,7 +140,7 @@ int ObCheckConstraintValidationTask::process()
                       1L/*unused execution id*/, ret, info))) {
   }
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, target_object_id:%ld", 
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%" PRIu64 ", target_object_id:%" PRIu64, 
             data_table_id_, target_object_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "check constraint validation task process finish",
     "ret", ret,

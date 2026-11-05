@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_table_redefinition_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -756,7 +757,7 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     }
   }
   char object_id_buffer[256];
-  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%ld, target_object_id:%ld", 
+  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%" PRIu64 ", target_object_id:%" PRIu64, 
             object_id_, target_object_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "table redefinition task take effect",
     "ret", ret,

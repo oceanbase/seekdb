@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
@@ -182,7 +183,7 @@ int ObIndexSSTableBuildTask::process()
 void ObIndexSSTableBuildTask::add_event_info(const int ret, const ObString &ddl_event_stmt)
 {
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%" PRIu64 ", dest_table_id:%" PRIu64,
             data_table_id_, dest_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ret,
