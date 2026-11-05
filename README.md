@@ -10,8 +10,8 @@
 
 <p>
     <a href="https://github.com/oceanbase/seekdb/stargazers">
-        <img alt="GitHub Stars" src="https://img.shields.io/github/stars/oceanbase/seekdb?style=flat-square&logo=github&color=yellow" />
-    </a>
+        <img alt="GitHub Stars" src="https://img.shields.io/github/stars/oceanbase/seekdb?style=flat-square&logo=github&color=yellow" /> 
+    </a> 
     <a href="https://github.com/oceanbase/seekdb/releases">
         <img alt="Latest Release" src="https://img.shields.io/github/v/release/oceanbase/seekdb?style=flat-square&color=blue" />
     </a>
@@ -593,3 +593,4 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+OB-P:py1uudCk66di24k7teC98g
