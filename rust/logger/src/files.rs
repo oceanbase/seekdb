@@ -15,6 +15,7 @@
 //! seekdb's timestamped file convention on top of spdlog's public Sink API.
 //! Open files, append/reopen/rotation and retention have one owner.
 use chrono::Local;
+#[cfg(unix)]
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -25,7 +26,30 @@ use std::time::{Duration, Instant};
 use std::os::unix::{ffi::OsStrExt, fs::MetadataExt, fs::OpenOptionsExt, io::AsRawFd};
 
 #[cfg(windows)]
-use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
+use std::os::windows::{
+    ffi::OsStrExt,
+    io::{AsRawHandle, IntoRawHandle},
+};
+
+fn stdio_error() -> io::Error {
+    #[cfg(unix)]
+    {
+        io::Error::last_os_error()
+    }
+    #[cfg(windows)]
+    {
+        unsafe extern "C" {
+            fn _get_errno(value: *mut libc::c_int) -> libc::errno_t;
+        }
+        let mut code = 0;
+        if unsafe { _get_errno(&mut code) } == 0 {
+            // CRT errno values are not Win32 GetLastError codes.
+            io::Error::other(format!("Windows CRT errno {code}"))
+        } else {
+            io::Error::other("Windows CRT failure (errno unavailable)")
+        }
+    }
+}
 
 #[cfg(windows)]
 fn identity(file: &File) -> io::Result<(u32, u32, u32)> {
@@ -60,6 +84,7 @@ pub(crate) struct Output {
     last_archive: String,
     buffer: Vec<u8>,
     buffered_records: usize,
+    rotation_failed: bool,
 }
 
 pub(crate) const BUFFER_CAPACITY: usize = 64 * 1024;
@@ -111,6 +136,7 @@ impl Output {
             last_archive: String::new(),
             buffer: Vec::new(),
             buffered_records: 0,
+            rotation_failed: false,
         };
         output.redirect_stdio()?;
         Ok(output)
@@ -126,30 +152,33 @@ impl Output {
             // std::File uses Win32 HANDLEs; stdout/stderr use CRT descriptors.
             #[cfg(windows)]
             let fd = {
-                let _ = file;
-                let path = CString::new(self.path.to_string_lossy().as_bytes())?;
+                // Reuse File's delete-sharing handle. Opening the path with
+                // the CRT would prevent renaming while stdout/stderr hold it.
+                let handle = file.try_clone()?;
                 let fd = unsafe {
-                    libc::open(
-                        path.as_ptr(),
-                        libc::O_WRONLY | libc::O_APPEND | libc::O_BINARY,
+                    libc::open_osfhandle(
+                        handle.as_raw_handle() as libc::intptr_t,
+                        libc::O_APPEND | libc::O_BINARY,
                     )
                 };
                 if fd < 0 {
-                    return Err(io::Error::last_os_error());
+                    return Err(stdio_error());
                 }
+                // The CRT owns this duplicate only after successful adoption.
+                let _ = handle.into_raw_handle();
                 fd
             };
             let result = (|| {
                 for target in [1, 2] {
                     if unsafe { libc::dup2(fd, target) } < 0 {
-                        return Err(io::Error::last_os_error());
+                        return Err(stdio_error());
                     }
                 }
                 Ok(())
             })();
             #[cfg(windows)]
-            unsafe {
-                libc::close(fd);
+            if fd != 1 && fd != 2 {
+                unsafe { libc::close(fd) };
             }
             result?;
         }
@@ -282,7 +311,23 @@ impl Output {
                 self.flush()?;
                 // The record is already written. A maintenance failure must
                 // not make it appear dropped or encourage callers to resend.
-                let _ = self.rotate(limits, info);
+                if let Err(error) = self.rotate(limits, info) {
+                    if !self.rotation_failed {
+                        self.rotation_failed = true;
+                        // Write directly, without reentering the logger or
+                        // flooding the file on every subsequent record.
+                        let diagnostic = format!(
+                            "[{}] WARN  [LOGGER] Log rotation maintenance failed: {}\n",
+                            Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
+                            error
+                        );
+                        let (written, _) =
+                            write_bytes(self.file.as_mut().unwrap(), diagnostic.as_bytes());
+                        self.size = self.size.saturating_add(written as u64);
+                    }
+                } else {
+                    self.rotation_failed = false;
+                }
             }
         } else {
             io::stderr().lock().write_all(bytes)?;
