@@ -5871,15 +5871,28 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    // Pre-filtering scans the filter's candidates before the vector search starts,
+    // so it only pays off when it actually shrinks the candidate set. A predicate
+    // that keeps (nearly) every row, such as `category5 BETWEEN 1 AND 5` over data
+    // that only stores 1..5, would otherwise add a full scan in front of an ANN
+    // search that does not need it (issue #1471). The rate limits below are the
+    // same ones used to reject pre-filtering for large candidate sets.
+    const double pre_filter_rate = is_primary_idx ?
+                                   ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY :
+                                   ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+    // The index-merge path has no table row count and relies on the pre-filter
+    // default, so only apply the selectivity gate when an estimate exists.
+    const bool pre_filter_shrinks_scan = vc_info.row_count_ <= 0 ||
+                                         vc_info.selectivity_ <= pre_filter_rate;
+    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE && pre_filter_shrinks_scan) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
-                                    && vc_info.selectivity_ <= ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY) ?
+                                    && pre_filter_shrinks_scan) ?
                                     ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER : ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
     } else {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_IDX
-                                    && vc_info.selectivity_ <= ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX) ?
+                                    && pre_filter_shrinks_scan) ?
                                     ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER : ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) {
