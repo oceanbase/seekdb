@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include <cmath>
+#include <inttypes.h>
 #include <memory>
 
 #include "ob_select_into_op.h"
@@ -392,7 +393,7 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
       OZ(file_name_with_suffix.append_fmt("%.*s", input_file_name.length(), input_file_name.ptr()));
     }
     if (MY_SPEC.parallel_ > 1) {
-      OZ(file_name_with_suffix.append_fmt("_%ld_%ld_%d", input->sqc_id_, input->task_id_, 0));
+      OZ(file_name_with_suffix.append_fmt("_%" PRId64 "_%" PRId64 "_%d", input->sqc_id_, input->task_id_, 0));
     } else {
       OZ(file_name_with_suffix.append_fmt("_%d", 0));
     }
@@ -423,7 +424,7 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
   } else {
     file_path = data_writer.url_.split_on(data_writer.url_.reverse_find('_'));
     if (OB_FAIL(url_with_suffix.assign(file_path))) {
-    } else if (OB_FAIL(url_with_suffix.append_fmt("_%ld", data_writer.split_file_id_))) {
+    } else if (OB_FAIL(url_with_suffix.append_fmt("_%" PRId64 "", data_writer.split_file_id_))) {
     }
     ObString file_extension;
     OZ(external_properties_.get_format_file_extension(format_type_, file_extension));

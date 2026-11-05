@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr.h"
+#include <inttypes.h>
 #include "query/resolver/ob_raw_expr_traits.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
@@ -1695,7 +1696,7 @@ int ObQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
     } else if (OB_FAIL(ref_stmt_->get_qb_name(qb_name))) {
     } else if (OB_FAIL(BUF_PRINTF("SQ(%.*s)", qb_name.length(), qb_name.ptr()))) {
     }
-  } else if (OB_FAIL(BUF_PRINTF("subquery(%lu)", ref_id_))) {
+  } else if (OB_FAIL(BUF_PRINTF("subquery(%" PRIu64 ")", ref_id_))) {
   } else if (EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
     } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
@@ -1827,7 +1828,7 @@ int ObExecParamRawExpr::get_name_internal(char *buf,
     if (OB_FAIL(BUF_PRINTF("?"))) {
     }
   } else {
-    if (OB_FAIL(BUF_PRINTF(":%ld", exec_param_idx_))) {
+    if (OB_FAIL(BUF_PRINTF(":%" PRId64 "", exec_param_idx_))) {
     } else if (EXPLAIN_EXTENDED != type) {
       /* do nothing */
     } else if (OB_FAIL(BUF_PRINTF("("))) {
@@ -4970,7 +4971,7 @@ int ObSetOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
   }
   if (OB_FAIL(ret)) {
     //do nothing
-  } else if (OB_FAIL(BUF_PRINTF("%s([%ld])", op_name, idx_ + 1))) {
+  } else if (OB_FAIL(BUF_PRINTF("%s([%" PRId64 "])", op_name, idx_ + 1))) {
   } else {}
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {

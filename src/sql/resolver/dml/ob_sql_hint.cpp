@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_sql_hint.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/rewrite/ob_transform_utils.h"
 
@@ -343,7 +344,7 @@ int ObQueryHint::generate_orig_stmt_qb_name(ObIAllocator &allocator, int64_t ini
       qb_names.qb_names_.reuse();
       while(qb_name.empty() && OB_SUCC(ret)) {
         pos = old_pos;
-        if (OB_FAIL(BUF_PRINTF("%ld", id_start))) {
+        if (OB_FAIL(BUF_PRINTF("%" PRId64 "", id_start))) {
         } else if (OB_FAIL(try_add_new_qb_name(allocator, idx, buf, pos, cnt, qb_name))) {
         } else {
           ++id_start;
@@ -387,7 +388,7 @@ int ObQueryHint::generate_qb_name_for_stmt(ObIAllocator &allocator,
     while(qb_name.empty() && OB_SUCC(ret)) {
       pos = old_pos;
       if (OB_FAIL(BUF_PRINTF("%08X", hash_val))) {
-      } else if (NULL != sub_num && OB_FAIL(BUF_PRINTF("_%ld", *sub_num))) {
+      } else if (NULL != sub_num && OB_FAIL(BUF_PRINTF("_%" PRId64 "", *sub_num))) {
       } else if (OB_FAIL(try_add_new_qb_name(allocator, stmt.get_stmt_id(),
                                              buf, pos, cnt, qb_name))) {
       } else if (NULL != sub_num) {

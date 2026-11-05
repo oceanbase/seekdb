@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/parser/ob_item_type_str.h"
+#include <inttypes.h>
 #include "sql/resolver/expr/ob_raw_expr_print_visitor.h"
 namespace oceanbase
 {
@@ -83,7 +84,7 @@ int ObRawExprPrintVisitor::visit(ObOpPseudoColumnRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObQueryRefRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "SUBQUERY(%lu)", expr.get_ref_id()))) {
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "SUBQUERY(%" PRIu64 ")", expr.get_ref_id()))) {
   }
   return ret;
 }
@@ -91,7 +92,7 @@ int ObRawExprPrintVisitor::visit(ObQueryRefRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObPlQueryRefRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%ld>|", get_type_name(expr.get_expr_type()),
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%" PRId64 ">|", get_type_name(expr.get_expr_type()),
                               expr.get_param_count()))) {
   }
   return ret;
@@ -100,7 +101,7 @@ int ObRawExprPrintVisitor::visit(ObPlQueryRefRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObColumnRefRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s(%lu:%lu)",
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s(%" PRIu64 ":%" PRIu64 ")",
                               get_type_name(expr.get_expr_type()),
                               expr.get_table_id(), expr.get_column_id()))) {
   }
@@ -110,7 +111,7 @@ int ObRawExprPrintVisitor::visit(ObColumnRefRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObOpRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%ld>|", get_type_name(expr.get_expr_type()),
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%" PRId64 ">|", get_type_name(expr.get_expr_type()),
                               expr.get_param_count()))) {
   }
   return ret;
@@ -120,10 +121,10 @@ int ObRawExprPrintVisitor::visit(ObCaseOpRawExpr &expr)
 {
   int ret = OB_SUCCESS;
   if (expr.get_arg_param_expr()) {
-    if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "CASE<%ld>|", expr.get_param_count()))) {
+    if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "CASE<%" PRId64 ">|", expr.get_param_count()))) {
     }
   } else {
-    if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "CASE_WHEN<%ld>|", expr.get_param_count()))) {
+    if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "CASE_WHEN<%" PRId64 ">|", expr.get_param_count()))) {
     }
   }
   return ret;
@@ -132,7 +133,7 @@ int ObRawExprPrintVisitor::visit(ObCaseOpRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObAggFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%ld>|",
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%" PRId64 ">|",
                               ob_aggr_func_str(expr.get_expr_type()),
                               expr.get_param_count()))) {
   } else if (expr.is_param_distinct()) {
@@ -149,7 +150,7 @@ int ObRawExprPrintVisitor::visit(ObAggFunRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObSysFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%.*s<%ld>|",
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%.*s<%" PRId64 ">|",
                               expr.get_func_name().length(), expr.get_func_name().ptr(),
                               expr.get_param_count()))) {
   }
@@ -159,7 +160,7 @@ int ObRawExprPrintVisitor::visit(ObSysFunRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObSetOpRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%ld>|", get_type_name(expr.get_expr_type()),
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%" PRId64 ">|", get_type_name(expr.get_expr_type()),
                               expr.get_param_count()))) {
   }
   return ret;
@@ -168,7 +169,7 @@ int ObRawExprPrintVisitor::visit(ObSetOpRawExpr &expr)
 int ObRawExprPrintVisitor::visit(ObMatchFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%ld>|", get_type_name(expr.get_expr_type()),
+  if (OB_FAIL(databuff_printf(buf_, buf_len_, pos_, "%s<%" PRId64 ">|", get_type_name(expr.get_expr_type()),
                               expr.get_param_count()))) {
   }
   return ret;

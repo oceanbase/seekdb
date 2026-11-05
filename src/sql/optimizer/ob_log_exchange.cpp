@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_exchange.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
 #include "sql/optimizer/ob_log_join.h"
@@ -146,7 +147,7 @@ int ObLogExchange::get_plan_item_info(PlanText &plan_text,
   }
   if (OB_SUCC(ret) && OB_INVALID_ID != get_dfo_id()) {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF(":EX%ld%04ld", 
+    if (OB_FAIL(BUF_PRINTF(":EX%" PRId64 "%04" PRId64 "", 
                             get_px_id(), 
                             get_dfo_id()))) {
     }
@@ -282,7 +283,7 @@ int ObLogExchange::print_annotation_keys(char *buf,
                                         const ObIArray<ObRawExpr *> &keys) 
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(BUF_PRINTF("(#keys=%ld", keys.count()))) {
+  if (OB_FAIL(BUF_PRINTF("(#keys=%" PRId64 "", keys.count()))) {
   } else if (keys.count() == 0) {
     if (OB_FAIL(BUF_PRINTF("), "))) {
     }

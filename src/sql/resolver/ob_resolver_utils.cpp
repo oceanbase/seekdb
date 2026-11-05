@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
@@ -445,7 +446,7 @@ int ObResolverUtils::resolve_vector_type_info(const ParseNode &type_node, ObStri
   } else if (type_node.children_[0]->value_ <= 0 || type_node.children_[0]->value_ > 16000) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector column dim less or equal to zero or larger than 16000 is");
-  } else if (OB_FAIL(databuff_printf(tmp, MAX_LEN, pos, "%ld", type_node.children_[0]->value_))) {
+  } else if (OB_FAIL(databuff_printf(tmp, MAX_LEN, pos, "%" PRId64 "", type_node.children_[0]->value_))) {
   } else if (OB_FAIL(buf.append(tmp, pos))) {
   } else if (type_node.type_ == T_COLLECTION && OB_FAIL(buf.append(")"))) {
   }
@@ -7032,7 +7033,7 @@ int ObResolverUtils::create_values_table_query(ObSQLSessionInfo *session_info,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN(("value desc is null"), K(ret));
         } else if (OB_FAIL(column_expr->add_flag(IS_COLUMN))) {
-        } else if (OB_FAIL(tmp_col_name.append_fmt("column_%ld", i))) {
+        } else if (OB_FAIL(tmp_col_name.append_fmt("column_%" PRId64 "", i))) {
         } else if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(tmp_col_name.length())))) {
           ret = common::OB_ALLOCATE_MEMORY_FAILED;
         } else {

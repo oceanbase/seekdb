@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_load_data_impl.h"
+#include <inttypes.h>
 #include "share/config/ob_config_helper.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -49,7 +50,7 @@ namespace sql
   } while (0)
 
 const char *log_file_column_names = "\nBatchId\tLineNum\tType\tErrCode\tErrMsg\t\n";
-const char *log_file_row_fmt = "%ld\t%ld\t%s\t%d\t%.*s\t\n";
+const char *log_file_row_fmt = "%" PRId64 "\t%" PRId64 "\t%s\t%d\t%.*s\t\n";
 static const int64_t WAIT_INTERVAL_US = 1 * 1000 * 1000;  //1s
 
 
@@ -2069,7 +2070,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       OZ (databuff_printf(buf, buf_len, pos,
                           "File name:\t%.*s\n"
                           "Into table:\t%.*s\n"
-                          "Batch size:\t%ld\n"
+                          "Batch size:\t%" PRId64 "\n"
                           "SQL trace:\t%s\n",
                           load_args.file_name_.length(), load_args.file_name_.ptr(),
                           load_args.combined_name_.length(), load_args.combined_name_.ptr(),

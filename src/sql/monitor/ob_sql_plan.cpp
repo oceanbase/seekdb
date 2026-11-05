@@ -317,7 +317,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       CASE WHEN (SELECT MAX(PLAN_ID) FROM %.*s) IS NULL\
           THEN 0\
           ELSE (SELECT MAX(PLAN_ID) FROM %.*s)\
-          END + %ld,  \
+          END + %" PRId64 ",  \
       '%.*s', \
       '%.*s', \
       '%.*s', \
@@ -326,7 +326,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       '%.*s', \
       '%.*s', \
       '%.*s', \
-      %ld, \
+      %" PRId64 ", \
       '%.*s', \
       '%.*s', \
       %d, \
@@ -335,25 +335,25 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       %d, \
       %d, \
       %d, \
-      %ld, \
-      %ld, \
-      %ld, \
-      %ld, \
+      %" PRId64 ", \
+      %" PRId64 ", \
+      %" PRId64 ", \
+      %" PRId64 ", \
       '%.*s', \
       '%.*s', \
       '%.*s', \
-      %ld, \
+      %" PRId64 ", \
       '%.*s', \
       '%.*s', \
-      %ld, \
-      %ld, \
-      %ld, \
+      %" PRId64 ", \
+      %" PRId64 ", \
+      %" PRId64 ", \
       '%.*s', \
       '%.*s', \
       '%.*s', \
       '%.*s', \
       '%.*s', \
-      %ld, \
+      %" PRId64 ", \
       '%.*s', \
       '%.*s' \
       )",
@@ -670,7 +670,7 @@ int ObSqlPlan::get_qb_name_trace(PlanText &plan_text,
     int64_t &pos = temp_text.pos_;
     const ObIArray<QbNames> &stmt_id_map = query_ctx->get_query_hint().stmt_id_map_;
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt_id_map.count(); ++i) {
-      if (OB_FAIL(BUF_PRINTF("  stmt_id:%ld, ", i))) {
+      if (OB_FAIL(BUF_PRINTF("  stmt_id:%" PRId64 ", ", i))) {
       } else if (OB_FAIL(stmt_id_map.at(i).print_qb_names(temp_text))) {
       } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
         /* Do nothing */
@@ -794,7 +794,7 @@ int ObSqlPlan::get_plan_other_info(PlanText &plan_text,
       } else { /* Do nothing */ }
       for (int64_t i = 0; OB_SUCC(ret) && NULL != params && i < params->count() && i < 100; i++) {
         if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-        } else if (OB_FAIL(BUF_PRINTF(":%ld => ", i))) {
+        } else if (OB_FAIL(BUF_PRINTF(":%" PRId64 " => ", i))) {
         } else {
           int64_t save_pos = pos;
           if (OB_FAIL(params->at(i).print_sql_literal(buf, 
@@ -909,7 +909,7 @@ int ObSqlPlan::print_constraint_info(char *buf,
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < info.const_idx_.count(); ++i) {
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF(":%ld = ", info.const_idx_.at(i)))) {
+    } else if (OB_FAIL(BUF_PRINTF(":%" PRId64 " = ", info.const_idx_.at(i)))) {
     } else if (OB_FAIL(info.const_params_.at(i).print_sql_literal(buf, buf_len, pos))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else { /* Do nothing */ }
@@ -925,14 +925,14 @@ int ObSqlPlan::print_constraint_info(char *buf,
   int ret = OB_SUCCESS;
   if (info.use_abs_cmp_) {
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF(":%ld = abs( :%ld )", 
+    } else if (OB_FAIL(BUF_PRINTF(":%" PRId64 " = abs( :%" PRId64 " )", 
                           info.first_param_idx_, 
                           info.second_param_idx_))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else { /* Do nothing */ }
   } else {
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF(":%ld = :%ld", 
+    } else if (OB_FAIL(BUF_PRINTF(":%" PRId64 " = :%" PRId64 "", 
                           info.first_param_idx_, 
                           info.second_param_idx_))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
@@ -1583,7 +1583,7 @@ int ObSqlPlan::format_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
         if (plan_item->cardinality_ >= 0) {
-          ret = BUF_PRINTF("%-*ld", 
+          ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(EstRows),
                          plan_item->cardinality_);
         } else {
@@ -1596,7 +1596,7 @@ int ObSqlPlan::format_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
         if (plan_item->cost_ >= 0) {
-          ret = BUF_PRINTF("%-*ld", 
+          ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(EstCost),
                          plan_item->cost_);
         } else {
@@ -1710,7 +1710,7 @@ int ObSqlPlan::format_real_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
         if (plan_item->cardinality_ >= 0) {
-          ret = BUF_PRINTF("%-*ld", 
+          ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(EstRows),
                          plan_item->cardinality_);
         } else {
@@ -1723,7 +1723,7 @@ int ObSqlPlan::format_real_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
         if (plan_item->cost_ >= 0) {
-          ret = BUF_PRINTF("%-*ld", 
+          ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(EstCost),
                          plan_item->cost_);
         } else {
@@ -1735,28 +1735,28 @@ int ObSqlPlan::format_real_plan_table(ObIArray<ObSqlPlanItem*> &sql_plan_infos,
       //REAL ROWS
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
-        ret = BUF_PRINTF("%-*ld", 
+        ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(RealRows),
                          plan_item->real_cardinality_);
       }
       //REAL COST
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
-        ret = BUF_PRINTF("%-*ld", 
+        ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(RealCost),
                          plan_item->real_cost_);
       }
       //IO COST
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
-        ret = BUF_PRINTF("%-*ld", 
+        ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(IoTime),
                          plan_item->io_cost_);
       }
       //CPU COST
       if (OB_SUCC(ret)) {
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
-        ret = BUF_PRINTF("%-*ld", 
+        ret = BUF_PRINTF("%-*" PRId64 "", 
                          format_helper.column_len_.at(CpuTime),
                          plan_item->cpu_cost_);
         ret = BUF_PRINTF(COLUMN_SEPARATOR);
@@ -1794,7 +1794,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
     //print output info
     if (OB_ISNULL(plan_item)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(BUF_PRINTF("%3ld - ", i))) {
+    } else if (OB_FAIL(BUF_PRINTF("%3" PRId64 " - ", i))) {
       //do nothing
     } else if (plan_item->projection_len_ <= 0 && 
                OB_FAIL(BUF_PRINTF("output(nil)"))) {
@@ -1828,7 +1828,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
     } else if (plan_item->rowset_ <= 1) {
       //do nothing
     } else if (OB_FAIL(BUF_PRINTF(", "))) {
-    } else if (OB_FAIL(BUF_PRINTF("rowset=%ld", plan_item->rowset_))) {
+    } else if (OB_FAIL(BUF_PRINTF("rowset=%" PRId64 "", plan_item->rowset_))) {
     }
     //print access info
     if (OB_FAIL(ret)) {

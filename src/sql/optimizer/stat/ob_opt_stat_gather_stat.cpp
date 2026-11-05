@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include <inttypes.h>
 #include "sql/session/ob_sql_session_mgr.h"
 
 using namespace oceanbase::common;
@@ -212,7 +213,7 @@ int ObOptStatRunningMonitor::add_table_info(const common::ObTableStatParam &tabl
     opt_stat_gather_stat_.set_table_id(table_param.table_id_);
     ObSqlString properties_sql_str;
     char *buf = NULL;
-    if (OB_FAIL(properties_sql_str.append_fmt("GRANULARITY:%.*s;METHOD_OPT:%.*s;DEGREE:%ld;ESTIMATE_PERCENT:%lf;BLOCK_SAMPLE:%d;STALE_PERCENT:%lf;HIST_EST_PERCENT:%lf",
+    if (OB_FAIL(properties_sql_str.append_fmt("GRANULARITY:%.*s;METHOD_OPT:%.*s;DEGREE:%" PRId64 ";ESTIMATE_PERCENT:%lf;BLOCK_SAMPLE:%d;STALE_PERCENT:%lf;HIST_EST_PERCENT:%lf",
                                               table_param.granularity_.length(),
                                               table_param.granularity_.ptr(),
                                               table_param.method_opt_.length(),

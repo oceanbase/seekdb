@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_scheduled_job_utils.h"
 #include "share/ob_timezone_mgr.h"
@@ -236,7 +237,7 @@ int ObDbmsStatsMaintenanceWindow::get_window_job_info(const int64_t current_time
     LOG_INFO("begin to get window job info", K(current_time), K(total_hour_with_trunc),
                                              K(current_hour), K(current_wday), K(nth_window),
                                              K(default_start_hour), K(default_duration_usec));
-    if (OB_FAIL(job_action.append_fmt("DBMS_STATS.GATHER_DATABASE_STATS_JOB_PROC(%ld)",
+    if (OB_FAIL(job_action.append_fmt("DBMS_STATS.GATHER_DATABASE_STATS_JOB_PROC(%" PRId64 ")",
                                       default_duration_usec))) {
     } else {
       int64_t offset_day = nth_window - current_wday;

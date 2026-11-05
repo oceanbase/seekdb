@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_opt_stat_monitor_manager.h"
+#include <inttypes.h>
 #include "share/ob_ex_rpc.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_shared_timer.h"
@@ -60,7 +61,7 @@ namespace common
   "SELECT column_id, equality_preds, equijoin_preds, nonequijion_preds, range_preds, " \
          "like_preds, null_preds, distinct_member, groupby_member " \
   "FROM oceanbase.__all_column_usage " \
-  "WHERE table_id = %lu and column_id in (%s);"
+  "WHERE table_id = %" PRIu64 " and column_id in (%s);"
 
 #define INSERT_MONITOR_MODIFIED \
   "INSERT INTO %s (table_id, tablet_id, inserts, updates, deletes) VALUES "
@@ -91,7 +92,7 @@ namespace common
                                                                                 "ON DUPLICATE KEY UPDATE " \
                                                                                 "stale_stats = if(last_analyzed > 0, stale_stats, values(stale_stats))"
 
-#define STALE_TABLE_STAT_MOCK_VALUE_PATTERN "(%lu, %ld, 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1)"
+#define STALE_TABLE_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1)"
 
 
 void ObOptStatMonitorFlushAllTask::runTimerTask()
@@ -454,7 +455,7 @@ int ObOptStatMonitorManager::construct_get_column_usage_sql(ObIArray<ObColumnSta
     ObColumnStatParam *column_param = column_params.at(i);
     if (OB_ISNULL(column_param)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(col_ids.append_fmt("%s%lu",
+    } else if (OB_FAIL(col_ids.append_fmt("%s%" PRIu64 "",
                                           i == 0 ? "" : ", ",
                                           column_param->column_id_))) {
     }
@@ -560,7 +561,7 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
   } else if (OB_FAIL(delete_table_sql.append_fmt("DELETE FROM %s m WHERE (NOT EXISTS (SELECT 1 " \
             "FROM %s t, %s db WHERE t.database_id = db.database_id "\
             "AND t.table_id = m.table_id AND db.database_name != '__recyclebin')) "\
-            "AND table_id > %ld;",
+            "AND table_id > %" PRId64 ";",
             share::OB_ALL_MONITOR_MODIFIED_TNAME, all_table_name, share::OB_ALL_DATABASE_TNAME,
             OB_MAX_INNER_TABLE_ID))) {
   } else if (OB_FAIL(delete_part_sql.append_fmt("DELETE /*+leading(view3, m1) use_nl(view3, m1)*/FROM %s m1 WHERE (table_id, tablet_id) IN ( "\
@@ -569,7 +570,7 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
             "AND t.database_id = db.database_id AND db.database_name != '__recyclebin' "\
             "AND NOT EXISTS (SELECT 1 FROM %s p WHERE  p.table_id = m.table_id AND p.tablet_id = m.tablet_id) "\
             "AND NOT EXISTS (SELECT 1 FROM %s sp WHERE  sp.table_id = m.table_id AND sp.tablet_id = m.tablet_id)) "\
-            "AND table_id > %ld;",
+            "AND table_id > %" PRId64 ";",
             share::OB_ALL_MONITOR_MODIFIED_TNAME, share::OB_ALL_MONITOR_MODIFIED_TNAME,
             all_table_name, share::OB_ALL_DATABASE_TNAME, share::OB_ALL_PART_TNAME,
             share::OB_ALL_SUB_PART_TNAME, OB_MAX_INNER_TABLE_ID))) {
@@ -741,7 +742,7 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
       } else if (is_valid) {
         
         uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(dml_stats.at(i).table_id_);
-        if (OB_FAIL(tablet_list.append_fmt("%s(%lu, %ld)", is_first ? "(" : " ,",
+        if (OB_FAIL(tablet_list.append_fmt("%s(%" PRIu64 ", %" PRId64 ")", is_first ? "(" : " ,",
                                                                 pure_table_id,
                                                                 dml_stats.at(i).tablet_id_))) {
         } else {
@@ -1098,7 +1099,7 @@ int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t
                                                       "sum(inserts+updates+deletes) AS total_modified_cnt,"\
                                                       "sum(last_inserts+last_updates+last_deletes) AS last_modified_cnt "\
                                                   "from     %s "\
-                                                  "WHERE    table_id = %lu %s%s "\
+                                                  "WHERE    table_id = %" PRIu64 " %s%s "\
                                                   "GROUP BY table_id) m "\
                                         "WHERE     (CASE WHEN row_cnt = 0 THEN 10.1 "\
                                                     "ELSE (total_modified_cnt  * 1.0) / last_modified_cnt END) > 10.1 "\
@@ -1141,7 +1142,7 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<uint64_t> &tablet_id
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == tablet_ids.count() - 1 ? ')' : ',');
-    if (OB_FAIL(tablet_list.append_fmt("%c%lu%c", prefix, tablet_ids.at(i), suffix))) {
+    if (OB_FAIL(tablet_list.append_fmt("%c%" PRIu64 "%c", prefix, tablet_ids.at(i), suffix))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -1207,7 +1208,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const ObIArray<ObOptTa
                                        same_part_analyzed_list,
                                        diff_part_analyzed_list,
                                        expired_partition_ids))) {
-    } else if (OB_FAIL(update_sql.append_fmt("update /*+QUERY_TIMEOUT(60000000)*/%s set stale_stats = 1 where table_id = %lu and %s",
+    } else if (OB_FAIL(update_sql.append_fmt("update /*+QUERY_TIMEOUT(60000000)*/%s set stale_stats = 1 where table_id = %" PRIu64 " and %s",
                                               share::OB_ALL_TABLE_STAT_TNAME,
                                               pure_table_id,
                                               !same_part_analyzed_list.empty() ? same_part_analyzed_list.ptr() : diff_part_analyzed_list.ptr()))) {
@@ -1235,17 +1236,17 @@ int ObOptStatMonitorManager::gen_part_analyzed_list(const ObIArray<ObOptTableSta
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
       char suffix = (i == end_idx - 1 ? ')' : ',');
       if (OB_FAIL(expired_partition_ids.push_back(expired_table_stats.at(i).get_partition_id()))) {
-      } else if (OB_FAIL(diff_part_analyzed_list.append_fmt("%s(%ld,usec_to_time(%ld))%c", i == begin_idx ? "(partition_id, last_analyzed) in (" : " ",
+      } else if (OB_FAIL(diff_part_analyzed_list.append_fmt("%s(%" PRId64 ",usec_to_time(%" PRId64 "))%c", i == begin_idx ? "(partition_id, last_analyzed) in (" : " ",
                                                                                            expired_table_stats.at(i).get_partition_id(),
                                                                                            expired_table_stats.at(i).get_last_analyzed(),
                                                                                            suffix))) {
       } else if (i == begin_idx || last_analyzed == expired_table_stats.at(i).get_last_analyzed()) {
         last_analyzed = expired_table_stats.at(i).get_last_analyzed();
-        if (OB_FAIL(same_part_analyzed_list.append_fmt("%s%ld%c", i == begin_idx ? "partition_id in (" : " ",
+        if (OB_FAIL(same_part_analyzed_list.append_fmt("%s%" PRId64 "%c", i == begin_idx ? "partition_id in (" : " ",
                                                                   expired_table_stats.at(i).get_partition_id(),
                                                                   suffix))) {
         } else if (i == end_idx - 1) {
-          if (OB_FAIL(same_part_analyzed_list.append_fmt(" AND last_analyzed = usec_to_time(%ld)", last_analyzed))) {
+          if (OB_FAIL(same_part_analyzed_list.append_fmt(" AND last_analyzed = usec_to_time(%" PRId64 ")", last_analyzed))) {
           } else {
             diff_part_analyzed_list.reset();
           }

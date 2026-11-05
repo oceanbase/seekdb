@@ -1522,7 +1522,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
         const static int64_t val_buf_len = 1024;
         char val_buf[val_buf_len];
         int64_t pos = 0;
-        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%ld", int64_val))) {
+        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%" PRId64 "", int64_val))) {
         } else {
           ObString cs_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, cs_name_str.length(), cs_name_str.ptr());
@@ -1613,7 +1613,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
         const static int64_t val_buf_len = 1024;
         char val_buf[val_buf_len];
         int64_t pos = 0;
-        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%ld", int64_val))) {
+        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%" PRId64 "", int64_val))) {
         } else {
           ObString coll_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name_str.length(), coll_name_str.ptr());
@@ -1684,7 +1684,7 @@ int ObSysVarOnCheckFuncs::check_default_value_for_utf8mb4(ObExecContext &ctx,
         const static int64_t val_buf_len = 1024;
         char val_buf[val_buf_len];
         int64_t pos = 0;
-        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%ld", int64_val))) {
+        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%" PRId64 "", int64_val))) {
         } else {
           ObString coll_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name_str.length(), coll_name_str.ptr());
@@ -1828,7 +1828,7 @@ int ObSysVarOnCheckFuncs::check_default_lob_inrow_threshold(sql::ObExecContext &
     char error_msg[ERROR_MSG_LENGTH] = "";
     int64_t pos = 0;
     if (OB_SUCCESS != (tmp_ret = databuff_printf(error_msg, ERROR_MSG_LENGTH,
-        pos, "lob inrow threshold, should be [%ld, %ld]", OB_MIN_LOB_INROW_THRESHOLD, OB_MAX_LOB_INROW_THRESHOLD))) {
+        pos, "lob inrow threshold, should be [%" PRId64 ", %" PRId64 "]", OB_MIN_LOB_INROW_THRESHOLD, OB_MAX_LOB_INROW_THRESHOLD))) {
     } else {
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, error_msg);
     }
@@ -2518,7 +2518,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
     if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_port_int_str_,
                                 ObSpecialSysVarValues::SERVER_PORT_INT_STR_MAX_LEN,
                                 pos,
-                                "%ld",
+                                "%" PRId64 "",
                                 mysql_port))) {
     }
   }
