@@ -351,7 +351,7 @@ int ObExprLike::assign(const ObExprOperator &other)
 // check valid must be process first, even parttern or text is null, it will report error
 // eg: select 1 from dual where null like 'a' escape '';
 // like: select 1 from t1 where '_%a' like 'a_a%aa' escape 'a';  --ok
-//       select 1 from t1 where '_%' lldke 'aba%' escape 'a';  --error, ab is invalid
+//       select 1 from t1 where '_%' like 'aba%' escape 'a';  --error, ab is invalid
 // Error: missing or illegal character following the escape character.
 template <bool is_static_engine, typename T>
 int ObExprLike::check_pattern_valid(const T &pattern,
