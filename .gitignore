@@ -229,3 +229,6 @@ seekdb_data/
 
 /deps/android/
 /deps/wasm/
+
+prompt/
+.codex/
