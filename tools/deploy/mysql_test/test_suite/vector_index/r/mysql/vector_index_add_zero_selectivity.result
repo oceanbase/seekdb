@@ -1,0 +1,29 @@
+# Broad equivalent filters must have identical post-filter estimates
+plans_found	same_estimate	post_filter
+1	1	1
+# Narrow equivalent filters must retain the pre-filter choice
+plans_found	same_estimate	pre_filter
+1	1	1
+# BETWEEN must also reuse the column range estimate
+plans_found	same_estimate	post_filter
+1	1	1
+# Overlapping OR ranges must be combined before estimating selectivity
+plans_found	same_estimate	pre_filter
+1	1	1
+# Nested AND and OR ranges must retain the same estimate
+plans_found	same_estimate	pre_filter
+1	1	1
+# Parameter reuse must preserve executable additions and NULL semantics
+eligible
+990
+eligible
+1000
+eligible
+0
+# Nullable and boundary integer values remain equivalent
+signed_eligible
+2
+unsigned_eligible
+2
+mismatches
+0

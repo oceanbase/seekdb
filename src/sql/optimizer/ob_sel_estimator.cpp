@@ -1832,28 +1832,125 @@ int ObBoolOpSelEstimator::get_sel(const OptTableMetas &table_metas,
   return ret;
 }
 
+// Build a statistics-only predicate for integral additions of zero. Keep the
+// executable predicate intact, including parameterized additions: this must not
+// turn an estimate based on current parameter values into a semantic rewrite.
+static int get_add_zero_range_expr(const OptSelectivityCtx &ctx,
+                                   const ObRawExpr &expr,
+                                   const ObRawExpr *&range_expr)
+{
+  int ret = OB_SUCCESS;
+  range_expr = &expr;
+  ObOpRawExpr *new_expr = NULL;
+  if (T_OP_AND == expr.get_expr_type() || T_OP_OR == expr.get_expr_type()) {
+    // Keep same-column Boolean ranges together, so overlapping OR branches
+    // are estimated as a range union rather than as mutually exclusive filters.
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
+      const ObRawExpr *child = expr.get_param_expr(i);
+      const ObRawExpr *range_child = NULL;
+      if (OB_ISNULL(child)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(SMART_CALL(get_add_zero_range_expr(ctx, *child, range_child)))) {
+      } else if (range_child != child) {
+        if (NULL == new_expr) {
+          if (OB_FAIL(ctx.get_opt_ctx().get_expr_factory().create_raw_expr(expr.get_expr_type(), new_expr))) {
+          } else if (OB_FAIL(new_expr->assign(expr))) {
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(new_expr->replace_param_expr(i, const_cast<ObRawExpr *>(range_child)))) {
+        }
+      }
+    }
+  } else if (IS_RANGE_CMP_OP(expr.get_expr_type()) ||
+      T_OP_BTW == expr.get_expr_type() || T_OP_NOT_BTW == expr.get_expr_type()) {
+    const ObRawExpr *var = NULL;
+    const ObRawExpr *const_expr1 = NULL;
+    const ObRawExpr *const_expr2 = NULL;
+    ObItemType type = T_INVALID;
+    bool is_valid = false;
+    bool removed_zero = false;
+    if (OB_FAIL(ObOptEstUtils::extract_var_op_const(&expr, var, const_expr1,
+                                                    const_expr2, type, is_valid))) {
+    } else if (is_valid) {
+      const ObRawExpr *column = var;
+      if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(column, column))) {
+      }
+      while (OB_SUCC(ret) && T_OP_ADD == column->get_expr_type() &&
+             (ObIntTC == column->get_type_class() || ObUIntTC == column->get_type_class())) {
+        const ObRawExpr *left = column->get_param_expr(0);
+        const ObRawExpr *right = column->get_param_expr(1);
+        const ObRawExpr *zero = NULL;
+        const ObRawExpr *child = NULL;
+        ObObj value;
+        bool got_result = false;
+        if (OB_UNLIKELY(column->get_param_count() != 2) ||
+            OB_ISNULL(left) || OB_ISNULL(right)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (left->is_static_scalar_const_expr()) {
+          zero = left;
+          child = right;
+        } else if (right->is_static_scalar_const_expr()) {
+          zero = right;
+          child = left;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (NULL == zero || child->get_type_class() != column->get_type_class()) {
+          break;
+        } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
+                     ctx.get_opt_ctx().get_exec_ctx(), zero, value, got_result, ctx.get_allocator()))) {
+        } else if (!got_result || !value.is_integer_type() || !value.is_zero()) {
+          break;
+        } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(child, column))) {
+        } else {
+          removed_zero = true;
+        }
+      }
+      if (OB_SUCC(ret) && removed_zero && column->is_column_ref_expr()) {
+        if (OB_FAIL(ctx.get_opt_ctx().get_expr_factory().create_raw_expr(expr.get_expr_type(), new_expr))) {
+        } else if (OB_FAIL(new_expr->assign(expr))) {
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < new_expr->get_param_count(); ++i) {
+            if (new_expr->get_param_expr(i) == var &&
+                OB_FAIL(new_expr->replace_param_expr(i, const_cast<ObRawExpr *>(column)))) {
+            }
+          }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && NULL != new_expr) {
+    if (OB_FAIL(new_expr->extract_info())) {
+    } else if (OB_FAIL(new_expr->calc_hash())) {
+    } else {
+      range_expr = new_expr;
+    }
+  }
+  return ret;
+}
+
 int ObRangeSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
                                           const OptSelectivityCtx &ctx,
                                           const ObRawExpr &expr,
                                           ObSelEstimator *&estimator)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
   bool is_valid = true;
   estimator = NULL;
   ObArray<ObRawExpr*> column_exprs;
   ObRangeSelEstimator *range_estimator = NULL;
-  if (OB_FAIL(ObOptEstUtils::is_range_expr(&expr, is_valid))) {
+  const ObRawExpr *range_expr = &expr;
+  if (OB_FAIL(get_add_zero_range_expr(ctx, expr, range_expr))) {
+  } else if (OB_FAIL(ObOptEstUtils::is_range_expr(range_expr, is_valid))) {
   } else if (!is_valid) {
     // do nothing
-  } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(&expr, column_exprs))) {
+  } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(range_expr, column_exprs))) {
   } else if (column_exprs.count() != 1) {
     is_valid = false;
   } else if (OB_FAIL(factory.create_estimator_inner(range_estimator))) {
   } else {
     range_estimator->column_expr_ = static_cast<ObColumnRefRawExpr *>(column_exprs.at(0));
     range_estimator->eigen_expr_ = range_estimator->column_expr_;
-    if (OB_FAIL(range_estimator->range_exprs_.push_back(const_cast<ObRawExpr *>(&expr)))) {
+    if (OB_FAIL(range_estimator->range_exprs_.push_back(const_cast<ObRawExpr *>(range_expr)))) {
     } else {
       estimator = range_estimator;
     }
