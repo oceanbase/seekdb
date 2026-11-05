@@ -86,7 +86,7 @@ char *ObLogCursor::to_str() const
 
 int64_t ObLogCursor::to_string(char *buf, const int64_t limit) const
 {
-  return snprintf(buf, limit, "ObLogCursor{file_id=%ld, log_id=%ld, offset=%ld}", file_id_, log_id_, offset_);
+  return snprintf(buf, limit, "ObLogCursor{file_id=%" PRId64 ", log_id=%" PRId64 ", offset=%" PRId64 "}", file_id_, log_id_, offset_);
 }
 
 int ObLogCursor::next_entry(ObLogEntry &entry, const LogCommand cmd, const char *log_data,
