@@ -5871,7 +5871,18 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    // Pre-filtering scans the candidates before the vector search starts. When the
+    // filter keeps most rows, that scan is a full table scan in front of an ANN
+    // search that would visit far fewer rows. Use the same selectivity limits as
+    // the large-candidate branches below. row_count_ <= 0 means the row count is
+    // unknown, for example on the index-merge path, so keep the old behavior.
+    const double pre_filter_rate =
+        is_primary_idx ? ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY
+                       : ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+    const bool pre_filter_shrinks_scan =
+        vc_info.row_count_ <= 0 || vc_info.selectivity_ <= pre_filter_rate;
+    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE
+        && pre_filter_shrinks_scan) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
