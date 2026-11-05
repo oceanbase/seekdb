@@ -20,6 +20,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <string>
+#include <sys/stat.h>
 
 #include <gtest/gtest.h>
 
@@ -253,6 +254,87 @@ TEST_F(TestPlatformIo, RejectEmptyName)
   errno = 0;
   EXPECT_EQ(-1, ob_open_utf8("", O_RDONLY, 0));
   EXPECT_EQ(EINVAL, errno);
+}
+
+TEST_F(TestPlatformIo, DirectoryMetadataRoundTrip)
+{
+  // Non-ASCII directory names must survive create/scan/rename/remove on the
+  // platform layer on every platform.
+  const std::string dir = path_of("seekdb_\xE7\x9B\xAE\xE5\xBD\x95\xE6\xB5\x8B\xE8\xAF\x95");
+  ASSERT_EQ(0, ob_mkdir_utf8(dir.c_str(), 0755)) << "mkdir failed errno=" << errno;
+
+  ObPlatformFileStat dir_stat;
+  ASSERT_EQ(0, ob_stat_utf8(dir.c_str(), dir_stat)) << "stat dir failed errno=" << errno;
+  EXPECT_TRUE(S_ISDIR(dir_stat.mode));
+
+  const std::string file = dir + "/plain.bin";
+  const int fd = ob_open_utf8(file.c_str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+  ASSERT_GE(fd, 0) << "create in dir failed errno=" << errno;
+  const char payload[] = "dir-entry";
+  ASSERT_EQ(9, ob_pwrite_fd(fd, payload, 9, 0));
+  ASSERT_EQ(0, close_fd(fd));
+
+  ObPlatformFileStat file_stat;
+  ASSERT_EQ(0, ob_stat_utf8(file.c_str(), file_stat)) << "stat file failed errno=" << errno;
+  EXPECT_FALSE(S_ISDIR(file_stat.mode));
+  EXPECT_EQ(9, file_stat.size);
+
+  // Directory scan reports the entry names.
+  ObPlatformDir *handle = ob_opendir_utf8(dir.c_str());
+  ASSERT_NE(nullptr, handle) << "opendir failed errno=" << errno;
+  bool saw_file = false;
+  char entry_name[256] = {0};
+  int read_ret = 0;
+  while (1 == (read_ret = ob_readdir_utf8(handle, entry_name, sizeof(entry_name)))) {
+    if (0 == ::strcmp(entry_name, "plain.bin")) {
+      saw_file = true;
+    }
+  }
+  EXPECT_EQ(0, read_ret) << "readdir failed errno=" << errno;
+  EXPECT_TRUE(saw_file);
+  EXPECT_EQ(0, ob_closedir_utf8(handle));
+
+  // rename + unlink + rmdir on UTF-8 names.
+  const std::string renamed = dir + "/renamed_\xC3\xA9.bin";
+  EXPECT_EQ(0, ob_rename_utf8(file.c_str(), renamed.c_str())) << "rename failed errno=" << errno;
+  EXPECT_EQ(-1, ob_stat_utf8(file.c_str(), file_stat));
+  EXPECT_EQ(0, ob_stat_utf8(renamed.c_str(), file_stat));
+  EXPECT_EQ(0, ob_unlink_utf8(renamed.c_str())) << "unlink failed errno=" << errno;
+  EXPECT_EQ(0, ob_rmdir_utf8(dir.c_str())) << "rmdir failed errno=" << errno;
+}
+
+TEST_F(TestPlatformIo, AccessAndAbsolutePath)
+{
+  const std::string file = path_of("access.bin");
+  const int fd = ob_open_utf8(file.c_str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+  ASSERT_GE(fd, 0);
+  ASSERT_EQ(0, close_fd(fd));
+
+  EXPECT_EQ(0, ob_access_utf8(file.c_str(), ObPathPermission::EXISTS));
+  EXPECT_EQ(0, ob_access_utf8(file.c_str(), ObPathPermission::READ));
+  EXPECT_EQ(0, ob_access_utf8(file.c_str(), ObPathPermission::WRITE));
+  errno = 0;
+  EXPECT_EQ(-1, ob_access_utf8(path_of("missing.bin").c_str(), ObPathPermission::EXISTS));
+  EXPECT_EQ(ENOENT, errno);
+
+  char absolute[4096] = {0};
+  EXPECT_EQ(0, ob_absolute_path_utf8(file.c_str(), absolute, sizeof(absolute)));
+  EXPECT_TRUE(absolute[0] != '\0');
+#ifdef _WIN32
+  EXPECT_TRUE(ob_is_absolute_path_utf8(absolute));
+#else
+  EXPECT_TRUE(ob_is_absolute_path_utf8(absolute));
+  EXPECT_FALSE(ob_is_absolute_path_utf8("relative/path"));
+#endif
+
+  int64_t total_space = 0;
+  int64_t free_space = 0;
+  EXPECT_EQ(0, ob_get_disk_space_utf8(root_.c_str(), total_space, free_space));
+  EXPECT_GT(total_space, 0);
+  EXPECT_GT(free_space, 0);
+
+  EXPECT_EQ(0, ob_fsync_dir_utf8(root_.c_str())) << "fsync dir failed errno=" << errno;
+  EXPECT_EQ(0, ob_unlink_utf8(file.c_str()));
 }
 
 #ifdef _WIN32

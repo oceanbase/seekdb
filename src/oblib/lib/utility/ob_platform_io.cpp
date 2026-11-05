@@ -18,17 +18,31 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <limits.h>
 #include <new>
 
 #ifdef _WIN32
+#include <direct.h>
 #include <fcntl.h>
 #include <io.h>
+#include <stdio.h>
+#include <sys/stat.h>
 #include <windows.h>
 #include <cwchar>
+// S_IFLNK is not part of the UCRT stat constants; the value matches the POSIX
+// convention used by the repository. Callers compare through S_ISLNK(st_mode).
+#ifndef S_IFLNK
+#define S_IFLNK 0xA000
+#endif
 #else
+#include <dirent.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -240,9 +254,128 @@ wchar_t *make_extended_path(const wchar_t *path)
   return result;
 }
 
+// Converts a UTF-8 name to its extended-length (\\?\) UTF-16 form. Returns a
+// new[]-allocated string or NULL with errno set.
+wchar_t *utf8_to_extended_path(const char *path)
+{
+  wchar_t *wide = NULL;
+  wchar_t *extended = NULL;
+  if (NULL == path || '\0' == path[0]) {
+    errno = EINVAL;
+  } else if (0 == utf8_to_wide(path, wide)) {
+    extended = make_extended_path(wide);
+    delete[] wide;
+  }
+  return extended;
+}
+
+// Converts a NUL-terminated UTF-16 string to UTF-8. Returns 0 or -1 with errno
+// set when the name does not fit into `buffer_size`.
+int wide_to_utf8(const wchar_t *wide, char *buffer, int64_t buffer_size)
+{
+  int ret = -1;
+  if (NULL == wide || NULL == buffer || buffer_size <= 0
+      || buffer_size > static_cast<int64_t>(INT_MAX)) {
+    errno = EINVAL;
+  } else {
+    const int utf8_len = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, NULL, 0, NULL, NULL);
+    if (utf8_len <= 0) {
+      errno = EINVAL;
+    } else if (utf8_len > buffer_size) {
+      errno = name_too_long_errno();
+    } else if (0 == ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, buffer,
+                                          static_cast<int>(buffer_size), NULL, NULL)) {
+      errno = EINVAL;
+    } else {
+      ret = 0;
+    }
+  }
+  return ret;
+}
+
+int64_t filetime_to_unix_seconds(const FILETIME &filetime)
+{
+  ULARGE_INTEGER value;
+  value.LowPart = filetime.dwLowDateTime;
+  value.HighPart = filetime.dwHighDateTime;
+  return static_cast<int64_t>(value.QuadPart / 10000000ULL) - 11644473600LL;
+}
+
+uint32_t attributes_to_mode(DWORD attributes)
+{
+  uint32_t mode = 0;
+  if (0 != (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+    mode |= _S_IFDIR;
+  } else {
+    mode |= _S_IFREG;
+  }
+  if (0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+    mode |= S_IFLNK;
+  }
+  mode |= (0 != (attributes & FILE_ATTRIBUTE_READONLY)) ? _S_IREAD : (_S_IREAD | _S_IWRITE);
+  return mode;
+}
+
+int fill_stat_from_attributes(const wchar_t *extended_path, DWORD attributes,
+                              ObPlatformFileStat &stat)
+{
+  int ret = 0;
+  WIN32_FILE_ATTRIBUTE_DATA data;
+  ::memset(&data, 0, sizeof(data));
+  if (FALSE == ::GetFileAttributesExW(extended_path, GetFileExInfoStandard, &data)) {
+    errno = win32_error_to_errno(::GetLastError());
+    ret = -1;
+  } else {
+    stat.size = (static_cast<int64_t>(data.nFileSizeHigh) << 32)
+                | static_cast<int64_t>(data.nFileSizeLow);
+    stat.atime_sec = filetime_to_unix_seconds(data.ftLastAccessTime);
+    stat.mtime_sec = filetime_to_unix_seconds(data.ftLastWriteTime);
+    stat.ctime_sec = filetime_to_unix_seconds(data.ftCreationTime);
+    stat.dev = 0;
+    stat.inode = 0;
+    stat.nlink = 1;
+    stat.uid = 0;
+    stat.gid = 0;
+    stat.mode = attributes_to_mode(attributes);
+  }
+  return ret;
+}
+
 } // namespace platform_io_internal
 
 #endif // _WIN32
+
+#ifndef _WIN32
+namespace platform_io_internal
+{
+
+int name_too_long_errno()
+{
+  return ENAMETOOLONG;
+}
+
+void fill_stat(const struct stat &src, ObPlatformFileStat &stat)
+{
+  stat.size = static_cast<int64_t>(src.st_size);
+  stat.dev = static_cast<uint64_t>(src.st_dev);
+  stat.inode = static_cast<uint64_t>(src.st_ino);
+  stat.nlink = static_cast<uint32_t>(src.st_nlink);
+  stat.uid = static_cast<uint32_t>(src.st_uid);
+  stat.gid = static_cast<uint32_t>(src.st_gid);
+  stat.mode = static_cast<uint32_t>(src.st_mode);
+#if defined(__APPLE__)
+  stat.atime_sec = static_cast<int64_t>(src.st_atimespec.tv_sec);
+  stat.mtime_sec = static_cast<int64_t>(src.st_mtimespec.tv_sec);
+  stat.ctime_sec = static_cast<int64_t>(src.st_ctimespec.tv_sec);
+#else
+  stat.atime_sec = static_cast<int64_t>(src.st_atim.tv_sec);
+  stat.mtime_sec = static_cast<int64_t>(src.st_mtim.tv_sec);
+  stat.ctime_sec = static_cast<int64_t>(src.st_ctim.tv_sec);
+#endif
+}
+
+} // namespace platform_io_internal
+#endif // !_WIN32
 
 int ob_open_utf8(const char *path, int flags, int mode)
 {
@@ -373,6 +506,491 @@ int64_t ob_pwrite_fd(int fd, const void *buf, int64_t count, int64_t offset)
   return static_cast<int64_t>(::pwrite(fd, buf, static_cast<size_t>(count),
                                         static_cast<off_t>(offset)));
 #endif
+}
+
+class ObPlatformDir
+{
+public:
+#ifdef _WIN32
+  HANDLE handle_;
+  WIN32_FIND_DATAW find_data_;
+  bool first_pending_;
+#else
+  DIR *dir_;
+#endif
+};
+
+int ob_stat_utf8(const char *path, ObPlatformFileStat &stat, bool follow_link)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else if (follow_link) {
+    struct _stat64 os_stat;
+    if (0 != ::_wstat64(extended_path, &os_stat)) {
+      ret = -1;
+    } else {
+      stat.size = os_stat.st_size;
+      stat.atime_sec = os_stat.st_atime;
+      stat.mtime_sec = os_stat.st_mtime;
+      stat.ctime_sec = os_stat.st_ctime;
+      stat.dev = os_stat.st_dev;
+      stat.inode = os_stat.st_ino;
+      stat.mode = static_cast<uint32_t>(os_stat.st_mode);
+      stat.nlink = static_cast<uint32_t>(os_stat.st_nlink);
+      stat.uid = static_cast<uint32_t>(os_stat.st_uid);
+      stat.gid = static_cast<uint32_t>(os_stat.st_gid);
+    }
+  } else {
+    // _wstat64 follows reparse points; the caller asked for the link itself.
+    const DWORD attributes = ::GetFileAttributesW(extended_path);
+    if (INVALID_FILE_ATTRIBUTES == attributes) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    } else {
+      ret = platform_io_internal::fill_stat_from_attributes(extended_path, attributes, stat);
+    }
+  }
+  delete[] extended_path;
+#else
+  struct stat os_stat;
+  if (0 != (follow_link ? ::stat(path, &os_stat) : ::lstat(path, &os_stat))) {
+    ret = -1;
+  } else {
+    platform_io_internal::fill_stat(os_stat, stat);
+  }
+#endif
+  return ret;
+}
+
+int ob_access_utf8(const char *path, ObPathPermission permission)
+{
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    return -1;
+  }
+  int os_mode = 0;
+  switch (permission) {
+    case ObPathPermission::EXISTS:
+      os_mode = 0;
+      break;
+    case ObPathPermission::READ:
+      os_mode = 4;
+      break;
+    case ObPathPermission::WRITE:
+      os_mode = 2;
+      break;
+    default:
+      break;
+  }
+  const int ret = ::_waccess(extended_path, os_mode);
+  delete[] extended_path;
+  return ret;
+#else
+  int os_mode = F_OK;
+  switch (permission) {
+    case ObPathPermission::EXISTS:
+      os_mode = F_OK;
+      break;
+    case ObPathPermission::READ:
+      os_mode = R_OK;
+      break;
+    case ObPathPermission::WRITE:
+      os_mode = W_OK;
+      break;
+    default:
+      break;
+  }
+  return ::access(path, os_mode);
+#endif
+}
+
+int ob_mkdir_utf8(const char *path, int mode)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else {
+    ret = ::_wmkdir(extended_path);
+    delete[] extended_path;
+  }
+#else
+  ret = ::mkdir(path, static_cast<mode_t>(mode));
+#endif
+  return ret;
+}
+
+int ob_rmdir_utf8(const char *path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else {
+    ret = ::_wrmdir(extended_path);
+    delete[] extended_path;
+  }
+#else
+  ret = ::rmdir(path);
+#endif
+  return ret;
+}
+
+int ob_unlink_utf8(const char *path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else {
+    ret = ::_wunlink(extended_path);
+    delete[] extended_path;
+  }
+#else
+  ret = ::unlink(path);
+#endif
+  return ret;
+}
+
+int ob_rename_utf8(const char *old_path, const char *new_path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_old = platform_io_internal::utf8_to_extended_path(old_path);
+  wchar_t *extended_new = NULL;
+  if (NULL == extended_old) {
+    ret = -1;
+  } else if (NULL == (extended_new = platform_io_internal::utf8_to_extended_path(new_path))) {
+    ret = -1;
+  } else {
+    ret = ::_wrename(extended_old, extended_new);
+  }
+  delete[] extended_old;
+  delete[] extended_new;
+#else
+  ret = ::rename(old_path, new_path);
+#endif
+  return ret;
+}
+
+int ob_symlink_utf8(const char *target_path, const char *link_path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_target = platform_io_internal::utf8_to_extended_path(target_path);
+  wchar_t *extended_link = NULL;
+  if (NULL == extended_target) {
+    ret = -1;
+  } else if (NULL == (extended_link = platform_io_internal::utf8_to_extended_path(link_path))) {
+    ret = -1;
+  } else if (FALSE == ::CreateSymbolicLinkW(extended_link, extended_target, 0)) {
+    errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+    ret = -1;
+  }
+  delete[] extended_target;
+  delete[] extended_link;
+#else
+  ret = ::symlink(target_path, link_path);
+#endif
+  return ret;
+}
+
+int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free_space)
+{
+  int ret = 0;
+  total_space = 0;
+  free_space = 0;
+#ifdef _WIN32
+  wchar_t *wide_path = NULL;
+  if (NULL == path || '\0' == path[0]) {
+    errno = EINVAL;
+    ret = -1;
+  } else if (0 != platform_io_internal::utf8_to_wide(path, wide_path)) {
+    ret = -1;
+  } else {
+    // GetDiskFreeSpaceExW takes a volume path; reduce an absolute path to its
+    // root ("C:\" or "\\server\share\").
+    wchar_t *root = NULL;
+    const size_t wide_len = ::wcslen(wide_path);
+    if (wide_len >= 3 && L':' == wide_path[1]) {
+      if (NULL != (root = new (std::nothrow) wchar_t[4])) {
+        root[0] = wide_path[0];
+        root[1] = L':';
+        root[2] = L'\\';
+        root[3] = L'\0';
+      } else {
+        errno = ENOMEM;
+      }
+    } else if (wide_len >= 2 && L'\\' == wide_path[0] && L'\\' == wide_path[1]) {
+      size_t root_len = 2;
+      int64_t separators = 0;
+      for (; root_len < wide_len && separators < 2; ++root_len) {
+        if (L'\\' == wide_path[root_len]) {
+          ++separators;
+        }
+      }
+      if (2 == separators) {
+        if (NULL != (root = new (std::nothrow) wchar_t[root_len + 1])) {
+          ::wmemcpy(root, wide_path, root_len);
+          root[root_len] = L'\0';
+        } else {
+          errno = ENOMEM;
+        }
+      }
+    }
+    ULARGE_INTEGER free_bytes_available;
+    ULARGE_INTEGER total_number_of_bytes;
+    ULARGE_INTEGER total_number_of_free_bytes;
+    if (NULL == root) {
+      errno = ENOENT;
+      ret = -1;
+    } else if (FALSE == ::GetDiskFreeSpaceExW(root, &free_bytes_available, &total_number_of_bytes,
+                                              &total_number_of_free_bytes)) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    } else {
+      total_space = static_cast<int64_t>(total_number_of_bytes.QuadPart);
+      free_space = static_cast<int64_t>(free_bytes_available.QuadPart);
+    }
+    delete[] root;
+    delete[] wide_path;
+  }
+#else
+  struct statvfs svfs;
+  if (NULL == path) {
+    errno = EINVAL;
+    ret = -1;
+  } else if (0 != ::statvfs(path, &svfs)) {
+    ret = -1;
+  } else {
+    total_space = static_cast<int64_t>((svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize);
+    free_space = static_cast<int64_t>(svfs.f_bavail * svfs.f_bsize);
+  }
+#endif
+  return ret;
+}
+
+int ob_fsync_dir_utf8(const char *path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else {
+    const HANDLE handle = ::CreateFileW(extended_path, GENERIC_READ,
+                                        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (INVALID_HANDLE_VALUE == handle) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    } else {
+      // Directories are journaled; a failed flush is not fatal, matching the
+      // previous Windows behaviour.
+      ::FlushFileBuffers(handle);
+      ::CloseHandle(handle);
+    }
+    delete[] extended_path;
+  }
+#else
+  const int fd = ::open(path, O_RDONLY | O_DIRECTORY);
+  if (-1 == fd) {
+    ret = -1;
+  } else {
+    if (0 != ::fsync(fd)) {
+      ret = -1;
+    }
+    ::close(fd);
+  }
+#endif
+  return ret;
+}
+
+bool ob_is_absolute_path_utf8(const char *path)
+{
+  bool ret = false;
+  if (NULL != path) {
+#ifdef _WIN32
+    const size_t len = ::strlen(path);
+    if (len >= 2 && ('\\' == path[0] || '/' == path[0])
+        && ('\\' == path[1] || '/' == path[1])) {
+      ret = true;
+    } else if (len >= 3 && ':' == path[1]
+               && ('\\' == path[2] || '/' == path[2])) {
+      ret = ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'));
+    }
+#else
+    ret = ('/' == path[0]);
+#endif
+  }
+  return ret;
+}
+
+int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *wide_path = NULL;
+  if (NULL == path || NULL == buffer || buffer_size <= 0) {
+    errno = EINVAL;
+    ret = -1;
+  } else if (0 != platform_io_internal::utf8_to_wide(path, wide_path)) {
+    ret = -1;
+  } else {
+    const DWORD need = ::GetFullPathNameW(wide_path, 0, NULL, NULL);
+    if (0 == need) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    } else {
+      wchar_t *absolute = new (std::nothrow) wchar_t[need];
+      if (NULL == absolute) {
+        errno = ENOMEM;
+        ret = -1;
+      } else {
+        const DWORD written = ::GetFullPathNameW(wide_path, need, absolute, NULL);
+        if (0 == written || written >= need) {
+          errno = (0 == written) ? platform_io_internal::win32_error_to_errno(::GetLastError())
+                                 : platform_io_internal::name_too_long_errno();
+          ret = -1;
+        } else {
+          ret = platform_io_internal::wide_to_utf8(absolute, buffer, buffer_size);
+        }
+        delete[] absolute;
+      }
+    }
+    delete[] wide_path;
+  }
+#else
+  if (NULL == path || NULL == buffer || buffer_size < PATH_MAX) {
+    errno = EINVAL;
+    ret = -1;
+  } else if (NULL == ::realpath(path, buffer)) {
+    ret = -1;
+  }
+#endif
+  return ret;
+}
+
+ObPlatformDir *ob_opendir_utf8(const char *path)
+{
+  ObPlatformDir *dir = NULL;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+  } else {
+    const size_t extended_len = ::wcslen(extended_path);
+    wchar_t *pattern = new (std::nothrow) wchar_t[extended_len + 3];
+    if (NULL == pattern) {
+      errno = ENOMEM;
+    } else {
+      ::wmemcpy(pattern, extended_path, extended_len);
+      ::wmemcpy(pattern + extended_len, L"\\*", 3);
+      dir = new (std::nothrow) ObPlatformDir();
+      if (NULL == dir) {
+        errno = ENOMEM;
+      } else {
+        ::memset(&dir->find_data_, 0, sizeof(dir->find_data_));
+        dir->first_pending_ = true;
+        dir->handle_ = ::FindFirstFileW(pattern, &dir->find_data_);
+        if (INVALID_HANDLE_VALUE == dir->handle_) {
+          errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+          delete dir;
+          dir = NULL;
+        }
+      }
+      delete[] pattern;
+    }
+    delete[] extended_path;
+  }
+#else
+  DIR *os_dir = ::opendir(path);
+  if (NULL != os_dir) {
+    dir = new (std::nothrow) ObPlatformDir();
+    if (NULL == dir) {
+      ::closedir(os_dir);
+      errno = ENOMEM;
+    } else {
+      dir->dir_ = os_dir;
+    }
+  }
+#endif
+  return dir;
+}
+
+int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size)
+{
+  int ret = -1;
+  if (NULL == dir || NULL == name || name_size <= 0) {
+    errno = EINVAL;
+#ifdef _WIN32
+  } else {
+    ret = 0;
+    for (;;) {
+      if (dir->first_pending_) {
+        dir->first_pending_ = false;
+      } else if (FALSE == ::FindNextFileW(dir->handle_, &dir->find_data_)) {
+        const DWORD error = ::GetLastError();
+        if (ERROR_NO_MORE_FILES == error) {
+          ret = 0;
+        } else {
+          errno = platform_io_internal::win32_error_to_errno(error);
+          ret = -1;
+        }
+        break;
+      }
+      if (0 == platform_io_internal::wide_to_utf8(dir->find_data_.cFileName, name, name_size)) {
+        ret = 1;
+        break;
+      }
+    }
+  }
+#else
+  } else {
+    const struct dirent *entry = ::readdir(dir->dir_);
+    if (NULL == entry) {
+      ret = 0;
+    } else if (::strlen(entry->d_name) + 1 > static_cast<size_t>(name_size)) {
+      errno = platform_io_internal::name_too_long_errno();
+      ret = -1;
+    } else {
+      ::snprintf(name, name_size, "%s", entry->d_name);
+      ret = 1;
+    }
+  }
+#endif
+  return ret;
+}
+
+int ob_closedir_utf8(ObPlatformDir *dir)
+{
+  int ret = 0;
+  if (NULL == dir) {
+    errno = EINVAL;
+    ret = -1;
+#ifdef _WIN32
+  } else {
+    if (FALSE == ::FindClose(dir->handle_)) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    }
+    delete dir;
+  }
+#else
+  } else {
+    if (0 != ::closedir(dir->dir_)) {
+      ret = -1;
+    }
+    delete dir;
+  }
+#endif
+  return ret;
 }
 
 #ifdef _WIN32

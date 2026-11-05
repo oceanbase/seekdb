@@ -45,6 +45,72 @@ int ob_open_utf8(const char *path, int flags, int mode);
 int64_t ob_pread_fd(int fd, void *buf, int64_t count, int64_t offset);
 int64_t ob_pwrite_fd(int fd, const void *buf, int64_t count, int64_t offset);
 
+// Metadata reported by ob_stat_utf8(). The POSIX stat/lstat fields used by the
+// database are exposed with explicit widths; fields that Windows does not have
+// (device, inode, owner) are zero there.
+struct ObPlatformFileStat
+{
+  int64_t size;
+  int64_t atime_sec;
+  int64_t mtime_sec;
+  int64_t ctime_sec;
+  uint64_t dev;
+  uint64_t inode;
+  uint32_t mode;
+  uint32_t nlink;
+  uint32_t uid;
+  uint32_t gid;
+};
+
+// stat(2)/lstat(2) of a UTF-8 path. `follow_link` selects stat(2) when true and
+// lstat(2) when false. Returns 0 or -1 with errno set.
+int ob_stat_utf8(const char *path, ObPlatformFileStat &stat, bool follow_link = true);
+
+enum class ObPathPermission
+{
+  EXISTS = 0,
+  READ = 1,
+  WRITE = 2,
+};
+
+// access(2) with the matching POSIX errno on every platform. On Windows the
+// EXECUTE bit is not modelled, so READ/WRITE are checked through _waccess.
+int ob_access_utf8(const char *path, ObPathPermission permission);
+
+// Directory and file name operations on UTF-8 paths. Each returns 0 or -1 with
+// errno set. Windows uses the extended-length form internally, so long and
+// non-ASCII names work.
+int ob_mkdir_utf8(const char *path, int mode);
+int ob_rmdir_utf8(const char *path);
+int ob_unlink_utf8(const char *path);
+int ob_rename_utf8(const char *old_path, const char *new_path);
+int ob_symlink_utf8(const char *target_path, const char *link_path);
+
+// Free and total space of the filesystem containing `path`.
+int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free_space);
+
+// Flushes a directory entry table (fsync(2) on a directory descriptor on POSIX,
+// FlushFileBuffers on a directory handle on Windows).
+int ob_fsync_dir_utf8(const char *path);
+
+// True when `path` is already absolute in the platform's syntax ("/" on POSIX,
+// "C:\", "C:/", "\\server" or "//server" on Windows).
+bool ob_is_absolute_path_utf8(const char *path);
+
+// Writes the absolute UTF-8 form of `path` into `buffer`. The buffer must be
+// PATH_MAX bytes for POSIX realpath(3); returns 0 or -1 with errno set.
+int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size);
+
+// An open directory stream. The implementation is platform specific and opaque.
+class ObPlatformDir;
+
+// Directory iteration on UTF-8 paths. ob_readdir_utf8() returns 1 and copies
+// one entry name (including "." and "..") into `name`, 0 at the end of the
+// directory, or -1 with errno set.
+ObPlatformDir *ob_opendir_utf8(const char *path);
+int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size);
+int ob_closedir_utf8(ObPlatformDir *dir);
+
 #ifdef _WIN32
 // Maps a Win32 error code (GetLastError()) to the errno value this layer would
 // report for it. Exposed for callers that also own a Win32 error path and for

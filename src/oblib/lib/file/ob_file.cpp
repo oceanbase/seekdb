@@ -1027,21 +1027,10 @@ int64_t get_file_size(const int fd)
 int64_t get_file_size(const char *fname)
 {
   int64_t ret = -1;
-#ifdef _WIN32
-  // MSVCRT's `struct stat::st_size` is 32-bit (_off_t = long); files larger
-  // than 2 GiB get a truncated size. Use _stat64 to report the real size.
-  struct _stat64 st;
-  if (NULL != fname
-      && 0 == _stat64(fname, &st)) {
-    ret = st.st_size;
+  ObPlatformFileStat file_info;
+  if (NULL != fname && 0 == ob_stat_utf8(fname, file_info)) {
+    ret = file_info.size;
   }
-#else
-  struct stat st;
-  if (NULL != fname
-      && 0 == stat(fname, &st)) {
-    ret = st.st_size;
-  }
-#endif
   return ret;
 }
 

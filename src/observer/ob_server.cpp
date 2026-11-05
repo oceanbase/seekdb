@@ -94,6 +94,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "lib/utility/ob_target_specific.h"
+#include "lib/utility/ob_platform_io.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "rpc/ob_request.h"
@@ -476,24 +477,19 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   ObSqlString redo_file_path;
   if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
   }
-#ifdef _WIN32
   if (OB_FAIL(ret)) {
   } else {
-    const DWORD attributes = GetFileAttributesA(data_file_path.ptr());
-    if (INVALID_FILE_ATTRIBUTES != attributes) {
+    ObPlatformFileStat data_file_info;
+    if (0 == ob_stat_utf8(data_file_path.ptr(), data_file_info)) {
       data_file_exists = true;
+    } else if (ENOENT == errno) {
+      data_file_exists = false;
     } else {
-      const DWORD error = GetLastError();
-      if (ERROR_FILE_NOT_FOUND != error && ERROR_PATH_NOT_FOUND != error) {
-        ret = OB_IO_ERROR;
-        LOG_WARN("Failed to query data file", K(data_file_path), K(error), K(ret));
-      }
+      ret = OB_IO_ERROR;
+      LOG_WARN("Failed to query data file", K(data_file_path), K(errno), K(ret));
     }
   }
   if (OB_FAIL(ret)) {
-#else
-  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
-#endif
 #ifdef _WIN32
   } else if (OB_FAIL(create_redo_path(redo_dir, created_redo_leaf))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
