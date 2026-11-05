@@ -1,0 +1,42 @@
+# Regression for #1511: a chain of negated equalities on one column and the
+# equivalent NOT IN predicate must be estimated identically, otherwise the
+# vector scan picks a different adaptive path for two semantically equal filters.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS vector_filter_exclusion_sel;
+--enable_warnings
+CREATE TABLE vector_filter_exclusion_sel(id INT PRIMARY KEY, c INT, v VECTOR(3)) ORGANIZATION HEAP;
+INSERT INTO vector_filter_exclusion_sel VALUES
+  (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),(3,3,'[3,0,0]'),
+  (4,4,'[4,0,0]'),(5,5,'[5,0,0]'),(6,NULL,'[6,0,0]');
+CREATE VECTOR INDEX exclusion_sel_idx ON vector_filter_exclusion_sel(v)
+  WITH(distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+CALL dbms_stats.gather_table_stats('test','vector_filter_exclusion_sel', method_opt=>'for all columns size 254');
+CALL dbms_stats.set_table_stats('test','vector_filter_exclusion_sel', numrows=>1000000);
+
+--echo # Equivalent predicates return the same rows
+SELECT id FROM vector_filter_exclusion_sel WHERE c NOT IN (1,2,3,4) ORDER BY id;
+SELECT id FROM vector_filter_exclusion_sel
+  WHERE NOT(c=1) AND NOT(c=2) AND NOT(c=3) AND NOT(c=4) ORDER BY id;
+SELECT id FROM vector_filter_exclusion_sel
+  WHERE c != 1 AND c != 2 AND c != 3 AND c != 4 ORDER BY id;
+
+--echo # Equivalent predicates choose the same vector scan path
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_filter_exclusion_sel
+  WHERE c NOT IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $op_not_in = query_get_value("$sql", Query Plan, 3);
+--echo $op_not_in
+
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_filter_exclusion_sel
+  WHERE NOT(c=1) AND NOT(c=2) AND NOT(c=3) AND NOT(c=4)
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $op_not_eq = query_get_value("$sql", Query Plan, 3);
+--echo $op_not_eq
+
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_filter_exclusion_sel
+  WHERE c != 1 AND c != 2 AND c != 3 AND c != 4
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $op_ne = query_get_value("$sql", Query Plan, 3);
+--echo $op_ne
+
+DROP TABLE vector_filter_exclusion_sel;

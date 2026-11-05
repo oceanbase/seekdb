@@ -3162,5 +3162,58 @@ int ObUniformRangeSelEstimator::refine_out_of_bounds_sel(const OptTableMetas &ta
   return ret;
 }
 
+// Extract "column != value" / "NOT(column = value)" out of an equal estimator.
+bool ObEqualSelEstimator::get_negated_equal_value(const ObColumnRefRawExpr *&column,
+                                                  const ObRawExpr *&value) const
+{
+  bool bret = false;
+  column = NULL;
+  value = NULL;
+  if (NULL != expr_ && T_OP_NE == expr_->get_expr_type() && 2 == expr_->get_param_count()) {
+    const ObRawExpr *left = expr_->get_param_expr(0);
+    const ObRawExpr *right = expr_->get_param_expr(1);
+    if (NULL != left && NULL != right) {
+      if (left->is_column_ref_expr() && !right->has_flag(CNT_COLUMN)) {
+        column = static_cast<const ObColumnRefRawExpr *>(left);
+        value = right;
+        bret = true;
+      } else if (right->is_column_ref_expr() && !left->has_flag(CNT_COLUMN)) {
+        column = static_cast<const ObColumnRefRawExpr *>(right);
+        value = left;
+        bret = true;
+      }
+    }
+  }
+  return bret;
+}
+
+// Extract "column != value" out of "NOT(column = value)".
+bool ObBoolOpSelEstimator::get_negated_equal_value(const ObColumnRefRawExpr *&column,
+                                                  const ObRawExpr *&value) const
+{
+  bool bret = false;
+  column = NULL;
+  value = NULL;
+  if (NULL != expr_ && T_OP_NOT == expr_->get_expr_type() && 1 == expr_->get_param_count()) {
+    const ObRawExpr *child = expr_->get_param_expr(0);
+    if (NULL != child && T_OP_EQ == child->get_expr_type() && 2 == child->get_param_count()) {
+      const ObRawExpr *left = child->get_param_expr(0);
+      const ObRawExpr *right = child->get_param_expr(1);
+      if (NULL != left && NULL != right) {
+        if (left->is_column_ref_expr() && !right->has_flag(CNT_COLUMN)) {
+          column = static_cast<const ObColumnRefRawExpr *>(left);
+          value = right;
+          bret = true;
+        } else if (right->is_column_ref_expr() && !left->has_flag(CNT_COLUMN)) {
+          column = static_cast<const ObColumnRefRawExpr *>(right);
+          value = left;
+          bret = true;
+        }
+      }
+    }
+  }
+  return bret;
+}
+
 }//end of namespace sql
 }//end of namespace oceanbase
