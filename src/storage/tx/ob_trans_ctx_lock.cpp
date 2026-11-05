@@ -15,6 +15,7 @@
  */
 
 #include "ob_trans_ctx_lock.h"
+#include "storage/mds_timing_diagnostic.h"
 #include "ob_trans_service.h"
 #include "lib/utility/ob_platform_utils.h"
 #ifdef __APPLE__
@@ -100,6 +101,9 @@ int CtxLock::lock(const int64_t timeout_us)
     if (OB_SUCC(flush_redo_lock_.wrlock(common::ObLatchIds::TRANS_FLUSH_REDO_LOCK, timeout))) {
       if (OB_SUCC(ctx_lock_.wrlock(common::ObLatchIds::TRANS_CTX_LOCK, timeout))) {
         lock_start_ts_ = ObClockGenerator::getClock();
+#if defined(OB_MDS_TIMING_DIAGNOSTIC) && OB_MDS_TIMING_DIAGNOSTIC
+        mds_timing::begin(this);
+#endif
       } else {
         flush_redo_lock_.unlock();
         access_lock_.unlock();
@@ -120,6 +124,9 @@ int CtxLock::try_lock()
     if (OB_SUCC(flush_redo_lock_.try_wrlock(common::ObLatchIds::TRANS_FLUSH_REDO_LOCK))) {
       if (OB_SUCC(ctx_lock_.try_wrlock(common::ObLatchIds::TRANS_CTX_LOCK))) {
         lock_start_ts_ = ObClockGenerator::getClock();
+#if defined(OB_MDS_TIMING_DIAGNOSTIC) && OB_MDS_TIMING_DIAGNOSTIC
+        mds_timing::begin(this);
+#endif
       } else {
         flush_redo_lock_.unlock();
         access_lock_.unlock();
@@ -134,6 +141,9 @@ int CtxLock::try_lock()
 int CtxLock::try_rdlock_ctx()
 {
   int ret = ctx_lock_.try_rdlock(common::ObLatchIds::TRANS_CTX_LOCK);
+#if defined(OB_MDS_TIMING_DIAGNOSTIC) && OB_MDS_TIMING_DIAGNOSTIC
+  if (OB_SUCCESS == ret) { mds_timing::begin(this); }
+#endif
   lock_start_ts_ = 0;
   return ret;
 }
@@ -148,6 +158,9 @@ void CtxLock::unlock()
 int CtxLock::wrlock_ctx()
 {
   int ret = ctx_lock_.wrlock(common::ObLatchIds::TRANS_CTX_LOCK);
+#if defined(OB_MDS_TIMING_DIAGNOSTIC) && OB_MDS_TIMING_DIAGNOSTIC
+  if (OB_SUCCESS == ret) { mds_timing::begin(this); }
+#endif
   lock_start_ts_ = ObClockGenerator::getClock();
   return ret;
 }
@@ -167,6 +180,9 @@ void CtxLock::unlock_ctx()
   CtxLockArg arg;
   before_unlock(arg);
   ctx_lock_.unlock();
+#if defined(OB_MDS_TIMING_DIAGNOSTIC) && OB_MDS_TIMING_DIAGNOSTIC
+  const mds_timing::Snapshot mds_snapshot = mds_timing::end();
+#endif
   if (lock_start_ts > 0) {
     const int64_t lock_ts = ObClockGenerator::getClock() - lock_start_ts;
     if (lock_ts > WARN_LOCK_TS) {
@@ -175,6 +191,13 @@ void CtxLock::unlock_ctx()
     }
   }
   after_unlock(arg);
+#if defined(OB_MDS_TIMING_DIAGNOSTIC) && OB_MDS_TIMING_DIAGNOSTIC
+  if (mds_snapshot.observed()) {
+    char matrix[2048] = {};
+    mds_snapshot.format(matrix, sizeof(matrix));
+    TRANS_LOG(INFO, "MDS diagnostic ctx summary", K(arg.trans_id_), "matrix", matrix);
+  }
+#endif
 }
 
 int CtxLock::wrlock_flush_redo()

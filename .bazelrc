@@ -63,3 +63,5 @@ build:remote --strategy=CppCompile=remote
 build:package --//bazel:package_runtime=true
 build:rpm --config=package
 build:rpm --//bazel:rpm_logging=true
+
+build:windows --copt=/DOB_MDS_TIMING_DIAGNOSTIC=1

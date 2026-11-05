@@ -24,6 +24,7 @@
 #ifndef STORAGE_MULTI_DATA_SOURCE_MDS_NODE_H_IPP
 #define STORAGE_MULTI_DATA_SOURCE_MDS_NODE_H_IPP
 #include "mds_node.h"
+#include "storage/mds_timing_diagnostic.h"
 #endif
 
 namespace oceanbase
@@ -158,6 +159,7 @@ void UserMdsNode<K, V>::advance_mds_table_max_aborted_scn_(const share::SCN &scn
 template <typename K, typename V>
 bool UserMdsNode<K, V>::try_on_redo(const share::SCN &redo_scn)
 {
+  MDS_DIAG_SCOPE(ON_REDO_INCLUSIVE);
   MDS_TG(1_ms);
   TryLockGuard lg(this);
   if (lg.lock_succeed()) {
@@ -170,6 +172,7 @@ bool UserMdsNode<K, V>::try_on_redo(const share::SCN &redo_scn)
 template <typename K, typename V>
 void UserMdsNode<K, V>::on_redo_(const share::SCN &redo_scn)
 {
+  MDS_DIAG_SCOPE(ON_REDO_BODY);
   MdsTableBase *p_mds_table = nullptr;
   if (p_mds_row_ && p_mds_row_->p_mds_unit_) {
     p_mds_table = p_mds_row_->p_mds_unit_->p_mds_table_;
@@ -184,10 +187,10 @@ void UserMdsNode<K, V>::on_redo_(const share::SCN &redo_scn)
     if (OB_ISNULL(p_mds_table)) {
       MDS_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "pointer is NULL, can not try decline rec_scn", K(*this), K(redo_scn));
     } else {
-      p_mds_table->try_decline_rec_scn(redo_scn);
+      MDS_DIAG_CALL(DECLINE_REC_SCN, p_mds_table->try_decline_rec_scn(redo_scn));
     }
     redo_scn_ = redo_scn;
-    on_user_data_redo_(redo_scn);
+    MDS_DIAG_CALL(USER_REDO, on_user_data_redo_(redo_scn));
     report_event_("ON_REDO");
   }
 }
@@ -377,13 +380,14 @@ void UserMdsNode<K, V>::report_event_(const char (&event_str)[N],
                                       const uint32_t line,
                                       const char *function_name) const
 {
+  MDS_DIAG_SCOPE(REPORT_EVENT_INCLUSIVE);
   int ret = OB_SUCCESS;
   constexpr int64_t buffer_size = 1_KB;
   char stack_buffer[buffer_size] = { 0 };
   MdsEvent event;
   if (OB_UNLIKELY(!has_valid_link_back_ptr_())) {
     // do nothing
-  } else if (OB_FAIL(fill_event_(event, event_str, stack_buffer, buffer_size))) {
+  } else if (OB_FAIL(MDS_DIAG_CALL(FILL_EVENT, fill_event_(event, event_str, stack_buffer, buffer_size)))) {
   } else {
     MdsEventKey key(p_mds_row_->p_mds_unit_->p_mds_table_->tablet_id_);
     ObMdsEventBuffer::append(key, event, p_mds_row_->p_mds_unit_->p_mds_table_, file, line, function_name);

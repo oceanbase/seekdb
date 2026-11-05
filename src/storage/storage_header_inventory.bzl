@@ -65,6 +65,7 @@ STORAGE_PUBLIC_HEADER_ROOTS = [
     "meta_store/ob_server_runtime_meta.h",
     "meta_store/storage_meta_service.h",
     "multi_data_source/ob_mds_event_buffer.h",
+    "mds_timing_diagnostic.h",
     "multi_data_source/runtime_utility/common_define.h",
     "ob_common_id_utils.h",
     "ob_disk_usage_reporter.h",
