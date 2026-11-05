@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_index_builder_util.h"
+#include <inttypes.h>
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 
@@ -209,7 +210,7 @@ int ObIndexBuilderUtil::add_shadow_pks(
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
         uint64_t column_id = column_ids.at(i);
-        int n = snprintf(shadow_pk_name, OB_MAX_COLUMN_NAME_BUF_LENGTH, "shadow_pk_%ld", i);
+        int n = snprintf(shadow_pk_name, OB_MAX_COLUMN_NAME_BUF_LENGTH, "shadow_pk_%" PRId64, i);
         if (n < 0 || n > OB_MAX_COLUMN_NAME_LENGTH) {
           ret = OB_BUF_NOT_ENOUGH;
           LOG_ERROR("failed to generate shadow_pk_name", K(i), K(n),

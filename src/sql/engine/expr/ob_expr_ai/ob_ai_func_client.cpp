@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_client.h"
+#include <inttypes.h>
 
 namespace oceanbase 
 {
@@ -222,7 +223,7 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
         ret = OB_CURL_ERROR;
         char http_code_str[1024];
         // An endpoint may return internal data or credentials in an error body.
-        snprintf(http_code_str, sizeof(http_code_str), "http status code: %ld", http_code);
+        snprintf(http_code_str, sizeof(http_code_str), "http status code: %" PRId64, static_cast<int64_t>(http_code));
         FORWARD_USER_ERROR(ret, http_code_str);
       }
     }

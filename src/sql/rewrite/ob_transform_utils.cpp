@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 
 #include "ob_transform_utils.h"
+#include <inttypes.h>
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/rewrite/ob_equal_analysis.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -838,7 +839,7 @@ int ObTransformUtils::create_select_item(ObIAllocator &allocator,
     if (alias_name.empty()) {
       if (OB_FAIL(select_expr->get_name(name_buf, 64, pos))) {
         ret = OB_SUCCESS;
-        pos = sprintf(name_buf, "SEL_%ld", select_stmt->get_select_item_size() + 1);
+        pos = sprintf(name_buf, "SEL_%" PRId64, select_stmt->get_select_item_size() + 1);
         pos = (pos < 0 || pos >= 64) ? 0 : pos;
       }
       alias_name.assign(name_buf, static_cast<int32_t>(pos));
@@ -875,7 +876,7 @@ int ObTransformUtils::refresh_select_items_name(ObIAllocator &allocator, ObSelec
         if (alias_name.empty()) {
           if (OB_FAIL(expr->get_name(name_buf, 64, pos))) {
             ret = OB_SUCCESS;
-            pos = sprintf(name_buf, "SEL_%ld", i + 1);
+            pos = sprintf(name_buf, "SEL_%" PRId64, i + 1);
             pos = (pos < 0 || pos >= 64) ? 0 : pos;
           }
           alias_name.assign(name_buf, static_cast<int32_t>(pos));

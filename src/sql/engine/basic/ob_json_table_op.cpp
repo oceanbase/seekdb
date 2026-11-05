@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_json_table_op.h"
+#include <inttypes.h>
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
@@ -799,7 +800,7 @@ int RegularCol::eval_value_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
              && (ob_is_datetime_tc(col_node.col_info_.data_type_.get_obj_type())
                  || ob_is_mysql_datetime_tc(col_node.col_info_.data_type_.get_obj_type()))) {
     char* res_ptr = ctx->buf;
-    int len = snprintf(ctx->buf, sizeof(ctx->buf), "%ld", in->get_int());
+    int len = snprintf(ctx->buf, sizeof(ctx->buf), "%" PRId64, in->get_int());
     if (len > 0) {
       ObJsonString* j_string = nullptr;
       if (OB_ISNULL(j_string = static_cast<ObJsonString*>(ctx->row_alloc_.alloc(sizeof(ObJsonString))))) {

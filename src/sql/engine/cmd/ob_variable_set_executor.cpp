@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "query/command/ob_root_service_serialization.h"
@@ -797,7 +798,7 @@ int ObVariableSetExecutor::process_last_insert_id_hook(ObPhysicalPlanCtx *plan_c
     if (SMO_STRICT_ALL_TABLES & sql_mode) {
       if (value < 0) {
         char auto_increment_str[OB_CAST_TO_VARCHAR_MAX_LENGTH];
-        int32_t length = snprintf(auto_increment_str, OB_CAST_TO_VARCHAR_MAX_LENGTH, "%ld", value);
+        int32_t length = snprintf(auto_increment_str, OB_CAST_TO_VARCHAR_MAX_LENGTH, "%" PRId64, value);
         if (length < 0 || length >= OB_CAST_TO_VARCHAR_MAX_LENGTH) {
           length = OB_CAST_TO_VARCHAR_MAX_LENGTH - 1;
           auto_increment_str[length] = '\0';

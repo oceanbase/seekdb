@@ -426,7 +426,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
       } else {
       }
       char table_info_buffer[256];
-      snprintf(table_info_buffer, sizeof(table_info_buffer), "table_id:%ld, hidden_table_id:%ld",
+      snprintf(table_info_buffer, sizeof(table_info_buffer), "table_id:%" PRId64 ", hidden_table_id:%" PRId64,
                 alter_table_arg.table_id_, alter_table_arg.hidden_table_id_);
       SERVER_EVENT_ADD("ddl", "create table as select execute finish",
         "ret", ret,
@@ -869,7 +869,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       }
     }
     char table_info_buffer[256];
-    snprintf(table_info_buffer, sizeof(table_info_buffer), "table_id:%ld, hidden_table_id:%ld", 
+    snprintf(table_info_buffer, sizeof(table_info_buffer), "table_id:%" PRId64 ", hidden_table_id:%" PRId64, 
               alter_table_arg.table_id_, alter_table_arg.hidden_table_id_);
 
     SERVER_EVENT_ADD("ddl", "alter table execute finish",

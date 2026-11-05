@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
+#include <inttypes.h>
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
 #include "share/ob_lob_access_utils.h"
@@ -205,7 +206,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
               case MYSQL_ERRNO_TYPE:
                 {
                   int64_t errnum = ob_errpkt_errno(err_ret);
-                  sprintf(str, "%ld", errnum);
+                  sprintf(str, "%" PRId64, errnum);
                   SET_OBJ_VAR(expect_type, errnum, ObString(str), has_lob_header);
                 }
                 break;
@@ -531,10 +532,10 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
               ObObjType expect_type = pl_data_type.get_data_type()->get_obj_type();
               bool has_lob_header = pl_data_type.get_data_type()->get_meta_type().has_lob_header();
               if (val == "NUMBER") {
-                sprintf(str, "%ld", number);
+                sprintf(str, "%" PRId64, number);
                 SET_OBJ_VAR(expect_type, number, ObString(str), has_lob_header);
               } else if (val == "ROW_COUNT") {
-                sprintf(str, "%ld", old_affected_rows);
+                sprintf(str, "%" PRId64, old_affected_rows);
                 SET_OBJ_VAR(expect_type, old_affected_rows, ObString(str), has_lob_header);
               } else {
                 ret = OB_ERR_UNEXPECTED;
