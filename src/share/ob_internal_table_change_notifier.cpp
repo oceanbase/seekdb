@@ -166,7 +166,8 @@ void InternalTableChangeNotifier::notify_table_changed(
     TableEntry *entry = find_table_entry_(table_id);
     if (nullptr != entry) {
       if (OB_UNLIKELY(!commit_version.is_valid())) {
-        LOG_WARN("invalid commit version for internal table change", K(table_id), K(commit_version));
+        LOG_WARN_RET(OB_INVALID_ARGUMENT,
+            "invalid commit version for internal table change", K(table_id), K(commit_version));
       } else {
         // Notifications may race and arrive out of commit order. Keep the
         // largest version so an older notification cannot lower the watermark.
