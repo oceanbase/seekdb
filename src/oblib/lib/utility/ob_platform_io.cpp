@@ -235,20 +235,31 @@ wchar_t *make_extended_path(const wchar_t *path)
           absolute[i] = L'\\';
         }
       }
-      // A UNC path (\\server\share) replaces its leading "\\" with "\\?\UNC\".
-      const bool is_unc = absolute_len >= 2 && L'\\' == absolute[0] && L'\\' == absolute[1];
-      const size_t prefix_len = is_unc ? 8 : 4;
-      result = new (std::nothrow) wchar_t[absolute_len + prefix_len + 1];
-      if (NULL == result) {
-        errno = ENOMEM;
-      } else if (is_unc) {
-        ::wmemcpy(result, L"\\\\?\\UNC\\", 8);
-        ::wmemcpy(result + 8, absolute + 2, absolute_len - 2 + 1);
+      // GetFullPathNameW already returns an extended-length path when the
+      // working directory is one (ob_chdir_utf8 keeps the verbatim form so
+      // paths beyond MAX_PATH work). Never wrap that in "\\?\" again.
+      const bool absolute_has_prefix = absolute_len >= 4
+                                       && L'\\' == absolute[0] && L'\\' == absolute[1]
+                                       && (L'?' == absolute[2] || L'.' == absolute[2])
+                                       && L'\\' == absolute[3];
+      if (absolute_has_prefix) {
+        result = absolute;
       } else {
-        ::wmemcpy(result, L"\\\\?\\", 4);
-        ::wmemcpy(result + 4, absolute, absolute_len + 1);
+        // A UNC path (\\server\share) replaces its leading "\\" with "\\?\UNC\".
+        const bool is_unc = absolute_len >= 2 && L'\\' == absolute[0] && L'\\' == absolute[1];
+        const size_t prefix_len = is_unc ? 8 : 4;
+        result = new (std::nothrow) wchar_t[absolute_len + prefix_len + 1];
+        if (NULL == result) {
+          errno = ENOMEM;
+        } else if (is_unc) {
+          ::wmemcpy(result, L"\\\\?\\UNC\\", 8);
+          ::wmemcpy(result + 8, absolute + 2, absolute_len - 2 + 1);
+        } else {
+          ::wmemcpy(result, L"\\\\?\\", 4);
+          ::wmemcpy(result + 4, absolute, absolute_len + 1);
+        }
+        delete[] absolute;
       }
-      delete[] absolute;
     }
   }
   return result;
@@ -1246,16 +1257,51 @@ int ob_chdir_utf8(const char *path)
 {
   int ret = 0;
 #ifdef _WIN32
-  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
-  if (NULL == extended_path) {
+  wchar_t *wide_path = NULL;
+  wchar_t *absolute_path = NULL;
+  if (0 != platform_io_internal::utf8_to_wide(path, wide_path)) {
     ret = -1;
   } else {
-    if (FALSE == ::SetCurrentDirectoryW(extended_path)) {
+    const DWORD need = ::GetFullPathNameW(wide_path, 0, NULL, NULL);
+    if (0 == need) {
       errno = platform_io_internal::win32_error_to_errno(::GetLastError());
       ret = -1;
+    } else if (NULL == (absolute_path = new (std::nothrow) wchar_t[need])) {
+      errno = ENOMEM;
+      ret = -1;
+    } else {
+      const DWORD written = ::GetFullPathNameW(wide_path, need, absolute_path, NULL);
+      if (0 == written) {
+        errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+        ret = -1;
+      } else if (written >= need) {
+        errno = platform_io_internal::name_too_long_errno();
+        ret = -1;
+      } else if (written + 1 <= MAX_PATH) {
+        // Prefer the plain form: the process working directory is then
+        // ordinary "C:\..." for the legacy relative-path call sites that do
+        // not go through this layer.
+        if (FALSE == ::SetCurrentDirectoryW(absolute_path)) {
+          errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+          ret = -1;
+        }
+      } else {
+        // Win32 only accepts paths beyond MAX_PATH in the verbatim form.
+        wchar_t *extended_path = platform_io_internal::make_extended_path(absolute_path);
+        if (NULL == extended_path) {
+          ret = -1;
+        } else {
+          if (FALSE == ::SetCurrentDirectoryW(extended_path)) {
+            errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+            ret = -1;
+          }
+          delete[] extended_path;
+        }
+      }
     }
-    delete[] extended_path;
   }
+  delete[] wide_path;
+  delete[] absolute_path;
 #else
   ret = ::chdir(path);
 #endif
@@ -1283,6 +1329,17 @@ int ob_getcwd_utf8(char *buffer, int64_t buffer_size)
         errno = platform_io_internal::win32_error_to_errno(::GetLastError());
         ret = -1;
       } else {
+        // ob_chdir_utf8 keeps the verbatim form, GetCurrentDirectoryW reports
+        // it back; callers expect an ordinary "C:\..." path.
+        size_t wide_cwd_len = ::wcslen(wide_cwd);
+        if (wide_cwd_len >= 8 && 0 == ::wcsncmp(wide_cwd, L"\\\\?\\UNC\\", 8)) {
+          ::wmemmove(wide_cwd + 2, wide_cwd + 8, wide_cwd_len - 8 + 1);
+          wide_cwd[0] = L'\\';
+          wide_cwd[1] = L'\\';
+        } else if (wide_cwd_len >= 4 && L'\\' == wide_cwd[0] && L'\\' == wide_cwd[1]
+                   && L'?' == wide_cwd[2] && L'\\' == wide_cwd[3]) {
+          ::wmemmove(wide_cwd, wide_cwd + 4, wide_cwd_len - 4 + 1);
+        }
         ret = platform_io_internal::wide_to_utf8(wide_cwd, buffer, buffer_size);
       }
       delete[] wide_cwd;
