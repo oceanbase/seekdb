@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include "ob_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/config/ob_parallel_ddl_control_mode.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_checksum.h"
@@ -1340,8 +1341,18 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     } else if (OB_FALSE_IT(ddl_rpc_timeout += tmp_timeout)) {
     } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_INDEX_STATUS_FAILED))) {
     } else {
-      const bool is_parallel = create_index_arg_.is_parallel_;
-      if (!is_parallel) {
+      bool is_parallel = create_index_arg_.is_parallel_;
+      const ObIndexType index_type = index_schema.get_index_type();
+      if (!is_parallel && parent_task_id_ > 0
+          && (index_schema.is_normal_index()
+              || INDEX_TYPE_UNIQUE_LOCAL == index_type
+              || INDEX_TYPE_UNIQUE_GLOBAL == index_type
+              || INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE == index_type)) {
+        ret = ObParallelDDLControlMode::is_parallel_ddl_enable(
+            ObParallelDDLControlMode::CREATE_INDEX, is_parallel);
+      }
+      if (OB_FAIL(ret)) {
+      } else if (!is_parallel) {
         if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
         }
       } else {
