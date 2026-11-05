@@ -663,3 +663,108 @@ order by p.cardinality, p.plan_id;
 drop table t_issue1439_or_selectivity;
 
 alter system set vector_memory_limit = 0;
+
+# Regression for #1534: absorb redundant integer bounds in simple ANN queries.
+--disable_warnings
+DROP TABLE IF EXISTS ann_redundant_bounds;
+--enable_warnings
+SET ob_hnsw_ef_search = 64;
+CREATE TABLE ann_redundant_bounds (
+  id INT PRIMARY KEY,
+  age INT,
+  v VECTOR(3),
+  KEY idx_age(age),
+  VECTOR INDEX hnsw(v) WITH (distance=l2, type=hnsw, lib=vsag,
+                            m=16, ef_construction=128, sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO ann_redundant_bounds VALUES
+  (1,1,'[1,0,0]'), (2,9,'[2,0,0]'), (3,10,'[3,0,0]'),
+  (4,20,'[4,0,0]'), (5,NULL,'[5,0,0]'), (6,0,'[6,0,0]'),
+  (7,30,'[7,0,0]'), (8,-1,'[8,0,0]');
+ANALYZE TABLE ann_redundant_bounds;
+
+# The plan must retain only the strongest bound and still use a vector scan.
+--replace_regex /, $/,/
+EXPLAIN BASIC SELECT id FROM ann_redundant_bounds
+WHERE age < 10 AND age < 20 AND age <= 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_redundant_bounds
+WHERE age < 10 AND age < 20 AND age <= 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_redundant_bounds
+WHERE age > 0 AND age > -1 AND age >= 0
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_redundant_bounds
+WHERE age <= 10 AND age <= 20 AND age < 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_redundant_bounds
+WHERE age < 0 AND age >= 0
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Equality at the boundary must preserve strictness, including reversed operands.
+SELECT id FROM ann_redundant_bounds
+WHERE age <= 10 AND age < 10 AND age < 20
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_redundant_bounds
+WHERE 20 > age AND 10 > age
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_redundant_bounds
+WHERE age < 9223372036854775807 AND age < 10
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Match the issue's 128 weaker bounds, without storing a large repeated query.
+--disable_query_log
+let $bounds = age < 10;
+let $i = 20;
+while ($i < 660)
+{
+  let $bounds = $bounds AND age < $i;
+  inc $i;
+  inc $i;
+  inc $i;
+  inc $i;
+  inc $i;
+}
+--replace_regex /, $/,/
+eval EXPLAIN BASIC SELECT id FROM ann_redundant_bounds WHERE $bounds ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+eval SELECT id FROM ann_redundant_bounds WHERE $bounds ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+--enable_query_log
+
+# NO_REWRITE must preserve the original predicates.
+--replace_regex /, $/,/
+EXPLAIN BASIC SELECT /*+ NO_REWRITE */ id FROM ann_redundant_bounds
+WHERE age < 10 AND age < 20
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Reusing a parameterized statement must not reuse the wrong strongest bound.
+PREPARE ann_bounds_stmt FROM
+'SELECT id FROM ann_redundant_bounds WHERE age < ? AND age < ? ORDER BY l2_distance(v,''[0,0,0]'') APPROXIMATE LIMIT 10';
+SET @a = 10, @b = 20;
+EXECUTE ann_bounds_stmt USING @a, @b;
+SET @a = 20, @b = 10;
+EXECUTE ann_bounds_stmt USING @a, @b;
+SET @a = 20, @b = 30;
+EXECUTE ann_bounds_stmt USING @a, @b;
+SET @a = NULL, @b = 30;
+EXECUTE ann_bounds_stmt USING @a, @b;
+DEALLOCATE PREPARE ann_bounds_stmt;
+
+# An outer predicate must not be pushed through an inner ANN top-K boundary.
+SELECT id FROM (
+  SELECT id, age FROM ann_redundant_bounds
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 2
+) AS top_two WHERE age > 5;
+DROP TABLE ann_redundant_bounds;
+
+# Unsigned bounds beyond INT64_MAX must not use signed-integer absorption.
+CREATE TABLE ann_unsigned_bounds (
+  id INT PRIMARY KEY, age BIGINT UNSIGNED, v VECTOR(3), KEY idx_age(age),
+  VECTOR INDEX hnsw(v) WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO ann_unsigned_bounds VALUES
+  (1,1,'[1,0,0]'), (2,9223372036854775808,'[2,0,0]'),
+  (3,18446744073709551615,'[3,0,0]');
+SELECT id FROM ann_unsigned_bounds
+WHERE age >= 1 AND age >= 9223372036854775808
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+DROP TABLE ann_unsigned_bounds;

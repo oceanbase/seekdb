@@ -37,6 +37,7 @@ public:
                                  ObDMLStmt *&stmt,
                                  bool &trans_happened) override;
 private:
+  int simplify_ann_integer_bounds(ObDMLStmt &stmt, bool &trans_happened);
   int replace_is_null_condition(ObDMLStmt *stmt, bool &trans_happened);
   int inner_replace_is_null_condition(ObDMLStmt *stmt,
                                       ObRawExpr *&expr,
