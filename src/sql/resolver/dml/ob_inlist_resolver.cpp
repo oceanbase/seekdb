@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -28,6 +29,51 @@ using namespace common;
 
 namespace sql
 {
+
+namespace
+{
+// This is only a plan-selection check. Keep the original parse nodes and
+// parameter positions so cached plans still evaluate every supplied value.
+bool has_small_integer_inlist(const ParseNode &in_list,
+                              const ParamStore *param_store,
+                              const int64_t threshold,
+                              const uint64_t tenant_id)
+{
+  bool below_threshold = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+  if (threshold > 1 && in_list.num_child_ >= threshold && nullptr != in_list.children_
+      && OB_SUCCESS == distinct_values.create(threshold, ObMemAttr(tenant_id, "InListCard"))) {
+    bool supported = true;
+    int64_t i = 0;
+    for (; supported && i < in_list.num_child_ && distinct_values.size() < threshold; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      if (nullptr == node) {
+        supported = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_QUESTIONMARK == node->type_
+                 && nullptr != param_store
+                 && node->value_ >= 0 && node->value_ < param_store->count()
+                 && ObIntType == param_store->at(node->value_).get_type()) {
+        value = param_store->at(node->value_).get_int();
+      } else {
+        // Preserve the existing path for NULL, unsigned, mixed, string and
+        // nonconstant inputs instead of introducing comparison/coercion rules.
+        supported = false;
+      }
+      if (supported) {
+        const int set_ret = distinct_values.set_refactored(value);
+        supported = OB_SUCCESS == set_ret || OB_HASH_EXIST == set_ret;
+      }
+    }
+    below_threshold = supported && i == in_list.num_child_ && distinct_values.size() < threshold;
+  }
+  // Allocation failure simply leaves the original rewrite decision in place.
+  distinct_values.destroy();
+  return below_threshold;
+}
+} // namespace
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -350,6 +396,11 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt && !is_prepare_stmt
+          && has_small_integer_inlist(in_list, param_store, threshold,
+                                      session_info->get_effective_tenant_id())) {
+        is_enable = false;
+      }
     }
   }
   return ret;
