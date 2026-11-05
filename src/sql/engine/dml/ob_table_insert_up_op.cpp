@@ -419,7 +419,13 @@ int ObTableInsertUpOp::do_insert_up_cache()
         update_rows++;
         modify_row.old_row_ = const_cast<ObChunkDatumStore::StoredRow *>(upd_old_row);
         modify_row.new_row_ = upd_new_row;
-        if (OB_FAIL(conflict_checker_.update_row(upd_new_row, upd_old_row))) {
+        // A row first inserted in this cache still contains insert values,
+        // including text for semantic indexes, rather than fetched vectors.
+        // Preserve its projection source across further conflicts and key moves.
+        const ObNewRowSource row_source =
+            constraint_values.at(0).new_row_source_ == ObNewRowSource::FROM_INSERT
+                ? ObNewRowSource::FROM_INSERT : ObNewRowSource::FROM_UPDATE;
+        if (OB_FAIL(conflict_checker_.update_row(upd_new_row, upd_old_row, row_source))) {
         } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         }
       } else {
