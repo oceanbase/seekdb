@@ -13,6 +13,7 @@ SHARE_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/share/inner_table/ob_load_inner_table_schema.cpp",
+            "src/share/inner_table/ob_all_ai_column_table.cpp",
         ],
     ),
     struct(

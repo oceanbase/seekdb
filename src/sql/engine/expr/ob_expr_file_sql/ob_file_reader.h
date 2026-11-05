@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_FILE_READER_H_
 
 #include "lib/string/ob_string.h"
-#include "common/ob_i_allocator.h"
+#include "lib/alloc/ob_iallocator.h"
 
 namespace oceanbase
 {

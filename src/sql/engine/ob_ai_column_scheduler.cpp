@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_column_scheduler.h"
-#include "sql/engine/expr/ob_ai_func_utils.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
 #include "share/schema/ob_schema_service.h"
-#include "lib/string/ob_string_util.h"
 
 using namespace oceanbase::common;
 

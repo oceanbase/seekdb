@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ft_index_optimizer.h"
 #include "share/schema/ob_schema_service.h"
-#include "lib/string/ob_string_util.h"
 
 using namespace oceanbase::common;
 

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_csv_parser.h"
 #include "lib/ob_name_def.h"
-#include "common/object/ob_obj_cast_helper.h"
 #include <cctype>
 
 using namespace oceanbase::common;

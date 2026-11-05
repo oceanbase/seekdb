@@ -18,7 +18,7 @@
 #include "ob_expr_read_csv.h"
 #include "sql/engine/ob_file_table_iterator.h"
 #include "lib/utility/utility.h"
-#include "common/session/ob_session_context.h"
+#include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

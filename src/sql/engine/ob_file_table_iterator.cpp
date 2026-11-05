@@ -16,8 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_file_table_iterator.h"
-#include "common/object/ob_obj_cast_helper.h"
-#include "lib/string/ob_string_util.h"
 
 using namespace oceanbase::common;
 

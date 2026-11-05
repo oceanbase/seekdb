@@ -19,7 +19,7 @@
 
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_se_array.h"
-#include "common/ob_obj_type.h"
+#include "common/object/ob_obj_type.h"
 
 namespace oceanbase
 {

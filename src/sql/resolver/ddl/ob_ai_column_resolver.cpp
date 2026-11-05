@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESOLVE
 #include "ob_ai_column_resolver.h"
-#include "share/schema/ob_schema_builder.h"
 #include "lib/ob_name_def.h"
-#include "common/ob_obj_type.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
