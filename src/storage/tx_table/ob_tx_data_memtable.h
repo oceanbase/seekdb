@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TX_DATA_MEMTABLE
 
 #include "share/scn.h"
+#include <inttypes.h>
 #include "storage/checkpoint/ob_freeze_checkpoint.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/tx/ob_tx_data_define.h"
@@ -521,7 +522,7 @@ public:
     while (OB_NOT_NULL(cur_node))
     {
       for (int i = 0; i < cur_node->size_; i++) {
-        fprintf(fd_, "[%ld, %ld)",
+        fprintf(fd_, "[%" PRId64 ", %" PRId64 ")",
                 cur_node->undo_actions_[i].undo_from_.cast_to_int(),
                 cur_node->undo_actions_[i].undo_to_.cast_to_int());
       }

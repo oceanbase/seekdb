@@ -15,6 +15,7 @@
  */
 
 #include "lib/allocator/ob_qsync.h"
+#include <inttypes.h>
 #include "lib/allocator/ob_retire_station.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/ob_errno.h"
@@ -65,23 +66,23 @@ void BtreeNode<BtreeKey, BtreeVal>::print(FILE *file, const int depth) const
     MultibitSet index;
     index.load(index_);
     int count = index.size();
-    fprintf(file, " index=%lx %dV:", index.get(), count);
+    fprintf(file, " index=%" PRIx64 " %dV:", index.get(), count);
     for (int i = 0; i < count; i++) {
-      fprintf(file, " %lx->%lx", (uint64_t)kvs_[i].key_.get_ptr(), (uint64_t)kvs_[i].val_);
+      fprintf(file, " %" PRIx64 "->%" PRIx64, (uint64_t)kvs_[i].key_.get_ptr(), (uint64_t)kvs_[i].val_);
     }
     for (int i = 0; i < count; i++) {
       ObCStringHelper helper;
-      fprintf(file, "\n%*s %s%s->%lx", depth * 2 + 2, "|-", "+", helper.convert(get_key(i, &index)), (uint64_t)get_val(i, &index));
+      fprintf(file, "\n%*s %s%s->%" PRIx64, depth * 2 + 2, "|-", "+", helper.convert(get_key(i, &index)), (uint64_t)get_val(i, &index));
     }
   } else {
     int count = size();
-    fprintf(file, " index=%lx %dC:", index_.get(), count);
+    fprintf(file, " index=%" PRIx64 " %dC:", index_.get(), count);
     for (int i = 0; i < count; i++) {
-      fprintf(file, " %lx->%lx", (uint64_t)kvs_[i].key_.get_ptr(), (uint64_t)kvs_[i].val_);
+      fprintf(file, " %" PRIx64 "->%" PRIx64, (uint64_t)kvs_[i].key_.get_ptr(), (uint64_t)kvs_[i].val_);
     }
     for (int i = 0; i < count; i++) {
       ObCStringHelper helper;
-      fprintf(file, "\n%*s %s%s->%lx", depth * 2 + 2, "|-", "+", helper.convert(get_key(i)), (uint64_t)get_val(i));
+      fprintf(file, "\n%*s %s%s->%" PRIx64, depth * 2 + 2, "|-", "+", helper.convert(get_key(i)), (uint64_t)get_val(i));
       BtreeNode *child = (BtreeNode *)get_val(i);
       child->print(file, depth + 1);
     }
@@ -1490,7 +1491,7 @@ template<typename BtreeKey, typename BtreeVal>
 void ObKeyBtree<BtreeKey, BtreeVal>::print(FILE *file) const
 {
   if (OB_NOT_NULL(file)) {
-    fprintf(file, "\n|root=%p node_size=%lu node_key_count=%d total_size=%ld\n", root_, sizeof(BtreeNode),
+    fprintf(file, "\n|root=%p node_size=%zu node_key_count=%d total_size=%" PRId64 "\n", root_, sizeof(BtreeNode),
             NODE_KEY_COUNT, size());
     if (OB_NOT_NULL(root_)) {
       root_->print(file, 0);

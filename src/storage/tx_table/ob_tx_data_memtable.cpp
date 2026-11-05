@@ -16,6 +16,7 @@
 
 
 #include "ob_tx_data_memtable.h"
+#include <inttypes.h>
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1052,7 +1053,7 @@ int ObTxDataMemtable::dump2text(const char *fname)
   if (OB_ISNULL(fname)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fanme is NULL");
-  } else if (snprintf(real_fname, sizeof(real_fname), "%s.%ld", fname,
+  } else if (snprintf(real_fname, sizeof(real_fname), "%s.%" PRId64, fname,
                       ::oceanbase::common::ObTimeUtility::current_time()) >= (int64_t)sizeof(real_fname)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fname too long", K(fname));
@@ -1090,7 +1091,7 @@ int ObTxDataMemtable::dump2text(const char *fname)
           last_insert_ts_,
           state_);
     }
-    fprintf(fd, "tx_data_count=%ld \n", tx_data_map_->count());
+    fprintf(fd, "tx_data_count=%" PRId64 " \n", tx_data_map_->count());
     DumpTxDataMemtableFunctor fn(fd);
     // tx_data_map_->for_each(fn);
   }

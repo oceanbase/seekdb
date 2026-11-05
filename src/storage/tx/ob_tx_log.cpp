@@ -15,6 +15,7 @@
  */
 
 #include "storage/tx/ob_tx_log.h"
+#include <inttypes.h>
 #include "storage/memtable/ob_memtable_mutator.h"
 
 namespace oceanbase
@@ -525,7 +526,7 @@ int ObTxRedoLog::format_row_data_(const memtable::ObRowData &row_data, ObAdminMu
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_row.get_column_count(); i++) {
       int64_t pos = 0;
       if (nullptr != arg.writer_ptr_) {
-        sprintf(arg.buf_ + arg.pos_, "%lu", i);
+        sprintf(arg.buf_ + arg.pos_, "%" PRId64, i);
         arg.writer_ptr_->dump_key(arg.buf_ + arg.pos_);
         pos = datum_row.storage_datums_[i].storage_to_string(arg.buf_ + arg.pos_, arg.buf_len_ - arg.pos_);
         arg.writer_ptr_->dump_string(arg.buf_ + arg.pos_);
