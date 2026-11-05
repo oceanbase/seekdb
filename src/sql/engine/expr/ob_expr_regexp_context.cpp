@@ -419,11 +419,6 @@ int ObExprRegexContext::check_regexp_status(const RegexError &error) const
     case RegexErrorKind::Argument:
       ret = OB_INVALID_ARGUMENT;
       break;
-    case RegexErrorKind::PropertySyntax:
-    case RegexErrorKind::UnsupportedProperty:
-      ret = OB_ERR_REGEXP_ERROR;
-      LOG_USER_ERROR(OB_ERR_REGEXP_ERROR, error.message.data());
-      break;
     default:
       ret = OB_ERR_REGEXP_ERROR;
       LOG_USER_ERROR(OB_ERR_REGEXP_ERROR, error.message.data());

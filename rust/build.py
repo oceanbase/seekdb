@@ -21,8 +21,6 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from prepare_regex import prepare_workspace
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -37,8 +35,6 @@ def main():
     environment = os.environ.copy()
     environment["CONFIG_RS"] = str(Path(environment["CONFIG_RS"]).resolve())
     target_dir = Path(args.target_dir).resolve()
-    workspace, patch_options = prepare_workspace(
-        workspace, target_dir / "sql-regexp", args.cargo, environment)
     command = [args.cargo, "build", "--locked", "--workspace", "--release",
                "--manifest-path", str(workspace / "Cargo.toml"),
                "--target-dir", str(target_dir),
@@ -46,7 +42,6 @@ def main():
     if args.target:
         command += ["--target", args.target]
     command += args.cargo_args
-    command += patch_options
     with subprocess.Popen(command, cwd=workspace, env=environment, stdout=subprocess.PIPE,
                           universal_newlines=True) as cargo:
         for line in cargo.stdout:
