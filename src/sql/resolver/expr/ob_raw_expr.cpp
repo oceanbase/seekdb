@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr.h"
+#include <cinttypes>
 #include "query/resolver/ob_raw_expr_traits.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
@@ -39,6 +40,16 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+int print_expr_address(char *buf, const int64_t buf_len, int64_t &pos,
+                       const void *address)
+{
+  return databuff_printf(buf, buf_len, pos, "0x%" PRIxPTR,
+                         reinterpret_cast<std::uintptr_t>(address));
+}
+}
+
 ObRawExpr *USELESS_POINTER = NULL;
 
 #define GENERATE_CASE(type, class)                                      \
@@ -1306,7 +1317,7 @@ int ObConstRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
     } else if (EXPLAIN_EXTENDED != type) {
       /* do nothing */
     } else if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     }
   } else {
@@ -1698,7 +1709,7 @@ int ObQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
   } else if (OB_FAIL(BUF_PRINTF("subquery(%lu)", ref_id_))) {
   } else if (EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -1831,7 +1842,7 @@ int ObExecParamRawExpr::get_name_internal(char *buf,
     } else if (EXPLAIN_EXTENDED != type) {
       /* do nothing */
     } else if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     }
   }
@@ -1999,7 +2010,7 @@ int ObColumnRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int6
     } else {
       if (EXPLAIN_EXTENDED == type) {
         if (OB_FAIL(BUF_PRINTF("("))) {
-        } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+        } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
         } else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else {}
       }
@@ -2778,7 +2789,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
   if (OB_SUCC(ret)) {
     if (EXPLAIN_EXTENDED == type) {
       if (OB_FAIL(BUF_PRINTF("("))) {
-      } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+      } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
       } else if (OB_FAIL(BUF_PRINTF(")"))) {
       } else {}
     }
@@ -3444,7 +3455,7 @@ int ObCaseOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
   }
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -3739,7 +3750,7 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
     }
     if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
       if (OB_FAIL(BUF_PRINTF("("))) {
-      } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+      } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
       } else if (OB_FAIL(BUF_PRINTF(")"))) {
       } else {}
     }
@@ -4176,7 +4187,7 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       if (OB_FAIL(BUF_PRINTF(")"))) {
       } else if (EXPLAIN_EXTENDED == type) {
         if (OB_FAIL(BUF_PRINTF("("))) {
-        } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+        } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
         } else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else {}
       } else {}
@@ -4974,7 +4985,7 @@ int ObSetOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
   } else {}
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -5449,7 +5460,7 @@ int ObWinFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
 
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -5546,7 +5557,7 @@ int ObPseudoColumnRawExpr::get_name_internal(char *buf, const int64_t buf_len, i
   }
   if (OB_SUCC(ret) && EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -5621,7 +5632,7 @@ int ObOpPseudoColumnRawExpr::get_name_internal(char *buf,
   if (OB_FAIL(ret)) {
   } else if (EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -5843,7 +5854,7 @@ int ObPlQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int
   } else if (OB_FAIL(BUF_PRINTF("subquery(%.*s)", ps_sql_.length(), ps_sql_.ptr()))) {
   } else if (EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+    } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
     } else if (OB_FAIL(BUF_PRINTF(")"))) {
     } else {}
   }
@@ -6197,7 +6208,7 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
         }else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else if (EXPLAIN_EXTENDED == type) {
           if (OB_FAIL(BUF_PRINTF("("))) {
-          } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+          } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
           } else if (OB_FAIL(BUF_PRINTF(")"))) {
           } else {}
         }
@@ -6229,7 +6240,7 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
         } else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else if (EXPLAIN_EXTENDED == type) {
           if (OB_FAIL(BUF_PRINTF("("))) {
-          } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+          } else if (OB_FAIL(print_expr_address(buf, buf_len, pos, this))) {
           } else if (OB_FAIL(BUF_PRINTF(")"))) {
           } else {}
         }
