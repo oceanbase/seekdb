@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_server_runtime.h"
@@ -217,7 +218,7 @@ void ObPxPool::handle(ObLink *task)
 void ObPxPool::set_px_thread_name()
 {
   char buf[32];
-  snprintf(buf, 32, "PX_G%ld", group_id_);
+  snprintf(buf, 32, "PX_G%" PRIu64, group_id_);
   lib::set_thread_name(buf);
 }
 

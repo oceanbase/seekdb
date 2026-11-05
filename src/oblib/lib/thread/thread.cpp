@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "thread.h"
+#include <inttypes.h>
 #ifdef _WIN32
 #include <windows.h>
 #ifdef ERROR
@@ -453,7 +454,7 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
   if (tid == 0) {
     ret = OB_NOT_INIT;
   } else {
-    snprintf(stat_path, PATH_BUFSIZE, "/proc/%d/task/%ld/stat", pid, tid);
+    snprintf(stat_path, PATH_BUFSIZE, "/proc/%d/task/%" PRId64 "/stat", pid, tid);
     if ((fd = ::open(stat_path, O_RDONLY)) < 0) {
       ret = OB_IO_ERROR;
     } else if ((read_size = read(fd, stat_content, MAX_LINE_LENGTH)) < 0) {
