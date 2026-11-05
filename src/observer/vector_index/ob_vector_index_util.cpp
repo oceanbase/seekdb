@@ -3275,7 +3275,7 @@ int ObVectorIndexUtil::check_index_param(
         } else if (INT64_MAX / sample_per_nlist_value < nlist_value) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "ivf vector index param nlist_value * sample_per_nlist_value should less than int64_max");
-        } else if (INT64_MAX / sample_per_nlist_value < (1L << nbits_value)) {
+        } else if (INT64_MAX / sample_per_nlist_value < (1ULL << nbits_value)) {
            ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "ivf vector index param (1L << nbits_value) * sample_per_nlist_value should less than int64_max");
         }
@@ -5163,7 +5163,7 @@ int ObVectorIndexUtil::estimate_ivf_memory(uint64_t num_vectors,
     buff_mem = sizeof(float) * nlist * param.dim_;
     construct_mem = 1000 + 2 * nlist * (nlist + 1) + 8 * nlist * param.dim_ + 4 * sample_cnt * (param.dim_ + 2);
   } else if (param.type_ == VIAT_IVF_PQ) {
-    uint64_t ksub = MIN(num_vectors, 1L << param.nbits_);
+    uint64_t ksub = MIN(num_vectors, 1ULL << param.nbits_);
     uint64_t pq_sample_cnt = MIN(num_vectors, ksub * param.sample_per_nlist_);
     buff_mem = sizeof(float) * param.dim_ * (ksub + nlist) + sizeof(float) * nlist * ksub * param.m_;
     uint64_t ivf_construct = 1000 + 2 * nlist * (nlist + 1) + 8 * nlist * param.dim_ + 4 * sample_cnt * (param.dim_ + 2);
@@ -5196,7 +5196,7 @@ int ObVectorIndexUtil::estimate_ivf_pq_kmeans_memory(uint64_t num_vectors, const
       pq_dim = param.dim_ / param.m_;
     }
 
-    uint64_t ksub = MIN(num_vectors, 1L << param.nbits_);
+    uint64_t ksub = MIN(num_vectors, 1ULL << param.nbits_);
     uint64_t pq_sample_cnt = MIN(num_vectors, ksub * param.sample_per_nlist_);
     kmeans_mem = (2 * ksub * (ksub + 1) + 4 * pq_sample_cnt + 8 * ksub * pq_dim) * thread_cnt;  // thread cnt is 1
   } else {

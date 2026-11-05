@@ -383,7 +383,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         break;
       }
       case IvfCacheType::IVF_PQ_CENTROID_CACHE: {
-        int64_t pqnlist = 1L << param.nbits_;
+        int64_t pqnlist = 1ULL << param.nbits_;
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * pqnlist * param.dim_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -397,7 +397,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         break;
       }
       case IvfCacheType::IVF_PQ_PRECOMPUTE_TABLE_CACHE: {
-        int64_t ksub = 1L << param.nbits_;
+        int64_t ksub = 1ULL << param.nbits_;
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * param.nlist_ * param.m_ * ksub)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -505,12 +505,12 @@ int64_t ObIvfCentCache::get_expect_memory_used(
       break;
     }
     case IvfCacheType::IVF_PQ_CENTROID_CACHE: {
-      int64_t pqnlist = 1L << param.nbits_;
+      int64_t pqnlist = 1ULL << param.nbits_;
       usage = sizeof(float) * pqnlist * param.dim_;
       break;
     }
     case IvfCacheType::IVF_PQ_PRECOMPUTE_TABLE_CACHE: {
-      int64_t ksub = 1L << param.nbits_;
+      int64_t ksub = 1ULL << param.nbits_;
       usage = sizeof(float) * param.nlist_ * param.m_ * ksub;
       break;
     }
