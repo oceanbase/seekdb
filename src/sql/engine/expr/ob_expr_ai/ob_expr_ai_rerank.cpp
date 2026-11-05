@@ -101,7 +101,9 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *arg_query = nullptr;
   ObDatum *arg_documents = nullptr;
   ObDatum *arg_doc_key = nullptr;
-  if (OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_query, arg_documents, arg_doc_key))) {
+  if (expr.arg_cnt_ == 4 ? OB_FAIL(expr.eval_param_value(
+          ctx, arg_model_id, arg_query, arg_documents, arg_doc_key))
+          : OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_query, arg_documents))) {
   } else if (arg_model_id->is_null() || arg_query->is_null() || arg_documents->is_null()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, model id or query or documents is null");
@@ -122,8 +124,9 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObJsonArray *document_array = nullptr;
     ObJsonArray *result_array = nullptr;
     ObIJsonBase *j_base = nullptr;
-    int64_t batch_size = 20; // max batch size for rerank
+    const int64_t batch_size = 20; // max batch size for rerank
     bool is_null_result = false;
+    const bool has_doc_key = OB_NOT_NULL(arg_doc_key) && !arg_doc_key->is_null();
     if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, DOCUMENTS_IDX,
           j_base, is_null_result))) {
     } else if (OB_ISNULL(j_base)) {
@@ -141,10 +144,10 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         ObJsonNode *doc_node = document_array->get_value(i);
         if (OB_ISNULL(doc_node)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_NOT_NULL(arg_doc_key) && doc_node->json_type() != ObJsonNodeType::J_OBJECT) {
+        } else if (has_doc_key && doc_node->json_type() != ObJsonNodeType::J_OBJECT) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, document_array element is not object");
-        } else if (OB_ISNULL(arg_doc_key) && doc_node->json_type() != ObJsonNodeType::J_STRING) {
+        } else if (!has_doc_key && doc_node->json_type() != ObJsonNodeType::J_STRING) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, document_array element is not string");
         }
@@ -160,7 +163,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } 
 
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_doc_key)) {
+    } else if (has_doc_key) {
       ObString doc_key = arg_doc_key->get_string();
       if (OB_FAIL(eval_ai_rerank_with_doc_key(expr, ctx, temp_allocator, model_id,
                   query, document_array, doc_key, *info, *endpoint_info, res))) {
@@ -204,26 +207,51 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   return ret;
 }
 
-int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator, 
-                                                ObString& model_id, ObString& query, ObJsonArray *document_array,
-                                                ObString& doc_key, const ObAIFuncExprInfo &info,
-                                                const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res)
+int ObExprAIRerank::eval_ai_rerank_with_doc_key(
+    const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator,
+    ObString &model_id, ObString &query, ObJsonArray *document_array,
+    ObString &doc_key, const ObAIFuncExprInfo &info,
+    const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res)
 {
   INIT_SUCC(ret);
-  ObJsonArray *doc_array = nullptr;
+  UNUSED(model_id);
   ObJsonArray *result_array = nullptr;
-  ObJsonArray *sorted_document_array = nullptr;
-  if (OB_FAIL(get_doc_array_from_documents_array_with_key(allocator, document_array, doc_key, doc_array))) {
-  } else {
-    ObAIFuncModel model(allocator, info, endpoint_info);
-    if (OB_FAIL(model.call_rerank(query, doc_array, result_array))) {
-    } else if (OB_FAIL(sort_document_array_by_model_result(allocator, document_array, result_array, sorted_document_array))) {
-    } 
+  ObJsonArray *sorted_documents = nullptr;
+  ObArray<ObString> headers;
+  const int64_t batch_size = 20;
+  if (OB_FAIL(ObAIFuncUtils::check_info_type_rerank(&info))) {
+  } else if (OB_FAIL(ObAIFuncUtils::get_header(allocator, info, endpoint_info, headers))) {
+  } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, result_array))) {
   }
-  if (OB_SUCC(ret)) {
-    ObString raw_str;
-    if (OB_FAIL(sorted_document_array->get_raw_binary(raw_str, &allocator))) {
-    } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_str))) {
+  for (int64_t first = 0; OB_SUCC(ret) && first < document_array->element_count();
+       first += batch_size) {
+    const int64_t last = std::min(first + batch_size,
+                                  static_cast<int64_t>(document_array->element_count()));
+    ObJsonArray *objects = nullptr;
+    ObJsonArray *texts = nullptr;
+    ObJsonArray *batch_scores = nullptr;
+    ObJsonArray *merged = nullptr;
+    ObString score_key(SCORE_KEY);
+    if (OB_FAIL(construct_batch_document_array(
+            allocator, document_array, first, last, objects))) {
+    } else if (OB_FAIL(get_doc_array_from_documents_array_with_key(
+                   allocator, objects, doc_key, texts))) {
+    } else if (OB_FAIL(inner_eval_ai_rerank(
+                   allocator, info, endpoint_info, headers, query, texts, batch_scores))) {
+    } else if (OB_FAIL(batch_result_add_base(allocator, batch_scores, first))) {
+    } else if (OB_FAIL(compact_json_array_by_key(
+                   allocator, result_array, batch_scores, score_key, merged))) {
+    } else {
+      result_array = merged;
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(sort_document_array_by_model_result(
+                 allocator, document_array, result_array, sorted_documents))) {
+  } else {
+    ObString raw;
+    if (OB_FAIL(sorted_documents->get_raw_binary(raw, &allocator))) {
+    } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw))) {
     }
   }
   return ret;
