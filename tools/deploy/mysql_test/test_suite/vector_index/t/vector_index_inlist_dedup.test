@@ -1,0 +1,21 @@
+# Regression for #1512: keep duplicate integer IN values as an ANN table filter.
+--disable_warnings
+DROP TABLE IF EXISTS vector_inlist_dedup;
+--enable_warnings
+CREATE TABLE vector_inlist_dedup(id INT PRIMARY KEY, category INT, embedding VECTOR(3),
+  VECTOR INDEX vec_idx(embedding) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO vector_inlist_dedup VALUES (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),
+  (3,3,'[3,0,0]'),(4,4,'[0.1,0,0]'),(5,NULL,'[0.2,0,0]');
+
+# Exercise the default rewrite threshold with 3072 values and three distinct integers.
+let $inlist = `SELECT CONCAT(REPEAT('1,2,3,',1023),'1,2,3')`;
+--disable_query_log
+--replace_regex /, $/,/
+eval EXPLAIN BASIC SELECT /*+ INDEX(vector_inlist_dedup vec_idx) */ id
+  FROM vector_inlist_dedup WHERE category IN ($inlist)
+  ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+eval SELECT /*+ INDEX(vector_inlist_dedup vec_idx) */ id
+  FROM vector_inlist_dedup WHERE category IN ($inlist)
+  ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+--enable_query_log
+DROP TABLE vector_inlist_dedup;
