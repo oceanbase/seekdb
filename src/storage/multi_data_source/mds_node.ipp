@@ -18,6 +18,7 @@
 #define STORAGE_MULTI_DATA_SOURCE_MDS_NODE_IPP
 
 #include "lib/ob_abort.h"
+#include "storage/mds_timing_diagnostic.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/multi_data_source/runtime_utility/list_helper.h"
@@ -195,11 +196,16 @@ void UserMdsNode<K, V>::on_redo_(const share::SCN &redo_scn)
 template <typename K, typename V>
 bool UserMdsNode<K, V>::try_before_prepare()
 {
+  MDS_DIAG_SCOPE(BEFORE_PREPARE_INCLUSIVE);
   MDS_TG(1_ms);
+  MDS_DIAG_TIMER(node_timer, TRY_NODE_LOCK);
   TryLockGuard lg(this);
+  MDS_DIAG_LOCK_STOP(node_timer);
   if (lg.lock_succeed()) {
     CLICK();
     before_prepare_();
+  } else {
+    MDS_DIAG_LOCK_FAILED();
   }
   return lg.lock_succeed();
 }
@@ -210,8 +216,11 @@ void UserMdsNode<K, V>::before_prepare_()
   if (status_.union_.field_.state_ == TwoPhaseCommitState::BEFORE_PREPARE) {// reentrant
     MDS_ASSERT(trans_version_.is_min());
   } else {
-    status_.advance(TwoPhaseCommitState::BEFORE_PREPARE);
-    trans_version_.set_min();// block all read operation
+    {
+      MDS_DIAG_SCOPE(STATE_TRANSITION);
+      status_.advance(TwoPhaseCommitState::BEFORE_PREPARE);
+      trans_version_.set_min();// block all read operation
+    }
     report_event_("BEFORE_PREPARE");
   }
 }
@@ -377,13 +386,14 @@ void UserMdsNode<K, V>::report_event_(const char (&event_str)[N],
                                       const uint32_t line,
                                       const char *function_name) const
 {
+  MDS_DIAG_SCOPE(REPORT_EVENT_INCLUSIVE);
   int ret = OB_SUCCESS;
   constexpr int64_t buffer_size = 1_KB;
   char stack_buffer[buffer_size] = { 0 };
   MdsEvent event;
   if (OB_UNLIKELY(!has_valid_link_back_ptr_())) {
     // do nothing
-  } else if (OB_FAIL(fill_event_(event, event_str, stack_buffer, buffer_size))) {
+  } else if (OB_FAIL(MDS_DIAG_CALL(FILL_EVENT, fill_event_(event, event_str, stack_buffer, buffer_size)))) {
   } else {
     MdsEventKey key(p_mds_row_->p_mds_unit_->p_mds_table_->tablet_id_);
     ObMdsEventBuffer::append(key, event, p_mds_row_->p_mds_unit_->p_mds_table_, file, line, function_name);

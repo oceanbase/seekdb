@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "ob_ls_tablet_service.h"
+#include "storage/mds_timing_diagnostic.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_runtime_service.h"
@@ -1215,6 +1216,7 @@ int ObLSTabletService::create_tablet(
     ObTabletHandle &tablet_handle,
     const share::ObForkTabletInfo &fork_info)
 {
+  MDS_DIAG_SCOPE(CREATE_INCLUSIVE);
   int ret = OB_SUCCESS;
   UNUSED(data_format_version);
   common::ObArenaAllocator tmp_allocator(common::ObMemAttr("CreateTab"));
@@ -1225,23 +1227,25 @@ int ObLSTabletService::create_tablet(
   ObFreezer *freezer = ls_->get_freezer();
   tablet_handle.reset();
 
-  if (OB_FAIL(ObTabletCreateDeleteHelper::prepare_create_msd_tablet())) {
+  if (OB_FAIL(MDS_DIAG_CALL(PREPARE_THROTTLE, ObTabletCreateDeleteHelper::prepare_create_msd_tablet()))) {
   } else {
     ObUpdateTabletPointerParam param;
+    MDS_DIAG_TIMER(bucket_timer, BUCKET_LOCK);
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
-    if (OB_FAIL(ObTabletCreateDeleteHelper::create_msd_tablet(key, tablet_handle))) {
+    MDS_DIAG_LOCK_STOP(bucket_timer);
+    if (OB_FAIL(MDS_DIAG_CALL(CREATE_MSD, ObTabletCreateDeleteHelper::create_msd_tablet(key, tablet_handle)))) {
     } else if (OB_ISNULL(tablet = tablet_handle.get_obj())
         || OB_ISNULL(allocator = tablet_handle.get_allocator())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
-    } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, tablet_id, data_tablet_id,
+    } else if (OB_FAIL(MDS_DIAG_CALL(INITIALIZE, tablet->init_for_first_time_creation(*allocator, tablet_id, data_tablet_id,
         create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
-        micro_index_clustered, freezer, fork_info))) {
-    } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {
-    } else if (OB_FAIL(t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param))) {
-    } else if (OB_FAIL(tablet_id_set_.set(tablet_id))) {
+        micro_index_clustered, freezer, fork_info)))) {
+    } else if (OB_FAIL(MDS_DIAG_CALL(POINTER_PARAM, tablet->get_updating_tablet_pointer_param(param)))) {
+    } else if (OB_FAIL(MDS_DIAG_CALL(CAS_PUBLISH, t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param)))) {
+    } else if (OB_FAIL(MDS_DIAG_CALL(ID_SET, tablet_id_set_.set(tablet_id)))) {
     } else {
-      report_tablet_to_rs(tablet_id);
+      MDS_DIAG_CALL(REPORT, report_tablet_to_rs(tablet_id));
     }
 
     if (OB_SUCC(ret)) {

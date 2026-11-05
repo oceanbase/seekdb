@@ -16,6 +16,7 @@
 
 #include "rust/config.h"
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
+#include "storage/mds_timing_diagnostic.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
@@ -948,6 +949,7 @@ int ObTabletCreateMdsHelper::set_tablet_status(
     const ObTabletMdsUserDataType &data_type,
     const int64_t create_commit_version)
 {
+  MDS_DIAG_SCOPE(STATUS_INCLUSIVE);
   MDS_TG(5_ms);
   int ret = OB_SUCCESS;
   const ObTabletStatus status(ObTabletStatus::NORMAL);

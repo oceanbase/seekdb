@@ -16,6 +16,7 @@
  
 #ifndef OB_STORAGE_MULTI_DATA_SOURCE_MDS_EVENT_BUFFER_H_
 #define OB_STORAGE_MULTI_DATA_SOURCE_MDS_EVENT_BUFFER_H_
+#include "storage/mds_timing_diagnostic.h"
 
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
@@ -274,12 +275,13 @@ struct ObMdsEventBuffer {
                 const char *func) {
       if (OB_NOT_NULL(file) && OB_UNLIKELY(line != 0) && OB_NOT_NULL(func) && OB_NOT_NULL(event.event_)) {
         if (OB_UNLIKELY(OB_LOGGER.need_to_print(::oceanbase::common::OB_LOG_ROOT::M_MDS, OB_LOG_LEVEL_INFO))) {
+          MDS_DIAG_SCOPE(INFO_EMIT);
           ::oceanbase::common::OB_PRINT("[MDS.EVENT]", OB_LOG_LEVEL_INFO, file, line, func, OB_SUCCESS,
                                         event.event_, LOG_KVS(K(key), K(event), KPC(mds_table)));
         }
       }
       if (is_inited_) {
-        (void) mds_event_cache_.append(key, event, file, line, func);
+        (void) MDS_DIAG_CALL(EVENT_CACHE, mds_event_cache_.append(key, event, file, line, func));
       }
     }
     template <typename OP>
