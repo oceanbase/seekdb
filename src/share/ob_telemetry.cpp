@@ -1071,13 +1071,12 @@ static int get_telemetry_base_dir(char *base_dir,
   return ret;
 }
 
-int get_host_hash(char *buf, const int64_t buf_len)
+int get_host_hash(const common::ObAddr &addr, char *buf, const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
   int64_t out_len = 0;
   char ip_buf[MAX_IP_ADDR_LENGTH] = {'\0'};
   char hash_buf[SHA256_DIGEST_LENGTH + 1] = {'\0'};
-  ObAddr addr = GCTX.self_addr();
   if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_SH256, ip_buf, strlen(ip_buf), hash_buf, sizeof(hash_buf), out_len))) {
@@ -1126,7 +1125,8 @@ static int generate_id(char *id, const int64_t id_len)
 }
 
 static int generate_telemetry_json(const char* reporter, const char* event_name,
-    ObIAllocator *allocator, ObString &json_str, const int64_t created_at_us)
+    ObIAllocator *allocator, ObString &json_str, const int64_t created_at_us,
+    const common::ObAddr &self_addr)
 {
   int ret = OB_SUCCESS;
   const int64_t SHA256_DIGEST_HEX_LEN = 2 * SHA256_DIGEST_LENGTH + 1;
@@ -1163,7 +1163,7 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   snprintf(log_disk_size, sizeof(log_disk_size), "%.9gG", log_disk_size_gb);
   snprintf(datafile_size, sizeof(datafile_size), "%.9gG", datafile_size_gb);
   VersionUtil::print_version_str(version, sizeof(version), SERVER_CURRENT_VERSION);
-  get_host_hash(host_hash, sizeof(host_hash));
+  get_host_hash(self_addr, host_hash, sizeof(host_hash));
   get_os_info(os_name, sizeof(os_name), os_version, sizeof(os_version));
   get_cpu_model(cpu_model, sizeof(cpu_model));
   if (OB_FAIL(generate_id(id, sizeof(id)))) {
@@ -1451,7 +1451,8 @@ bool is_telemetry_enabled()
   return bret;
 }
 
-int report_telemetry(const char *reporter, const char *event_name)
+int report_telemetry(const char *reporter, const char *event_name,
+                    const common::ObAddr &self_addr)
 {
   int ret = OB_SUCCESS;
   // Serialize concurrent callers through the read/send/update transaction.
@@ -1472,7 +1473,7 @@ int report_telemetry(const char *reporter, const char *event_name)
     // The file's logical creation time is immutable, unlike filesystem mtime
     // or ctime, which change when delivery state is updated or files are copied.
     const int64_t created_at_us = ObTimeUtility::current_time();
-    if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str, created_at_us))) {
+    if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str, created_at_us, self_addr))) {
     } else if (OB_FAIL(write_telemetry_file(json_str))) {
     } else if (OB_FAIL(parse_telemetry_file(allocator, json_str, root, sent))) {
     }
