@@ -1,6 +1,10 @@
 .gitattributes export-ignore
 .gitignore export-ignore
 
+# Bazel hashes Cargo.lock and MODULE.bazel.lock byte-for-byte when validating the
+# module lockfile, so a CRLF checkout on Windows fails --lockfile_mode=error.
+*.lock text eol=lf
+
 # All OceanBase code is auto-formatted using clang-format.
 *.c filter=codeformat
 *.cc filter=codeformat
