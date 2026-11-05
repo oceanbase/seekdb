@@ -40,6 +40,25 @@ namespace sql
 {
 #define GET_RANGE_NODE_DOMAIN_TYPE(n) (static_cast<ObDomainOpType>((n)->domain_extra_.domain_releation_type_))
 
+static bool is_empty_integer_not_in_gap(const ObObjMeta &column_type,
+                                        const ObObj &lower,
+                                        const ObObj &upper)
+{
+  bool is_empty = false;
+  if (column_type.is_signed_integer() &&
+      lower.is_signed_integer() && upper.is_signed_integer()) {
+    const int64_t start = lower.get_int();
+    const int64_t end = upper.get_int();
+    is_empty = start == end || (start < INT64_MAX && start + 1 == end);
+  } else if (column_type.is_unsigned_integer() &&
+             lower.is_unsigned_integer() && upper.is_unsigned_integer()) {
+    const uint64_t start = lower.get_uint64();
+    const uint64_t end = upper.get_uint64();
+    is_empty = start == end || (start < UINT64_MAX && start + 1 == end);
+  }
+  return is_empty;
+}
+
 int ObTmpRange::copy(ObTmpRange &other)
 {
   int ret = OB_SUCCESS;
@@ -615,7 +634,17 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
         if (OB_FAIL(generate_one_range(*always_false_tmp_range_))) {
         }
       } else {
+        const ObRangeColumnMeta *column_meta = pre_range_graph_->get_column_meta(cur_node->min_offset_);
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_in_param->in_param_.count() + 1; ++i) {
+          // Both endpoints are excluded. Adjacent integer values leave no key,
+          // even when this column is followed by more index key columns.
+          if (i > 0 && i < tmp_in_param->in_param_.count() &&
+              OB_NOT_NULL(column_meta) &&
+              is_empty_integer_not_in_gap(column_meta->column_type_.get_obj_meta(),
+                                         *tmp_in_param->in_param_.at(i - 1),
+                                         *tmp_in_param->in_param_.at(i))) {
+            continue;
+          }
           ObTmpRange *new_range = nullptr;
           if (pre_node_offset != -1 && add_last) {
             tmp_range_lists_[pre_node_offset].remove_last();
