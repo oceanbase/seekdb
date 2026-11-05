@@ -20,6 +20,7 @@
 #include "share/io/ob_io_manager.h"                           // ObIOManager
 #include "lib/string/ob_string.h"                             // ObString
 #include "share/ob_device_manager.h"                          // ObDeviceManager
+#include "lib/utility/ob_platform_io.h"                       // ob_ftruncate_fd
 
 namespace oceanbase
 {
@@ -262,11 +263,7 @@ int LogIOAdapter::truncate(const ObIOFd &io_fd, const int64_t offset)
   if (!io_fd.is_valid() || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), K(offset));
-#ifdef _WIN32
-  } else if (0 != ob_ftruncate(io_fd.second_id_, offset)) {
-#else
-  } else if (0 != ftruncate(io_fd.second_id_, offset)) {
-#endif
+  } else if (0 != common::ob_ftruncate_fd(io_fd.second_id_, offset)) {
     ret = convert_sys_errno();
     PALF_LOG(WARN, "ftruncate failed", K(ret), K(errno), K(io_fd), K(offset));
   }
