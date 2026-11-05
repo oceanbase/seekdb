@@ -1,0 +1,42 @@
+DROP TABLE IF EXISTS ddl_ordinary_name, ddl_escaped_enum, ddl_escaped_set, ddl_escaped_utf8;
+SET NAMES utf8mb4;
+CREATE TABLE ddl_ordinary_name (id INT PRIMARY KEY, value ENUM('a', 'b'));
+INSERT INTO ddl_ordinary_name VALUES (1, 'a');
+CREATE UNIQUE INDEX ordinary_value ON ddl_ordinary_name(value);
+SELECT id, value FROM ddl_ordinary_name ORDER BY id;
+id	value
+1	a
+CREATE TABLE ddl_escaped_enum (id INT PRIMARY KEY, `e``n` ENUM('a', 'b'));
+INSERT INTO ddl_escaped_enum VALUES (1, 'a');
+CREATE UNIQUE INDEX escaped_enum_value ON ddl_escaped_enum(`e``n`);
+INSERT INTO ddl_escaped_enum VALUES (2, 'b'), (3, NULL), (4, NULL);
+INSERT INTO ddl_escaped_enum VALUES (5, 'a');
+ERROR 23000: Duplicate entry '1' for key 'escaped_enum_value'
+SELECT id, `e``n` FROM ddl_escaped_enum FORCE INDEX(escaped_enum_value) ORDER BY id;
+id	e`n
+1	a
+2	b
+3	NULL
+4	NULL
+CREATE TABLE ddl_escaped_set (id INT PRIMARY KEY, ```s````n``` SET('a', 'b'));
+INSERT INTO ddl_escaped_set VALUES (1, 'a');
+CREATE UNIQUE INDEX escaped_set_value ON ddl_escaped_set(```s````n```);
+INSERT INTO ddl_escaped_set VALUES (2, 'b'), (3, 'a,b'), (4, NULL), (5, NULL);
+INSERT INTO ddl_escaped_set VALUES (6, 'a,b');
+ERROR 23000: Duplicate entry '3' for key 'escaped_set_value'
+SELECT id, ```s````n``` FROM ddl_escaped_set FORCE INDEX(escaped_set_value) ORDER BY id;
+id	`s``n`
+1	a
+2	b
+3	a,b
+4	NULL
+5	NULL
+CREATE TABLE ddl_escaped_utf8 (id INT PRIMARY KEY, `列``名` ENUM('x', 'y'));
+INSERT INTO ddl_escaped_utf8 VALUES (1, 'x');
+CREATE UNIQUE INDEX escaped_utf8_value ON ddl_escaped_utf8(`列``名`);
+INSERT INTO ddl_escaped_utf8 VALUES (2, 'y');
+SELECT id, `列``名` FROM ddl_escaped_utf8 FORCE INDEX(escaped_utf8_value) ORDER BY id;
+id	列`名
+1	x
+2	y
+DROP TABLE ddl_ordinary_name, ddl_escaped_enum, ddl_escaped_set, ddl_escaped_utf8;
