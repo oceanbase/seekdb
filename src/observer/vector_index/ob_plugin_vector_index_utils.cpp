@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -1763,21 +1764,21 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
             if (OB_NOT_NULL(adaptor->get_incr_data()) &&
                 OB_NOT_NULL(adaptor->get_incr_data()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_incr_data()->mem_ctx_->mem_ctx())) {
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_incr_%lu\":%d", adaptor->get_inc_table_id(), adaptor->get_incr_vsag_mem_hold()))) {
+              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_incr_%" PRIu64 "\":%d", adaptor->get_inc_table_id(), adaptor->get_incr_vsag_mem_hold()))) {
               }
             }
             if (OB_FAIL(ret)) {
             } else if (OB_NOT_NULL(adaptor->get_snap_data_()) &&
                 OB_NOT_NULL(adaptor->get_snap_data_()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_snap_data_()->mem_ctx_->mem_ctx())) {
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_snap_%lu\":%d", adaptor->get_snapshot_table_id(), adaptor->get_snap_vsag_mem_hold()))) {
+              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_snap_%" PRIu64 "\":%d", adaptor->get_snapshot_table_id(), adaptor->get_snap_vsag_mem_hold()))) {
               }
             }
             if (OB_FAIL(ret)) {
             } else if (OB_NOT_NULL(adaptor->get_vbitmap_data()) &&
                 OB_NOT_NULL(adaptor->get_vbitmap_data()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_vbitmap_data()->mem_ctx_->mem_ctx())) {
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_bitmap_%lu\":%lu", adaptor->get_vbitmap_table_id(), adaptor->get_vbitmap_data()->mem_ctx_->hold()))) {
+              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_bitmap_%" PRIu64 "\":%" PRIu64 "", adaptor->get_vbitmap_table_id(), adaptor->get_vbitmap_data()->mem_ctx_->hold()))) {
               }
             }
           }
@@ -1829,7 +1830,7 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
         } else if (ret == OB_HASH_NOT_EXIST) {
           ret = OB_SUCCESS;
           if (adaptor != NULL) {
-            if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"ivf_cache_%lu\":%ld", adaptor->get_table_id(), adaptor->get_memory_hold()))) {
+            if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"ivf_cache_%" PRIu64 "\":%" PRId64 "", adaptor->get_table_id(), adaptor->get_memory_hold()))) {
             }
           }
           OZ(adaptor_ptr_set.set_refactored(reinterpret_cast<int64_t>(adaptor)));

@@ -18,6 +18,7 @@
 
 #ifdef WITH_COVERAGE
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -170,7 +171,7 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
   DWORD tid = GetCurrentThreadId();
   BOOL is_main = (tid == g_main_thread_id);
   int n = snprintf(buf, sizeof(buf),
-    "[WIN32-TRACE] Vectored exception #%ld: code=0x%08lX addr=0x%p tid=%lu%s\r\n",
+    "[WIN32-TRACE] Vectored exception #%" PRId64 ": code=0x%08" PRIX64 " addr=0x%p tid=%" PRIu64 "%s\r\n",
     crash_seq, code, (void*)ep->ExceptionRecord->ExceptionAddress, tid,
     is_main ? " (MAIN)" : " (bg-thread)");
   if (code == 0xC0000005 && ep->ExceptionRecord->NumberParameters >= 2) {
@@ -297,7 +298,7 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
   {
     char msg2[256];
     snprintf(msg2, sizeof(msg2),
-      "[WIN32-TRACE] Background thread crash #%ld, terminating process to avoid corruption.\r\n",
+      "[WIN32-TRACE] Background thread crash #%" PRId64 ", terminating process to avoid corruption.\r\n",
       bg_seq);
     win32_trace(msg2);
   }
@@ -386,7 +387,7 @@ static void disable_hugepage_for_self_text()
     unsigned long end = 0;
     char perms[8] = {0};
     char path[PATH_MAX] = {0};
-    const int fields = sscanf(line, "%lx-%lx %7s %*s %*s %*s %4095[^\n]",
+    const int fields = sscanf(line, "%" PRIx64 "-%" PRIx64 " %7s %*s %*s %*s %4095[^\n]",
                               &start, &end, perms, path);
     if (fields == 4 && start < end && perms[0] == 'r' && perms[2] == 'x'
         && 0 == strcmp(path, exe_path)) {
@@ -490,7 +491,7 @@ static void print_limit(const char *name, const int resource)
     if (RLIM_INFINITY == limit.rlim_cur) {
       _OB_LOG(INFO, "[%s] %-24s = %s", __func__, name, "unlimited");
     } else {
-      _OB_LOG(INFO, "[%s] %-24s = %ld", __func__, name, limit.rlim_cur);
+      _OB_LOG(INFO, "[%s] %-24s = %" PRId64 "", __func__, name, limit.rlim_cur);
     }
   }
   if (RLIMIT_CORE == resource) {
@@ -714,9 +715,9 @@ int inner_main(int argc, char *argv[])
       _LOG_INFO("Get virtual memory info failed");
     } else {
 #ifdef _WIN32
-      _LOG_INFO("Virtual memory : %15ld byte", memory_used);
+      _LOG_INFO("Virtual memory : %15" PRId64 " byte", memory_used);
 #else
-      _LOG_INFO("Virtual memory : %'15ld byte", memory_used);
+      _LOG_INFO("Virtual memory : %'15" PRId64 " byte", memory_used);
 #endif
     }
     // print in log file.

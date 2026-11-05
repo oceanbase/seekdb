@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_column_redefinition_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -594,7 +595,7 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -609,14 +610,14 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %ld",
+                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %" PRId64 "",
                                     snapshot_version_))) {
         }
       } else {
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %ld",
+                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %" PRId64 "",
                                     wait_trans_ctx_.get_pending_tx_id().get_id()))) {
         }
       }
@@ -643,14 +644,14 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: REPLICA BUILD, PARALLELISM: %ld, INITIALIZING",
+                                    "STATUS: REPLICA BUILD, PARALLELISM: %" PRId64 ", INITIALIZING",
                                     ObDDLTaskUtil::get_real_parallelism(parallelism_)))) {
         }
       } else if (OB_FAIL(local_builder_.get_progress(row_inserted, physical_row_count_, percent))) {
       } else if (OB_FAIL(databuff_printf(stat_info_.message_,
                                   MAX_LONG_OPS_MESSAGE_LENGTH,
                                   pos,
-                                  "STATUS: REPLICA BUILD, PARALLELISM: %ld, ESTIMATED_TOTAL_ROWS: %ld, ROW_PROCESSED: %ld, PROGRESS: %0.2lf%%",
+                                  "STATUS: REPLICA BUILD, PARALLELISM: %" PRId64 ", ESTIMATED_TOTAL_ROWS: %" PRId64 ", ROW_PROCESSED: %" PRId64 ", PROGRESS: %0.2lf%%",
                                   ObDDLTaskUtil::get_real_parallelism(parallelism_),
                                   physical_row_count_,
                                   row_inserted,

@@ -17,6 +17,7 @@
 #ifdef _WIN32
 
 #include "observer/ob_win_service.h"
+#include <inttypes.h>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -155,7 +156,7 @@ int ob_install_win_service(const char *service_name, int argc, char *argv[])
     if (err == ERROR_ACCESS_DENIED) {
       MPRINT("Error: Access denied. Please run as Administrator to install the service.");
     } else {
-      MPRINT("Error: Failed to open Service Control Manager (error %lu).", err);
+      MPRINT("Error: Failed to open Service Control Manager (error %" PRIu64 ").", err);
     }
     return 1;
   }
@@ -180,7 +181,7 @@ int ob_install_win_service(const char *service_name, int argc, char *argv[])
     if (err == ERROR_SERVICE_EXISTS) {
       MPRINT("Error: Service '%s' already exists. Use --remove-service first.", service_name);
     } else {
-      MPRINT("Error: Failed to create service '%s' (error %lu).", service_name, err);
+      MPRINT("Error: Failed to create service '%s' (error %" PRIu64 ").", service_name, err);
     }
     CloseServiceHandle(sc_manager);
     return 1;
@@ -228,7 +229,7 @@ int ob_remove_win_service(const char *service_name)
     if (err == ERROR_ACCESS_DENIED) {
       MPRINT("Error: Access denied. Please run as Administrator to remove the service.");
     } else {
-      MPRINT("Error: Failed to open Service Control Manager (error %lu).", err);
+      MPRINT("Error: Failed to open Service Control Manager (error %" PRIu64 ").", err);
     }
     return 1;
   }
@@ -239,7 +240,7 @@ int ob_remove_win_service(const char *service_name)
     if (err == ERROR_SERVICE_DOES_NOT_EXIST) {
       MPRINT("Error: Service '%s' does not exist.", service_name);
     } else {
-      MPRINT("Error: Failed to open service '%s' (error %lu).", service_name, err);
+      MPRINT("Error: Failed to open service '%s' (error %" PRIu64 ").", service_name, err);
     }
     CloseServiceHandle(sc_manager);
     return 1;
@@ -264,7 +265,7 @@ int ob_remove_win_service(const char *service_name)
 
   if (!DeleteService(service)) {
     DWORD err = GetLastError();
-    MPRINT("Error: Failed to delete service '%s' (error %lu).", service_name, err);
+    MPRINT("Error: Failed to delete service '%s' (error %" PRIu64 ").", service_name, err);
     CloseServiceHandle(service);
     CloseServiceHandle(sc_manager);
     return 1;
@@ -299,7 +300,7 @@ int ob_start_as_win_service(const char *service_name, ObServiceMainFunc main_fun
       MPRINT("Service Control Manager. If running from the command line, use --nodaemon");
       MPRINT("instead of --service.");
     } else {
-      MPRINT("Error: StartServiceCtrlDispatcher failed (error %lu).", err);
+      MPRINT("Error: StartServiceCtrlDispatcher failed (error %" PRIu64 ").", err);
     }
     return 1;
   }

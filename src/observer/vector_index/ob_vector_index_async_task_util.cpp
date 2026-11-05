@@ -370,7 +370,7 @@ int ObVecIndexAsyncTaskUtil::move_task_to_history_table(
   int64_t insert_rows = 0;
   int64_t delete_rows = 0;
 
-  if (OB_FAIL(sql.assign_fmt("REPLACE INTO %s SELECT * FROM %s WHERE status = 3 ORDER BY gmt_create LIMIT %ld",
+  if (OB_FAIL(sql.assign_fmt("REPLACE INTO %s SELECT * FROM %s WHERE status = 3 ORDER BY gmt_create LIMIT %" PRId64 "",
               share::OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME,
               share::OB_ALL_VECTOR_INDEX_TASK_TNAME,
               batch_size))) {
@@ -444,7 +444,7 @@ int ObVecIndexAsyncTaskUtil::insert_vec_tasks(
         ObVecIndexTaskStatus &task = task_ctx->task_status_;
         char trace_id_str[256] = { 0 };
         task.trace_id_.to_string(trace_id_str, sizeof(trace_id_str));
-        if (OB_FAIL(sql.append_fmt(" (%ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, '%s')",
+        if (OB_FAIL(sql.append_fmt(" (%" PRId64 ", %" PRId64 ", %" PRId64 ", %" PRId64 ", %" PRId64 ", %" PRId64 ", %" PRId64 ", %" PRId64 ", '%s')",
                                   task.table_id_, task.tablet_id_.id(),
                                   task.task_id_, task.trigger_type_, task.task_type_,
                                   task.status_, task.target_scn_.get_val_for_sql(), task.ret_code_,
@@ -482,10 +482,10 @@ int ObVecIndexAsyncTaskUtil::update_vec_task(
     ObVecIndexTaskStatusField& field = update_fields.at(i);
     if (OB_FAIL(sql.append_fmt("%s =", field.field_name_.ptr()))) {
     } else if (field.type_ == ObVecIndexTaskStatusField::INT_TYPE) {
-      if (OB_FAIL(sql.append_fmt("%ld", field.data_.int_))) {
+      if (OB_FAIL(sql.append_fmt("%" PRId64 "", field.data_.int_))) {
       }
     } else if (field.type_ == ObVecIndexTaskStatusField::UINT_TYPE) {
-      if (OB_FAIL(sql.append_fmt("%ld", field.data_.uint_))) {
+      if (OB_FAIL(sql.append_fmt("%" PRId64 "", field.data_.uint_))) {
       }
     } else if (field.type_ == ObVecIndexTaskStatusField::STRING_TYPE) {
       if (OB_FAIL(sql.append_fmt("%s", field.data_.str_.ptr()))) {
@@ -501,7 +501,7 @@ int ObVecIndexAsyncTaskUtil::update_vec_task(
   // WHERE FILTER
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sql.append_fmt(" WHERE "
-                    "table_id = %ld AND tablet_id = %ld AND task_id = %ld",
+                    "table_id = %" PRId64 " AND tablet_id = %" PRId64 " AND task_id = %" PRId64 "",
                     key.table_id_, key.tablet_id_, key.task_id_))) {
   }
 
@@ -664,10 +664,10 @@ int ObVecIndexAsyncTaskUtil::construct_read_task_sql(const char *tname,
                                0 == i ? " WHERE " : " AND ",
                                field.field_name_.ptr()))) {
     } else if (field.type_ == ObVecIndexTaskStatusField::INT_TYPE) {
-      if (OB_FAIL(sql.append_fmt("%ld", field.data_.int_))) {
+      if (OB_FAIL(sql.append_fmt("%" PRId64 "", field.data_.int_))) {
       }
     } else if (field.type_ == ObVecIndexTaskStatusField::UINT_TYPE) {
-      if (OB_FAIL(sql.append_fmt("%ld", field.data_.uint_))) {
+      if (OB_FAIL(sql.append_fmt("%" PRId64 "", field.data_.uint_))) {
       }
     } else if (field.type_ == ObVecIndexTaskStatusField::STRING_TYPE) {
       if (OB_FAIL(sql.append_fmt("%s", field.data_.str_.ptr()))) {
@@ -1665,12 +1665,12 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
               key_str = static_cast<char*>(allocator_.alloc(OB_VEC_IDX_SNAPSHOT_KEY_LENGTH));
               if (OB_ISNULL(key_str)) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else if (index_type == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRIu64 "_hnsw_data_part%05" PRId64 "", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
               } else if (index_type == VIAT_HGRAPH &&
-                OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hgraph_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
-              } else if (index_type == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_sq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
-              } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
-              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+                OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRIu64 "_hgraph_data_part%05" PRId64 "", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRIu64 "_hnsw_sq_data_part%05" PRId64 "", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRIu64 "_hnsw_bq_data_part%05" PRId64 "", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRIu64 "_ipivf_data_part%05" PRId64 "", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
               } else if (OB_ISNULL(key_str)) {
                 ret = OB_ERR_UNEXPECTED;
               } else {

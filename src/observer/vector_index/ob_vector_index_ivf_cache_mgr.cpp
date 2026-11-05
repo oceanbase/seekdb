@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "query/vector/ob_vector_index_cache.h"
+#include <inttypes.h>
 #include "query/vector/ob_vector_query_result.h"
 #include "storage/allocator/ob_vector_allocator.h"
 
@@ -218,8 +219,8 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
   ObVectorIndexParam *param;
   int64_t pos = 0;
   if (OB_FAIL(databuff_printf(
-          info.statistics_, sizeof(info.statistics_), pos, "actual_memory_used=%ld;", get_actual_memory_used()))) {
-  } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "ref_cnt=%ld;", ref_cnt_))) {
+          info.statistics_, sizeof(info.statistics_), pos, "actual_memory_used=%" PRId64 ";", get_actual_memory_used()))) {
+  } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "ref_cnt=%" PRId64 ";", ref_cnt_))) {
   } else if (OB_FAIL(databuff_printf(
                  info.statistics_, sizeof(info.statistics_), pos, "is_reach_limit=%d;", is_reach_limit_))) {
   } else if (OB_FAIL(databuff_printf(
@@ -249,7 +250,7 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
           ObIvfCentCache *cache = dynamic_cast<ObIvfCentCache*>(iter->second);
           if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
-                  "capacity=%ld;", cache->get_capacity()))) {
+                  "capacity=%" PRId64 ";", cache->get_capacity()))) {
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "cent_vec_dim=%d;", cache->cent_vec_dim_))) {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include <limits>
+#include <inttypes.h>
 #include <string>
 
 #include "ob_vector_index_util.h"
@@ -1080,19 +1081,19 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
     if (OB_FAIL(ret)) {
     } else if (new_vec_param.m_ != 0 || new_vec_param.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) { 
       // m is reset
-    } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", M=%ld", old_vec_param.m_))) {
+    } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", M=%" PRId64 "", old_vec_param.m_))) {
     }
 
     if (OB_FAIL(ret)) {
     } else if (new_vec_param.ef_search_ != 0 || new_vec_param.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
       // ef_search is reset
-    } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", EF_SEARCH=%ld", old_vec_param.ef_search_))) {
+    } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", EF_SEARCH=%" PRId64 "", old_vec_param.ef_search_))) {
     }
 
     if (OB_FAIL(ret)) {
     } else if (new_vec_param.ef_construction_ != 0 || new_vec_param.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
       // ef_construction is reset
-    } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", EF_CONSTRUCTION=%ld", old_vec_param.ef_construction_))) {
+    } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", EF_CONSTRUCTION=%" PRId64 "", old_vec_param.ef_construction_))) {
     }
     if (OB_FAIL(ret)) {
     } else if (new_vec_param.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
@@ -1152,13 +1153,13 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
         } else if (OB_FAIL(check_extra_info_size(data_table_schema, nullptr, true, new_vec_param.extra_info_max_size_,
                                                  extra_info_actual_size))) {
         } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", EXTRA_INFO_ACTUAL_SIZE=%ld", extra_info_actual_size))) {
+                                           ", EXTRA_INFO_ACTUAL_SIZE=%" PRId64 "", extra_info_actual_size))) {
         }
       }
     } else {
       // extra_info_max_size not change
       if (old_vec_param.extra_info_actual_size_ != 0) {
-        if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", EXTRA_INFO_ACTUAL_SIZE=%ld",
+        if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", EXTRA_INFO_ACTUAL_SIZE=%" PRId64 "",
                                     old_vec_param.extra_info_actual_size_))) {
         }
       }
@@ -2263,7 +2264,7 @@ int ObVectorIndexUtil::update_param_extra_actual_size(const ObTableSchema &data_
         } else if (OB_FALSE_IT(pos = res_len)) {
         } else if (new_extra_info_actual_size > 0 &&
                    OB_FAIL(databuff_printf(new_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", EXTRA_INFO_ACTUAL_SIZE=%ld", new_extra_info_actual_size))) {
+                                           ", EXTRA_INFO_ACTUAL_SIZE=%" PRId64 "", new_extra_info_actual_size))) {
         } else {
           ObString new_index_params;
           new_index_params.assign_ptr(new_params_str, pos);
@@ -3334,22 +3335,22 @@ int ObVectorIndexUtil::check_index_param(
                                                     ", LIB=%.*s", default_lib.length(), default_lib.ptr()))) {
         } else if (!m_is_set && !ivf_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", M=%ld", default_m_value))) {
+                                           ", M=%" PRId64 "", default_m_value))) {
         } else if (!ef_construction_is_set && !ivf_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", EF_CONSTRUCTION=%ld", default_ef_construction_value))) {
+                                           ", EF_CONSTRUCTION=%" PRId64 "", default_ef_construction_value))) {
         } else if (!ef_search_is_set && !ivf_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", EF_SEARCH=%ld", default_ef_search_value))) {
+                                           ", EF_SEARCH=%" PRId64 "", default_ef_search_value))) {
         } else if (!nlist_is_set && !hnsw_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", NLIST=%ld", default_nlist_value))) {
+                                           ", NLIST=%" PRId64 "", default_nlist_value))) {
         } else if (!sample_per_nlist_is_set && !hnsw_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", SAMPLE_PER_NLIST=%ld", default_sample_per_nlist_value))) {
+                                           ", SAMPLE_PER_NLIST=%" PRId64 "", default_sample_per_nlist_value))) {
         } else if (!nbits_is_set && type_ivf_pq_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", NBITS=%ld", default_nbits_value))) {
+                                           ", NBITS=%" PRId64 "", default_nbits_value))) {
         } else if (hnsw_is_set && OB_FAIL(check_extra_info_size(tbl_schema, session_info, extra_info_max_size_is_set,
                                                                 extra_info_max_size, extra_info_actual_size))) {
         } else if (hnsw_is_set && (!is_text_col || type_hybrid_vec_is_set) &&
@@ -3367,12 +3368,12 @@ int ObVectorIndexUtil::check_index_param(
                                                                         0,
                                                                         ObVectorIndexParam::DEFAULT_WINDOW_SIZE))) {
         } else if (hnsw_is_set && extra_info_actual_size > 0 && OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                                          ", EXTRA_INFO_ACTUAL_SIZE=%ld", extra_info_actual_size))) {
+                                                          ", EXTRA_INFO_ACTUAL_SIZE=%" PRId64 "", extra_info_actual_size))) {
         } else if (extra_info_actual_size > 0 && extra_info_max_size <= 0) {
           ret = OB_ERR_UNEXPECTED;
         } else if (!sync_interval_is_set && type_hybrid_vec_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
-                                           ", SYNC_INTERVAL=%lds", sync_interval_value))) {
+                                           ", SYNC_INTERVAL=%" PRId64 "s", sync_interval_value))) {
         } else if (!sync_mode_is_set && hnsw_is_set && !type_hybrid_vec_is_set
                    && tbl_schema.is_heap_organized_table()
                    && OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
@@ -3530,7 +3531,7 @@ int ObVectorIndexUtil::generate_new_index_name(ObIAllocator &allocator, ObString
   } else if (OB_FAIL(databuff_printf(buf,
                                      OB_MAX_TABLE_NAME_LENGTH,
                                      pos,
-                                     "idx_%lu", ObTimeUtility::current_time()))){
+                                     "idx_%" PRIu64 "", ObTimeUtility::current_time()))){
   } else {
     new_index_name.assign_ptr(buf, static_cast<int32_t>(pos));
   }

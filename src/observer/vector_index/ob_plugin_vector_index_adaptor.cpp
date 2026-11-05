@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -700,9 +701,9 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
   }
   if (FAILEDx(databuff_printf(info.statistics_,
                  sizeof(info.statistics_), pos,
-                 "ref_cnt=%ld;",  ATOMIC_LOAD(&ref_cnt_) - 1))) { // delete the virtual table ref
+                 "ref_cnt=%" PRId64 ";",  ATOMIC_LOAD(&ref_cnt_) - 1))) { // delete the virtual table ref
   } else if (OB_FAIL(databuff_printf(info.statistics_,
-             sizeof(info.statistics_), pos, "idle_cnt=%ld;", idle_cnt_))) {
+             sizeof(info.statistics_), pos, "idle_cnt=%" PRId64 ";", idle_cnt_))) {
   } else if (!index_identity_.empty()) {
     ObCStringHelper helper;
     if (OB_FAIL(databuff_printf(
@@ -714,16 +715,16 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
     // do nothing
   } else if (nullptr != incr_data_ && OB_FAIL(databuff_printf(
              info.statistics_, sizeof(info.statistics_), pos,
-             "incr_data.scn=%lu;", incr_data_->scn_.get_val_for_inner_table_field()))) {
+             "incr_data.scn=%" PRIu64 ";", incr_data_->scn_.get_val_for_inner_table_field()))) {
   } else if (nullptr != vbitmap_data_ && OB_FAIL(databuff_printf(
              info.statistics_, sizeof(info.statistics_), pos,
-             "vbitmap_data.scn=%lu;", vbitmap_data_->scn_.get_val_for_inner_table_field()))) {
+             "vbitmap_data.scn=%" PRIu64 ";", vbitmap_data_->scn_.get_val_for_inner_table_field()))) {
   } else if (nullptr != snap_data_ && OB_FAIL(databuff_printf(
              info.statistics_, sizeof(info.statistics_), pos,
-             "snap_data.scn=%lu;", snap_data_->scn_.get_val_for_inner_table_field()))) {
+             "snap_data.scn=%" PRIu64 ";", snap_data_->scn_.get_val_for_inner_table_field()))) {
   } else if (nullptr != all_vsag_use_mem_ && OB_FAIL(databuff_printf(
              info.statistics_, sizeof(info.statistics_), pos,
-             "all_index_mem_used=%lu;", ATOMIC_LOAD(all_vsag_use_mem_)))) {
+             "all_index_mem_used=%" PRIu64 ";", ATOMIC_LOAD(all_vsag_use_mem_)))) {
   } else {
     ObRbMemMgr *mem_mgr = nullptr;
     
@@ -732,21 +733,21 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
       LOG_ERROR("mem_mgr is null");
     } else if (OB_FAIL(databuff_printf(
                info.statistics_, sizeof(info.statistics_), pos,
-               "all_index_bitmap_used=%lu;", mem_mgr->get_vec_idx_used()))) {
+               "all_index_bitmap_used=%" PRIu64 ";", mem_mgr->get_vec_idx_used()))) {
     }
   }
   pos = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(databuff_printf(info.sync_info_, sizeof(info.sync_info_), pos,
-             "incr_cnt=%lu;", follower_sync_statistics_.incr_count_))) {
+             "incr_cnt=%" PRIu64 ";", follower_sync_statistics_.incr_count_))) {
   } else if (OB_FAIL(databuff_printf(info.sync_info_, sizeof(info.sync_info_), pos,
-             "vbitmap_cnt=%lu;", follower_sync_statistics_.vbitmap_count_))) {
+             "vbitmap_cnt=%" PRIu64 ";", follower_sync_statistics_.vbitmap_count_))) {
   } else if (OB_FAIL(databuff_printf(info.sync_info_, sizeof(info.sync_info_), pos,
-             "snap_cnt=%lu;", follower_sync_statistics_.snap_count_))) {
+             "snap_cnt=%" PRIu64 ";", follower_sync_statistics_.snap_count_))) {
   } else if (OB_FAIL(databuff_printf(info.sync_info_, sizeof(info.sync_info_), pos,
-             "sync_total_cnt=%lu;", follower_sync_statistics_.sync_count_))) {
+             "sync_total_cnt=%" PRIu64 ";", follower_sync_statistics_.sync_count_))) {
   } else if (OB_FAIL(databuff_printf(info.sync_info_, sizeof(info.sync_info_), pos,
-             "sync_fail_cnt=%lu;", follower_sync_statistics_.sync_fail_))) {
+             "sync_fail_cnt=%" PRIu64 ";", follower_sync_statistics_.sync_fail_))) {
   }
   return ret;
 }
@@ -1897,7 +1898,7 @@ int ObPluginVectorIndexAdaptor::set_snapshot_key_prefix(uint64_t tablet_id, uint
     char *key_prefix_str = static_cast<char*>(get_allocator()->alloc(max_length));
     if (OB_ISNULL(key_prefix_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(databuff_printf(key_prefix_str, max_length, pos, "%lu_%lu", tablet_id, scn))) {
+    } else if (OB_FAIL(databuff_printf(key_prefix_str, max_length, pos, "%" PRIu64 "_%" PRIu64 "", tablet_id, scn))) {
     } else {
       if(!snapshot_key_prefix_.empty()) {
         allocator_->free(snapshot_key_prefix_.ptr());

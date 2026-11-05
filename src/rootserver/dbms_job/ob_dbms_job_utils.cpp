@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_dbms_job_utils.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_share_util.h"
@@ -257,7 +258,7 @@ int ObDBMSJobUtils::get_dbms_job_info(
   CK (OB_NOT_NULL(sql_proxy_));
   CK (OB_LIKELY(job_id != OB_INVALID_ID));
 
-  OZ (sql.append_fmt("select * from %s where job = %ld", OB_ALL_JOB_TNAME, job_id));
+  OZ (sql.append_fmt("select * from %s where job = %" PRId64 "", OB_ALL_JOB_TNAME, job_id));
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
