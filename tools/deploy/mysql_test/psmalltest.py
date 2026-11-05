@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 psmall_test=[
+'ddl.ddl_identifier_escaping',
 'add',
 'aggr_bug200109',
 'alias2',
