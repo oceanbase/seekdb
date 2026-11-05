@@ -229,36 +229,35 @@ void InternalTableChangeNotifier::mark_all_tables_changed()
   }
 }
 
-int InternalTableChangeWatcher::register_tables(
+int InternalTableChangeWatcher::init_watched_tables(
     const std::initializer_list<uint64_t> table_ids)
 {
   int ret = OB_SUCCESS;
-  if (watched_tables_.count() == 0) {
-    InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
-    if (OB_ISNULL(notifier)) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("internal table change notifier is not initialized", K(ret));
-    } else {
-      for (const uint64_t table_id : table_ids) {
-        if (OB_FAIL(notifier->register_table(table_id))) {
-          LOG_WARN("failed to register table with internal table change notifier",
-                   K(ret), K(table_id));
-        } else {
-          WatchedTable watched_table;
-          watched_table.table_id_ = table_id;
-          if (OB_FAIL(watched_tables_.push_back(watched_table))) {
-            LOG_WARN("failed to save watched table", K(ret), K(table_id));
-          }
-        }
-        if (OB_FAIL(ret)) {
-          break;
+  OB_ASSERT(watched_tables_.count() == 0);
+  InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
+  if (OB_ISNULL(notifier)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("internal table change notifier is not initialized", K(ret));
+  } else {
+    for (const uint64_t table_id : table_ids) {
+      if (OB_FAIL(notifier->register_table(table_id))) {
+        LOG_WARN("failed to register table with internal table change notifier",
+                 K(ret), K(table_id));
+      } else {
+        WatchedTable watched_table;
+        watched_table.table_id_ = table_id;
+        if (OB_FAIL(watched_tables_.push_back(watched_table))) {
+          LOG_WARN("failed to save watched table", K(ret), K(table_id));
         }
       }
+      if (OB_FAIL(ret)) {
+        break;
+      }
     }
-    if (OB_FAIL(ret)) {
-      watched_tables_.reset();
-      target_captured_ = false;
-    }
+  }
+  if (OB_FAIL(ret)) {
+    watched_tables_.reset();
+    target_captured_ = false;
   }
   return ret;
 }

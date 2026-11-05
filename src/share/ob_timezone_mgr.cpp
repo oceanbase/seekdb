@@ -58,7 +58,7 @@ int ObTimezoneMgr::init(ObMySQLProxy &sql_proxy)
   if (OB_FAIL(init_timezone(sql_proxy))) {
   } else if (OB_FAIL(timer_.init("TimezoneMgr", ObMemAttr("TimezoneMgr")))) {
     LOG_WARN("init timezone timer failed", K(ret));
-  } else if (OB_FAIL(table_change_watcher_.register_tables(
+  } else if (OB_FAIL(table_change_watcher_.init_watched_tables(
                  {share::OB_ALL_SYS_STAT_TID,
                   share::OB_ALL_TIME_ZONE_NAME_TID,
                   share::OB_ALL_TIME_ZONE_TRANSITION_TID,

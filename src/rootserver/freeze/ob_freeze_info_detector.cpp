@@ -67,7 +67,7 @@ int ObMajorMergeInfoDetector::init(
     snapshot_gc_scn_renewer_ = &snapshot_gc_scn_renewer;
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
-    } else if (OB_FAIL(table_change_watcher_.register_tables(
+    } else if (OB_FAIL(table_change_watcher_.init_watched_tables(
                    {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID}))) {
       LOG_WARN("register freeze table change tracking failed", KR(ret));
     } else {

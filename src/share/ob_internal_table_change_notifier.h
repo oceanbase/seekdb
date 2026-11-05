@@ -113,8 +113,8 @@ public:
   DISALLOW_COPY_AND_ASSIGN(InternalTableChangeWatcher);
 
   // Must be called during module initialization, before the notifier is sealed.
-  // Registers the watched tables once; subsequent calls are no-ops.
-  int register_tables(std::initializer_list<uint64_t> table_ids);
+  // Calling it while watched_tables_ is non-empty triggers OB_ASSERT.
+  int init_watched_tables(std::initializer_list<uint64_t> table_ids);
 
   // Captures the current target versions and checks GTS visibility. The caller
   // must call mark_refreshed() only after the associated refresh succeeds.

@@ -436,7 +436,7 @@ int ObFreezeInfoMgr::ReloadTask::init() {
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
-  } else if (OB_FAIL(table_change_watcher_.register_tables(
+  } else if (OB_FAIL(table_change_watcher_.init_watched_tables(
                  {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID,
                   OB_ALL_ACQUIRED_SNAPSHOT_TID}))) {
     STORAGE_LOG(WARN, "fail to register freeze table change tracking", K(ret));

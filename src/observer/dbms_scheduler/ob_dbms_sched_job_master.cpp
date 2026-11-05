@@ -60,7 +60,7 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
   } else if (OB_FAIL(table_operator_.init(sql_proxy))) {
   } else if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr("DbmsSched_Job")))) {
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
-  } else if (OB_FAIL(scheduler_job_table_change_watcher_.register_tables(
+  } else if (OB_FAIL(scheduler_job_table_change_watcher_.init_watched_tables(
                  {OB_ALL_SCHEDULER_JOB_TID}))) {
     LOG_WARN("failed to register scheduler job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
