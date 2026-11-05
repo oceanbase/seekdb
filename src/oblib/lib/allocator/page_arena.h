@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_PAGE_ARENA_H_
 
 #include <stdlib.h>
+#include <inttypes.h>
 #include <assert.h>
 #include <string.h>
 #ifndef _WIN32
@@ -1061,7 +1062,7 @@ public:
   ModuleArena &get_arena() { return arena_; }
   int64_t to_string(char *buf, int64_t len) const
   {
-    int64_t printed = snprintf(buf, len, "pages=%ld, used=%ld, total=%ld",
+    int64_t printed = snprintf(buf, len, "pages=%" PRId64 ", used=%" PRId64 ", total=%" PRId64,
         arena_.pages(), arena_.used(), arena_.total());
     return printed < len ? printed : len;
   }

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "utility.h"
+#include <inttypes.h>
 #include "lib/utility/ob_printf.h"
 #include "lib/alloc/alloc_func.h"
 #include "dirent.h"
@@ -765,7 +766,7 @@ const char *time2str(const int64_t time_us, char *buf, const int64_t buf_len, co
       if (pos > 0) {
         // 25 = 1(.) + 6(cur_second_time_u) + 1(' ') + 16(time_us) + 1('\0')
         if (pos <= buf_len - 25) {
-          IGNORE_RETURN snprintf(buf + pos, buf_len - pos, ".%ld %ld", cur_second_time_us, time_us);
+          IGNORE_RETURN snprintf(buf + pos, buf_len - pos, ".%" PRId64 " %" PRId64, cur_second_time_us, time_us);
         }
       } else {
         buf[0] = '\0';

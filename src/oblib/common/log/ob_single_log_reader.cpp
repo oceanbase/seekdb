@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/log/ob_single_log_reader.h"
+#include <inttypes.h>
 #include "common/log/ob_log_dir_scanner.h"
 #include "common/log/ob_log_generator.h"
 
@@ -54,7 +55,7 @@ int ObSingleLogReader::open(const uint64_t file_id, const uint64_t last_log_seq/
     ret = OB_NOT_INIT;
     SHARE_LOG(ERROR, "ObSingleLogReader not init", K(ret));
   } else {
-    int err = snprintf(file_name_, OB_MAX_FILE_NAME_LENGTH, "%s/%lu", log_dir_, file_id);
+    int err = snprintf(file_name_, OB_MAX_FILE_NAME_LENGTH, "%s/%" PRIu64, log_dir_, file_id);
     if (OB_UNLIKELY(err < 0)) {
       ret = OB_ERROR;
       SHARE_LOG(ERROR, "snprintf file name error", K(ret), K(err), KCSTRING(log_dir_), K(file_id),

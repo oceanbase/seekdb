@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/log/ob_log_data_writer.h"
+#include <inttypes.h>
 #include "lib/utility/ob_platform_io.h"
 #ifdef _WIN32
 #include <fcntl.h>
@@ -238,7 +239,7 @@ const char *ObLogDataWriter::select_pool_file(char *buf, const int64_t buf_len)
   } else if (min_file_id_ > min_avail_file_id_
              && min_file_id_ > (min_avail_file_id_ = min_avail_file_id_getter_->get())) {
     SHARE_LOG_RET(WARN, OB_ERROR, "can not select pool_file", K(min_file_id_), K(min_avail_file_id_));
-  } else if ((len = snprintf(buf, buf_len, "%s/%ld", log_dir_, min_file_id_)) < 0
+  } else if ((len = snprintf(buf, buf_len, "%s/%" PRId64, log_dir_, min_file_id_)) < 0
              || len >= buf_len) {
     SHARE_LOG_RET(ERROR, OB_ERROR, "gen fname fail", K(buf_len), KCSTRING(log_dir_), K(min_file_id_));
   } else {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/log/ob_log_cursor.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -77,7 +78,7 @@ int64_t ObLogCursor::get_serialize_size() const
 char *ObLogCursor::to_str() const
 {
   static char buf[512];
-  snprintf(buf, sizeof(buf), "ObLogCursor{file_id=%ld, log_id=%ld, offset=%ld}", file_id_, log_id_,
+  snprintf(buf, sizeof(buf), "ObLogCursor{file_id=%" PRId64 ", log_id=%" PRId64 ", offset=%" PRId64 "}", file_id_, log_id_,
            offset_);
   buf[sizeof(buf) - 1] = 0;
   return buf;

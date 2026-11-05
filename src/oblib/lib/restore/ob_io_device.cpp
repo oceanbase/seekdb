@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "lib/restore/ob_io_device.h"
+#include <inttypes.h>
 
 namespace oceanbase {
 namespace common {
@@ -165,7 +166,7 @@ int ObIODevice::get_device_name(char *buf, int32_t len)
   if (OB_ISNULL(buf) || len <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    snprintf(buf, len, "DeviceType:%d/MediaID:%ld", device_type_, media_id_);
+    snprintf(buf, len, "DeviceType:%d/MediaID:%" PRId64, device_type_, media_id_);
   }
   return ret;
 }
