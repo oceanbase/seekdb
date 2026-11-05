@@ -1,0 +1,136 @@
+# AI VECTOR invalidation, VSAG maintenance, ANN scan, and rollback coverage.
+
+connection default;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py start 19123
+--disable_warnings
+drop database if exists ai_column_p0_vector;
+--enable_warnings
+create database ai_column_p0_vector;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_vector_embed_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_vector_embed');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_vector_embed',
+  '{"type":"dense_embedding","model_name":"mock-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_vector_embed_ep',
+  '{"ai_model_name":"p0_vector_embed","url":"http://127.0.0.1:19123/v1/embeddings","access_key":"p0-vector-key","provider":"openai","request_model_name":"mock-embed"}');
+
+drop table if exists ai_column_p0_vector.docs;
+create table ai_column_p0_vector.docs(
+  id bigint primary key,
+  content varchar(200),
+  emb vector(4) AI COLUMN (
+    AI_EMBED('p0_vector_embed', content)
+  ) WITH (sync_mode='async', max_retries=2)
+);
+insert into ai_column_p0_vector.docs(id, content)
+values (1, 'vec-zero'), (2, 'vec-ten'), (3, 'vec-twenty');
+
+let $retry = 150;
+let $ready = 0;
+while ($retry)
+{
+  let $ready = `select count(*) = 3 from ai_column_p0_vector.docs
+                where emb is not null`;
+  if ($ready == 1)
+  {
+    let $retry = 0;
+  }
+  if ($ready == 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+eval select $ready = 1 as initial_embeddings_ready;
+select id, emb from ai_column_p0_vector.docs order by id;
+create vector index idx_p0_ai_emb on ai_column_p0_vector.docs(emb)
+  with(distance=l2, type=hnsw, lib=vsag, m=10,
+       ef_construction=12, ef_search=40);
+select id, l2_distance(emb, [0,0,0,0]) as distance
+from ai_column_p0_vector.docs
+order by distance approximate limit 3;
+
+start transaction;
+update ai_column_p0_vector.docs set content = 'vec-zero' where id = 2;
+select content = 'vec-zero' and emb is null as vector_hidden_during_regeneration
+from ai_column_p0_vector.docs where id = 2;
+select count(*) = 1 as vector_update_task_created
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs'
+  and task.rowkey_predicate = '`id` = 2';
+select count(*) = 2 and sum(id = 2) = 0 as old_vector_removed_from_ann
+from (
+  select id from ai_column_p0_vector.docs
+  order by l2_distance(emb, [0,0,0,0]) approximate limit 3
+) ann;
+commit;
+
+let $retry = 150;
+let $ready = 0;
+while ($retry)
+{
+  let $ready = `select emb = [0,0,0,0]
+                from ai_column_p0_vector.docs where id = 2`;
+  if ($ready == 1)
+  {
+    let $retry = 0;
+  }
+  if ($ready == 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+eval select $ready = 1 as regenerated_vector_ready;
+select count(*) = 0 as vector_task_removed
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs';
+--replace_regex /__vid_[0-9]+(_[0-9]+)?/__vid_0/g /__type_[0-9]+_[0-9]+/__type_0_0/g
+explain select id from ai_column_p0_vector.docs
+order by l2_distance(emb, [0,0,0,0]) approximate limit 3;
+select count(*) = 2 and sum(id = 1) = 1 and sum(id = 2) = 1
+       as regenerated_vector_visible_to_ann
+from (
+  select id from ai_column_p0_vector.docs
+  order by l2_distance(emb, [0,0,0,0]) approximate limit 2
+) ann;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19123 embedding
+
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py reset 19123
+start transaction;
+update ai_column_p0_vector.docs set content = 'vec-ten' where id = 3;
+select content = 'vec-ten' and emb is null as vector_transaction_sees_invalidation
+from ai_column_p0_vector.docs where id = 3;
+select count(*) = 1 as vector_transaction_sees_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs'
+  and task.rowkey_predicate = '`id` = 3';
+rollback;
+select content = 'vec-twenty' and emb = [20,0,0,0]
+       as vector_rollback_restores_row
+from ai_column_p0_vector.docs where id = 3;
+select count(*) = 0 as vector_rollback_removes_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs';
+--real_sleep 2
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19123 no-requests
+select count(*) = 1 and sum(id = 3) = 1 as rollback_vector_still_visible_to_ann
+from (
+  select id from ai_column_p0_vector.docs
+  order by l2_distance(emb, [20,0,0,0]) approximate limit 1
+) ann;
+
+drop table ai_column_p0_vector.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_vector_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_vector_embed');
+drop database ai_column_p0_vector;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19123

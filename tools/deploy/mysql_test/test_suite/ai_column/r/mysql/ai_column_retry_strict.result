@@ -1,0 +1,131 @@
+drop database if exists ai_column_retry_strict;
+create database ai_column_retry_strict;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('retry_strict_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('retry_strict_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('retry_strict_model',
+'{"type":"completion","model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('retry_strict_ep',
+'{"ai_model_name":"retry_strict_model","url":"http://127.0.0.1:19124/v1/chat/completions","access_key":"retry-key","provider":"openai","request_model_name":"mock-complete"}');
+create table ai_column_retry_strict.docs(
+id bigint primary key,
+category varchar(20),
+status varchar(20),
+content varchar(200),
+result varchar(400) AI COLUMN (
+AI_COMPLETE('retry_strict_model', content)
+) WITH (sync_mode='async', max_retries=0),
+label varchar(400) AI COLUMN (
+AI_COMPLETE('retry_strict_model', concat('Label: ', content))
+) WITH (sync_mode='async', max_retries=0)
+);
+insert into ai_column_retry_strict.docs(id, category, status, content)
+values (1, 'news', 'active', 'row-one'),
+(2, 'sports', 'active', 'row-two'),
+(3, 'news', 'inactive', 'row-three');
+select 1 = 1 as initial_results_ready;
+initial_results_ready
+1
+select @@ai_column_strict_read as strict_read_defaults_off;
+strict_read_defaults_off
+0
+alter table ai_column_retry_strict.docs
+retry ai column result where id in (1, 3);
+set session ai_column_strict_read = off;
+select id,
+result is null as selected_result_invalidated,
+label is not null as other_ai_column_unchanged
+from ai_column_retry_strict.docs order by id;
+id	selected_result_invalidated	other_ai_column_unchanged
+1	1	1
+2	0	1
+3	1	1
+set session ai_column_strict_read = on;
+select id, category from ai_column_retry_strict.docs order by id;
+id	category
+1	news
+2	sports
+3	news
+select count(*) = 3 as ready_label_is_readable
+from ai_column_retry_strict.docs where label is not null;
+ready_label_is_readable
+1
+select result from ai_column_retry_strict.docs where id = 2;
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+select id, result from ai_column_retry_strict.docs order by id;
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+select id from ai_column_retry_strict.docs where result is null;
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+select id from ai_column_retry_strict.docs
+where id in (select id from ai_column_retry_strict.docs where result is null);
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+update ai_column_retry_strict.docs
+set category = category where result is null;
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+delete from ai_column_retry_strict.docs where result is null;
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+set session ai_column_strict_read = off;
+select count(*) = 3 as rejected_writes_leave_rows_unchanged
+from ai_column_retry_strict.docs;
+rejected_writes_leave_rows_unchanged
+1
+select 0 = 0 as failed_task_rows_cleaned;
+failed_task_rows_cleaned
+1
+set session ai_column_strict_read = on;
+select result from ai_column_retry_strict.docs where id = 1;
+ERROR HY000: AI column has unfinished tasks for table_id=<table_id>, column_id=<column_id>
+set session ai_column_strict_read = off;
+alter table ai_column_retry_strict.docs
+retry ai column result
+where status = 'FAILED' and category = 'news';
+alter table ai_column_retry_strict.docs retry ai column result;
+select 1 = 1 as full_retry_ready;
+full_retry_ready
+1
+set session ai_column_strict_read = on;
+select count(*) = 3 as strict_read_succeeds_when_all_ready
+from ai_column_retry_strict.docs where result is not null;
+strict_read_succeeds_when_all_ready
+1
+set session ai_column_strict_read = off;
+alter table ai_column_retry_strict.docs
+retry ai column result where status = 'READY' and id = 999;
+select count(*) = 3 as zero_match_keeps_ready_results
+from ai_column_retry_strict.docs where result is not null;
+zero_match_keeps_ready_results
+1
+select count(*) = 0 as zero_match_creates_no_tasks
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_retry_strict'
+  and t.table_name = 'docs';
+zero_match_creates_no_tasks
+1
+alter table ai_column_retry_strict.docs
+retry ai column result
+where status = 'READY' and category = 'sports';
+select id, result is null as sports_row_retried
+from ai_column_retry_strict.docs order by id;
+id	sports_row_retried
+1	0
+2	1
+3	0
+alter table ai_column_retry_strict.docs retry ai column result;
+alter table ai_column_retry_strict.docs
+retry ai column result where `status` = 'active' and id = 1;
+select id, result is null as physical_status_row_retried
+from ai_column_retry_strict.docs order by id;
+id	physical_status_row_retried
+1	1
+2	0
+3	0
+alter table ai_column_retry_strict.docs retry ai column content where id = 1;
+ERROR 0A000: retrying a column that is not an AI column not supported
+alter table ai_column_retry_strict.docs
+retry ai column result where id = 1, add column extra_col int;
+ERROR 0A000: combining AI COLUMN RETRY with another ALTER action not supported
+drop table ai_column_retry_strict.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('retry_strict_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('retry_strict_model');
+drop database ai_column_retry_strict;
