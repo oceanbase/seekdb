@@ -4,6 +4,25 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "identifier_escape_cases",
+    srcs = ["test_identifier_escape.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_base",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_identifier_escape",
+    size = "small",
+    linkstatic = True,
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [":identifier_escape_cases", "//src/observer:liboceanbase"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+cc_library(
     name = "jemalloc_hook_cases",
     srcs = ["test_jemalloc_hook.cpp"],
     alwayslink = True,
