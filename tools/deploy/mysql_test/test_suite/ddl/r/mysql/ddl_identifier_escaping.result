@@ -1,0 +1,20 @@
+DROP TABLE IF EXISTS ddl_identifier_escaping;
+CREATE TABLE ddl_identifier_escaping (
+id INT PRIMARY KEY,
+`enum``name` ENUM('one', 'two'),
+`set````name` SET('one', 'two')
+);
+INSERT INTO ddl_identifier_escaping VALUES (1, 'one', 'one'), (2, 'two', 'one,two');
+CREATE UNIQUE INDEX idx_enum ON ddl_identifier_escaping (`enum``name`);
+CREATE UNIQUE INDEX idx_set ON ddl_identifier_escaping (`set````name`);
+SELECT id, `enum``name`, `set````name` FROM ddl_identifier_escaping ORDER BY id;
+id	enum`name	set``name
+1	one	one
+2	two	one,two
+SELECT /*+ INDEX(ddl_identifier_escaping idx_enum) */ id FROM ddl_identifier_escaping WHERE `enum``name` = 'two';
+id
+2
+SELECT /*+ INDEX(ddl_identifier_escaping idx_set) */ id FROM ddl_identifier_escaping WHERE `set````name` = 'one,two';
+id
+2
+DROP TABLE ddl_identifier_escaping;
