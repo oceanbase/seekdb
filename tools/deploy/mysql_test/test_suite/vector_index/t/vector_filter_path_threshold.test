@@ -1,0 +1,39 @@
+# Regression for #1511: moderate-selectivity equivalent filters should both
+# use iterative HNSW filtering, while small result sets keep pre-filtering.
+--disable_query_log
+SET @saved_plan_cache = @@ob_enable_plan_cache;
+SET ob_enable_plan_cache = 0;
+--disable_warnings
+DROP TABLE IF EXISTS vector_filter_path_threshold;
+--enable_warnings
+CREATE TABLE vector_filter_path_threshold(id INT PRIMARY KEY, c INT, v VECTOR(3)) ORGANIZATION HEAP;
+INSERT INTO vector_filter_path_threshold VALUES
+  (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),(3,3,'[3,0,0]'),
+  (4,4,'[4,0,0]'),(5,5,'[5,0,0]'),(6,NULL,'[6,0,0]');
+CREATE VECTOR INDEX path_threshold_idx ON vector_filter_path_threshold(v)
+  WITH(distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=128,sync_mode=immediate);
+CALL dbms_stats.gather_table_stats('test','vector_filter_path_threshold',method_opt=>'for all columns size 254');
+
+--echo # Equivalent predicate results
+SELECT id FROM vector_filter_path_threshold WHERE c NOT IN (1,2,3,4) ORDER BY id;
+SELECT id FROM vector_filter_path_threshold WHERE NOT(c = 1) AND NOT(c = 2) AND NOT(c = 3) AND NOT(c = 4) ORDER BY id;
+
+--echo # Small-result strategy
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_filter_path_threshold WHERE c NOT IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $scan_operator = query_get_value("$sql", Query Plan, 3);
+--echo $scan_operator
+
+# Model the million-row issue workload without loading a large fixture.
+CALL dbms_stats.set_table_stats('test','vector_filter_path_threshold',numrows=>1000000);
+--echo # NOT IN strategy
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_filter_path_threshold WHERE c NOT IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $scan_operator = query_get_value("$sql", Query Plan, 3);
+--echo $scan_operator
+--echo # Negated-equality strategy
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_filter_path_threshold WHERE NOT(c = 1) AND NOT(c = 2) AND NOT(c = 3) AND NOT(c = 4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $scan_operator = query_get_value("$sql", Query Plan, 3);
+--echo $scan_operator
+
+DROP TABLE vector_filter_path_threshold;
+SET ob_enable_plan_cache = @saved_plan_cache;
+--enable_query_log

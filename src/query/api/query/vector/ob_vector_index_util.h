@@ -314,7 +314,7 @@ public:
 struct ObVecIdxExtraInfo
 {
 static constexpr double DEFAULT_SELECTIVITY_RATE = 0.3;
-static constexpr double DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY = 0.35;
+static constexpr double DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY = 0.15;
 static constexpr double DEFAULT_PRE_RATE_FILTER_WITH_IDX = 0.15;
 static constexpr double DEFAULT_SINDI_SELECTIVITY_RATE = 0.1;
 static const uint64_t MAX_HNSW_BRUTE_FORCE_SIZE = 20000;

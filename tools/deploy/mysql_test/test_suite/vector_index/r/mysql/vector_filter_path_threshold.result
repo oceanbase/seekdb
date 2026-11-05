@@ -1,0 +1,11 @@
+# Equivalent predicate results
+id
+5
+id
+5
+# Small-result strategy
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
+# NOT IN strategy
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)",
+# Negated-equality strategy
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)",
