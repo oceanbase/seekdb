@@ -397,6 +397,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/utility/ob_easy_string.cpp",
                 "src/oblib/lib/utility/ob_fast_convert.cpp",
                 "src/oblib/lib/utility/ob_hang_fatal_error.cpp",
+                "src/oblib/lib/utility/ob_platform_io.cpp",
                 "src/oblib/lib/utility/ob_platform_utils.cpp",
                 "src/oblib/lib/utility/ob_print_utils.cpp",
                 "src/oblib/lib/utility/ob_serialization_helper.cpp",

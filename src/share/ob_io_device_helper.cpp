@@ -58,6 +58,7 @@
 #include "share/ob_local_device.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/file/file_directory_utils.h"
+#include "lib/utility/ob_platform_io.h"
 #include "lib/utility/ob_smart_call.h"
 
 using namespace oceanbase::common;
@@ -298,11 +299,7 @@ int ObIODeviceLocalFileOp::open(
   if (OB_ISNULL(pathname)) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid pathname, ", K(ret), KP(pathname));
-#ifdef _WIN32
-  } else if ((local_fd = ::open(pathname, flags | _O_BINARY, mode)) < 0) {
-#else
-  } else if ((local_fd = ::open(pathname, flags, mode)) < 0) {
-#endif
+  } else if ((local_fd = ob_open_utf8(pathname, flags, static_cast<int>(mode))) < 0) {
     ret = convert_sys_errno();
     // use DEBUG log level to avoid too many unnecessary logs
   } else {
@@ -701,7 +698,7 @@ int ObIODeviceLocalFileOp::truncate(const char *pathname, const int64_t len)
   } else {
     int sys_ret = 0;
 #ifdef _WIN32
-    int fd = ::open(pathname, O_RDWR | _O_BINARY);
+    int fd = ob_open_utf8(pathname, O_RDWR, 0);
     if (fd < 0) {
       sys_ret = -1;
     } else {
@@ -901,33 +898,7 @@ int ObIODeviceLocalFileOp::pread_impl(
   int64_t read_offset = offset;
   ssize_t sz = 0;
   while (OB_SUCC(ret) && read_sz > 0) {
-#ifdef _WIN32
-    {
-      HANDLE h = (HANDLE)_get_osfhandle(static_cast<int>(fd));
-      if (h == INVALID_HANDLE_VALUE) {
-        sz = -1;
-        errno = EBADF;
-      } else {
-        OVERLAPPED ov = {};
-        ov.Offset = (DWORD)((uint64_t)read_offset & 0xFFFFFFFF);
-        ov.OffsetHigh = (DWORD)((uint64_t)read_offset >> 32);
-        DWORD bytes = 0;
-        if (ReadFile(h, buffer, (DWORD)read_sz, &bytes, &ov)) {
-          sz = (ssize_t)bytes;
-        } else {
-          DWORD err = GetLastError();
-          if (err == ERROR_HANDLE_EOF) {
-            sz = (ssize_t)bytes;
-          } else {
-            sz = -1;
-            errno = EIO;
-          }
-        }
-      }
-    }
-#else
-    sz = ::pread(static_cast<int32_t>(fd), buffer, read_sz, read_offset);
-#endif
+    sz = static_cast<ssize_t>(ob_pread_fd(static_cast<int>(fd), buffer, read_sz, read_offset));
     if (sz < 0) {
       if (EINTR == errno) {
         SHARE_LOG(INFO, "pread is interrupted before any data is read, just retry", K(errno), KERRMSG);
@@ -963,28 +934,7 @@ int ObIODeviceLocalFileOp::pwrite_impl(
   int64_t write_offset = offset;
   ssize_t sz = 0;
   while (OB_SUCC(ret) && write_sz > 0) {
-#ifdef _WIN32
-    {
-      HANDLE h = (HANDLE)_get_osfhandle(static_cast<int>(fd));
-      if (h == INVALID_HANDLE_VALUE) {
-        sz = -1;
-        errno = EBADF;
-      } else {
-        OVERLAPPED ov = {};
-        ov.Offset = (DWORD)((uint64_t)write_offset & 0xFFFFFFFF);
-        ov.OffsetHigh = (DWORD)((uint64_t)write_offset >> 32);
-        DWORD bytes = 0;
-        if (WriteFile(h, buffer, (DWORD)write_sz, &bytes, &ov)) {
-          sz = (ssize_t)bytes;
-        } else {
-          sz = -1;
-          errno = EIO;
-        }
-      }
-    }
-#else
-    sz = ::pwrite(static_cast<int32_t>(fd), buffer, write_sz, write_offset);
-#endif
+    sz = static_cast<ssize_t>(ob_pwrite_fd(static_cast<int>(fd), buffer, write_sz, write_offset));
     if (sz <= 0) {
       // if physical end of medium is reached and there's no space for any byte, EFBIG is set
       // and we think pwrite will never return 0
@@ -1230,11 +1180,8 @@ int ObIODeviceLocalFileOp::open_block_file(
   } else {
     int open_flag = is_exist ? O_DIRECT | O_RDWR | O_LARGEFILE
                           : O_CREAT | O_EXCL | O_DIRECT | O_RDWR | O_LARGEFILE;
-#ifdef _WIN32
-    open_flag |= _O_BINARY;
-#endif
-    if ((block_file_attr.block_fd_ = ::open(block_file_attr.store_path_, open_flag,
-                                            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
+    if ((block_file_attr.block_fd_ = ob_open_utf8(block_file_attr.store_path_, open_flag,
+                                                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
       ret = OB_IO_ERROR;
       SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
     } else {

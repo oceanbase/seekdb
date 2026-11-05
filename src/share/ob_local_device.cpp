@@ -33,6 +33,7 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#include "lib/utility/ob_platform_io.h"
 #include "rust/config.h"
 #ifdef __EMSCRIPTEN__
 #include "lib/file/wasm_file.h"
@@ -132,30 +133,12 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
     struct iocb *iocb = iocbpp[i];
     ssize_t res = 0;
 #ifdef _WIN32
-    HANDLE h = (HANDLE)_get_osfhandle(iocb->aio_fildes);
-    if (h == INVALID_HANDLE_VALUE) {
-      res = -EIO;
-    } else {
-      OVERLAPPED ov = {};
-      ov.Offset = (DWORD)((uint64_t)iocb->aio_offset & 0xFFFFFFFF);
-      ov.OffsetHigh = (DWORD)((uint64_t)iocb->aio_offset >> 32);
-      DWORD bytes = 0;
-      BOOL ok;
-      if (iocb->aio_lio_opcode == 1) {
-        ok = WriteFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
-      } else {
-        ok = ReadFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
-      }
-      if (ok) {
-        res = (ssize_t)bytes;
-      } else {
-        DWORD err = GetLastError();
-        if (err == ERROR_HANDLE_EOF) {
-          res = (ssize_t)bytes;
-        } else {
-          res = -EIO;
-        }
-      }
+    if (iocb->aio_lio_opcode == 1) { // PWRITE
+      res = static_cast<ssize_t>(oceanbase::common::ob_pwrite_fd(
+          iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset));
+    } else if (iocb->aio_lio_opcode == 0) { // PREAD
+      res = static_cast<ssize_t>(oceanbase::common::ob_pread_fd(
+          iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset));
     }
 #else
     if (iocb->aio_lio_opcode == 1) { // PWRITE

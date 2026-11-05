@@ -15,6 +15,7 @@
  */
 
 #include "lib/file/ob_file.h"
+#include "lib/utility/ob_platform_io.h"
 #ifdef __APPLE__
 #include <stdlib.h> // For posix_memalign
 #include <fcntl.h> // For O_DIRECT (if not already defined)
@@ -53,30 +54,6 @@ static inline int ob_fsync(int fd) {
 static inline int fcntl(int, int, ...) {
   return 0;
 }
-static inline int64_t ob_pwrite(int fd, const void *buf, int64_t count, int64_t offset) {
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
-  DWORD written = 0;
-  if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) return -1;
-  return (int64_t)written;
-}
-static inline int64_t ob_pread(int fd, void *buf, int64_t count, int64_t offset) {
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
-  DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) {
-    if (GetLastError() == ERROR_HANDLE_EOF) {
-      errno = 0;
-      return 0;
-    }
-    return -1;
-  }
-  return (int64_t)nread;
-}
 #endif
 
 namespace oceanbase
@@ -85,19 +62,6 @@ namespace common
 {
 namespace FileComponent
 {
-#ifdef _WIN32
-static int open_utf8_path(const char *path, int flags, int mode)
-{
-  wchar_t wide_path[OB_MAX_FILE_NAME_LENGTH];
-  if (0 == MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1,
-                               wide_path, OB_MAX_FILE_NAME_LENGTH)) {
-    errno = EINVAL;
-    return -1;
-  }
-  return ::_wopen(wide_path, flags, mode);
-}
-#endif
-
 template <class T>
 int open(const ObString &fname, const T &file, int &fd)
 {
@@ -122,12 +86,8 @@ int open(const ObString &fname, const T &file, int &fd)
     if (NULL == fname_ptr) {
       _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
-#ifdef _WIN32
-    } else if (-1 == (fd = open_utf8_path(fname_ptr, file.get_open_flags() | _O_BINARY,
-                                         file.get_open_mode()))) {
-#else
-    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags(), file.get_open_mode()))) {
-#endif
+    } else if (-1 == (fd = ob_open_utf8(fname_ptr, file.get_open_flags(),
+                                       file.get_open_mode()))) {
       if (ENOENT == errno) {
         ret = OB_FILE_NOT_EXIST;
       } else if (EEXIST == errno) {
@@ -858,11 +818,8 @@ int64_t unintr_pwrite(const int fd, const void *buf, const int64_t count, const 
   int64_t write_ret = 0;
   while (length2write > 0) {
     for (int64_t retry = 0; retry < 3;) {
-#ifdef _WIN32
-      write_ret = ob_pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
-#else
-      write_ret = ::pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
-#endif
+      write_ret = ob_pwrite_fd(fd, (char *)buf + offset2write, length2write,
+                               offset + offset2write);
       if (0 >= write_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;
@@ -926,11 +883,8 @@ int64_t unintr_pread(const int fd, void *buf, const int64_t count, const int64_t
   int64_t read_ret = 0;
   while (length2read > 0) {
     for (int64_t retry = 0; retry < 3;) {
-#ifdef _WIN32
-      read_ret = ob_pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
-#else
-      read_ret = ::pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
-#endif
+      read_ret = ob_pread_fd(fd, (char *)buf + offset2read, length2read,
+                             offset + offset2read);
       if (0 > read_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;
