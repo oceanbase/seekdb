@@ -21896,8 +21896,8 @@ ObDDLSQLTransaction::~ObDDLSQLTransaction()
   }
 }
 
-int ObDDLService::set_dbms_job_exec_env(const obcall::ObCreateIndexArg &create_index_arg,
-                                        ObTableSchema& vidx_table_schema)
+int ObDDLService::set_vec_index_exec_env(const obcall::ObCreateIndexArg &create_index_arg,
+                                         ObTableSchema& vidx_table_schema)
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(!vidx_table_schema.is_vec_delta_buffer_type())) {

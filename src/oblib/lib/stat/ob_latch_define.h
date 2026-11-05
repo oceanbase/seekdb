@@ -80,8 +80,6 @@ LATCH_DEF(APPLY_STATUS_LOCK, 127, "apply_status latch", LATCH_FIFO, 2000, 0, tru
 LATCH_DEF(ID_SOURCE_LOCK, 128, "ID allocator updates assignable interval lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TABLET_MULTI_SOURCE_DATA_LOCK, 130, "tablet multi source data lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DTL_CHANNEL_MGR_LOCK, 131, "DTL channel mgr wait", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(DBMS_JOB_TASK_LOCK, 134, "dbms_job task lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(DBMS_JOB_MASTER_LOCK, 135, "dbms_job master lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DTL_CHANNEL_LIST_LOCK,136, "dtl channel list lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DTL_CACHED_BUFFER_LIST_LOCK,137, "dtl free buffer list lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(PS_CACHE_EVICT_MUTEX_LOCK, 138, "plan cache evict lock", LATCH_FIFO, 2000, 0, true)

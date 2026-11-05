@@ -1679,33 +1679,6 @@ all_column_usage_def = dict(
 
 def_table_schema(**all_column_usage_def)
 
-def_table_schema(
-  owner = 'linlin.xll',
-  table_name     = '__all_job',
-  table_id       = '1062',
-  table_type     = 'SYSTEM_TABLE',
-  gm_columns     = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('job', 'int', 'false')
-  ],
-  normal_columns = [
-    ('lowner', 'varchar:OB_MAX_DATABASE_NAME_LENGTH', 'false'),
-    ('powner', 'varchar:OB_MAX_DATABASE_NAME_LENGTH', 'false'),
-    ('cowner', 'varchar:OB_MAX_DATABASE_NAME_LENGTH', 'false'),
-    ('last_date', 'timestamp', 'true'),
-    ('this_date', 'timestamp', 'true'),
-    ('next_date', 'timestamp', 'false'),
-    ('total', 'int', 'true', '0'),
-    ('interval#', 'varchar:200', 'false'),
-    ('failures', 'int', 'true', '0'),
-    ('flag', 'int', 'false'),
-    ('what', 'varchar:4000', 'true'),
-    ('nlsenv', 'varchar:4000', 'true'),
-    ('charenv', 'varchar:4000', 'true'),
-    ('scheduler_flags', 'int', 'true', '0'),
-    ('exec_env', 'varchar:OB_MAX_PROC_ENV_LENGTH', 'true')
-                   ]
-  )
 
 
 
@@ -13999,16 +13972,6 @@ def_sys_index_table(
   keywords = all_def_keywords['__all_tablet_to_table'])
 
 
-
-
-
-def_sys_index_table(
-  index_name = 'idx_job_powner',
-  index_table_id = 102028,
-  index_columns = ['powner'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_job'])
 
 
 
