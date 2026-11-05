@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include <inttypes.h>
 #include "ob_expr_json_search.h"
 #include "util/easy_string.h"
 #include "share/ob_json_access_utils.h"
@@ -159,7 +160,7 @@ int ObExprJsonSearch::find_matches(common::ObIAllocator *allocator,
             } else {
               uint64_t reserve_len = i == 0 ? 3 : static_cast<uint64_t>(math_compat::log10(static_cast<double>(i))) + 3;
               char temp_buf[reserve_len + 1];
-              int64_t count = lnprintf(temp_buf, reserve_len + 1, "[%lu]", i);
+              int64_t count = lnprintf(temp_buf, reserve_len + 1, "[%" PRIu64 "]", i);
               if (count < 0) {
                 LOG_WARN("fail to snprintf", K(i), K(count));
               } else if (OB_FAIL(path.append(temp_buf, count))) {

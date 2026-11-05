@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 
+#include <inttypes.h>
 #include "lib/signal/ob_signal_utils.h"
 #include <time.h>
 #ifndef _WIN32
@@ -64,9 +65,9 @@ int64_t safe_parray(char *buf, int64_t len, int64_t *array, int size)
     for (int64_t i = 0; i < size; i++) {
       int64_t addr = get_rel_offset_c(array[i]);
       if (0 == i) {
-        count = lnprintf(buf + pos, len - pos, "0x%lx", addr);
+        count = lnprintf(buf + pos, len - pos, "0x%" PRIx64, addr);
       } else {
-        count = lnprintf(buf + pos, len - pos, " 0x%lx", addr);
+        count = lnprintf(buf + pos, len - pos, " 0x%" PRIx64, addr);
       }
       if (count >= 0 && pos + count < len) {
         pos += count;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #define _GNU_SOURCE 1
+#include <inttypes.h>
 #include "lib/profile/ob_trace_id.h"
 #include "lib/signal/ob_signal_struct.h"
 #ifndef _WIN32
@@ -89,7 +90,7 @@ int install_ob_signal_handler()
 bool g_redirect_handler = false;
 static __thread int g_coredump_num = 0;
 
-#define COMMON_FMT "timestamp=%ld, tid=%ld, tname=%s, trace_id=%s, lbt=%s"
+#define COMMON_FMT "timestamp=%" PRId64 ", tid=%" PRId64 ", tname=%s, trace_id=%s, lbt=%s"
 
 void coredump_cb(int, int, void*, void*);
 void ob_signal_handler(int sig, siginfo_t *si, void *context)
@@ -186,17 +187,17 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
     bt[len++] = '\0';
     char rlimit_core[32] = "unlimited";
     if (UINT64_MAX != g_rlimit_core) {
-      lnprintf(rlimit_core, sizeof(rlimit_core), "%lu", g_rlimit_core);
+      lnprintf(rlimit_core, sizeof(rlimit_core), "%" PRIu64, g_rlimit_core);
     }
     char crash_info[128] = "CRASH ERROR!!!";
     int64_t fatal_error_thread_id = get_fatal_error_thread_id();
     if (-1 != fatal_error_thread_id) {
       lnprintf(crash_info, sizeof(crash_info),
                "Right to Die or Duty to Live's Thread Existed before CRASH ERROR!!!"
-               "ThreadId=%ld,", fatal_error_thread_id);
+               "ThreadId=%" PRId64 ",", fatal_error_thread_id);
     }
     ssize_t print_len = lnprintf(print_buf, sizeof(print_buf),
-                                 "%s IP=%lx, RBP=%lx, sig=%d, sig_code=%d, sig_addr=%p, RLIMIT_CORE=%s, " COMMON_FMT ", ",
+                                 "%s IP=%" PRIx64 ", RBP=%" PRIx64 ", sig=%d, sig_code=%d, sig_addr=%p, RLIMIT_CORE=%s, " COMMON_FMT ", ",
                                   crash_info, ip, bp, sig, sig_code, sig_addr, rlimit_core,
                                   ts, GETTID(), tname, trace_id_buf, bt);
     ObSqlInfo sql_info = ObSqlInfoGuard::get_tl_sql_info();

@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <inttypes.h>
 #ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -162,7 +163,7 @@ char *easy_connection_str(easy_connection_t *c)
     }
 
     easy_connection_get_local_addr(c, &local_eaddr);
-    lnprintf(buffer, 192, "%s_%s_%d_%p tp=%d t=%ld-%ld s=%d r=%d io=%ld/%ld sq=%ld",
+    lnprintf(buffer, 192, "%s_%s_%d_%p tp=%d t=%" PRId64 "-%" PRId64 " s=%d r=%d io=%" PRId64 "/%" PRId64 " sq=%" PRId64,
         easy_inet_addr_to_str(&local_eaddr, local_addr, sizeof(local_addr)),
         easy_inet_addr_to_str(&c->addr, dest_addr, sizeof(dest_addr)), c->fd, c, c->type,
         (int64_t)(1000000LL * c->start_time), (int64_t)(1000000LL * c->last_time),
