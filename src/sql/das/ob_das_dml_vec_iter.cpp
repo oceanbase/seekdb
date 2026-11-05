@@ -676,13 +676,9 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
             ObString embedded_vector;
             if (is_old_row_) {
               obj_arr[embedded_vec_idx].set_null();
-            } else if (das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE
-                       && embedded_vec_idx < das_ctdef_->old_row_projector_.count()
-                       && das_ctdef_->old_row_projector_.at(embedded_vec_idx)
-                           == row_projector->at(embedded_vec_idx)) {
-              // An unchanged generated column shares the old row's stored
-              // datum, which contains the vector fetched from the embedded
-              // auxiliary table rather than text to send to the model.
+            } else if (das_ctdef_->is_embedded_vec_from_old_row_) {
+              // Domain-ID lookup supplied the stored vector. The generated
+              // expression for changed text instead requires embedding.
               obj_arr[embedded_vec_idx].set_string(chunk);
             } else {
               if (OB_FAIL(ObVectorIndexUtil::get_vector_from_text_by_embedding(allocator_, chunk, vec_index_param, embedded_vector))) {
