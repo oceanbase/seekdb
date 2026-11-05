@@ -321,13 +321,13 @@ public:
       // patch exception, TODO, oushen, optimize later
       int64_t ex_idx = 0;
       for (int64_t i = 0; i < 64; i++) {
-        if ((xbitmap1 & (1LU << i)) > 0) {
+        if ((xbitmap1 & (1ULL << i)) > 0) {
           out_arr[i] |= (ex[ex_idx] << b);
           ex_idx++;
         }
       }
       for (int64_t i = 0; i < 64; i++) {
-        if ((xbitmap2 & (1LU << i)) > 0) {
+        if ((xbitmap2 & (1ULL << i)) > 0) {
           out_arr[i + 64] |= (ex[ex_idx] << b);
           ex_idx++;
         }
