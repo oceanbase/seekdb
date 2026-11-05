@@ -662,4 +662,79 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1538: arithmetic with constants on a column must keep the column's range selectivity
+--disable_warnings
+drop table if exists t_issue1538_arith_selectivity;
+--enable_warnings
+create table t_issue1538_arith_selectivity(
+  id bigint not null,
+  embedding vector(3) not null,
+  age int not null,
+  primary key(id),
+  key idx_age(age),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  eval insert into t_issue1538_arith_selectivity values ($row, '[$row,0,0]', $row);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_issue1538_arith_selectivity;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1538_ARITH_SELECTIVITY', numrows=>200000);
+--enable_result_log
+
+# Every filter below keeps the same 89 rows as age > 10, so all of them should take the
+# same ANN path. Each filter has a distinct shape so that plan cache parameterization
+# does not let one of them reuse the plan of another.
+alter system flush plan cache;
+--disable_result_log
+select id from t_issue1538_arith_selectivity where age > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where ((age + 0) + 0) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (age + 2) > (10 + 2)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (age - 2) > 8
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (20 - age) < 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where ((age * 1) * 1) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (age * 2) > 20
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (age * -1) < -10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (age / 2.0) > 5.0
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select p.operator, p.cardinality, s.query_sql
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_arith_selectivity') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by s.query_sql;
+
+# Bounds are not derived when the arithmetic is not monotonic in the column:
+# multiplying by zero, and dividing a constant by the column. They keep the default estimate.
+alter system flush plan cache;
+--disable_result_log
+select id from t_issue1538_arith_selectivity where (age * 0) >= 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity where (1000 / (age + 1)) < 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select p.operator, p.cardinality, s.query_sql
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_arith_selectivity') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by s.query_sql;
+
+drop table t_issue1538_arith_selectivity;
+
 alter system set vector_memory_limit = 0;
