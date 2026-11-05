@@ -273,7 +273,11 @@ impl EventLoop {
                     match event.token() {
                         WAKER => {}
                         #[cfg(feature = "native-network")]
-                        LISTENER => self.accept_all(),
+                        LISTENER => {
+                            if let Err(err) = self.accept_all() {
+                                self.on_accept_failure(err);
+                            }
+                        }
                         #[cfg(all(any(unix, windows), feature = "native-network"))]
                         LOCAL_LISTENER => self.accept_local(),
                         token => {
@@ -451,22 +455,34 @@ impl EventLoop {
     }
 
     #[cfg(feature = "native-network")]
-    pub(crate) fn accept_all(&mut self) {
+    pub(crate) fn accept_all(&mut self) -> std::io::Result<()> {
         loop {
             let listener = match self.listener.as_ref() {
                 Some(listener) => listener,
-                None => return,
+                None => return Ok(()),
             };
             let (sock, _addr) = match listener.accept() {
                 Ok(v) => v,
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(_) => break,
+                // mio rearms the listener when the drain reaches WouldBlock.
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
+                // The pending connection was aborted or reset, or accept was
+                // interrupted.  It is no longer queued, so keep draining.
+                Err(ref e) if is_connection_accept_error(e.kind()) => continue,
+                // A listener error is not a connection error.  Tell the reactor
+                // instead of silently leaving an unrearmed listener behind.
+                Err(err) => return Err(err),
             };
             if sock.set_nodelay(true).is_err() {
                 continue;
             }
             self.distribute(ConnStream::from(sock));
         }
+    }
+
+    #[cfg(feature = "native-network")]
+    fn on_accept_failure(&mut self, err: std::io::Error) {
+        eprintln!("sql-nio: TCP listener accept failed: {err}");
+        self.listener = None;
     }
 
     #[cfg(all(unix, feature = "native-network"))]
@@ -847,6 +863,15 @@ impl EventLoop {
             }
         }
     }
+}
+
+fn is_connection_accept_error(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    )
 }
 
 #[cfg(all(unix, feature = "native-network"))]
@@ -1320,5 +1345,29 @@ pub unsafe fn nio_wait_destroy(reactor: *mut NioReactor) {
     }
     for join in e.joins.drain(..) {
         let _ = join.join();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_connection_accept_error;
+    use std::io::ErrorKind;
+
+    #[test]
+    fn connection_level_accept_errors_keep_draining() {
+        for kind in [
+            ErrorKind::Interrupted,
+            ErrorKind::ConnectionAborted,
+            ErrorKind::ConnectionReset,
+        ] {
+            assert!(is_connection_accept_error(kind), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn readiness_and_listener_errors_are_not_connection_level() {
+        for kind in [ErrorKind::WouldBlock, ErrorKind::PermissionDenied, ErrorKind::Other] {
+            assert!(!is_connection_accept_error(kind), "{kind:?}");
+        }
     }
 }
