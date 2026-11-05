@@ -1,0 +1,16 @@
+# the result of the query is written to a csv file, the file holds a header
+# the file that was written is read back
+id	name	score	day	created	note
+1	Alice	98.5	2026-08-01	2026-08-01 10:11:12	hello,<NL>world
+2	Bob	87	NULL	NULL	plain
+3	Chen	90.25	2026-08-03	2026-08-03 12:13:14	say "hi"
+# the null values are written as the null string of the copy statement and
+# they are read back as null values
+id	day
+1	2026-08-01
+2	NULL
+3	2026-08-03
+# the copy fails when the file already exists
+# the file of a copy whose query fails is removed, the copy can be run again
+row_count
+3

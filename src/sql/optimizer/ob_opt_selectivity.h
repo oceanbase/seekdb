@@ -23,6 +23,7 @@
 #include "common/object/ob_object.h"
 #include "common/ob_range.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
+#include "sql/resolver/dml/ob_file_table_def.h"
 #include "sql/optimizer/ob_opt_default_stat.h"
 #include "sql/optimizer/ob_optimizer_context.h"
 #include "sql/optimizer/ob_dynamic_sampling.h"
@@ -615,6 +616,10 @@ public:
                                  const uint64_t table_id,
                                  const OptSelectivityCtx &ctx,
                                  ObValuesTableDef *table_def);
+  int add_file_table_meta_info(const ObDMLStmt *stmt,
+                               const uint64_t table_id,
+                               const OptSelectivityCtx &ctx,
+                               ObFileTableDef *table_def);
   int get_set_stmt_output_statistics(const ObSelectStmt &stmt,
                                      const OptTableMetas &child_table_metas,
                                      const int64_t idx,

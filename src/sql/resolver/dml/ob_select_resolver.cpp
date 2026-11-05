@@ -1659,6 +1659,21 @@ int ObSelectResolver::expand_target_list(
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(append(column_items, get_stmt()->get_column_items()))) {
     }
+  } else if (table_item.is_file_table()) {
+    // the columns of a file table are the columns that were inferred from the
+    // content of the file
+    if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(get_stmt()->get_column_size() == 0)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const ObIArray<ColumnItem> &all_column_items = get_stmt()->get_column_items();
+      for (int64_t i = 0; OB_SUCC(ret) && i < all_column_items.count(); ++i) {
+        if (all_column_items.at(i).table_id_ == table_item.table_id_) {
+          if (OB_FAIL(column_items.push_back(all_column_items.at(i)))) {
+            LOG_WARN("cannot copy the column item of the file table", K(ret));
+          }
+        }
+      }
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
@@ -3126,6 +3141,11 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
                                            into_item->pl_vars_,
                                            select_stmt))) {
         }
+      } else if (T_INTO_COPY == node->type_) { // copy (select ...) to 'file'
+        if (is_in_set_query()) {
+          ret = OB_INAPPROPRIATE_INTO;
+        } else if (OB_FAIL(resolve_into_copy(node, *into_item))) {
+        }
       } else {
         //do nothing
       }
@@ -3133,6 +3153,140 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
         select_stmt->set_select_into(into_item);
       }
     }
+  }
+  return ret;
+}
+
+/**
+ * @brief Resolve the into clause of a copy statement.
+ *
+ * The copy statement writes the result of the query to a csv file, it uses the
+ * writer of the select ... into outfile statement. The defaults of the csv
+ * writer are the comma, the double quote and the double quote: the double
+ * quote is the escape character of the csv format, the value that holds a
+ * double quote is written twice and it is read back by the csv reader.
+ */
+int ObSelectResolver::resolve_into_copy(const ParseNode *node, ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  const ObCollationType cs_type = params_.session_info_->get_local_collation_connection();
+  into_item.into_type_ = T_INTO_OUTFILE;
+  into_item.is_copy_ = true;
+  into_item.is_optional_ = true;
+  into_item.field_str_.set_varchar(",", 1);
+  into_item.field_str_.set_collation_type(cs_type);
+  into_item.closed_cht_.meta_.set_char();
+  into_item.closed_cht_.set_char_value("\"", 1);
+  into_item.closed_cht_.set_collation_type(cs_type);
+  into_item.escaped_cht_.meta_.set_char();
+  into_item.escaped_cht_.set_char_value("\"", 1);
+  into_item.escaped_cht_.set_collation_type(cs_type);
+  if (OB_ISNULL(node) || 2 != node->num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
+  } else if (OB_FAIL(resolve_into_copy_options(node->children_[1], into_item))) {
+  }
+  return ret;
+}
+
+/**
+ * @brief Resolve the options of a copy statement.
+ *
+ * The options are the options of the csv writer: the format of the file, the
+ * header of the file, the terminator of the fields, the character that
+ * encloses the fields, the character that escapes the fields and the text that
+ * is written for a null value.
+ */
+int ObSelectResolver::resolve_into_copy_options(const ParseNode *node, ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(node)) {
+    // the copy statement has no option
+  } else if (T_LINK_NODE == node->type_ && 2 == node->num_child_) {
+    // the list of the options is a chain of links, the first child is the
+    // previous list and the second child is the option
+    if (OB_FAIL(resolve_into_copy_options(node->children_[0], into_item))) {
+    } else if (OB_FAIL(resolve_into_copy_options(node->children_[1], into_item))) {
+    }
+  } else if (T_COPY_OPTION == node->type_ && node->num_child_ >= 1) {
+    const ParseNode *name_node = node->children_[0];
+    const ParseNode *value_node = (node->num_child_ > 1) ? node->children_[1] : NULL;
+    if (OB_ISNULL(name_node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const ObString name(name_node->str_len_, name_node->str_value_);
+      if (0 == name.case_compare("format")) {
+        // only the csv format is supported
+        if (OB_ISNULL(value_node) || T_IDENT != value_node->type_) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "format");
+        } else {
+          const ObString format(value_node->str_len_, value_node->str_value_);
+          if (0 != format.case_compare("csv")) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "the format option");
+          }
+        }
+      } else if (0 == name.case_compare("header")) {
+        // the header option is a flag, it may hold a boolean value
+        if (OB_ISNULL(value_node)) {
+          into_item.has_header_ = true;
+        } else if (T_BOOL == value_node->type_) {
+          into_item.has_header_ = 0 != value_node->value_;
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "header");
+        }
+      } else if (0 == name.case_compare("nullstr")) {
+        if (OB_ISNULL(value_node) || T_VARCHAR != value_node->type_) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nullstr");
+        } else {
+          into_item.null_str_.assign_ptr(value_node->str_value_, value_node->str_len_);
+        }
+      } else if (0 == name.case_compare("delimiter") || 0 == name.case_compare("sep")) {
+        if (OB_ISNULL(value_node) || T_VARCHAR != value_node->type_
+            || 0 == value_node->str_len_) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "delimiter");
+        } else {
+          into_item.field_str_.set_varchar(value_node->str_value_, value_node->str_len_);
+          into_item.field_str_.set_collation_type(params_.session_info_->get_local_collation_connection());
+        }
+      } else if (0 == name.case_compare("quote")) {
+        if (OB_ISNULL(value_node) || T_VARCHAR != value_node->type_
+            || value_node->str_len_ > 1) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "quote");
+        } else {
+          into_item.closed_cht_.meta_.set_char();
+          into_item.closed_cht_.set_char_value(value_node->str_value_, value_node->str_len_);
+          into_item.closed_cht_.set_collation_type(params_.session_info_->get_local_collation_connection());
+        }
+      } else if (0 == name.case_compare("escape")) {
+        if (OB_ISNULL(value_node) || T_VARCHAR != value_node->type_
+            || value_node->str_len_ > 1) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "escape");
+        } else {
+          into_item.escaped_cht_.meta_.set_char();
+          into_item.escaped_cht_.set_char_value(value_node->str_value_, value_node->str_len_);
+          into_item.escaped_cht_.set_collation_type(params_.session_info_->get_local_collation_connection());
+        }
+      } else {
+        ObSqlString option_name;
+        // the result of the formatting is not assigned to ret, the macro
+        // OB_SUCC would reset the error that is set below
+        const int append_ret = option_name.append_fmt("the option '%s'", name.ptr());
+        ret = OB_NOT_SUPPORTED;
+        if (OB_SUCCESS == append_ret) {
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, option_name.ptr());
+        }
+      }
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid option of the copy statement", K(node->type_), K(node->num_child_));
   }
   return ret;
 }

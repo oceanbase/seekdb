@@ -41,6 +41,10 @@
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/hybrid_search/ob_hybrid_search_executor.h"
+#include "sql/engine/basic/ob_file_scan_utils.h"
+#include "lib/string/ob_sql_string.h"
+
+#include <limits.h>
 
 namespace oceanbase
 {
@@ -2724,6 +2728,11 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
         break;
       }
+      case T_FILE_TABLE_EXPRESSION: {
+        if (OB_FAIL(resolve_file_table_item(*table_node, table_item))) {
+        }
+        break;
+      }
       default:
         /* won't be here */
         ret = OB_ERR_PARSER_SYNTAX;
@@ -3084,6 +3093,10 @@ int ObDMLResolver::resolve_single_table_column_item(const TableItem &table_item,
     if (OB_FAIL(resolve_json_table_column_item(table_item, column_name, col_item))) {
     }
   } else if (table_item.is_values_table()) {
+    if (OB_ISNULL(col_item = stmt->get_column_item(table_item.table_id_, column_name))) {
+      ret = OB_ERR_BAD_FIELD_ERROR;
+    }
+  } else if (table_item.is_file_table()) {
     if (OB_ISNULL(col_item = stmt->get_column_item(table_item.table_id_, column_name))) {
       ret = OB_ERR_BAD_FIELD_ERROR;
     }
@@ -4029,6 +4042,498 @@ int ObDMLResolver::resolve_function_table_item(const ParseNode &parse_tree,
     OZ (resolve_function_table_column_item(*item, col_items));
   }
   OX (tbl_item = item);
+  return ret;
+}
+
+/**
+ * @brief Resolve a file table function, i.e. read_csv(), read_json(),
+ *        read_ndjson(), read_parquet() and glob().
+ *
+ * The function reads a file as if it were a base table: the columns of the
+ * table are inferred from the content of the file. The feature is disabled by
+ * default, the session variable enable_file_sql turns it on.
+ */
+int ObDMLResolver::resolve_file_table_item(const ParseNode &table_node, TableItem *&tbl_item)
+{
+  int ret = OB_SUCCESS;
+  ObDMLStmt *stmt = get_stmt();
+  ObFileScanOptions options;
+  ObString path_str;
+  ObString full_path;
+  ObString alias_name;
+  TableItem *item = NULL;
+  ObFileTableDef *table_def = NULL;
+  common::ObArray<ObFileColumnDef, common::ModulePageAllocator, true> columns;
+  const char *func_name = NULL;
+  // the describe mode is marked in the value of the expression
+  const int64_t format_value = table_node.value_ & ~OB_FILE_TABLE_DESCRIBE_FLAG;
+  const bool is_describe = 0 != (table_node.value_ & OB_FILE_TABLE_DESCRIBE_FLAG);
+
+  if (OB_ISNULL(stmt) || OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
+    ret = OB_NOT_INIT;
+  } else if (T_FILE_TABLE_EXPRESSION != table_node.type_ || 3 != table_node.num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid file table expression", K(table_node.type_), K(table_node.num_child_));
+  } else {
+    switch (format_value) {
+      case static_cast<int64_t>(ObFileScanFormat::CSV):
+        func_name = "read_csv";
+        break;
+      case static_cast<int64_t>(ObFileScanFormat::JSON):
+        func_name = "read_json";
+        break;
+      case static_cast<int64_t>(ObFileScanFormat::PARQUET):
+        func_name = "read_parquet";
+        break;
+      case static_cast<int64_t>(ObFileScanFormat::GLOB):
+        func_name = "glob";
+        break;
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unknown file table function", K(table_node.value_));
+        break;
+    }
+  }
+
+  // the feature is disabled by default, the session variable turns it on
+  bool enable_file_sql = false;
+  if (OB_SUCC(ret) && OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL,
+                                                                enable_file_sql))) {
+    LOG_WARN("cannot read the enable_file_sql variable", K(ret));
+  } else if (OB_SUCC(ret) && !enable_file_sql) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, func_name);
+  }
+
+  // the path of the file is the first argument of the function
+  if (OB_SUCC(ret) && OB_FAIL(resolve_str_const(*table_node.children_[0], path_str))) {
+    LOG_WARN("cannot resolve the path of the file table function", K(ret));
+  } else if (OB_SUCC(ret) && path_str.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the path of the file table function");
+  }
+
+  // the other arguments are the named options of the reader
+  options.format_ = static_cast<ObFileScanFormat>(format_value);
+  if (OB_SUCC(ret) && OB_FAIL(resolve_file_table_options(table_node.children_[1], options))) {
+    LOG_WARN("cannot resolve the options of the file table function", K(ret));
+  }
+
+  // only the sample size that scans the whole file is supported
+  if (OB_SUCC(ret) && -1 != options.sample_size_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "the sample_size option");
+  }
+
+  // the path must be inside the directory that secure_file_priv allows
+  if (OB_SUCC(ret) && OB_FAIL(resolve_file_table_full_path(path_str, full_path))) {
+    LOG_USER_ERROR(OB_FILE_NOT_EXIST);
+  } else if (OB_SUCC(ret) && OB_FAIL(check_file_table_secure_path(full_path))) {
+    LOG_WARN("the path of the file table function is not allowed", K(ret), K(full_path));
+  } else if (OB_SUCC(ret) && !ObFileScanUtils::is_supported_extension(options.format_, full_path)) {
+    // the extension of the file must be the one of the format that reads it
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "the extension of the file");
+    LOG_WARN("the file does not have the extension of the format that reads it",
+             K(ret), K(full_path), K(format_value));
+  } else if (OB_SUCC(ret)) {
+    options.path_ = full_path;
+  }
+
+  // the columns of the table are inferred from the content of the file
+  int64_t row_cnt = 0;
+  if (OB_SUCC(ret)) {
+    if (is_describe) {
+      // the table describes the columns of the file, the columns of the file
+      // are inferred when the statement runs
+    } else if (OB_FAIL(ObFileScanUtils::infer_schema(options, *allocator_, columns, &row_cnt))) {
+      LOG_WARN("cannot infer the schema of the file", K(ret), K(options.path_));
+    }
+  }
+
+  // the size and the modification time of the file are recorded, the operator
+  // checks that the file did not change when it opens it
+  if (OB_SUCC(ret) && ObFileScanFormat::GLOB != options.format_) {
+    if (OB_FAIL(ObFileScanUtils::stat_file(options.path_, options.file_size_, options.file_mtime_))) {
+      LOG_WARN("cannot stat the file", K(ret), K(options.path_));
+      ret = OB_SUCCESS;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    void *buf = NULL;
+    if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObFileTableDef)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      table_def = new (buf) ObFileTableDef();
+      table_def->options_ = options;
+      table_def->describe_ = is_describe;
+      if (is_describe) {
+        // the columns of the table are the description of the columns of the
+        // file, the columns of the file itself are inferred when the
+        // statement runs
+        table_def->row_cnt_ = 1;
+        for (int64_t i = 0; OB_SUCC(ret) && i < 6; ++i) {
+          ObFileColumnDef column;
+          column.type_ = common::ObVarcharType;
+          column.nullable_ = true;
+          const char *name = OB_FILE_TABLE_DESCRIBE_COLUMNS[i];
+          if (OB_FAIL(ob_file_copy_string(common::ObString(strlen(name), name),
+                                          *allocator_, column.name_))) {
+            LOG_WARN("cannot copy the name of the description column", K(ret));
+          } else if (OB_FAIL(table_def->columns_.push_back(column))) {
+            LOG_WARN("cannot add the description column of the file table", K(ret));
+          }
+        }
+      } else if (OB_FAIL(table_def->columns_.assign(columns))) {
+        LOG_WARN("cannot copy the columns of the file table", K(ret));
+      } else {
+        // the number of the rows is the number of the records of the file, it
+        // is the estimated cardinality of the table
+        table_def->row_cnt_ = row_cnt > 0 ? row_cnt : 1;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    ParseNode *alias_node = table_node.children_[2];
+    if (OB_ISNULL(item = stmt->create_table_item(*allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_NOT_NULL(alias_node)) {
+      alias_name.assign_ptr(alias_node->str_value_, alias_node->str_len_);
+    } else if (OB_FAIL(stmt->generate_file_table_name(*allocator_, alias_name))) {
+      LOG_WARN("cannot generate the name of the file table", K(ret));
+    }
+    OX (item->table_name_ = alias_name);
+    OX (item->alias_name_ = alias_name);
+    OX (item->table_id_ = generate_table_id());
+    OX (item->type_ = TableItem::FILE_TABLE);
+    OX (item->file_table_def_ = table_def);
+    OX (tbl_item = item);
+    OZ (stmt->add_table_item(session_info_, item));
+  }
+
+  if (OB_SUCC(ret) && OB_FAIL(gen_file_table_column_items(*table_def, *item))) {
+    LOG_WARN("cannot generate the column items of the file table", K(ret));
+  }
+
+  // the schema of a file table is inferred from the content of the file, it is
+  // not stable, the plan of such a query must not be cached
+  if (OB_SUCC(ret)) {
+    ObQueryCtx *query_ctx = stmt->get_query_ctx();
+    if (OB_NOT_NULL(query_ctx)) {
+      ObGlobalHint &global_hint =
+          const_cast<ObGlobalHint&>(query_ctx->get_query_hint_for_update().get_global_hint());
+      global_hint.merge_plan_cache_hint(OB_USE_PLAN_CACHE_NONE);
+    }
+  }
+
+  return ret;
+}
+
+/**
+ * @brief Resolve the named options of a file table function.
+ *
+ * The options are the second and the following arguments of the function, they
+ * are always named, a positional argument is a syntax error.
+ */
+int ObDMLResolver::resolve_file_table_options(const ParseNode *option_node,
+                                              ObFileScanOptions &options)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(option_node)) {
+    // the function has no option
+  } else if (T_FILE_TABLE_OPTION == option_node->type_ && 2 == option_node->num_child_) {
+    const ParseNode *name_node = option_node->children_[0];
+    const ParseNode *value_node = option_node->children_[1];
+    if (OB_ISNULL(name_node) || OB_ISNULL(value_node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObString name(name_node->str_len_, name_node->str_value_);
+      ObString str_value;
+      int64_t int_value = 0;
+      bool is_bool_value = false;
+      bool is_str_value = false;
+      if (OB_FAIL(resolve_file_table_option_value(*value_node, str_value, int_value,
+                                                 is_bool_value, is_str_value))) {
+        LOG_WARN("cannot resolve the value of the option", K(ret), K(name));
+      } else if (0 == name.case_compare("header")) {
+        if (!is_bool_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "header");
+        } else {
+          options.header_ = is_bool_value && 0 != int_value;
+        }
+      } else if (0 == name.case_compare("sample_size")) {
+        options.sample_size_ = int_value;
+      } else if (0 == name.case_compare("format")) {
+        // the format option names the format of the file, it must agree with
+        // the format of the function that reads it
+        if (!is_str_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "format");
+        } else if (!ob_file_is_supported_format(options.format_, str_value)) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the format option");
+        } else {
+          options.json_format_ = str_value;
+        }
+      } else if (0 == name.case_compare("delimiter")) {
+        if (!is_str_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "delimiter");
+        } else {
+          options.delimiter_ = str_value;
+        }
+      } else if (0 == name.case_compare("quote")) {
+        if (!is_str_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "quote");
+        } else {
+          options.quote_ = str_value;
+        }
+      } else if (0 == name.case_compare("escape")) {
+        if (!is_str_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "escape");
+        } else {
+          options.escape_ = str_value;
+        }
+      } else if (0 == name.case_compare("nullstr")) {
+        if (!is_str_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nullstr");
+        } else {
+          options.null_str_ = str_value;
+        }
+      } else if (0 == name.case_compare("union_by_name")) {
+        if (!is_bool_value) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "union_by_name");
+        } else {
+          options.union_by_name_ = 0 != int_value;
+        }
+      } else {
+        ObSqlString option_name;
+        // the result of the formatting is not assigned to ret, the macro
+        // OB_SUCC would reset the error that is set below
+        const int append_ret = option_name.append_fmt("the option '%s'", name.ptr());
+        ret = OB_NOT_SUPPORTED;
+        if (OB_SUCCESS == append_ret) {
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, option_name.ptr());
+        }
+      }
+    }
+  } else if (T_LINK_NODE == option_node->type_ && 2 == option_node->num_child_) {
+    // the list of the options is a chain of links, the first child is the
+    // previous list and the second child is the option
+    if (OB_FAIL(resolve_file_table_options(option_node->children_[0], options))) {
+    } else if (OB_FAIL(resolve_file_table_options(option_node->children_[1], options))) {
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid option of the file table function", K(option_node->type_),
+             K(option_node->num_child_));
+  }
+  return ret;
+}
+
+/**
+ * @brief Resolve the value of an option of a file table function.
+ *
+ * The value of an option is a constant, it is either a string, an integer or
+ * a boolean.
+ */
+int ObDMLResolver::resolve_file_table_option_value(const ParseNode &value_node,
+                                                   ObString &str_value,
+                                                   int64_t &int_value,
+                                                   bool &is_bool_value,
+                                                   bool &is_str_value)
+{
+  int ret = OB_SUCCESS;
+  is_bool_value = false;
+  is_str_value = false;
+  int_value = 0;
+  if (T_VARCHAR == value_node.type_) {
+    is_str_value = true;
+    str_value.assign_ptr(value_node.str_value_, value_node.str_len_);
+  } else if (T_BOOL == value_node.type_) {
+    is_bool_value = true;
+    int_value = value_node.value_;
+  } else if (T_INT == value_node.type_) {
+    int_value = value_node.value_;
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the value of the option");
+  }
+  return ret;
+}
+
+/**
+ * @brief Resolve the absolute path of the file of a file table function.
+ *
+ * The path of a file that does not exist cannot be resolved, the path of a
+ * pattern is resolved as the path of the directory that holds the pattern.
+ */
+int ObDMLResolver::resolve_file_table_full_path(const ObString &path, ObString &full_path)
+{
+  int ret = OB_SUCCESS;
+  char *path_buf = NULL;
+  char *resolved_buf = NULL;
+  const int64_t path_len = path.length();
+  if (OB_ISNULL(path_buf = static_cast<char *>(allocator_->alloc(path_len + 1)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(resolved_buf = static_cast<char *>(allocator_->alloc(PATH_MAX)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    MEMCPY(path_buf, path.ptr(), path_len);
+    path_buf[path_len] = '\0';
+    // find the first wildcard of the path, the path of a pattern is resolved
+    // with the directory that holds the pattern
+    int64_t dir_len = path_len;
+    bool has_wildcard = false;
+    for (int64_t i = 0; i < path_len; ++i) {
+      if ('*' == path_buf[i] || '?' == path_buf[i] || '[' == path_buf[i]) {
+        has_wildcard = true;
+        dir_len = 0;
+        for (int64_t j = i; j >= 0; --j) {
+          if ('/' == path_buf[j]) {
+            dir_len = j;
+            break;
+          }
+        }
+        break;
+      }
+    }
+    char *resolved = NULL;
+    if (has_wildcard) {
+      // the directory that holds the pattern must exist
+      char *dir_buf = NULL;
+      if (OB_ISNULL(dir_buf = static_cast<char *>(allocator_->alloc(dir_len + 1)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        MEMCPY(dir_buf, path_buf, dir_len);
+        dir_buf[dir_len] = '\0';
+        if (dir_len <= 0) {
+          dir_buf[0] = '.';
+          dir_buf[1] = '\0';
+        }
+        if (OB_ISNULL(resolved = ::realpath(dir_buf, resolved_buf))) {
+          ret = OB_FILE_NOT_EXIST;
+          LOG_WARN("cannot resolve the directory of the pattern", K(ret), K(path));
+        }
+      }
+    } else if (OB_ISNULL(resolved = ::realpath(path_buf, resolved_buf))) {
+      ret = OB_FILE_NOT_EXIST;
+      LOG_WARN("cannot resolve the path of the file", K(ret), K(path));
+    }
+    if (OB_SUCC(ret)) {
+      if (has_wildcard) {
+        ObSqlString sql_str;
+        if (OB_FAIL(sql_str.append_fmt("%s/%s", resolved, path_buf + dir_len + 1))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          // the text of the sql string is allocated in its own buffer, the path
+          // is copied into the memory of the resolver
+          if (OB_FAIL(ob_file_copy_string(sql_str.string(), *allocator_, full_path))) {
+            LOG_WARN("cannot copy the path of the pattern", K(ret));
+          }
+        }
+      } else {
+        full_path.assign_ptr(resolved, strlen(resolved));
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+ * @brief Check that the path of a file table function is inside the directory
+ *        that secure_file_priv allows.
+ */
+int ObDMLResolver::check_file_table_secure_path(const ObString &full_path)
+{
+  int ret = OB_SUCCESS;
+  if (session_info_->is_inner()) {
+    // the internal sessions are trusted
+  } else {
+    ObString secure_file_priv;
+    if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
+      LOG_WARN("cannot read the secure_file_priv variable", K(ret));
+    } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path))) {
+      if (OB_ERR_NO_PRIVILEGE == ret) {
+        ret = OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
+      }
+      LOG_WARN("the path is not allowed by secure_file_priv", K(ret), K(full_path));
+    }
+  }
+  return ret;
+}
+
+/**
+ * @brief Generate the column items of a file table.
+ *
+ * Every column of the file becomes a column of the table, the type of the
+ * column is the type that was inferred from the content of the file.
+ */
+int ObDMLResolver::gen_file_table_column_items(const ObFileTableDef &table_def,
+                                               TableItem &table_item)
+{
+  int ret = OB_SUCCESS;
+  const common::ObIArray<ObFileColumnDef> &columns = table_def.columns_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
+    const ObFileColumnDef &column = columns.at(i);
+    ObColumnRefRawExpr *column_expr = NULL;
+    if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_REF_COLUMN, column_expr))) {
+    } else if (OB_ISNULL(column_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObRawExprResType res_type;
+      common::ObDataType data_type;
+      // a column whose values are all NULL is a text column, the values of the
+      // column are NULL anyway
+      const common::ObObjType column_type = (common::ObNullType == column.type_)
+                                            ? common::ObVarcharType
+                                            : column.type_;
+      data_type.set_obj_type(column_type);
+      if (ob_is_string_type(column_type)) {
+        // the collation of a column of a file table is the collation of the
+        // text of the file, the length of the column is the length of its
+        // longest value
+        data_type.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+        data_type.set_collation_level(CS_LEVEL_IMPLICIT);
+        data_type.set_length(column.max_len_ > 0
+                               ? column.max_len_
+                               : OB_FILE_TABLE_DEFAULT_STRING_LENGTH);
+        data_type.set_length_semantics(LS_BYTE);
+        data_type.set_scale(0);
+      } else {
+        data_type.set_collation_type(CS_TYPE_BINARY);
+        data_type.set_accuracy(common::ObAccuracy::DDL_DEFAULT_ACCURACY[column_type]);
+        if (common::ObDateTimeType == column_type) {
+          // the scale of a datetime column is the number of the fractional
+          // digits of its values
+          data_type.set_scale(column.scale_);
+        }
+      }
+      res_type.set_meta(data_type.get_meta_type());
+      res_type.set_accuracy(data_type.get_accuracy());
+      column_expr->set_result_type(res_type);
+      column_expr->set_ref_id(table_item.table_id_, i + OB_APP_MIN_COLUMN_ID);
+      column_expr->set_column_attr(table_item.table_name_, column.name_);
+      if (OB_FAIL(column_expr->add_flag(IS_COLUMN))) {
+      } else {
+        ColumnItem column_item;
+        column_item.expr_ = column_expr;
+        column_item.table_id_ = column_expr->get_table_id();
+        column_item.column_id_ = column_expr->get_column_id();
+        column_item.column_name_ = column_expr->get_column_name();
+        if (OB_FAIL(get_stmt()->add_column_item(column_item))) {
+          LOG_WARN("cannot add the column item of the file table", K(ret));
+        }
+      }
+    }
+  }
   return ret;
 }
 

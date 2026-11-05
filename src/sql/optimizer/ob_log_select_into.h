@@ -44,7 +44,10 @@ public:
         escaped_cht_(),
         cs_type_(CS_TYPE_INVALID),
         is_overwrite_(false),
-        external_properties_()
+        external_properties_(),
+        is_copy_(false),
+        has_header_(false),
+        null_str_()
   {
   }
   virtual ~ObLogSelectInto() {}
@@ -108,6 +111,18 @@ public:
   {
     external_properties_.assign_ptr(external_properties.ptr(), external_properties.length());
   }
+  inline void set_is_copy(bool is_copy)
+  {
+    is_copy_ = is_copy;
+  }
+  inline void set_has_header(bool has_header)
+  {
+    has_header_ = has_header;
+  }
+  inline void set_null_str(const common::ObString &null_str)
+  {
+    null_str_ = null_str;
+  }
   inline ObItemType get_into_type() const
   {
     return into_type_;
@@ -164,8 +179,24 @@ public:
   {
     return external_properties_;
   }
+  inline bool get_is_copy() const
+  {
+    return is_copy_;
+  }
+  inline bool get_has_header() const
+  {
+    return has_header_;
+  }
+  inline common::ObString get_null_str() const
+  {
+    return null_str_;
+  }
   const common::ObIArray<ObRawExpr*> &get_select_exprs() const { return select_exprs_; }
   common::ObIArray<ObRawExpr*> &get_select_exprs() { return select_exprs_; }
+  // the names of the columns of the query, they are written in the first line
+  // of the file when the statement is a copy statement
+  const common::ObIArray<common::ObString> &get_select_expr_names() const { return select_expr_names_; }
+  common::ObIArray<common::ObString> &get_select_expr_names() { return select_expr_names_; }
   virtual int est_cost() override;
   virtual int compute_plan_type() override;
   virtual int get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) override;
@@ -188,6 +219,13 @@ private:
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   common::ObString external_properties_;
+  // the statement is a copy statement, it writes the result of the query to a file
+  bool is_copy_;
+  // the file holds the names of the columns in its first line
+  bool has_header_;
+  // the text that is written for a null value
+  common::ObString null_str_;
+  common::ObSEArray<common::ObString, 16, common::ModulePageAllocator, true> select_expr_names_;
 };
 }
 }

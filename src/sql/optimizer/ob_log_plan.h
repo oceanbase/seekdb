@@ -86,6 +86,8 @@ class ObExchangeInfo;
 class ObDmlTableInfo;
 struct IndexDMLInfo;
 class ValuesTablePath;
+class FileTablePath;
+class ObLogFileTable;
 class ObSelectLogPlan;
 class ObThreeStageAggrInfo;
 struct ObTextRetrievalInfo;
@@ -578,6 +580,9 @@ public:
 
   int allocate_values_table_path(ValuesTablePath *values_table_path,
                                  ObLogicalOperator *&out_access_path_op);
+
+  int allocate_file_table_path(FileTablePath *file_table_path,
+                               ObLogicalOperator *&out_access_path_op);
 
   int allocate_json_table_path(JsonTablePath *json_table_path,
                                    ObLogicalOperator *&out_access_path_op);
@@ -1777,6 +1782,8 @@ public:
                                  ObLogExprValues *&out_access_path_op);
   int do_alloc_values_table_path(ValuesTablePath *values_table_path,
                                  ObLogValuesTableAccess *&out_access_path_op);
+  int do_alloc_file_table_path(FileTablePath *file_table_path,
+                               ObLogFileTable *&out_access_path_op);
   inline ObRawExprReplacer &gen_col_replacer() { return gen_col_replacer_; }
 private:
   static const int64_t IDP_PATHNUM_THRESHOLD = 5000;

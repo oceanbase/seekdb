@@ -44,6 +44,7 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_explain_note.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
+#include "sql/optimizer/ob_log_file_table.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/optimizer/ob_log_expand.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -3519,6 +3520,10 @@ int ObLogPlan::create_plan_tree_from_path(Path *path,
       ValuesTablePath *values_table_path = static_cast<ValuesTablePath *>(path);
       if (OB_FAIL(allocate_values_table_path(values_table_path, op))) {
       } else { /* Do nothing */ }
+    } else if (path->is_file_table_path()) {
+      FileTablePath *file_table_path = static_cast<FileTablePath *>(path);
+      if (OB_FAIL(allocate_file_table_path(file_table_path, op))) {
+      } else { /* Do nothing */ }
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected path type");
@@ -6830,6 +6835,21 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
       select_into->set_escaped_cht(into_item->escaped_cht_);
       select_into->set_cs_type(into_item->cs_type_);
       select_into->set_external_properties(into_item->external_properties_);
+      select_into->set_is_copy(into_item->is_copy_);
+      select_into->set_has_header(into_item->has_header_);
+      select_into->set_null_str(into_item->null_str_);
+      // the names of the columns of the query are written in the first line of
+      // the file when the statement is a copy statement
+      const common::ObIArray<SelectItem> &select_items = stmt->get_select_items();
+      for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
+        const SelectItem &select_item = select_items.at(i);
+        const common::ObString &name = select_item.is_real_alias_
+                                       ? select_item.alias_name_
+                                       : select_item.expr_name_;
+        if (OB_FAIL(select_into->get_select_expr_names().push_back(name))) {
+          LOG_WARN("cannot add the name of the column of the copy statement", K(ret), K(i));
+        }
+      }
       select_into->set_child(ObLogicalOperator::first_child, old_top);
       // compute property
       if (OB_FAIL(select_into->compute_property())) {
@@ -11861,6 +11881,51 @@ int ObLogPlan::do_alloc_values_table_path(ValuesTablePath *values_table_path,
     } else if (OB_FAIL(values_op->get_column_exprs().assign(column_exprs))) {
     } else if (OB_FAIL(append(values_op->get_filter_exprs(), values_table_path->filter_))) {
     } else if (OB_FAIL(values_op->compute_property(values_table_path))) {
+    }
+  }
+  return ret;
+}
+
+int ObLogPlan::allocate_file_table_path(FileTablePath *file_table_path,
+                                        ObLogicalOperator *&out_access_path_op)
+{
+  int ret = OB_SUCCESS;
+  ObLogFileTable *file_op = NULL;
+  if (OB_FAIL(do_alloc_file_table_path(file_table_path, file_op))) {
+  } else {
+    out_access_path_op = file_op;
+  }
+  return ret;
+}
+
+int ObLogPlan::do_alloc_file_table_path(FileTablePath *file_table_path,
+                                        ObLogFileTable *&file_op)
+{
+  int ret = OB_SUCCESS;
+  TableItem *table_item = NULL;
+  ObFileTableDef *table_def = NULL;
+  if (OB_ISNULL(file_table_path) || OB_ISNULL(get_stmt()) ||
+      OB_ISNULL(table_item = get_stmt()->get_table_item_by_id(file_table_path->table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_UNLIKELY(!table_item->is_file_table()) ||
+             OB_ISNULL(table_def = file_table_path->table_def_) ||
+             OB_UNLIKELY(0 == table_def->columns_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(file_op = static_cast<ObLogFileTable*>(get_log_op_factory().
+                                   allocate(*this, LOG_FILE_TABLE)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    file_op->set_table_name(table_item->get_table_name());
+    file_op->set_table_id(file_table_path->table_id_);
+    file_op->set_file_table_def(table_def);
+    file_op->set_file_path(file_table_path);
+    ObSEArray<ObColumnRefRawExpr *, 4> column_exprs;
+    if (OB_FAIL(get_stmt()->get_column_exprs(file_table_path->table_id_, column_exprs))) {
+    } else if (OB_UNLIKELY(column_exprs.count() != table_def->columns_.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(file_op->get_column_exprs().assign(column_exprs))) {
+    } else if (OB_FAIL(append(file_op->get_filter_exprs(), file_table_path->filter_))) {
+    } else if (OB_FAIL(file_op->compute_property(file_table_path))) {
     }
   }
   return ret;

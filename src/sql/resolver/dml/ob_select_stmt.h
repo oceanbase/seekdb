@@ -128,7 +128,10 @@ struct ObSelectIntoItem
         max_file_size_(DEFAULT_MAX_FILE_SIZE),
         escaped_cht_(),
         buffer_size_(DEFAULT_BUFFER_SIZE),
-        external_properties_()
+        external_properties_(),
+        is_copy_(false),
+        has_header_(false),
+        null_str_()
   {
     field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
     field_str_.set_collation_type(ObCharset::get_system_collation());
@@ -155,6 +158,9 @@ struct ObSelectIntoItem
     cs_type_ = other.cs_type_;
     buffer_size_ = other.buffer_size_;
     external_properties_ = other.external_properties_;
+    is_copy_ = other.is_copy_;
+    has_header_ = other.has_header_;
+    null_str_ = other.null_str_;
     return user_vars_.assign(other.user_vars_);
   }
   int deep_copy(ObIAllocator &allocator,
@@ -171,7 +177,10 @@ struct ObSelectIntoItem
                K_(escaped_cht),
                K_(cs_type),
                K_(buffer_size),
-               K_(external_properties));
+               K_(external_properties),
+               K_(is_copy),
+               K_(has_header),
+               K_(null_str));
   ObItemType into_type_;
   common::ObObj outfile_name_;
   common::ObObj field_str_; // field terminated str
@@ -186,6 +195,12 @@ struct ObSelectIntoItem
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
   common::ObString external_properties_;
+  // the statement is a copy statement, it writes the result of the query to a file
+  bool is_copy_;
+  // the file holds the names of the columns in its first line
+  bool has_header_;
+  // the text that is written for a null value
+  common::ObString null_str_;
 
   static const char* const DEFAULT_FIELD_TERM_STR;
   static const char* const DEFAULT_LINE_TERM_STR;

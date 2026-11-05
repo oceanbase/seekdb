@@ -1,0 +1,53 @@
+# owner: database-competition
+# owner group: SQL
+# description: The inference of the types of the columns and the malformed files.
+# tags: sql,executor,file_sql
+
+--source mysql_test/test_suite/file_sql/include/copy_file_sql_types_data.inc
+
+--disable_query_log
+let $FILE_SQL_TYPES_DIR = $OBSERVER_DIR/data_for_mysqltest_file_sql_types;
+--enable_query_log
+
+set session enable_file_sql = ON;
+
+--echo # the type of a column is inferred from all the values of the file, the
+--echo # integer column is widened to bigint, the column of the mixed numbers is
+--echo # widened to double and the column that holds only nulls keeps the null type
+eval describe select * from read_csv('$FILE_SQL_TYPES_DIR/types.csv');
+
+--echo # the values of the file are returned, the boundary values are not lost
+eval select id, big, small, flag, ratio, day, ts, empty, note
+       from read_csv('$FILE_SQL_TYPES_DIR/types.csv')
+      order by id;
+
+--echo # the type of a json column that holds values of different types is the
+--echo # type that can hold all of them
+eval describe select * from read_json('$FILE_SQL_TYPES_DIR/conflict.jsonl');
+
+--echo # a record of a csv file that has another number of fields than the
+--echo # header is reported, the query fails and the server stays alive
+--disable_result_log
+--error 4016
+eval select * from read_csv('$FILE_SQL_TYPES_DIR/malformed.csv');
+--enable_result_log
+
+--echo # a json object that holds a nested object is not supported
+--disable_result_log
+--error 4016
+eval select * from read_json('$FILE_SQL_TYPES_DIR/nested.jsonl');
+--enable_result_log
+
+--echo # a json object that holds an array is not supported
+--disable_result_log
+--error 4016
+eval select * from read_json('$FILE_SQL_TYPES_DIR/array.jsonl');
+--enable_result_log
+
+--echo # the server is still alive after the malformed files
+eval select 1 as alive;
+
+set session enable_file_sql = OFF;
+--enable_query_log
+
+--source mysql_test/test_suite/file_sql/include/remove_file_sql_types_data.inc
