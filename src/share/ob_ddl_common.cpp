@@ -541,6 +541,57 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+namespace
+{
+
+// Append one SQL identifier wrapped in backticks. A backtick that belongs to
+// the identifier itself has to be written twice, otherwise the generated text
+// is parsed back as a different name, e.g. key`id -> `key``id`.
+// The helper is kept inside the share module on purpose: share is a terminal
+// module and must not depend on the SQL layer only to reuse an escaping
+// routine (see issue #1469).
+int append_backtick_quoted_identifier(
+    ObSqlString &sql_string,
+    const char *prefix,
+    const ObString &identifier)
+{
+  int ret = OB_SUCCESS;
+  const char *ptr = identifier.ptr();
+  const int64_t identifier_len = identifier.length();
+  if (OB_ISNULL(prefix)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null identifier prefix", K(ret));
+  } else if (OB_FAIL(sql_string.append_fmt("`%s", prefix))) {
+    LOG_WARN("append identifier prefix failed", K(ret), K(prefix));
+  } else if (OB_ISNULL(ptr) || 0 == identifier_len) {
+    if (OB_FAIL(sql_string.append_fmt("`"))) {
+      LOG_WARN("append identifier quote failed", K(ret));
+    }
+  } else {
+    int64_t start_pos = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < identifier_len; ++i) {
+      if ('`' == ptr[i]) {
+        if (OB_FAIL(sql_string.append_fmt("%.*s", static_cast<int>(i - start_pos), ptr + start_pos))) {
+          LOG_WARN("append identifier segment failed", K(ret), K(identifier));
+        } else if (OB_FAIL(sql_string.append_fmt("``"))) {
+          LOG_WARN("append escaped backtick failed", K(ret));
+        } else {
+          start_pos = i + 1;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && start_pos < identifier_len
+        && OB_FAIL(sql_string.append_fmt("%.*s", static_cast<int>(identifier_len - start_pos), ptr + start_pos))) {
+      LOG_WARN("append identifier tail failed", K(ret), K(identifier));
+    } else if (OB_SUCC(ret) && OB_FAIL(sql_string.append_fmt("`"))) {
+      LOG_WARN("append identifier quote failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+}  // namespace
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -549,30 +600,36 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
   // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
-    }
+  if (with_comma && OB_FAIL(sql_string.append_fmt(", "))) {
+    LOG_WARN("append comma failed", K(ret));
   }
   // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast("))) {
+        LOG_WARN("append cast prefix failed", K(ret));
+      } else if (OB_FAIL(append_backtick_quoted_identifier(sql_string, "", column_name_info.column_name_))) {
+        LOG_WARN("append escaped column name failed", K(ret), K(column_name_info));
+      } else if (OB_FAIL(sql_string.append_fmt(" as unsigned)"))) {
+        LOG_WARN("append cast suffix failed", K(ret));
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_backtick_quoted_identifier(sql_string, "", column_name_info.column_name_))) {
+      LOG_WARN("append escaped column name failed", K(ret), K(column_name_info));
     }
   }
   // append AS
   if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+      LOG_WARN("append as keyword failed", K(ret));
     }
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_backtick_quoted_identifier(sql_string,
+        column_name_info.is_shadow_column_ ? "__SHADOW_" : "", column_name_info.column_name_))) {
+      LOG_WARN("append escaped alias column name failed", K(ret), K(column_name_info));
     }
   }
   return ret;
