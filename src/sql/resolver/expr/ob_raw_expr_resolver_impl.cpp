@@ -3164,6 +3164,7 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
   int ret = OB_SUCCESS;
   bool is_enable_rewrite = false;
   bool is_question_mark = true;
+  bool deduplicate = false;
   if (OB_ISNULL(node)|| OB_ISNULL(left_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*node,
@@ -3178,7 +3179,8 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
             ctx_.stmt_,
             ctx_.expr_factory_.get_allocator(),
             is_question_mark,
-            is_enable_rewrite))) {
+            is_enable_rewrite,
+            deduplicate))) {
   } else if (is_enable_rewrite) {
     ObQueryRefRawExpr *sub_query_expr = NULL;
     if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_REF_QUERY, sub_query_expr))) {
@@ -3198,7 +3200,14 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
     }
   /* do as normal process */
   } else if (OB_FAIL(SMART_CALL(recursive_resolve(node, right_expr)))) {
-  } else {/* do nothing */}
+  } else if (deduplicate) {
+    if (OB_ISNULL(right_expr) || T_OP_ROW != right_expr->get_expr_type()
+        || OB_ISNULL(ctx_.stmt_) || OB_ISNULL(ctx_.stmt_->get_query_ctx())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ObInListResolver::deduplicate_integer_inlist(
+                         *right_expr, *ctx_.stmt_->get_query_ctx()))) {
+    }
+  }
   return ret;
 }
 

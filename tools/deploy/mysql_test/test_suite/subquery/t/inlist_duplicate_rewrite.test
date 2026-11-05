@@ -1,0 +1,42 @@
+# Regression for #1512: duplicate values must not force a VALUES-table rewrite.
+--disable_warnings
+DROP TABLE IF EXISTS inlist_duplicate_rewrite;
+--enable_warnings
+CREATE TABLE inlist_duplicate_rewrite (id INT PRIMARY KEY, c INT);
+INSERT INTO inlist_duplicate_rewrite VALUES (1,1),(2,2),(3,3),(4,4),(5,NULL);
+
+--echo # Two distinct values stay below a four-value rewrite threshold.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,1,2,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,1,2,1,2) ORDER BY id;
+
+--echo # Four distinct values still reach the rewrite threshold.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,3,4,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,3,4,1,2) ORDER BY id;
+
+--echo # NULL and NOT IN retain three-valued logic.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,1,NULL,NULL,1,1) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c NOT IN (1,1,NULL,NULL,1,1) ORDER BY id;
+
+--echo # A cached statement keeps every original parameter position.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,1,2,1,2) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,3,4,3,4) ORDER BY id;
+
+--echo # Prepared statements may execute with different duplicate patterns.
+PREPARE stmt FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (?,?,?,?,?,?) ORDER BY id';
+SET @a=1,@b=2,@c=1,@d=2,@e=1,@f=2;
+EXECUTE stmt USING @a,@b,@c,@d,@e,@f;
+SET @c=3,@d=4,@e=3,@f=4;
+EXECUTE stmt USING @a,@b,@c,@d,@e,@f;
+DEALLOCATE PREPARE stmt;
+
+--echo # Expression operands use the same deduplicated IN list.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c + 0 IN (1,2,1,2,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c + 0 IN (1,2,1,2,1,2) ORDER BY id;
+
+--echo # Numeric and string parameters preserve their comparison semantics.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1.0,2.0,1.0,2.0,1.0,2.0) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE CAST(c AS CHAR) IN ('1','2','1','2','1','2') ORDER BY id;
+
+--echo # Row-valued IN lists retain the existing rewrite path.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE (id,c) IN ((1,1),(2,2),(1,1),(2,2)) ORDER BY id;
+DROP TABLE inlist_duplicate_rewrite;
