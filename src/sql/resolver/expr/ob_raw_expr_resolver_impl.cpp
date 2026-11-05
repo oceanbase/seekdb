@@ -20,6 +20,7 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "sql/resolver/dml/ob_hint.h"
 
 namespace oceanbase
 {
@@ -3166,7 +3167,9 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
   bool is_question_mark = true;
   if (OB_ISNULL(node)|| OB_ISNULL(left_expr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*node,
+  } else {
+    const ParseNode *cur_node = node;
+    if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*cur_node,
             op_type,
             *left_expr,
             ctx_.current_scope_,
@@ -3179,26 +3182,80 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
             ctx_.expr_factory_.get_allocator(),
             is_question_mark,
             is_enable_rewrite))) {
-  } else if (is_enable_rewrite) {
-    ObQueryRefRawExpr *sub_query_expr = NULL;
-    if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_REF_QUERY, sub_query_expr))) {
-    } else if (OB_ISNULL(sub_query_expr) || OB_ISNULL(ctx_.inlist_infos_) ) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObInListInfo inlist_info;
-      inlist_info.in_list_expr_ = sub_query_expr;
-      inlist_info.in_list_ = node;
-      inlist_info.column_cnt_ = left_expr->get_expr_type() == T_OP_ROW ? left_expr->get_param_count() : 1;
-      inlist_info.row_cnt_ = node->num_child_;
-      inlist_info.is_question_mark_ = is_question_mark;
-      if (OB_FAIL(ctx_.inlist_infos_->push_back(inlist_info))) {
-      } else {
-        right_expr = sub_query_expr;
+    } else if (is_enable_rewrite) {
+      // Member count can cross _inlist_rewrite_threshold only because values
+      // are repeated. Drop those duplicates and decide again, so an IN list
+      // whose distinct values are below the threshold stays a direct predicate
+      // instead of VALUES TABLE + HASH DISTINCT + SUBPLAN FILTER.
+      const ParseNode *deduped_node = NULL;
+      bool contains_question_mark = false;
+      if (OB_FAIL(ObInListResolver::dedup_const_inlist(ctx_.expr_factory_.get_allocator(),
+                                                       *cur_node,
+                                                       ctx_.param_list_,
+                                                       contains_question_mark,
+                                                       deduped_node))) {
+        LOG_WARN("failed to dedup const inlist", K(ret));
+      } else if (NULL != deduped_node && contains_question_mark) {
+        // Shortening a parameterized list leaves gaps in the question-mark
+        // indexes. Values-table rewrite requires those indexes to be
+        // contiguous, so keep the original list when the distinct count still
+        // reaches the threshold. Below the threshold the predicate can stay a
+        // direct IN/NOT IN, and the plan must not be cached: the kept indexes
+        // depend on the current parameter values.
+        int64_t threshold = ctx_.session_info_->get_inlist_rewrite_threshold();
+        if (NULL != ctx_.stmt_ && NULL != ctx_.stmt_->get_query_ctx()
+            && OB_FAIL(ctx_.stmt_->get_query_ctx()->get_global_hint().opt_params_
+                   .get_integer_opt_param(ObOptParamHint::INLIST_REWRITE_THRESHOLD, threshold))) {
+          LOG_WARN("failed to get inlist rewrite threshold", K(ret));
+        } else if (deduped_node->num_child_ < threshold) {
+          cur_node = deduped_node;
+          is_enable_rewrite = false;
+          if (NULL != ctx_.stmt_ && NULL != ctx_.stmt_->get_query_ctx()) {
+            ctx_.stmt_->get_query_ctx()->get_query_hint_for_update().get_global_hint()
+                .merge_plan_cache_hint(OB_USE_PLAN_CACHE_NONE);
+          }
+        }
+      } else if (NULL != deduped_node) {
+        cur_node = deduped_node;
+        if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*cur_node,
+                op_type,
+                *left_expr,
+                ctx_.current_scope_,
+                is_root_condition,
+                ctx_.is_need_print_,
+                NULL != ctx_.secondary_namespace_,
+                ctx_.session_info_,
+                ctx_.param_list_,
+                ctx_.stmt_,
+                ctx_.expr_factory_.get_allocator(),
+                is_question_mark,
+                is_enable_rewrite))) {
+          LOG_WARN("failed to check inlist rewrite after dedup", K(ret));
+        }
       }
     }
-  /* do as normal process */
-  } else if (OB_FAIL(SMART_CALL(recursive_resolve(node, right_expr)))) {
-  } else {/* do nothing */}
+    if (OB_FAIL(ret)) {
+    } else if (is_enable_rewrite) {
+      ObQueryRefRawExpr *sub_query_expr = NULL;
+      if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_REF_QUERY, sub_query_expr))) {
+      } else if (OB_ISNULL(sub_query_expr) || OB_ISNULL(ctx_.inlist_infos_) ) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ObInListInfo inlist_info;
+        inlist_info.in_list_expr_ = sub_query_expr;
+        inlist_info.in_list_ = cur_node;
+        inlist_info.column_cnt_ = left_expr->get_expr_type() == T_OP_ROW ? left_expr->get_param_count() : 1;
+        inlist_info.row_cnt_ = cur_node->num_child_;
+        inlist_info.is_question_mark_ = is_question_mark;
+        if (OB_FAIL(ctx_.inlist_infos_->push_back(inlist_info))) {
+        } else {
+          right_expr = sub_query_expr;
+        }
+      }
+    /* do as normal process */
+    } else if (OB_FAIL(SMART_CALL(recursive_resolve(cur_node, right_expr)))) {
+    } else {/* do nothing */}
+  }
   return ret;
 }
 
