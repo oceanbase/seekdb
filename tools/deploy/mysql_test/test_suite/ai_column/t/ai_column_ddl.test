@@ -1,0 +1,110 @@
+# AI column physical DDL and metadata coverage.  No external model request is made.
+
+connection default;
+--disable_warnings
+drop database if exists ai_column_p0_ddl;
+--enable_warnings
+create database ai_column_p0_ddl;
+
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_ddl_complete_ep');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_ddl_embed_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_ddl_complete');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_ddl_embed');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_ddl_complete',
+  '{"type":"completion","model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_ddl_embed',
+  '{"type":"dense_embedding","model_name":"mock-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_ddl_complete_ep',
+  '{"ai_model_name":"p0_ddl_complete","url":"http://127.0.0.1:19120/v1/chat/completions","access_key":"p0-key","provider":"openai","request_model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_ddl_embed_ep',
+  '{"ai_model_name":"p0_ddl_embed","url":"http://127.0.0.1:19120/v1/embeddings","access_key":"p0-key","provider":"openai","request_model_name":"mock-embed"}');
+
+drop table if exists ai_column_p0_ddl.docs;
+create table ai_column_p0_ddl.docs (
+  id bigint primary key,
+  content varchar(200),
+  tags json AI COLUMN (
+    AI_COMPLETE('p0_ddl_complete', concat('Classify: ', content))
+  ) WITH (sync_mode='async', max_retries=2),
+  emb vector(4) AI COLUMN (
+    AI_EMBED('p0_ddl_embed', content)
+  ) WITH (sync_mode='async', max_retries=3)
+);
+
+select count(*) = 2 as ai_metadata_rows
+from oceanbase.__all_ai_column a
+join oceanbase.__all_table t on t.table_id = a.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs';
+
+select a.column_name, a.max_retries
+from oceanbase.__all_ai_column a
+join oceanbase.__all_table t on t.table_id = a.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
+order by a.column_name;
+
+select count(*) = 6 as three_hidden_columns_per_ai_column
+from oceanbase.__all_ai_column a
+join oceanbase.__all_table t on t.table_id = a.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+join oceanbase.__all_column c
+  on c.table_id = a.table_id
+ and c.column_id in (a.state_column_id, a.request_column_id,
+                     a.result_spec_column_id)
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
+  and c.is_hidden = 1;
+
+select count(*) = 2 as result_columns_are_user_visible
+from oceanbase.__all_ai_column a
+join oceanbase.__all_table t on t.table_id = a.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+join oceanbase.__all_column c
+  on c.table_id = a.table_id and c.column_id = a.column_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
+  and c.is_hidden = 0;
+
+select count(*) = 1 as json_type_prompt_persisted
+from oceanbase.__all_ai_column a
+join oceanbase.__all_table t on t.table_id = a.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'docs'
+  and a.column_name = 'tags'
+  and a.normalized_expr like '%Return exactly one valid JSON value%';
+
+drop table if exists ai_column_p0_ddl.alter_docs;
+create table ai_column_p0_ddl.alter_docs(id bigint primary key, content varchar(200));
+alter table ai_column_p0_ddl.alter_docs add column tags json AI COLUMN (
+  AI_COMPLETE('p0_ddl_complete', content)
+) WITH (sync_mode='async', max_retries=1);
+select count(*) = 1 as alter_add_metadata
+from oceanbase.__all_ai_column a
+join oceanbase.__all_table t on t.table_id = a.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'alter_docs';
+
+--error 7600
+create table ai_column_p0_ddl.bad_dimension(
+  content varchar(20),
+  emb vector(4) AI COLUMN (AI_EMBED('p0_ddl_embed', content, 3))
+);
+
+--error 1235
+create table ai_column_p0_ddl.bad_dependency(
+  content varchar(20),
+  first_ai varchar(200) AI COLUMN (AI_COMPLETE('p0_ddl_complete', content)),
+  second_ai varchar(200) AI COLUMN (AI_COMPLETE('p0_ddl_complete', first_ai))
+);
+
+drop table ai_column_p0_ddl.alter_docs;
+drop table ai_column_p0_ddl.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_ddl_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_ddl_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_ddl_complete');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_ddl_embed');
+drop database ai_column_p0_ddl;
