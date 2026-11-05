@@ -1,0 +1,67 @@
+-- Full-Text Index Performance Baseline Test
+-- This test establishes baseline performance metrics for full-text search
+
+connection default;
+
+--disable_warnings
+drop table if exists ft_perf_test;
+--enable_warnings
+
+-- Create test table with full-text index
+create table ft_perf_test (
+  id bigint primary key auto_increment,
+  title varchar(200),
+  content text,
+  fulltext index ft_idx_title_content(title, content)
+) engine=innodb;
+
+-- Insert test data (1000 rows for baseline)
+delimiter //
+create procedure insert_ft_data()
+begin
+  declare i int default 1;
+  while i <= 1000 do
+    insert into ft_perf_test(title, content) values
+    (concat('Test Document ', i),
+     concat('This is the content of document number ', i,
+            '. It contains various keywords for testing full-text search. ',
+            'Keywords: database, optimization, performance, indexing, query.'));
+    set i = i + 1;
+  end while;
+end//
+delimiter ;
+
+call insert_ft_data();
+drop procedure insert_ft_data;
+
+-- Baseline Query 1: Simple term search
+select count(*) as simple_search_count
+from ft_perf_test
+where match(title, content) against('database');
+
+-- Baseline Query 2: Multi-term search
+select count(*) as multi_term_count
+from ft_perf_test
+where match(title, content) against('optimization performance');
+
+-- Baseline Query 3: Phrase search
+select count(*) as phrase_search_count
+from ft_perf_test
+where match(title, content) against('"full-text search"');
+
+-- Baseline Query 4: Boolean mode search
+select count(*) as boolean_search_count
+from ft_perf_test
+where match(title, content) against('+database -indexing' in boolean mode);
+
+-- Measure query execution time
+-- Note: In production, would use EXPLAIN and profiling tools
+select benchmark(100,
+  (select count(*) from ft_perf_test
+   where match(title, content) against('performance optimization'))
+) as exec_time_ms;
+
+-- Cleanup
+drop table ft_perf_test;
+
+--echo Full-text baseline tests completed
