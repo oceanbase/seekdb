@@ -18,6 +18,7 @@
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
 #include "query/engine/expr/ob_ai_model_resolver.h"
+#include "lib/string/ob_sql_string.h"
 #include <cmath>
 
 namespace oceanbase 
